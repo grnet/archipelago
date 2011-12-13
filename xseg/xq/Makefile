@@ -12,10 +12,10 @@ $(BASE)/sys/xseg_user.o:
 	make -C $(BASE)/sys xseg_user.o
 
 xq_test: xq_test.c xq.o $(BASE)/sys/xseg_user.o
-	$(CC) $(CFLAGS) -o $@ $< xq.o $(BASE)/sys/xseg_user.o -lrt -lm -ldl
+	$(CC) $(CFLAGS) -o $@ $< xq.o $(BASE)/sys/xseg_user.o -lrt -lm -ldl -lpthread
 
 xq_lock_test: xq_lock_test.c xq.o $(BASE)/sys/xseg_user.o
-	$(CC) $(CFLAGS) -o $@ $< xq.o $(BASE)/sys/xseg_user.o -lrt -lm -ldl
+	$(CC) $(CFLAGS) -o $@ $< xq.o $(BASE)/sys/xseg_user.o -lrt -lm -ldl -lpthread
 
 xq.o: xq.c xq.h xq_lock.h
 	$(CC) $(CFLAGS) -DRELATIVE_POINTERS -c -o $@ $<
