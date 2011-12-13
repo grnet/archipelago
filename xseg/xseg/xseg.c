@@ -94,7 +94,7 @@ static struct xseg_peer *__find_or_load_peer_type(const char *name)
 
 static struct xseg_peer *__get_peer_type(struct xseg *xseg, uint32_t serial)
 {
-	char name[XSEG_TNAMESIZE];
+	char *name;
 	struct xseg_peer *type;
 	char (*shared_peer_types)[XSEG_TNAMESIZE];
 
@@ -108,12 +108,11 @@ static struct xseg_peer *__get_peer_type(struct xseg *xseg, uint32_t serial)
 	if (serial >= (1 << xseg->config.page_shift) / XSEG_TNAMESIZE)
 		return NULL;
 
-	__lock_segment(xseg);
+	/* xseg->shared->peer_types is an append-only array,
+	 * therefore this should be safe
+	 * without either locking or string copying. */
 	shared_peer_types = XSEG_TAKE_PTR(xseg->shared->peer_types, xseg->segment);
-	strncpy(name, shared_peer_types[serial], XSEG_TNAMESIZE);
-	name[XSEG_TNAMESIZE-1] = 0;
-	__unlock_segment(xseg);
-
+	name = shared_peer_types[serial];
 	if (!*name)
 		return NULL;
 
@@ -723,7 +722,7 @@ struct xseg_request *xseg_get_request(struct xseg *xseg, uint32_t portno)
 		return NULL;
 
 	port = &xseg->ports[portno];
-	xqi = xq_pop_head(&xseg->ports[portno].free_queue);
+	xqi = xq_pop_head(&port->free_queue);
 	if (xqi == None)
 		return NULL;
 
