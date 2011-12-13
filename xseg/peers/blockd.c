@@ -178,7 +178,7 @@ static void handle_read_write(struct store *store, struct io *io)
 	}
 
 	prepare_io(store, io);
-	cb->aio_buf = req->data;
+	cb->aio_buf = req->data + req->serviced;
 	cb->aio_nbytes = req->datasize - req->serviced;
 	cb->aio_offset = req->offset + req->serviced;
 
