@@ -105,7 +105,6 @@ static struct xseg_peer *__get_peer_type(struct xseg *xseg, uint32_t serial)
 	if (type)
 		return type;
 
-	
 	if (serial >= (1 << xseg->config.page_shift) / XSEG_TNAMESIZE)
 		return NULL;
 
@@ -723,7 +722,7 @@ struct xseg_request *xseg_get_request(struct xseg *xseg, uint32_t portno)
 		return NULL;
 
 	port = &xseg->ports[portno];
-	xqi = xq_pop_head(&xseg->ports[portno].free_queue);
+	xqi = xq_pop_head(&port->free_queue);
 	if (xqi == None)
 		return NULL;
 
