@@ -94,8 +94,9 @@ static struct xseg_peer *__find_or_load_peer_type(const char *name)
 
 static struct xseg_peer *__get_peer_type(struct xseg *xseg, uint32_t serial)
 {
-	char *name;
+	char name[XSEG_TNAMESIZE];
 	struct xseg_peer *type;
+	char (*shared_peer_types)[XSEG_TNAMESIZE];
 
 	if (serial >= xseg->max_peer_types) 
 		return NULL;
@@ -104,11 +105,15 @@ static struct xseg_peer *__get_peer_type(struct xseg *xseg, uint32_t serial)
 	if (type)
 		return type;
 
-	
 	if (serial >= (1 << xseg->config.page_shift) / XSEG_TNAMESIZE)
 		return NULL;
 
-	name = xseg->shared->peer_types[serial];
+	__lock_segment(xseg);
+	shared_peer_types = XSEG_TAKE_PTR(xseg->shared->peer_types, xseg->segment);
+	strncpy(name, shared_peer_types[serial], XSEG_TNAMESIZE);
+	name[XSEG_TNAMESIZE-1] = 0;
+	__unlock_segment(xseg);
+
 	if (!*name)
 		return NULL;
 
@@ -317,7 +322,7 @@ bind:
 
 success:
 	xseg->peer_types[r] = driver;
-	return 0;
+	return r;
 }
 
 long xseg_enable_driver(struct xseg *xseg, const char *name)
