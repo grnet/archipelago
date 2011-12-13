@@ -1,0 +1,11 @@
+*.k.c
+*.k.o
+*.mod.c
+*.mod.o
+*.a
+*.so
+*.so.*
+*.o
+*.o.cmd
+.*.ko.cmd
+*.ko
