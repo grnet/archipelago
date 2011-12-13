@@ -82,9 +82,14 @@ static inline struct io *get_pending_io(struct store *store)
 static void log_io(char *msg, struct io *io)
 {
 	char name[64], data[64];
-	strncpy(name, io->req->name, 63);
-	name[63] = 0;
-	/* strncpy(data, io->req->data, 63); */
+	/* null terminate name in case of req->name is less than 63 characters,
+	 * and next character after name (aka first byte of next buffer) is not
+	 * null
+	 */
+	unsigned int end = (io->req->namesize > 63) ? 63 : io->req->namesize;
+	strncpy(name, io->req->name, end);
+	name[end] = 0;
+	strncpy(data, io->req->data, 63);
 	data[63] = 0;
 	printf("%s: fd:%u, op:%u %llu:%lu retval: %lu, reqstate: %u\n"
 		"name[%u]:'%s', data[%llu]:\n%s------------------\n\n",
@@ -375,7 +380,7 @@ malloc_fail:
 		return -1;
 
 	store->xport = xseg_bind_port(store->xseg, portno);
- 	if (!store->xport) {
+	if (!store->xport) {
 		printf("cannot bind to port %ld\n", portno);
 		return -1;
 	}
