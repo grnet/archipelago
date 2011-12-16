@@ -68,7 +68,7 @@ static inline void free_io(struct store *store, struct io *io)
 static inline void pending_io(struct store *store, struct io *io)
 {
 	xqindex idx = io - store->ios;
-	xq_append_head(&store->pending_ops, idx);
+	xq_append_tail(&store->pending_ops, idx);
 }
 
 static inline struct io *get_pending_io(struct store *store)
