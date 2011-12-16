@@ -642,10 +642,10 @@ static void xseg_request_fn(struct request_queue *rq)
 		*/
 
 		if (blkreq->cmd_flags & REQ_FLUSH)
-			xreq->flags |= XSEG_FLUSH;
+			xreq->flags |= XF_FLUSH;
 
 		if (blkreq->cmd_flags & REQ_FUA)
-			xreq->flags |= XSEG_FUA;
+			xreq->flags |= XF_FUA;
 
 		if (rq_data_dir(blkreq)) {
 			/* unlock for data transfers? */
