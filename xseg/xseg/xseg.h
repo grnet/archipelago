@@ -17,12 +17,6 @@
 #define XSEG_TAKE_PTR(ptr, base) XSEG_PTR_CONVERT(ptr, XSEG_BASE, base)
 #define XSEG_MAKE_PTR(ptr, base) XSEG_PTR_CONVERT(ptr, base, XSEG_BASE)
 
-/* Request Flags */
-#define XSEG_FLUSH	0
-#define XSEG_FUA	1
-#define XSEG_ALLDATA	2
-#define XSEG_FRESH	3
-
 #include <sys/util.h>
 #include <xq/xq.h>
 

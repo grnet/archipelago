@@ -165,7 +165,7 @@ static void handle_read_write(struct store *store, struct io *io)
 	if (req != io->req)
 		printf("0.%p vs %p!\n", (void *)req, (void *)io->req);
 	if (!req->size) {
-		if (req->flags & (XSEG_FLUSH | XSEG_FUA)) {
+		if (req->flags & (XF_FLUSH | XF_FUA)) {
 			/* for now, no FLUSH/FUA support.
 			 * note that with FLUSH/size == 0 
 			 * there will probably be a (uint64_t)-1 offset */

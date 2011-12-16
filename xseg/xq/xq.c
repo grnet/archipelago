@@ -26,6 +26,7 @@ void xq_init_empty(struct xq *xq, xqindex size, void *mem)
 	xq->tail = 0;
 	PTRSET(xq, queue, mem);
 	xq->size = __snap(size);
+	xq_release(&xq->lock);
 }
 
 void xq_init_map(struct xq *xq,
@@ -41,6 +42,7 @@ void xq_init_map(struct xq *xq,
 	xq->size = __snap(size);
 	for (t = 0; t < count; t++)
 		qmem[t] = mapfn(t);
+	xq_release(&xq->lock);
 }
 
 void xq_init_seq(struct xq *xq, xqindex size, xqindex count, void *mem)
@@ -52,6 +54,7 @@ void xq_init_seq(struct xq *xq, xqindex size, xqindex count, void *mem)
 	xq->size = __snap(size);
 	for (t = 0; t < count; t++)
 		qmem[t] = t;
+	xq_release(&xq->lock);
 }
 
 xqindex *xq_alloc_empty(struct xq *xq, xqindex size)
