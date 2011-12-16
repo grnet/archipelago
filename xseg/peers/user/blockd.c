@@ -163,7 +163,12 @@ static void handle_read_write(struct store *store, struct io *io)
 	if (req->state != XS_ACCEPTED) {
 		if (io->retval > 0)
 			req->serviced += io->retval;
-		else
+		else if (io->retval == 0){
+			/* reached end of file. zero out the rest data buffer */
+			memset(req->data + req->serviced, 0, req->datasize - req->serviced);
+			req->serviced = req->datasize;
+		}
+		else 
 			req->datasize = req->serviced;
 
 		if (req->serviced >= req->datasize) {
