@@ -30,7 +30,6 @@ static int opendev(void)
 	if (fdev < 0) {
 		LOGMSG("Cannot open %s: %s\n", XSEG_DEVICE,
 			strerror_r(errno, errbuf, ERRSIZE));
-		close(fdev);
 		fdev = -1;
 	}
 	return fdev;
