@@ -388,6 +388,7 @@ static void handle_read_write(struct store *store, struct io *io)
 	case X_READ:
 	case X_WRITE:
 		//log_io("submit", io);
+		pending(store, io);
 		r = sos_submit(store->sos, sos_req);
 		break;
 	default:
@@ -402,7 +403,6 @@ static void handle_read_write(struct store *store, struct io *io)
 		fail(store, io);
 		return;
 	}
-	pending(store, io);
 }
 
 static void handle_returned(struct store *store, struct io *io)
