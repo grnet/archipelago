@@ -190,6 +190,46 @@ void report_request(struct xseg_request *req)
 
 int cmd_info(char *name)
 {
+	struct xseg_request *req;
+	int r;
+	xserial srl;
+	uint32_t namesize = strlen(name);
+
+	xseg_prepare_wait(xseg, srcport);
+	if ((req = xseg_get_request(xseg, srcport))) {
+		xseg_cancel_wait(xseg, srcport);
+		r = xseg_prep_request(req, namesize, sizeof(off_t));
+		if (r < 0) {
+			printf("Cannot prepare request! (%u, %u)\n",
+				namesize, sizeof(off_t));
+			xseg_put_request(xseg, req->portno, req);
+			return -1;
+		}
+
+		strncpy(req->name, name, namesize);
+		req->offset = 0;
+		req->size = sizeof(off_t);
+		req->op = X_INFO;
+
+		srl = xseg_submit(xseg, dstport, req);
+		if (srl == None)
+			return -1;
+
+		xseg_signal(xseg, dstport);
+	}
+
+	while (!(req = xseg_receive(xseg, srcport)))
+
+	xseg_cancel_wait(xseg, srcport);
+	while (!(req->state & XS_SERVED)) {
+		report_request(req);
+	}
+
+	printf("%s size: %llu\n", req->name, *((off_t *)req->data));
+
+	if (xseg_put_request(xseg, req->portno, req))
+		printf("Cannot put request at port %u\n", req->portno);
+
 	return 0;
 }
 
@@ -1037,6 +1077,14 @@ int main(int argc, char **argv) {
 			i += 2;
 			continue;
 		}
+
+		if (!strcmp(argv[i], "info") && (i + 1 < argc)) {
+			char *name = argv[i+1];
+			ret = cmd_info(name);
+			i += 1;
+			continue;
+		}
+
 
 		if (!parse_ports(argv[i]))
 			printf("invalid argument: %s\n", argv[i]);

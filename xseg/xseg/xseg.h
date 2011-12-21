@@ -137,6 +137,7 @@ struct xseg_task {
 #define X_COPY      8
 #define X_CLONE     9
 #define X_COMMIT   10
+#define X_INFO     11
 
 /* FLAGS */
 #define XF_NOSYNC (1 << 0)
