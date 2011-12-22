@@ -292,6 +292,7 @@ static struct xseg_peer xseg_peer_xsegdev = {
 int xsegbd_xseg_init(struct xsegbd *dev)
 {
 	struct xseg_port *xport;
+	struct xsegdev *xsegdev;
 	int r;
 
 	if (!dev->name[0])
@@ -325,12 +326,16 @@ int xsegbd_xseg_init(struct xsegbd *dev)
 		XSEGLOG("WARNING: unexpected segment type '%s' vs 'xsegdev'",
 			 dev->config.type);
 
-	XSEGLOG("creating segment");
-	r = xseg_create(&dev->config);
-	if (r) {
-		XSEGLOG("cannot create segment");
-		goto err3;
+	xsegdev = xsegdev_get(0);
+	if (!xsegdev->segment) {
+		XSEGLOG("creating segment");
+		r = xseg_create(&dev->config);
+		if (r) {
+			XSEGLOG("cannot create segment");
+			goto err3;
+		}
 	}
+	xsegdev_put(xsegdev);
 
 	XSEGLOG("joining segment");
 	dev->xseg = xseg_join("xsegdev", "xsegbd");
