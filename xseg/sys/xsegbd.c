@@ -435,11 +435,7 @@ static loff_t xsegbd_get_size(struct xsegbd *dev)
 	uint64_t datasize;
 	loff_t size;
 
-	xseg_prepare_wait(dev->xseg, dev->src_portno);
-
 	if ((xreq = xseg_get_request(dev->xseg, dev->src_portno))) {
-		xseg_cancel_wait(dev->xseg, dev->src_portno);
-
 		datasize = sizeof(loff_t);
 		BUG_ON(xreq->buffersize - dev->namesize < datasize);
 		BUG_ON(xseg_prep_request(xreq, dev->namesize, datasize));
@@ -456,12 +452,18 @@ static loff_t xsegbd_get_size(struct xsegbd *dev)
 		xseg_signal(dev->xseg, dev->dst_portno);
 	}
 
+	/* callback_fn doesn't handle X_INFO reqs atm, and more importantly we
+	 * cannot use an async operation to learn the disk size. Currently, this
+	 * behaves like a busy-wait loop and makes insmod block until a peer
+	 * responds to our X_INFO req. This will change when the sysfs interface is
+	 * implemented, to handle disk operations.
+	 */
 	while (!(xreq = xseg_receive(dev->xseg, dev->src_portno))) ;
 
-	xseg_cancel_wait(dev->xseg, dev->src_portno);
 	while (!(xreq->state & XS_SERVED)) ;
 
 	data = XSEG_TAKE_PTR(xreq->data, dev->xseg->segment);
+	/* TODO: make sure we use consistent types accross peers */
 	size = *((off_t *) data);
 
 	if (xreq)
