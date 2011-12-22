@@ -425,6 +425,48 @@ static const struct block_device_operations xsegbd_ops = {
 
 static void xseg_request_fn(struct request_queue *rq);
 
+static loff_t xsegbd_get_size(struct xsegbd *dev)
+{
+	struct xseg_request *xreq;
+	char *name, *data;
+	uint64_t datasize;
+	loff_t size;
+
+	xseg_prepare_wait(dev->xseg, dev->src_portno);
+
+	if ((xreq = xseg_get_request(dev->xseg, dev->src_portno))) {
+		xseg_cancel_wait(dev->xseg, dev->src_portno);
+
+		datasize = sizeof(loff_t);
+		BUG_ON(xreq->buffersize - dev->namesize < datasize);
+		BUG_ON(xseg_prep_request(xreq, dev->namesize, datasize));
+
+		name = XSEG_TAKE_PTR(xreq->name, dev->xseg->segment);
+		strncpy(name, dev->name, dev->namesize);
+		xreq->size = datasize;
+		xreq->offset = 0;
+
+		xreq->op = X_INFO;
+
+		BUG_ON(xseg_submit(dev->xseg, dev->dst_portno, xreq) == NoSerial);
+
+		xseg_signal(dev->xseg, dev->dst_portno);
+	}
+
+	while (!(xreq = xseg_receive(dev->xseg, dev->src_portno))) ;
+
+	xseg_cancel_wait(dev->xseg, dev->src_portno);
+	while (!(xreq->state & XS_SERVED)) ;
+
+	data = XSEG_TAKE_PTR(xreq->data, dev->xseg->segment);
+	size = *((off_t *) data);
+
+	if (xreq)
+		xseg_put_request(dev->xseg, dev->src_portno, xreq);
+
+	return size;
+}
+
 static int xsegbd_dev_init(struct xsegbd *dev, int id, sector_t size)
 {
 	int ret = -ENOMEM;
@@ -475,7 +517,7 @@ static int xsegbd_dev_init(struct xsegbd *dev, int id, sector_t size)
 	if (!dev->blk_req_pending)
 		goto out_free_pending;
 
-	dev->sectors = size;
+	dev->sectors = xsegbd_get_size(dev) / 512ULL;
 	set_capacity(disk, dev->sectors);
 
 	add_disk(disk); /* immediately activates the device */
