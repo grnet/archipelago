@@ -26,7 +26,7 @@ MODULE_DESCRIPTION("xsegbd");
 MODULE_AUTHOR("XSEG");
 MODULE_LICENSE("GPL");
 
-static long sector_size = 100000;
+static long sector_size = 0;
 static long blksize = 512;
 static int major = 0;
 static char name[XSEGBD_VOLUME_NAMELEN] = "xsegbd";
@@ -522,7 +522,8 @@ static int xsegbd_dev_init(struct xsegbd *dev, int id, sector_t size)
 	if (!dev->blk_req_pending)
 		goto out_free_pending;
 
-	dev->sectors = xsegbd_get_size(dev) / 512ULL;
+	/* allow a non-zero sector_size parameter to override the disk size */
+	dev->sectors = sector_size ? sector_size : xsegbd_get_size(dev) / 512ULL;
 	set_capacity(disk, dev->sectors);
 
 	add_disk(disk); /* immediately activates the device */
