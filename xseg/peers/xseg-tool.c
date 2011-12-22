@@ -190,45 +190,36 @@ void report_request(struct xseg_request *req)
 
 int cmd_info(char *name)
 {
-	struct xseg_request *req;
+	uint32_t namesize = strlen(name);
+	size_t size = sizeof(off_t);
 	int r;
 	xserial srl;
-	uint32_t namesize = strlen(name);
+	struct xseg_request *req;
 
-	xseg_prepare_wait(xseg, srcport);
-	if ((req = xseg_get_request(xseg, srcport))) {
-		xseg_cancel_wait(xseg, srcport);
-		r = xseg_prep_request(req, namesize, sizeof(off_t));
-		if (r < 0) {
-			printf("Cannot prepare request! (%u, %u)\n",
-				namesize, sizeof(off_t));
-			xseg_put_request(xseg, req->portno, req);
-			return -1;
-		}
-
-		strncpy(req->name, name, namesize);
-		req->offset = 0;
-		req->size = sizeof(off_t);
-		req->op = X_INFO;
-
-		srl = xseg_submit(xseg, dstport, req);
-		if (srl == None)
-			return -1;
-
-		xseg_signal(xseg, dstport);
+	req = xseg_get_request(xseg, srcport);
+	if (!req) {
+		printf("No request!\n");
+		return -1;
 	}
 
-	while (!(req = xseg_receive(xseg, srcport)))
-
-	xseg_cancel_wait(xseg, srcport);
-	while (!(req->state & XS_SERVED)) {
-		report_request(req);
+	r = xseg_prep_request(req, namesize, size);
+	if (r < 0) {
+		printf("Cannot prepare request! (%lu, %lu)\n",
+			(unsigned long) namesize, (unsigned long) size);
+		xseg_put_request(xseg, srcport, req);
+		return -1;
 	}
 
-	printf("%s size: %llu\n", req->name, *((off_t *)req->data));
+	strncpy(req->name, name, namesize);
+	req->offset = 0;
+	req->size = size;
+	req->op = X_INFO;
 
-	if (xseg_put_request(xseg, req->portno, req))
-		printf("Cannot put request at port %u\n", req->portno);
+	srl = xseg_submit(xseg, dstport, req);
+	if (srl == None)
+		return -1;
+
+	xseg_signal(xseg, dstport);
 
 	return 0;
 }
@@ -751,6 +742,10 @@ void handle_reply(struct xseg_request *req)
 	case X_TRUNCATE:
 	case X_COMMIT:
 	case X_CLONE:
+	case X_INFO:
+		printf("size: %llu\n", *((off_t *)req->data));
+		break;
+
 	default:
 		break;
 	}
