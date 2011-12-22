@@ -543,9 +543,6 @@ void xseg_destroy(struct xseg *xseg)
 		return;
 	}
 
-	/* make sure to unmap the segment */
-	type->ops.unmap(xseg, xseg->segment_size);
-
 	/* should destroy() leave() first? */
 	type->ops.deallocate(xseg->config.name);
 }

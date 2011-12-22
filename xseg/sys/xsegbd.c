@@ -375,6 +375,9 @@ err0:
 
 int xsegbd_xseg_quit(struct xsegbd *dev)
 {
+	/* make sure to unmap the segment first */
+	dev->xseg->type.ops.unmap(dev->xseg, dev->xseg->segment_size);
+
 	xseg_destroy(dev->xseg);
 	dev->xseg = NULL;
 	return 0;
