@@ -26,7 +26,7 @@ MODULE_DESCRIPTION("xsegbd");
 MODULE_AUTHOR("XSEG");
 MODULE_LICENSE("GPL");
 
-static long sector_size = 100000;
+static long sector_size = 200000;
 static long blksize = 512;
 static int major = 0;
 static char name[XSEGBD_VOLUME_NAMELEN] = "xsegbd";
@@ -429,13 +429,18 @@ static int xsegbd_dev_init(struct xsegbd *dev, int id, sector_t size)
 {
 	int ret = -ENOMEM;
 	struct gendisk *disk;
+	unsigned int max_request_size_bytes;
 
 	spin_lock_init(&dev->lock);
 
 	dev->id = id;
+	ret = xsegbd_xseg_init(dev);
+	if (ret < 0)
+		goto out;
+
 	dev->blk_queue = blk_alloc_queue(GFP_KERNEL);
 	if (!dev->blk_queue)
-		goto out;
+		goto free_xseg;
 
 	blk_init_allocated_queue(dev->blk_queue, xseg_request_fn, &dev->lock);
 	dev->blk_queue->queuedata = dev;
@@ -444,11 +449,18 @@ static int xsegbd_dev_init(struct xsegbd *dev, int id, sector_t size)
 	blk_queue_logical_block_size(dev->blk_queue, 512);
 	blk_queue_physical_block_size(dev->blk_queue, blksize);
 	blk_queue_bounce_limit(dev->blk_queue, BLK_BOUNCE_ANY);
-	/* we can handle any number of segments, BUT
-	 * parts of the request may be available far sooner than others
-	 * but we cannot complete them (unless we handle their bios directly).
+	
+	//blk_queue_max_segments(dev->blk_queue, 512);
+	/* calculate maximum block request size
+	 * request size in pages * page_size
+	 * leave one page in buffer for name
 	 */
-	blk_queue_max_segments(dev->blk_queue, 1);
+	max_request_size_bytes = (unsigned int) (dev->config.request_size -1) * ( 1 << dev->config.page_shift) ;
+	blk_queue_max_hw_sectors(dev->blk_queue, max_request_size_bytes >> 9);
+	blk_queue_max_segment_size(dev->blk_queue, max_request_size_bytes);
+	blk_queue_io_min(dev->blk_queue, max_request_size_bytes);
+	blk_queue_io_opt(dev->blk_queue, max_request_size_bytes);
+
 	queue_flag_set_unlocked(QUEUE_FLAG_NONROT, dev->blk_queue);
 
 	/* vkoukis says we don't need partitions */
@@ -464,12 +476,9 @@ static int xsegbd_dev_init(struct xsegbd *dev, int id, sector_t size)
 	disk->flags |= GENHD_FL_SUPPRESS_PARTITION_INFO;
 	snprintf(disk->disk_name, 32, "xsegbd%c", 'a' + id);
 
-	ret = xsegbd_xseg_init(dev);
-	if (ret < 0)
-		goto out_free_disk;
 
 	if (!xq_alloc_seq(&dev->blk_queue_pending, nr_requests, nr_requests))
-		goto out_quit;
+		goto out_free_disk;
 
 	dev->blk_req_pending = kmalloc(sizeof(struct request *) * nr_requests, GFP_KERNEL);
 	if (!dev->blk_req_pending)
@@ -486,15 +495,14 @@ out:
 out_free_pending:
 	xq_free(&dev->blk_queue_pending);
 
-out_quit:
-	xsegbd_xseg_quit(dev);
-
 out_free_disk:
 	put_disk(disk);
 
 out_free_queue:
 	blk_cleanup_queue(dev->blk_queue);
 
+free_xseg:
+	xsegbd_xseg_quit(dev);
 	goto out;
 }
 
@@ -657,7 +665,9 @@ static void xseg_request_fn(struct request_queue *rq)
 
 		BUG_ON(xseg_submit(dev->xseg, dev->dst_portno, xreq) == NoSerial);
 	}
-
+	//This is going to happen at least once.
+	//TODO find out why it happens more than once.
+	WARN_ON(xseg_signal(dev->xseg, dev->dst_portno));
 	if (xreq)
 		xseg_put_request(dev->xseg, dev->src_portno, xreq);
 }
