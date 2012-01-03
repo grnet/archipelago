@@ -23,7 +23,6 @@ struct xsegdev {
 	struct cdev cdev;
 	unsigned long flags;
 	long (*callback)(void *arg);
-	void *callarg;
 
 	spinlock_t lock;
 	struct mutex mutex;
