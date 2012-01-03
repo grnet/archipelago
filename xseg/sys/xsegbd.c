@@ -596,6 +596,7 @@ static void xseg_request_fn(struct request_queue *rq)
 {
 	struct xseg_request *xreq;
 	struct xsegbd_device *xsegbd_dev = rq->queuedata;
+	struct xseg_port port;
 	struct request *blkreq;
 	xqindex blkreq_idx;
 	char *name;
@@ -650,6 +651,12 @@ static void xseg_request_fn(struct request_queue *rq)
 			xreq->op = X_READ;
 		}
 
+		/* TODO:
+		 * Temp/ugly hack, add support for it in prepare_wait instead
+		 */
+		port = xsegbd.xseg->ports[xsegbd_dev->src_portno];
+		port.waitcue = (long) xsegbd_dev;
+
 		BUG_ON(xseg_submit(xsegbd.xseg, xsegbd_dev->dst_portno, xreq) == NoSerial);
 	}
 
@@ -662,30 +669,13 @@ static long xseg_callback(void *arg)
 	struct xsegbd_device *xsegbd_dev = NULL;
 	struct xseg_request *xreq;
 	struct xseg_port *port;
-	int src_portno;
 	struct request *blkreq;
 	unsigned long flags;
 	xqindex blkreq_idx;
 	int err;
-	struct list_head *tmp;
 
 	port = XSEG_TAKE_PTR(arg, xsegbd.xseg->segment);
-	XSEGLOG("callback got port @%p", port);
-	src_portno = xseg_portno(xsegbd.xseg, port);
-	XSEGLOG("callback got port %u", src_portno);
-
-	mutex_lock_nested(&xsegbd_mutex, SINGLE_DEPTH_NESTING);
-	list_for_each(tmp, &xsegbd_dev_list) {
-		struct xsegbd_device *entry;
-
-		entry = list_entry(tmp, struct xsegbd_device, node);
-
-		if (entry->src_portno == src_portno) {
-			xsegbd_dev = entry;
-			break;
-		}
-	}
-	mutex_unlock(&xsegbd_mutex);
+	xsegbd_dev = (struct xsegbd_device *) port->waitcue;
 
 	if (!xsegbd_dev)
 		return -ENODEV;
