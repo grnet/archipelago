@@ -190,6 +190,37 @@ void report_request(struct xseg_request *req)
 
 int cmd_info(char *name)
 {
+	uint32_t namesize = strlen(name);
+	size_t size = sizeof(off_t);
+	int r;
+	xserial srl;
+	struct xseg_request *req;
+
+	req = xseg_get_request(xseg, srcport);
+	if (!req) {
+		printf("No request!\n");
+		return -1;
+	}
+
+	r = xseg_prep_request(req, namesize, size);
+	if (r < 0) {
+		printf("Cannot prepare request! (%lu, %lu)\n",
+			(unsigned long) namesize, (unsigned long) size);
+		xseg_put_request(xseg, srcport, req);
+		return -1;
+	}
+
+	strncpy(req->name, name, namesize);
+	req->offset = 0;
+	req->size = size;
+	req->op = X_INFO;
+
+	srl = xseg_submit(xseg, dstport, req);
+	if (srl == None)
+		return -1;
+
+	xseg_signal(xseg, dstport);
+
 	return 0;
 }
 
@@ -711,6 +742,10 @@ void handle_reply(struct xseg_request *req)
 	case X_TRUNCATE:
 	case X_COMMIT:
 	case X_CLONE:
+	case X_INFO:
+		printf("size: %llu\n", *((off_t *)req->data));
+		break;
+
 	default:
 		break;
 	}
@@ -1037,6 +1072,14 @@ int main(int argc, char **argv) {
 			i += 2;
 			continue;
 		}
+
+		if (!strcmp(argv[i], "info") && (i + 1 < argc)) {
+			char *name = argv[i+1];
+			ret = cmd_info(name);
+			i += 1;
+			continue;
+		}
+
 
 		if (!parse_ports(argv[i]))
 			printf("invalid argument: %s\n", argv[i]);

@@ -26,7 +26,7 @@ MODULE_DESCRIPTION("xsegbd");
 MODULE_AUTHOR("XSEG");
 MODULE_LICENSE("GPL");
 
-static long sector_size = 200000;
+static long sector_size = 0;
 static long blksize = 512;
 static int major = 0;
 static char name[XSEGBD_VOLUME_NAMELEN] = "xsegbd";
@@ -292,6 +292,7 @@ static struct xseg_peer xseg_peer_xsegdev = {
 int xsegbd_xseg_init(struct xsegbd *dev)
 {
 	struct xseg_port *xport;
+	struct xsegdev *xsegdev;
 	int r;
 
 	if (!dev->name[0])
@@ -325,12 +326,16 @@ int xsegbd_xseg_init(struct xsegbd *dev)
 		XSEGLOG("WARNING: unexpected segment type '%s' vs 'xsegdev'",
 			 dev->config.type);
 
-	XSEGLOG("creating segment");
-	r = xseg_create(&dev->config);
-	if (r) {
-		XSEGLOG("cannot create segment");
-		goto err3;
+	xsegdev = xsegdev_get(0);
+	if (!xsegdev->segment) {
+		XSEGLOG("creating segment");
+		r = xseg_create(&dev->config);
+		if (r) {
+			XSEGLOG("cannot create segment");
+			goto err3;
+		}
 	}
+	xsegdev_put(xsegdev);
 
 	XSEGLOG("joining segment");
 	dev->xseg = xseg_join("xsegdev", "xsegbd");
@@ -375,6 +380,9 @@ err0:
 
 int xsegbd_xseg_quit(struct xsegbd *dev)
 {
+	/* make sure to unmap the segment first */
+	dev->xseg->type.ops.unmap(dev->xseg, dev->xseg->segment_size);
+
 	xseg_destroy(dev->xseg);
 	dev->xseg = NULL;
 	return 0;
@@ -424,6 +432,50 @@ static const struct block_device_operations xsegbd_ops = {
 /* *************************** */
 
 static void xseg_request_fn(struct request_queue *rq);
+
+static loff_t xsegbd_get_size(struct xsegbd *dev)
+{
+	struct xseg_request *xreq;
+	char *name, *data;
+	uint64_t datasize;
+	loff_t size;
+
+	if ((xreq = xseg_get_request(dev->xseg, dev->src_portno))) {
+		datasize = sizeof(loff_t);
+		BUG_ON(xreq->buffersize - dev->namesize < datasize);
+		BUG_ON(xseg_prep_request(xreq, dev->namesize, datasize));
+
+		name = XSEG_TAKE_PTR(xreq->name, dev->xseg->segment);
+		strncpy(name, dev->name, dev->namesize);
+		xreq->size = datasize;
+		xreq->offset = 0;
+
+		xreq->op = X_INFO;
+
+		BUG_ON(xseg_submit(dev->xseg, dev->dst_portno, xreq) == NoSerial);
+
+		xseg_signal(dev->xseg, dev->dst_portno);
+	}
+
+	/* callback_fn doesn't handle X_INFO reqs atm, and more importantly we
+	 * cannot use an async operation to learn the disk size. Currently, this
+	 * behaves like a busy-wait loop and makes insmod block until a peer
+	 * responds to our X_INFO req. This will change when the sysfs interface is
+	 * implemented, to handle disk operations.
+	 */
+	while (!(xreq = xseg_receive(dev->xseg, dev->src_portno))) ;
+
+	while (!(xreq->state & XS_SERVED)) ;
+
+	data = XSEG_TAKE_PTR(xreq->data, dev->xseg->segment);
+	/* TODO: make sure we use consistent types accross peers */
+	size = *((off_t *) data);
+
+	if (xreq)
+		xseg_put_request(dev->xseg, dev->src_portno, xreq);
+
+	return size;
+}
 
 static int xsegbd_dev_init(struct xsegbd *dev, int id, sector_t size)
 {
@@ -484,7 +536,8 @@ static int xsegbd_dev_init(struct xsegbd *dev, int id, sector_t size)
 	if (!dev->blk_req_pending)
 		goto out_free_pending;
 
-	dev->sectors = size;
+	/* allow a non-zero sector_size parameter to override the disk size */
+	dev->sectors = sector_size ? sector_size : xsegbd_get_size(dev) / 512ULL;
 	set_capacity(disk, dev->sectors);
 
 	add_disk(disk); /* immediately activates the device */

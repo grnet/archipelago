@@ -33,7 +33,7 @@ struct store {
 	struct xseg_port *xport;
 	uint32_t portno;
 	int fd;
-	uint64_t size;
+	off_t size;
 	struct io *ios;
 	struct xq free_ops;
 	char *free_bufs;
@@ -205,12 +205,24 @@ static void handle_read_write(struct store *store, struct io *io)
 	pending(store, io);
 }
 
+static void handle_info(struct store *store, struct io *io)
+{
+	struct xseg_request *req = io->req;
+
+	*((off_t *) req->data) = store->size;
+	req->datasize = sizeof(store->size);
+
+	complete(store, io);
+}
+
 static void dispatch(struct store *store, struct io *io)
 {
 	switch (io->req->op) {
 	case X_READ:
 	case X_WRITE:
 		handle_read_write(store, io); break;
+	case X_INFO:
+		handle_info(store, io); break;
 	case X_SYNC:
 	default:
 		handle_unknown(store, io);
@@ -291,7 +303,7 @@ static struct xseg *join(char *spec)
 	return xseg_join(config.type, config.name);
 }
 
-static int blockd(char *path, unsigned long size, uint32_t nr_ops,
+static int blockd(char *path, off_t size, uint32_t nr_ops,
 		  char *spec, long portno)
 {
 	struct stat stat;
@@ -333,6 +345,8 @@ static int blockd(char *path, unsigned long size, uint32_t nr_ops,
 		perror("write");
 		return -1;
 	}
+
+	store->size = size;
 
 	/*
 	r = daemon(1, 1);
@@ -395,7 +409,7 @@ malloc_fail:
 int main(int argc, char **argv)
 {
 	char *path, *spec = "";
-	unsigned long size;
+	off_t size;
 	int i;
 	long portno;
 	uint32_t nr_ops;
@@ -416,7 +430,7 @@ int main(int argc, char **argv)
 		}
 
 		if (!strcmp(argv[i], "-s") && i + 1 < argc) {
-			size = strtoul(argv[i+1], NULL, 10);
+			size = strtoull(argv[i+1], NULL, 10);
 			i += 1;
 			continue;
 		}
