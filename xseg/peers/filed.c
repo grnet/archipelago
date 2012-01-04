@@ -237,7 +237,7 @@ start:
 					pthread_cond_wait(&cacheEntry->cond, &store->cache_lock);
 				}
 				// if successfully opened
-				if (fd > 0) {
+				if (cacheEntry->fd > 0) {
 					fd = store->fdcache[i].fd;
 					io->fdcacheidx = i;
 					goto out;
@@ -265,6 +265,7 @@ start:
 	}
 	if (store->fdcache[lru].ref){
 		fd = -1;
+		printf("lru(%ld) ref not 0 (%lu)\n", lru, store->fdcache[lru].ref);
 		goto out_err_unlock;
 	}
 	//make room for new file
