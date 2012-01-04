@@ -10,6 +10,7 @@
 
 #include <linux/kernel.h>
 #include <linux/types.h>
+#include <linux/completion.h>
 #include <xseg/xseg.h>
 #include <xq/xq.h>
 
@@ -34,6 +35,7 @@ struct xsegbd_device {
 	struct request **blk_req_pending;
 	struct device dev;
 	struct list_head node;
+	struct completion *comp;
 };
 
 #endif

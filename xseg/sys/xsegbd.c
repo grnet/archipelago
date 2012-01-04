@@ -429,12 +429,13 @@ static const struct block_device_operations xsegbd_ops = {
 
 static void xseg_request_fn(struct request_queue *rq);
 
-static loff_t xsegbd_get_size(struct xsegbd_device *xsegbd_dev)
+static int xsegbd_get_size(struct xsegbd_device *xsegbd_dev)
 {
 	struct xseg_request *xreq;
-	char *name, *data;
+	struct xseg_port *port;
+	char *name;
 	uint64_t datasize;
-	loff_t size;
+	struct completion comp;
 
 	xreq = xseg_get_request(xsegbd.xseg, xsegbd_dev->src_portno);
 	if (!xreq)
@@ -451,32 +452,26 @@ static loff_t xsegbd_get_size(struct xsegbd_device *xsegbd_dev)
 
 	xreq->op = X_INFO;
 
+	port = &xsegbd.xseg->ports[xsegbd_dev->src_portno];
+	port->waitcue = (long) xsegbd_dev;
+
+	init_completion(&comp);
+	xsegbd_dev->comp = &comp;
+
 	BUG_ON(xseg_submit(xsegbd.xseg, xsegbd_dev->dst_portno, xreq) == NoSerial);
 
 	xseg_signal(xsegbd.xseg, xsegbd_dev->dst_portno);
 
-	/* callback_fn doesn't handle X_INFO reqs atm, and more importantly we
-	 * cannot use an async operation to learn the disk size. Currently, this
-	 * behaves like a busy-wait loop and makes insmod block until a peer
-	 * responds to our X_INFO req. This will change when the sysfs interface is
-	 * implemented, to handle disk operations.
-	 */
-	while (!(xreq = xseg_receive(xsegbd.xseg, xsegbd_dev->src_portno))) ;
+	xseg_put_request(xsegbd.xseg, xsegbd_dev->src_portno, xreq);
+	xseg_free_requests(xsegbd.xseg, xsegbd_dev->src_portno, 1);
 
-	while (!(xreq->state & XS_SERVED)) ;
+	wait_for_completion_interruptible(&comp);
 
-	data = XSEG_TAKE_PTR(xreq->data, xsegbd.xseg->segment);
-	/* TODO: make sure we use consistent types accross peers */
-	size = *((off_t *) data);
-
-	if (xreq)
-		xseg_put_request(xsegbd.xseg, xsegbd_dev->src_portno, xreq);
-
-	return size;
+	return 0;
 }
 
 
-static int xsegbd_dev_init(struct xsegbd_device *xsegbd_dev, sector_t size)
+static int xsegbd_dev_init(struct xsegbd_device *xsegbd_dev)
 {
 	int ret = -ENOMEM;
 	struct gendisk *disk;
@@ -522,7 +517,11 @@ static int xsegbd_dev_init(struct xsegbd_device *xsegbd_dev, sector_t size)
 		goto out_free_pending;
 
 	/* allow a non-zero sector_size parameter to override the disk size */
-	xsegbd_dev->sectors = sector_size ? sector_size : xsegbd_get_size(xsegbd_dev) / 512ULL;
+	if (sector_size)
+		xsegbd_dev->sectors = sector_size;
+	else
+		xsegbd_get_size(xsegbd_dev);
+
 	set_capacity(disk, xsegbd_dev->sectors);
 
 	add_disk(disk); /* immediately activates the device */
@@ -596,7 +595,7 @@ static void xseg_request_fn(struct request_queue *rq)
 {
 	struct xseg_request *xreq;
 	struct xsegbd_device *xsegbd_dev = rq->queuedata;
-	struct xseg_port port;
+	struct xseg_port *port;
 	struct request *blkreq;
 	xqindex blkreq_idx;
 	char *name;
@@ -615,6 +614,7 @@ static void xseg_request_fn(struct request_queue *rq)
 			XSEGLOG("non-fs cmd_type: %u. *shrug*", blkreq->cmd_type);
 			__blk_end_request_all(blkreq, 0);
 		}
+
 
 		datasize = blk_rq_bytes(blkreq);
 		BUG_ON(xreq->buffersize - xsegbd.namesize < datasize);
@@ -654,8 +654,8 @@ static void xseg_request_fn(struct request_queue *rq)
 		/* TODO:
 		 * Temp/ugly hack, add support for it in prepare_wait instead
 		 */
-		port = xsegbd.xseg->ports[xsegbd_dev->src_portno];
-		port.waitcue = (long) xsegbd_dev;
+		port = &xsegbd.xseg->ports[xsegbd_dev->src_portno];
+		port->waitcue = (long) xsegbd_dev;
 
 		BUG_ON(xseg_submit(xsegbd.xseg, xsegbd_dev->dst_portno, xreq) == NoSerial);
 	}
@@ -673,6 +673,7 @@ static long xseg_callback(void *arg)
 	unsigned long flags;
 	xqindex blkreq_idx;
 	int err;
+	char *data;
 
 	port = XSEG_TAKE_PTR(arg, xsegbd.xseg->segment);
 	xsegbd_dev = (struct xsegbd_device *) port->waitcue;
@@ -684,6 +685,23 @@ static long xseg_callback(void *arg)
 		xreq = xseg_receive(xsegbd.xseg, xsegbd_dev->src_portno);
 		if (!xreq)
 			break;
+
+		if (xreq->op == X_INFO) {
+			if (!(xreq->state & XS_SERVED)) {
+				xseg_put_request(xsegbd.xseg, xreq->portno, xreq);
+				return -EIO;
+			}
+
+			data = XSEG_TAKE_PTR(xreq->data, xsegbd.xseg->segment);
+			/* TODO: make sure we use consistent types accross peers */
+			xsegbd_dev->sectors = *((off_t *) data) / 512ULL;
+
+			complete(xsegbd_dev->comp);
+
+			xseg_put_request(xsegbd.xseg, xreq->portno, xreq);
+
+			return 0;
+               }
 
 		/* we rely upon our peers to not have touched ->priv */
 		blkreq_idx = (xqindex)(unsigned long)xreq->priv;
@@ -921,7 +939,7 @@ static ssize_t xsegbd_add(struct bus_type *bus, const char *buf, size_t count)
 		goto out_bus;
 	}
 
-	ret = xsegbd_dev_init(xsegbd_dev, 0);
+	ret = xsegbd_dev_init(xsegbd_dev);
 	if (ret)
 		goto out_free_requests;
 
@@ -983,7 +1001,6 @@ static ssize_t xsegbd_remove(struct bus_type *bus, const char *buf, size_t count
 
 	ret = count;
 	xsegbd_dev = __xsegbd_get_dev(id);
-	XSEGLOG("found dev @%p", xsegbd_dev);
 	if (!xsegbd_dev) {
 		ret = -ENOENT;
 		goto out_unlock;
