@@ -110,8 +110,8 @@ struct xseg_port {
 	struct xq free_queue;
 	struct xq request_queue;
 	struct xq reply_queue;
-	unsigned long owner;
-	volatile long waitcue;
+	uint64_t owner;
+	volatile uint64_t waitcue;
 	uint32_t peer_type;
 };
 
@@ -159,7 +159,7 @@ struct xseg_request {
 	uint64_t serviced;
 	char *data;
 	uint64_t datasize;
-	char *name;			/* target name */
+	char *name;		/* target name */
 	uint32_t namesize;
 	uint32_t op;
 	uint32_t state;
@@ -169,11 +169,11 @@ struct xseg_request {
 	char *buffer;
 	uint64_t buffersize;
 	xqindex task;
-	void *priv;
+	uint64_t priv;
 };
 
 struct xseg_shared {
-	unsigned long flags;
+	uint64_t flags;
 	char (*peer_types)[XSEG_TNAMESIZE];
 	uint32_t nr_peer_types;
 };
@@ -205,7 +205,7 @@ struct xseg {
                                               struct xseg_config  * config    );
 
    struct xseg_port *  xseg_bind_port       ( struct xseg         * xseg,      
-                                              long                  portno    );
+                                              uint32_t              portno    );
 
     static uint32_t    xseg_portno          ( struct xseg         * xseg,
                                               struct xseg_port    * port      );

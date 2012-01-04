@@ -31,14 +31,14 @@ uint32_t __get_id(void);
 
 static void __lock_segment(struct xseg *xseg)
 {
-	volatile unsigned long *flags;
+	volatile uint64_t *flags;
 	flags = &xseg->shared->flags;
 	while (__sync_fetch_and_or(flags, XSEG_F_LOCK));
 }
 
 static void __unlock_segment(struct xseg *xseg)
 {
-	volatile unsigned long *flags;
+	volatile uint64_t *flags;
 	flags = &xseg->shared->flags;
 	__sync_fetch_and_and(flags, ~XSEG_F_LOCK);
 }
@@ -823,12 +823,12 @@ out:
 }
 
 
-struct xseg_port *xseg_bind_port(struct xseg *xseg, long req)
+struct xseg_port *xseg_bind_port(struct xseg *xseg, uint32_t req)
 {
 	uint32_t portno, maxno, id = __get_id(), force;
 	struct xseg_port *port;
 
-	if (req < 0 || req > xseg->config.nr_ports) {
+	if (req > xseg->config.nr_ports) {
 		portno = 0;
 		maxno = xseg->config.nr_ports;
 		force = 0;

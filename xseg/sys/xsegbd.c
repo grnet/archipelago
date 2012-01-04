@@ -691,7 +691,7 @@ static void xseg_request_fn(struct request_queue *rq)
 		BUG_ON(blkreq_idx == None);
 		/* WARN_ON(dev->blk_req_pending[blkreq_idx] */
 		dev->blk_req_pending[blkreq_idx] = blkreq;
-		xreq->priv = (void *)(unsigned long)blkreq_idx;
+		xreq->priv = (uint64_t)blkreq_idx;
 		xreq->size = datasize;
 		xreq->offset = blk_rq_pos(blkreq) << 9;
 		/*

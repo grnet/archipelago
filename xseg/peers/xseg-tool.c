@@ -743,7 +743,7 @@ void handle_reply(struct xseg_request *req)
 	case X_COMMIT:
 	case X_CLONE:
 	case X_INFO:
-		printf("size: %llu\n", *((off_t *)req->data));
+		printf("size: %llu\n", (unsigned long long)*((uint64_t *)req->data));
 		break;
 
 	default:
