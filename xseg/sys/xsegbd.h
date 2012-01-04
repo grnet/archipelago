@@ -14,21 +14,27 @@
 #include <xq/xq.h>
 
 struct xsegbd {
-	spinlock_t lock;
-	struct request_queue *blk_queue;
-	struct gendisk *gd;
-        int id;
-	struct xsegbd_backer *backer;
-	sector_t sectors;
-	uint64_t segsize;
 	char name[XSEGBD_VOLUME_NAMELEN];
 	uint32_t namesize;
 	struct xseg_config config;
 	struct xseg *xseg;
-	uint32_t src_portno, dst_portno;
+};
+
+struct xsegbd_device {
+	spinlock_t lock;
+	struct request_queue *blk_queue;
+	struct gendisk *gd;
+	int id;
+	int major;
+	sector_t sectors;
+	uint64_t segsize;
+	uint32_t src_portno, dst_portno, nr_requests;
 	struct xq blk_queue_pending;
+	struct xsegbd *xsegbd;
 	char *_blk_queue_mem;
 	struct request **blk_req_pending;
+	struct device dev;
+	struct list_head node;
 };
 
 #endif

@@ -213,13 +213,18 @@ static ssize_t xsegdev_write(struct file *file, const char __user *buf,
 {
 	struct xsegdev_file *vf = file->private_data;
 	struct xsegdev *dev = xsegdev_get(vf->minor);
+	struct xseg_port *port;
 	int ret = -ENODEV;
 	if (!dev)
 		goto out;
 
+	ret = copy_from_user(&port, buf, sizeof(port));
+	if (ret < 0)
+		goto out;
+
 	ret = -ENOSYS;
 	if (dev->callback)
-		ret = dev->callback(dev->callarg);
+		ret = dev->callback(port);
 
 	xsegdev_put(dev);
 out:
