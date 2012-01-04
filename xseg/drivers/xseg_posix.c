@@ -10,8 +10,8 @@
 #include <errno.h>
 #include <string.h>
 #include <signal.h>
-#include <xseg/xseg.h>
 #include <sys/util.h>
+#include <xseg/xseg.h>
 
 #define ERRSIZE 512
 char errbuf[ERRSIZE];
@@ -154,10 +154,10 @@ static int posix_signal(struct xseg_port *port)
 	union sigval sigval = {0};
 	pid_t cue = (pid_t)port->waitcue;
 	if (!cue)
-		return -1;
+		return 0;
 	sigqueue(cue, SIGIO, sigval);
 	/* XXX: on error what? */
-	return 0;
+	return 1;
 }
 
 static void *posix_malloc(uint64_t size)

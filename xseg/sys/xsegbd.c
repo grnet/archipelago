@@ -634,7 +634,7 @@ static void xseg_request_fn(struct request_queue *rq)
 	}
 	//This is going to happen at least once.
 	//TODO find out why it happens more than once.
-	WARN_ON(xseg_signal(xsegbd_dev->xsegbd->xseg, xsegbd_dev->dst_portno));
+	WARN_ON(xseg_signal(xsegbd_dev->xsegbd->xseg, xsegbd_dev->dst_portno) < 0);
 	if (xreq)
 		xseg_put_request(xsegbd_dev->xsegbd->xseg, xsegbd_dev->src_portno, xreq);
 }
