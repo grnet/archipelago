@@ -169,9 +169,10 @@ static int dir_open(struct store *store, struct io *io, char* name, uint32_t nam
 
 start:
 	/* check cache */
+	pthread_mutex_lock(&store->cache_lock);
+start_locked:
 	lru = -1;
 	min = UINT64_MAX;
-	pthread_mutex_lock(&store->cache_lock);
 	for (i = 0; i < store->maxfds; i++) {
 		if (store->fdcache[i].ref == 0 && min > store->fdcache[i].time 
 				&& (store->fdcache[i].flags & READY)){
@@ -185,8 +186,10 @@ start:
 				/* if any other io thread is currently opening
 				 * the file, block until it succeeds or fails
 				 */
-				while (!(cacheEntry->flags & READY)){
+				if (!(cacheEntry->flags & READY)){
 					pthread_cond_wait(&cacheEntry->cond, &store->cache_lock);
+					/* when ready, restart lookup */
+					goto start_locked;
 				}
 				/* if successfully opened */
 				if (cacheEntry->fd > 0) {
@@ -399,10 +402,8 @@ static void dispatch(struct store *store, struct io *io)
 	case X_READ:
 	case X_WRITE:
 		handle_read_write(store, io); break;
-		/*
 	case X_INFO:
 		handle_info(store, io); break;
-		*/
 	case X_SYNC:
 	default:
 		handle_unknown(store, io);
