@@ -40,9 +40,7 @@ struct io {
 	pthread_mutex_t lock;
 };
 
-#define DIRTY (1 << 1)
-#define FLUSHING (1 << 2)
-#define READY (1 << 3)
+#define READY (1 << 1)
 
 struct fdcacheNode {
 	volatile int fd;
@@ -50,7 +48,6 @@ struct fdcacheNode {
 	volatile unsigned long time;
 	volatile unsigned int flags;
 	pthread_cond_t cond;
-	pthread_mutex_t lock;
 	char name[MAX_FILENAME_SIZE+1];
 };
 
@@ -129,9 +126,7 @@ static void complete(struct store *store, struct io *io)
 	log_io("complete", io);
 	xseg_respond(store->xseg, req->portno, req);
 	xseg_signal(store->xseg, req->portno);
-	pthread_mutex_lock(&store->fdcache[io->fdcacheidx].lock);
-	store->fdcache[io->fdcacheidx].ref--;
-	pthread_mutex_unlock(&store->fdcache[io->fdcacheidx].lock);
+	__sync_fetch_and_sub(&store->fdcache[io->fdcacheidx].ref, 1);
 }
 
 static void fail(struct store *store, struct io *io)
@@ -142,9 +137,7 @@ static void fail(struct store *store, struct io *io)
 	xseg_respond(store->xseg, req->portno, req);
 	xseg_signal(store->xseg, req->portno);
 	if (io->fdcacheidx >= 0) {
-		pthread_mutex_lock(&store->fdcache[io->fdcacheidx].lock);
-		store->fdcache[io->fdcacheidx].ref--;
-		pthread_mutex_unlock(&store->fdcache[io->fdcacheidx].lock);
+		__sync_fetch_and_sub(&store->fdcache[io->fdcacheidx].ref, 1);
 	}
 }
 
@@ -168,14 +161,16 @@ static inline void prepare_io(struct store *store, struct io *io)
 static int dir_open(struct store *store, struct io *io, char* name, uint32_t namesize, int mode){
 	int fd = -1, r;
 	struct fdcacheNode *cacheEntry = NULL;
-	long i, lru = -1;
-	uint64_t min = UINT64_MAX;
+	long i, lru;
+	uint64_t min;
 	io->fdcacheidx = -1;
 	if (namesize > MAX_FILENAME_SIZE)
 		goto out_err;
 
 start:
 	/* check cache */
+	lru = -1;
+	min = UINT64_MAX;
 	pthread_mutex_lock(&store->cache_lock);
 	for (i = 0; i < store->maxfds; i++) {
 		if (store->fdcache[i].ref == 0 && min > store->fdcache[i].time 
@@ -267,11 +262,8 @@ new_entry:
 out:
 	store->handled_reqs++;
 	cacheEntry->time= store->handled_reqs;
-	/* no need for the big lock any more, but we need the per entry lock. */
+	__sync_fetch_and_add(&cacheEntry->ref, 1);
 	pthread_mutex_unlock(&store->cache_lock);
-	pthread_mutex_lock(&cacheEntry->lock);
-	cacheEntry->ref++;
-	pthread_mutex_unlock(&cacheEntry->lock);
 out_err:
 	return fd;
 
@@ -382,7 +374,7 @@ static void handle_info(struct store *store, struct io *io)
 	int fd, r;
 	off_t size;
 
-	fd = dir_open(store, io, req->name, req->namesize, mode);
+	fd = dir_open(store, io, req->name, req->namesize, 0);
 	if (fd < 0) {
 		fail(store, io);
 		return;
@@ -407,8 +399,10 @@ static void dispatch(struct store *store, struct io *io)
 	case X_READ:
 	case X_WRITE:
 		handle_read_write(store, io); break;
+		/*
 	case X_INFO:
 		handle_info(store, io); break;
+		*/
 	case X_SYNC:
 	default:
 		handle_unknown(store, io);
@@ -600,7 +594,6 @@ malloc_fail:
 
 	for (i = 0; i < nr_ops; i++) {
 		pthread_cond_init(&store->fdcache[i].cond, NULL);
-		pthread_mutex_init(&store->fdcache[i].lock, NULL);
 		store->fdcache[i].flags = READY;
 	}
 	for (i = 0; i < nr_ops; i++) {
