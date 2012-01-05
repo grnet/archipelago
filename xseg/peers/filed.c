@@ -375,6 +375,31 @@ static void handle_read_write(struct store *store, struct io *io)
 	return;
 }
 
+static void handle_info(struct store *store, struct io *io)
+{
+	struct xseg_request *req = io->req;
+        struct stat stat;
+	int fd, r;
+	off_t size;
+
+	fd = dir_open(store, io, req->name, req->namesize, mode);
+	if (fd < 0) {
+		fail(store, io);
+		return;
+	}
+	r = fstat(fd, &stat);
+	if (r < 0) {
+		perror("fstat");
+		fail(store, io);
+		return;
+	}
+	size = stat.st_size;
+	*((off_t *) req->data) = size;
+	req->datasize = sizeof(size);
+
+	complete(store, io);
+}
+
 static void dispatch(struct store *store, struct io *io)
 {
 	printf("io: %x, req: %x, op %u\n", io, io->req, io->req->op);
@@ -382,6 +407,8 @@ static void dispatch(struct store *store, struct io *io)
 	case X_READ:
 	case X_WRITE:
 		handle_read_write(store, io); break;
+	case X_INFO:
+		handle_info(store, io); break;
 	case X_SYNC:
 	default:
 		handle_unknown(store, io);
