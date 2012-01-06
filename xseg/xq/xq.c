@@ -166,9 +166,9 @@ out:
 
 xqindex __xq_pop_head(struct xq *xq, xqindex nr)
 {
-	xqindex head = xq->head;
-	xq->head = head - nr;
-	return head - nr;
+	xqindex head = xq->head - nr;
+	xq->head = head;
+	return head;
 }
 
 xqindex xq_pop_heads(struct xq *xq,
@@ -206,9 +206,9 @@ out:
 
 xqindex __xq_append_tail(struct xq *xq, xqindex nr)
 {
-	xqindex tail = xq->tail;
-	xq->tail = tail - nr;
-	return tail;
+	xqindex tail = xq->tail - nr;
+	xq->tail = tail;
+	return tail + 1;
 }
 
 xqindex xq_append_tails(struct xq *xq,
@@ -224,7 +224,7 @@ xqindex xq_append_tails(struct xq *xq,
 	}
 
 	mask = xq->size -1;
-	tail = __xq_append_tail(xq, nr);
+	tail = __xq_append_tail(xq, nr) + nr -1;
 	for (i = 0; i < nr; i++)
 		PTR(xq, queue)[(tail - i) & mask] = tails[i];
 out:
@@ -250,7 +250,7 @@ xqindex __xq_pop_tail(struct xq *xq, xqindex nr)
 {
 	xqindex tail = xq->tail;
 	xq->tail = tail + nr;
-	return tail + 1;
+	return tail +1;
 }
 
 xqindex xq_pop_tails(struct xq *xq, xqindex nr, xqindex *tails)
@@ -307,7 +307,7 @@ int xq_head_to_tail(struct xq *headq, struct xq *tailq, xqindex nr)
 	tq = PTR(tailq, queue);
 
 	for (i = 0; i < nr; i++)
-		tq[(tail - i) & tmask] = hq[(head - i) & hmask];
+		tq[(tail + i) & tmask] = hq[(head + i) & hmask];
 
 	ret = 0;
 out:
