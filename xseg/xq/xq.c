@@ -307,7 +307,7 @@ int xq_head_to_tail(struct xq *headq, struct xq *tailq, xqindex nr)
 	tq = PTR(tailq, queue);
 
 	for (i = 0; i < nr; i++)
-		tq[(tail - i) & tmask] = hq[(head - i) & hmask];
+		tq[(tail - i) & tmask] = hq[(head + i) & hmask];
 
 	ret = 0;
 out:
