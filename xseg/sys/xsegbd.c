@@ -641,9 +641,12 @@ static void xseg_request_fn(struct request_queue *rq)
 
 		BUG_ON(xseg_submit(xsegbd.xseg, xsegbd_dev->dst_portno, xreq) == NoSerial);
 	}
-	//This is going to happen at least once.
-	//TODO find out why it happens more than once.
-	xseg_signal(xsegbd_dev->xsegbd->xseg, xsegbd_dev->dst_portno) < 0;
+
+	/* TODO:
+	 * This is going to happen at least once.
+	 * Add a WARN_ON when debugging find out why it happens more than once.
+	 */
+	xseg_signal(xsegbd_dev->xsegbd->xseg, xsegbd_dev->dst_portno);
 	if (xreq)
 		xseg_put_request(xsegbd_dev->xsegbd->xseg, xsegbd_dev->src_portno, xreq);
 }
