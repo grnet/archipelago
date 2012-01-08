@@ -7,7 +7,7 @@
 #define XSEGLOG(message, args...) printk(XSEGLOG_PREFIX message "\n", ##args)
 
 #define XSEGBD_SEGMENT_NAMELEN 32
-#define XSEGBD_TARGET_NAMELEN 128
+#define XSEGBD_TARGET_NAMELEN 127
 
 #include <linux/kernel.h>
 #include <linux/types.h>
@@ -36,7 +36,7 @@ struct xsegbd_device {
 	struct request **blk_req_pending;
 	struct device dev;
 	struct list_head node;
-	char name[XSEGBD_TARGET_NAMELEN];
+	char name[XSEGBD_TARGET_NAMELEN + 1];
 	uint32_t namesize;
 };
 

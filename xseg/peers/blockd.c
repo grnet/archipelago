@@ -36,6 +36,7 @@ struct store {
 	uint32_t portno;
 	int fd;
 	char name[TARGET_NAMELEN];
+	uint32_t namesize;
 	uint64_t size;
 	struct io *ios;
 	struct xq free_ops;
@@ -212,7 +213,9 @@ static void handle_info(struct store *store, struct io *io)
 {
 	struct xseg_request *req = io->req;
 
-	if (strcmp(req->name, store->name)) {
+	if (req->namesize != store->namesize ||
+		strncmp(req->name, store->name, store->namesize)) {
+
 		fail(store, io);
 		return;
 	}
@@ -327,6 +330,9 @@ static int blockd(char *path, off_t size, uint32_t nr_ops,
 	}
 
 	strncpy(store->name, path, TARGET_NAMELEN);
+	store->name[TARGET_NAMELEN - 1] = '\0';
+	store->namesize = strlen(store->name);
+
 	store->fd = open(path, O_RDWR);
 	while (store->fd < 0) {
 		if (errno == ENOENT && size)
