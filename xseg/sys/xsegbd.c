@@ -471,7 +471,7 @@ static int xsegbd_dev_init(struct xsegbd_device *xsegbd_dev)
 	/* vkoukis says we don't need partitions */
 	xsegbd_dev->gd = disk = alloc_disk(1);
 	if (!disk)
-		goto out_free_queue;
+		goto out_disk;
 
 	disk->major = xsegbd_dev->major;
 	disk->first_minor = 0; // id * XSEGBD_MINORS;
@@ -482,11 +482,11 @@ static int xsegbd_dev_init(struct xsegbd_device *xsegbd_dev)
 	snprintf(disk->disk_name, 32, "xsegbd%u", xsegbd_dev->id);
 
 	if (!xq_alloc_seq(&xsegbd_dev->blk_queue_pending, xsegbd_dev->nr_requests, xsegbd_dev->nr_requests))
-		goto out_free_disk;
+		goto out_disk;
 
-	xsegbd_dev->blk_req_pending = kmalloc(sizeof(struct request *) * xsegbd_dev->nr_requests, GFP_KERNEL);
+	xsegbd_dev->blk_req_pending = kzalloc(sizeof(struct request *) * xsegbd_dev->nr_requests, GFP_KERNEL);
 	if (!xsegbd_dev->blk_req_pending)
-		goto out_free_pending;
+		goto out_disk;
 
 	/* allow a non-zero sector_size parameter to override the disk size */
 	if (sector_size)
@@ -494,40 +494,49 @@ static int xsegbd_dev_init(struct xsegbd_device *xsegbd_dev)
 	else {
 		ret = xsegbd_get_size(xsegbd_dev);
 		if (ret)
-			goto out_free_pending;
+			goto out_disk;
 	}
 
 	set_capacity(disk, xsegbd_dev->sectors);
 	XSEGLOG("xsegbd active...");
 	add_disk(disk); /* immediately activates the device */
-	ret = 0;
+
+	return 0;
+
+out_disk:
+	put_disk(disk);
 out:
 	return ret;
-
-out_free_pending:
-	xq_free(&xsegbd_dev->blk_queue_pending);
-
-out_free_disk:
-	put_disk(disk);
-
-out_free_queue:
-	blk_cleanup_queue(xsegbd_dev->blk_queue);
-
-	goto out;
 }
 
 static void xsegbd_dev_release(struct device *dev)
 {
 	struct xsegbd_device *xsegbd_dev = dev_to_xsegbd(dev);
+	struct xseg_port *port;
 
-	xq_free(&xsegbd_dev->blk_queue_pending);
-	kfree(xsegbd_dev->blk_req_pending);
-	del_gendisk(xsegbd_dev->gd);
-	put_disk(xsegbd_dev->gd);
-	blk_cleanup_queue(xsegbd_dev->blk_queue);
-	unregister_blkdev(xsegbd_dev->major, XSEGBD_NAME);
+	/* cleanup gendisk and blk_queue the right way */
+	if (xsegbd_dev->gd) {
+		if (xsegbd_dev->gd->flags & GENHD_FL_UP)
+			del_gendisk(xsegbd_dev->gd);
+
+		blk_cleanup_queue(xsegbd_dev->blk_queue);
+		put_disk(xsegbd_dev->gd);
+	}
+
+	/* reset the port's waitcue (aka cancel_wait) */
+	port = &xsegbd.xseg->ports[xsegbd_dev->src_portno];
+	port->waitcue = (long) NULL;
+
 	xseg_free_requests(xsegbd.xseg, xsegbd_dev->src_portno, xsegbd_dev->nr_requests);
+
+	kfree(xsegbd_dev->blk_req_pending);
+	xq_free(&xsegbd_dev->blk_queue_pending);
+
+	unregister_blkdev(xsegbd_dev->major, XSEGBD_NAME);
+
 	kfree(xsegbd_dev);
+
+	module_put(THIS_MODULE);
 }
 
 /* ******************* */
@@ -885,6 +894,9 @@ static ssize_t xsegbd_add(struct bus_type *bus, const char *buf, size_t count)
 	int new_id = 0;
 	struct list_head *tmp;
 
+	if (!try_module_get(THIS_MODULE))
+		return -ENODEV;
+
 	xsegbd_dev = kzalloc(sizeof(*xsegbd_dev), GFP_KERNEL);
 	if (!xsegbd_dev)
 		goto out;
@@ -943,6 +955,8 @@ static ssize_t xsegbd_add(struct bus_type *bus, const char *buf, size_t count)
 
 		goto out_bus;
 	}
+	/* make sure we don't get any requests until we're ready to handle them */
+	xport->waitcue = (long) NULL;
 
 	XSEGLOG("allocating %u requests", xsegbd_dev->nr_requests);
 	if (xseg_alloc_requests(xsegbd.xseg, xsegbd_dev->src_portno, xsegbd_dev->nr_requests)) {
@@ -954,15 +968,19 @@ static ssize_t xsegbd_add(struct bus_type *bus, const char *buf, size_t count)
 
 	ret = xsegbd_dev_init(xsegbd_dev);
 	if (ret)
-		goto out_free_requests;
+		goto out_bus;
 
 	return count;
 
-out_free_requests:
-	xseg_free_requests(xsegbd.xseg, xsegbd_dev->src_portno, xsegbd_dev->nr_requests);
-
 out_bus:
+	mutex_lock_nested(&xsegbd_mutex, SINGLE_DEPTH_NESTING);
+
+	list_del_init(&xsegbd_dev->node);
 	xsegbd_bus_del_dev(xsegbd_dev);
+
+	mutex_unlock(&xsegbd_mutex);
+
+	return ret;
 
 out_blkdev:
 	unregister_blkdev(xsegbd_dev->major, XSEGBD_NAME);
