@@ -31,7 +31,7 @@ MODULE_LICENSE("GPL");
 static long sector_size = 0;
 static long blksize = 512;
 static int major = 0;
-static char name[XSEGBD_VOLUME_NAMELEN] = "xsegbd";
+static char name[XSEGBD_SEGMENT_NAMELEN] = "xsegbd";
 static char spec[256] = "xsegdev:xsegbd:4:512:64:1024:12";
 
 module_param(sector_size, long, 0644);
@@ -312,7 +312,7 @@ int xsegbd_xseg_init(void)
 	int r;
 
 	if (!xsegbd.name[0])
-		strncpy(xsegbd.name, name, XSEGBD_VOLUME_NAMELEN);
+		strncpy(xsegbd.name, name, XSEGBD_SEGMENT_NAMELEN);
 
 	XSEGLOG("registering xseg types");
 	xsegbd.namesize = strlen(xsegbd.name);
@@ -599,11 +599,11 @@ static void xseg_request_fn(struct request_queue *rq)
 
 
 		datasize = blk_rq_bytes(blkreq);
-		BUG_ON(xreq->buffersize - xsegbd.namesize < datasize);
-		BUG_ON(xseg_prep_request(xreq, xsegbd.namesize, datasize));
+		BUG_ON(xreq->buffersize - xsegbd_dev->namesize < datasize);
+		BUG_ON(xseg_prep_request(xreq, xsegbd_dev->namesize, datasize));
 
 		name = XSEG_TAKE_PTR(xreq->name, xsegbd.xseg->segment);
-		strncpy(name, xsegbd.name, xsegbd.namesize);
+		strncpy(name, xsegbd_dev->name, xsegbd_dev->namesize);
 		blkreq_idx = xq_pop_head(&xsegbd_dev->blk_queue_pending);
 		BUG_ON(blkreq_idx == None);
 		/* WARN_ON(xsebd_dev->blk_req_pending[blkreq_idx] */
@@ -652,6 +652,10 @@ int update_dev_sectors_from_request(	struct xsegbd_device *xsegbd_dev,
 					struct xseg_request *xreq	)
 {
 	void *data;
+
+	if (xreq->state & XS_ERROR)
+		return -ENOENT;
+
 	if (!(xreq->state & XS_SERVED))
 		return -EIO;
 
@@ -675,14 +679,14 @@ static int xsegbd_get_size(struct xsegbd_device *xsegbd_dev)
 
 	datasize = sizeof(uint64_t);
 	BUG_ON((uint64_t)&comp < xsegbd_dev->nr_requests);
-	BUG_ON(xreq->buffersize - xsegbd.namesize < datasize);
-	BUG_ON(xseg_prep_request(xreq, xsegbd.namesize, datasize));
+	BUG_ON(xreq->buffersize - xsegbd_dev->namesize < datasize);
+	BUG_ON(xseg_prep_request(xreq, xsegbd_dev->namesize, datasize));
 
 	init_completion(&comp);
 	xreq->priv = (uint64_t)(long)&comp;
 
 	name = XSEG_TAKE_PTR(xreq->name, xsegbd.xseg->segment);
-	strncpy(name, xsegbd.name, xsegbd.namesize);
+	strncpy(name, xsegbd_dev->name, xsegbd_dev->namesize);
 	xreq->size = datasize;
 	xreq->offset = 0;
 
@@ -905,10 +909,13 @@ static ssize_t xsegbd_add(struct bus_type *bus, const char *buf, size_t count)
 	INIT_LIST_HEAD(&xsegbd_dev->node);
 
 	/* parse cmd */
-	if (sscanf(buf, "%d:%d:%d", &xsegbd_dev->src_portno, &xsegbd_dev->dst_portno, &xsegbd_dev->nr_requests) < 3) {
+	if (sscanf(buf, "%" __stringify(XSEGBD_TARGET_NAMELEN) "s "
+			"%d:%d:%d", xsegbd_dev->name, &xsegbd_dev->src_portno,
+			&xsegbd_dev->dst_portno, &xsegbd_dev->nr_requests) < 3) {
 		ret = -EINVAL;
 		goto out_dev;
 	}
+	xsegbd_dev->namesize = strlen(xsegbd_dev->name);
 
 	mutex_lock_nested(&xsegbd_mutex, SINGLE_DEPTH_NESTING);
 
