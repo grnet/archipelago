@@ -823,12 +823,21 @@ static ssize_t xsegbd_reqs_show(struct device *dev,
 	return sprintf(buf, "%u\n", (unsigned) xsegbd_dev->nr_requests);
 }
 
+static ssize_t xsegbd_name_show(struct device *dev,
+					struct device_attribute *attr, char *buf)
+{
+	struct xsegbd_device *xsegbd_dev = dev_to_xsegbd(dev);
+
+	return sprintf(buf, "%s\n", xsegbd_dev->name);
+}
+
 static DEVICE_ATTR(size, S_IRUGO, xsegbd_size_show, NULL);
 static DEVICE_ATTR(major, S_IRUGO, xsegbd_major_show, NULL);
 static DEVICE_ATTR(srcport, S_IRUGO, xsegbd_srcport_show, NULL);
 static DEVICE_ATTR(dstport, S_IRUGO, xsegbd_dstport_show, NULL);
 static DEVICE_ATTR(id , S_IRUGO, xsegbd_id_show, NULL);
 static DEVICE_ATTR(reqs , S_IRUGO, xsegbd_reqs_show, NULL);
+static DEVICE_ATTR(name , S_IRUGO, xsegbd_name_show, NULL);
 
 static struct attribute *xsegbd_attrs[] = {
 	&dev_attr_size.attr,
@@ -837,6 +846,7 @@ static struct attribute *xsegbd_attrs[] = {
 	&dev_attr_dstport.attr,
 	&dev_attr_id.attr,
 	&dev_attr_reqs.attr,
+	&dev_attr_name.attr,
 	NULL
 };
 
