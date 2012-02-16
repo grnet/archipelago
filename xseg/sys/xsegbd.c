@@ -942,8 +942,8 @@ static ssize_t xsegbd_add(struct bus_type *bus, const char *buf, size_t count)
 			goto out_unlock;
 		}
 
-		if (xsegbd_dev->id >= new_id)
-			new_id = xsegbd_dev->id + 1;
+		if (entry->id >= new_id)
+			new_id = entry->id + 1;
 	}
 
 	xsegbd_dev->id = new_id;
