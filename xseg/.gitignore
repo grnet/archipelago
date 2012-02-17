@@ -9,3 +9,4 @@
 *.o.cmd
 .*.ko.cmd
 *.ko
+*.pyc
