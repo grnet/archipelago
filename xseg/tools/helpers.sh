@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# Setup all the components needed to test xseg
+# Helper functions for xseg testing and setup
 
 function usage {
 	echo "`basename $0` $1"
@@ -16,14 +16,14 @@ function pretty_print {
 function parse_config {
 	[ -e .xsegrc ] && source .xsegrc
 
-	[ -e "${XSEG_HOME}"] || XSEG_HOME="/root/archip/xseg/"
-	[ -e "${MODULES_DIR}"] || MODULES_DIR="${XSEG_HOME}/sys/"
-	[ -e "${SPEC}" ] || SPEC="xsegdev:xsegbd:128:8192:64:1024:12"
-	[ -e "${REQS}" ] || REQS=128
-	[ -e "${PORTS}" ] || PORTS=128
+	[ -n "${XSEG_HOME}"] || XSEG_HOME="/root/archip/xseg/"
+	[ -n "${MODULES_DIR}"] || MODULES_DIR="${XSEG_HOME}/sys/"
+	[ -n "${SPEC}" ] || SPEC="xsegdev:xsegbd:128:8192:64:1024:12"
+	[ -n "${REQS}" ] || REQS=128
+	[ -n "${PORTS}" ] || PORTS=128
 
-	[ -e "${CHRDEV_NAME}" ] || CHARDEV_NAME="/dev/xsegdev"
-	[ -e "${CHRDEV_MAJOR}" ] || CHARDEV_MAJOR=60
+	[ -n "${CHRDEV_NAME}" ] || CHARDEV_NAME="/dev/xsegdev"
+	[ -n "${CHRDEV_MAJOR}" ] || CHARDEV_MAJOR=60
 }
 
 function unload_module {

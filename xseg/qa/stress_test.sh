@@ -6,7 +6,7 @@ source ../tools/helpers.sh
 
 parse_config
 
-[ -e $1 ] && usage "[nr_times]"
+[ -n "${1}" ] || usage "[nr_times]"
 
 PORTS_AVAIL=$(($PORTS / 2 - 1))
 
