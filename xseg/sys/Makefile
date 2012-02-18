@@ -8,7 +8,7 @@ endif
 
 KDIR := /lib/modules/$(shell uname -r)/build
 PWD := $(shell pwd)
-EXTRA_CFLAGS += -I$(BASE) -DRELATIVE_POINTERS
+EXTRA_CFLAGS += -I$(BASE)
 
 xseg-objs := xsegmod.o xq.k.o xseg.k.o 
 obj-m += xsegbd.o xsegdev.o xseg.o

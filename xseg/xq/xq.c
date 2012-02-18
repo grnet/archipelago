@@ -1,13 +1,5 @@
 #include <xq/xq.h>
 
-#ifdef RELATIVE_POINTERS
-#define PTR(p, f) ((typeof((p)->f))((unsigned long)(p) + (unsigned long)(p)->f))
-#define PTRSET(p, f, v) ((p)->f = (void *)((unsigned long)(v) - (unsigned long)(p)))
-#else
-#define PTR(p, f) (p)->f
-#define PTRSET(p, f, v) ((p)->f = (v))
-#endif
-
 static inline int __snap(xqindex size)
 {
 	if (!size)
@@ -16,7 +8,7 @@ static inline int __snap(xqindex size)
 }
 
 void xq_free(struct xq *xq) {
-	xq_mfree((void *)PTR(xq, queue));
+	xq_mfree((void *)XPTR(&xq->queue));
 	memset(xq, 0, sizeof(struct xq));
 }
 
@@ -24,7 +16,7 @@ void xq_init_empty(struct xq *xq, xqindex size, void *mem)
 {
 	xq->head = 1;
 	xq->tail = 0;
-	PTRSET(xq, queue, mem);
+	XPTRSET(&xq->queue, mem);
 	xq->size = __snap(size);
 	xq_release(&xq->lock);
 }
@@ -38,7 +30,7 @@ void xq_init_map(struct xq *xq,
 	xqindex t, *qmem = mem;
 	xq->head = count + 1;
 	xq->tail = 0;
-	PTRSET(xq, queue, qmem);
+	XPTRSET(&xq->queue, qmem);
 	xq->size = __snap(size);
 	for (t = 0; t < count; t++)
 		qmem[t] = mapfn(t);
@@ -50,7 +42,7 @@ void xq_init_seq(struct xq *xq, xqindex size, xqindex count, void *mem)
 	xqindex t, *qmem = mem;
 	xq->head = count + 1;
 	xq->tail = 0;
-	PTRSET(xq, queue, qmem);
+	XPTRSET(&xq->queue, qmem);
 	xq->size = __snap(size);
 	for (t = 0; t < count; t++)
 		qmem[t] = t;
@@ -99,7 +91,7 @@ xqindex xq_count(struct xq *xq)
 
 xqindex xq_element(struct xq *xq, xqindex index)
 {
-	return PTR(xq, queue)[index & (xq->size - 1)];
+	return XPTR(&xq->queue)[index & (xq->size - 1)];
 }
 
 void xq_print(struct xq *xq)
@@ -144,7 +136,7 @@ xqindex xq_append_heads(struct xq *xq,
 	mask = xq->size -1;
 	head = __xq_append_head(xq, nr);
 	for (i = 0; i < nr; i++)
-		PTR(xq, queue)[(head + i) & mask] = heads[i];
+		XPTR(&xq->queue)[(head + i) & mask] = heads[i];
 out:
 	xq_release(&xq->lock);
 	return serial;
@@ -158,7 +150,7 @@ xqindex xq_append_head(struct xq *xq, xqindex xqi)
 		serial = None;
 		goto out;
 	}
-	PTR(xq, queue)[__xq_append_head(xq, 1) & (xq->size -1)] = xqi;
+	XPTR(&xq->queue)[__xq_append_head(xq, 1) & (xq->size -1)] = xqi;
 out:
 	xq_release(&xq->lock);
 	return serial;
@@ -186,7 +178,7 @@ xqindex xq_pop_heads(struct xq *xq,
 	mask = xq->size -1;
 	head = __xq_pop_head(xq, nr);
 	for (i = 0; i < nr; i++)
-		heads[i] = PTR(xq, queue)[(head - i) & mask];
+		heads[i] = XPTR(&xq->queue)[(head - i) & mask];
 out:
 	xq_release(&xq->lock);
 	return serial;
@@ -198,7 +190,7 @@ xqindex xq_pop_head(struct xq *xq)
 	(void)xq_acquire(&xq->lock, 1);
 	if (!xq_count(xq))
 		goto out;
-	value = PTR(xq, queue)[__xq_pop_head(xq, 1) & (xq->size -1)];
+	value = XPTR(&xq->queue)[__xq_pop_head(xq, 1) & (xq->size -1)];
 out:
 	xq_release(&xq->lock);
 	return value;
@@ -226,7 +218,7 @@ xqindex xq_append_tails(struct xq *xq,
 	mask = xq->size -1;
 	tail = __xq_append_tail(xq, nr) + nr -1;
 	for (i = 0; i < nr; i++)
-		PTR(xq, queue)[(tail - i) & mask] = tails[i];
+		XPTR(&xq->queue)[(tail - i) & mask] = tails[i];
 out:
 	xq_release(&xq->lock);
 	return serial;
@@ -240,7 +232,7 @@ xqindex xq_append_tail(struct xq *xq, xqindex xqi)
 		serial = None;
 		goto out;
 	}
-	PTR(xq, queue)[__xq_append_tail(xq, 1) & (xq->size -1)] = xqi;
+	XPTR(&xq->queue)[__xq_append_tail(xq, 1) & (xq->size -1)] = xqi;
 out:
 	xq_release(&xq->lock);
 	return serial;
@@ -266,7 +258,7 @@ xqindex xq_pop_tails(struct xq *xq, xqindex nr, xqindex *tails)
 	mask = xq->size -1;
 	tail = __xq_pop_tail(xq, nr);
 	for (i = 0; i < nr; i++)
-		tails[i] = PTR(xq, queue)[(tail + i) & mask];
+		tails[i] = XPTR(&xq->queue)[(tail + i) & mask];
 out:
 	xq_release(&xq->lock);
 	return serial;
@@ -278,7 +270,7 @@ xqindex xq_pop_tail(struct xq *xq)
 	(void)xq_acquire(&xq->lock, 1);
 	if (!xq_count(xq))
 		goto out;
-	value = PTR(xq, queue)[__xq_pop_tail(xq, 1) & (xq->size -1)];
+	value = XPTR(&xq->queue)[__xq_pop_tail(xq, 1) & (xq->size -1)];
 out:
 	xq_release(&xq->lock);
 	return value;
@@ -303,8 +295,8 @@ int xq_head_to_tail(struct xq *headq, struct xq *tailq, xqindex nr)
 	tmask = tailq->size -1;
 	head = __xq_pop_head(headq, nr);
 	tail = __xq_append_tail(tailq, nr);
-	hq = PTR(headq, queue);
-	tq = PTR(tailq, queue);
+	hq = XPTR(&headq->queue);
+	tq = XPTR(&tailq->queue);
 
 	for (i = 0; i < nr; i++)
 		tq[(tail + i) & tmask] = hq[(head + i) & hmask];
@@ -315,9 +307,6 @@ out:
 	xq_release(&tailq->lock);
 	return ret;
 }
-
-#undef PTR
-#undef PTRDEF
 
 #ifdef __KERNEL__
 #include <linux/module.h>

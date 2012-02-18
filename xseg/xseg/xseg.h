@@ -145,12 +145,13 @@ struct xseg_task {
 #define XF_FUA    (1 << 2)
 
 /* STATES */
-#define XS_SERVED   (1 << 0)
-#define XS_ERROR    (1 << 1)
+#define XS_SERVED	(1 << 0)
+#define XS_FAILED	(1 << 1)
 
-#define XS_ACCEPTED (1 << 2)
-#define XS_PENDING  (2 << 2)
-#define XS_FINISHED (3 << 2)
+#define XS_ACCEPTED	(1 << 2)
+#define XS_PENDING	(2 << 2)
+#define XS_SERVING	(3 << 2)
+#define XS_CONCLUDED	(3 << 2)
 
 struct xseg_request {
 	xserial serial;
@@ -174,7 +175,7 @@ struct xseg_request {
 
 struct xseg_shared {
 	uint64_t flags;
-	char (*peer_types)[XSEG_TNAMESIZE];
+	char (*peer_types)[XSEG_TNAMESIZE]; /* alignment? */
 	uint32_t nr_peer_types;
 };
 
