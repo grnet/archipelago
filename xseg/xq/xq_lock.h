@@ -10,7 +10,7 @@
 struct xq_lock {
 	long lock;
 	unsigned long serial;
-};
+} __attribute__ ((aligned (32))); /* support up to 128bit longs */
 
 static inline unsigned long xq_acquire(struct xq_lock *lock, unsigned long nr)
 {
