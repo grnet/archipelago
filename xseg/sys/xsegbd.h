@@ -6,7 +6,8 @@
 #define XSEGLOG_PREFIX KERN_INFO XSEGBD_NAME ": "
 #define XSEGLOG(message, args...) printk(XSEGLOG_PREFIX message "\n", ##args)
 
-#define XSEGBD_VOLUME_NAMELEN 32
+#define XSEGBD_SEGMENT_NAMELEN 32
+#define XSEGBD_TARGET_NAMELEN 127
 
 #include <linux/kernel.h>
 #include <linux/types.h>
@@ -14,7 +15,7 @@
 #include <xq/xq.h>
 
 struct xsegbd {
-	char name[XSEGBD_VOLUME_NAMELEN];
+	char name[XSEGBD_SEGMENT_NAMELEN];
 	uint32_t namesize;
 	struct xseg_config config;
 	struct xseg *xseg;
@@ -35,6 +36,8 @@ struct xsegbd_device {
 	struct request **blk_req_pending;
 	struct device dev;
 	struct list_head node;
+	char name[XSEGBD_TARGET_NAMELEN + 1];
+	uint32_t namesize;
 };
 
 #endif

@@ -31,7 +31,7 @@ MODULE_LICENSE("GPL");
 static long sector_size = 0;
 static long blksize = 512;
 static int major = 0;
-static char name[XSEGBD_VOLUME_NAMELEN] = "xsegbd";
+static char name[XSEGBD_SEGMENT_NAMELEN] = "xsegbd";
 static char spec[256] = "xsegdev:xsegbd:4:512:64:1024:12";
 
 module_param(sector_size, long, 0644);
@@ -312,7 +312,7 @@ int xsegbd_xseg_init(void)
 	int r;
 
 	if (!xsegbd.name[0])
-		strncpy(xsegbd.name, name, XSEGBD_VOLUME_NAMELEN);
+		strncpy(xsegbd.name, name, XSEGBD_SEGMENT_NAMELEN);
 
 	XSEGLOG("registering xseg types");
 	xsegbd.namesize = strlen(xsegbd.name);
@@ -471,7 +471,7 @@ static int xsegbd_dev_init(struct xsegbd_device *xsegbd_dev)
 	/* vkoukis says we don't need partitions */
 	xsegbd_dev->gd = disk = alloc_disk(1);
 	if (!disk)
-		goto out_free_queue;
+		goto out_disk;
 
 	disk->major = xsegbd_dev->major;
 	disk->first_minor = 0; // id * XSEGBD_MINORS;
@@ -482,11 +482,11 @@ static int xsegbd_dev_init(struct xsegbd_device *xsegbd_dev)
 	snprintf(disk->disk_name, 32, "xsegbd%u", xsegbd_dev->id);
 
 	if (!xq_alloc_seq(&xsegbd_dev->blk_queue_pending, xsegbd_dev->nr_requests, xsegbd_dev->nr_requests))
-		goto out_free_disk;
+		goto out_disk;
 
-	xsegbd_dev->blk_req_pending = kmalloc(sizeof(struct request *) * xsegbd_dev->nr_requests, GFP_KERNEL);
+	xsegbd_dev->blk_req_pending = kzalloc(sizeof(struct request *) * xsegbd_dev->nr_requests, GFP_KERNEL);
 	if (!xsegbd_dev->blk_req_pending)
-		goto out_free_pending;
+		goto out_disk;
 
 	/* allow a non-zero sector_size parameter to override the disk size */
 	if (sector_size)
@@ -494,40 +494,49 @@ static int xsegbd_dev_init(struct xsegbd_device *xsegbd_dev)
 	else {
 		ret = xsegbd_get_size(xsegbd_dev);
 		if (ret)
-			goto out_free_pending;
+			goto out_disk;
 	}
 
 	set_capacity(disk, xsegbd_dev->sectors);
 	XSEGLOG("xsegbd active...");
 	add_disk(disk); /* immediately activates the device */
-	ret = 0;
+
+	return 0;
+
+out_disk:
+	put_disk(disk);
 out:
 	return ret;
-
-out_free_pending:
-	xq_free(&xsegbd_dev->blk_queue_pending);
-
-out_free_disk:
-	put_disk(disk);
-
-out_free_queue:
-	blk_cleanup_queue(xsegbd_dev->blk_queue);
-
-	goto out;
 }
 
 static void xsegbd_dev_release(struct device *dev)
 {
 	struct xsegbd_device *xsegbd_dev = dev_to_xsegbd(dev);
+	struct xseg_port *port;
 
-	xq_free(&xsegbd_dev->blk_queue_pending);
-	kfree(xsegbd_dev->blk_req_pending);
-	del_gendisk(xsegbd_dev->gd);
-	put_disk(xsegbd_dev->gd);
-	blk_cleanup_queue(xsegbd_dev->blk_queue);
-	unregister_blkdev(xsegbd_dev->major, XSEGBD_NAME);
+	/* cleanup gendisk and blk_queue the right way */
+	if (xsegbd_dev->gd) {
+		if (xsegbd_dev->gd->flags & GENHD_FL_UP)
+			del_gendisk(xsegbd_dev->gd);
+
+		blk_cleanup_queue(xsegbd_dev->blk_queue);
+		put_disk(xsegbd_dev->gd);
+	}
+
+	/* reset the port's waitcue (aka cancel_wait) */
+	port = &xsegbd.xseg->ports[xsegbd_dev->src_portno];
+	port->waitcue = (long) NULL;
+
 	xseg_free_requests(xsegbd.xseg, xsegbd_dev->src_portno, xsegbd_dev->nr_requests);
+
+	kfree(xsegbd_dev->blk_req_pending);
+	xq_free(&xsegbd_dev->blk_queue_pending);
+
+	unregister_blkdev(xsegbd_dev->major, XSEGBD_NAME);
+
 	kfree(xsegbd_dev);
+
+	module_put(THIS_MODULE);
 }
 
 /* ******************* */
@@ -590,11 +599,11 @@ static void xseg_request_fn(struct request_queue *rq)
 
 
 		datasize = blk_rq_bytes(blkreq);
-		BUG_ON(xreq->buffersize - xsegbd.namesize < datasize);
-		BUG_ON(xseg_prep_request(xreq, xsegbd.namesize, datasize));
+		BUG_ON(xreq->buffersize - xsegbd_dev->namesize < datasize);
+		BUG_ON(xseg_prep_request(xreq, xsegbd_dev->namesize, datasize));
 
 		name = XSEG_TAKE_PTR(xreq->name, xsegbd.xseg->segment);
-		strncpy(name, xsegbd.name, xsegbd.namesize);
+		strncpy(name, xsegbd_dev->name, xsegbd_dev->namesize);
 		blkreq_idx = xq_pop_head(&xsegbd_dev->blk_queue_pending);
 		BUG_ON(blkreq_idx == None);
 		/* WARN_ON(xsebd_dev->blk_req_pending[blkreq_idx] */
@@ -632,9 +641,12 @@ static void xseg_request_fn(struct request_queue *rq)
 
 		BUG_ON(xseg_submit(xsegbd.xseg, xsegbd_dev->dst_portno, xreq) == NoSerial);
 	}
-	//This is going to happen at least once.
-	//TODO find out why it happens more than once.
-	WARN_ON(xseg_signal(xsegbd_dev->xsegbd->xseg, xsegbd_dev->dst_portno) < 0);
+
+	/* TODO:
+	 * This is going to happen at least once.
+	 * Add a WARN_ON when debugging find out why it happens more than once.
+	 */
+	xseg_signal(xsegbd_dev->xsegbd->xseg, xsegbd_dev->dst_portno);
 	if (xreq)
 		xseg_put_request(xsegbd_dev->xsegbd->xseg, xsegbd_dev->src_portno, xreq);
 }
@@ -643,6 +655,10 @@ int update_dev_sectors_from_request(	struct xsegbd_device *xsegbd_dev,
 					struct xseg_request *xreq	)
 {
 	void *data;
+
+	if (xreq->state & XS_ERROR)
+		return -ENOENT;
+
 	if (!(xreq->state & XS_SERVED))
 		return -EIO;
 
@@ -666,14 +682,14 @@ static int xsegbd_get_size(struct xsegbd_device *xsegbd_dev)
 
 	datasize = sizeof(uint64_t);
 	BUG_ON((uint64_t)&comp < xsegbd_dev->nr_requests);
-	BUG_ON(xreq->buffersize - xsegbd.namesize < datasize);
-	BUG_ON(xseg_prep_request(xreq, xsegbd.namesize, datasize));
+	BUG_ON(xreq->buffersize - xsegbd_dev->namesize < datasize);
+	BUG_ON(xseg_prep_request(xreq, xsegbd_dev->namesize, datasize));
 
 	init_completion(&comp);
 	xreq->priv = (uint64_t)(long)&comp;
 
 	name = XSEG_TAKE_PTR(xreq->name, xsegbd.xseg->segment);
-	strncpy(name, xsegbd.name, xsegbd.namesize);
+	strncpy(name, xsegbd_dev->name, xsegbd_dev->namesize);
 	xreq->size = datasize;
 	xreq->offset = 0;
 
@@ -807,12 +823,21 @@ static ssize_t xsegbd_reqs_show(struct device *dev,
 	return sprintf(buf, "%u\n", (unsigned) xsegbd_dev->nr_requests);
 }
 
+static ssize_t xsegbd_name_show(struct device *dev,
+					struct device_attribute *attr, char *buf)
+{
+	struct xsegbd_device *xsegbd_dev = dev_to_xsegbd(dev);
+
+	return sprintf(buf, "%s\n", xsegbd_dev->name);
+}
+
 static DEVICE_ATTR(size, S_IRUGO, xsegbd_size_show, NULL);
 static DEVICE_ATTR(major, S_IRUGO, xsegbd_major_show, NULL);
 static DEVICE_ATTR(srcport, S_IRUGO, xsegbd_srcport_show, NULL);
 static DEVICE_ATTR(dstport, S_IRUGO, xsegbd_dstport_show, NULL);
 static DEVICE_ATTR(id , S_IRUGO, xsegbd_id_show, NULL);
 static DEVICE_ATTR(reqs , S_IRUGO, xsegbd_reqs_show, NULL);
+static DEVICE_ATTR(name , S_IRUGO, xsegbd_name_show, NULL);
 
 static struct attribute *xsegbd_attrs[] = {
 	&dev_attr_size.attr,
@@ -821,6 +846,7 @@ static struct attribute *xsegbd_attrs[] = {
 	&dev_attr_dstport.attr,
 	&dev_attr_id.attr,
 	&dev_attr_reqs.attr,
+	&dev_attr_name.attr,
 	NULL
 };
 
@@ -885,6 +911,9 @@ static ssize_t xsegbd_add(struct bus_type *bus, const char *buf, size_t count)
 	int new_id = 0;
 	struct list_head *tmp;
 
+	if (!try_module_get(THIS_MODULE))
+		return -ENODEV;
+
 	xsegbd_dev = kzalloc(sizeof(*xsegbd_dev), GFP_KERNEL);
 	if (!xsegbd_dev)
 		goto out;
@@ -893,10 +922,13 @@ static ssize_t xsegbd_add(struct bus_type *bus, const char *buf, size_t count)
 	INIT_LIST_HEAD(&xsegbd_dev->node);
 
 	/* parse cmd */
-	if (sscanf(buf, "%d:%d:%d", &xsegbd_dev->src_portno, &xsegbd_dev->dst_portno, &xsegbd_dev->nr_requests) < 3) {
+	if (sscanf(buf, "%" __stringify(XSEGBD_TARGET_NAMELEN) "s "
+			"%d:%d:%d", xsegbd_dev->name, &xsegbd_dev->src_portno,
+			&xsegbd_dev->dst_portno, &xsegbd_dev->nr_requests) < 3) {
 		ret = -EINVAL;
 		goto out_dev;
 	}
+	xsegbd_dev->namesize = strlen(xsegbd_dev->name);
 
 	mutex_lock_nested(&xsegbd_mutex, SINGLE_DEPTH_NESTING);
 
@@ -910,8 +942,8 @@ static ssize_t xsegbd_add(struct bus_type *bus, const char *buf, size_t count)
 			goto out_unlock;
 		}
 
-		if (xsegbd_dev->id >= new_id)
-			new_id = xsegbd_dev->id + 1;
+		if (entry->id >= new_id)
+			new_id = entry->id + 1;
 	}
 
 	xsegbd_dev->id = new_id;
@@ -943,6 +975,8 @@ static ssize_t xsegbd_add(struct bus_type *bus, const char *buf, size_t count)
 
 		goto out_bus;
 	}
+	/* make sure we don't get any requests until we're ready to handle them */
+	xport->waitcue = (long) NULL;
 
 	XSEGLOG("allocating %u requests", xsegbd_dev->nr_requests);
 	if (xseg_alloc_requests(xsegbd.xseg, xsegbd_dev->src_portno, xsegbd_dev->nr_requests)) {
@@ -954,15 +988,19 @@ static ssize_t xsegbd_add(struct bus_type *bus, const char *buf, size_t count)
 
 	ret = xsegbd_dev_init(xsegbd_dev);
 	if (ret)
-		goto out_free_requests;
+		goto out_bus;
 
 	return count;
 
-out_free_requests:
-	xseg_free_requests(xsegbd.xseg, xsegbd_dev->src_portno, xsegbd_dev->nr_requests);
-
 out_bus:
+	mutex_lock_nested(&xsegbd_mutex, SINGLE_DEPTH_NESTING);
+
+	list_del_init(&xsegbd_dev->node);
 	xsegbd_bus_del_dev(xsegbd_dev);
+
+	mutex_unlock(&xsegbd_mutex);
+
+	return ret;
 
 out_blkdev:
 	unregister_blkdev(xsegbd_dev->major, XSEGBD_NAME);

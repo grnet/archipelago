@@ -12,6 +12,8 @@
 
 #include <xseg/xseg.h>
 
+#define TARGET_NAMELEN 128
+
 static int usage(void)
 {
 	printf("Usage: ./blockd <path_to_disk_image> [options]\n"
@@ -33,7 +35,9 @@ struct store {
 	struct xseg_port *xport;
 	uint32_t portno;
 	int fd;
-	off_t size;
+	char name[TARGET_NAMELEN];
+	uint32_t namesize;
+	uint64_t size;
 	struct io *ios;
 	struct xq free_ops;
 	char *free_bufs;
@@ -209,8 +213,16 @@ static void handle_info(struct store *store, struct io *io)
 {
 	struct xseg_request *req = io->req;
 
-	*((off_t *) req->data) = store->size;
-	req->datasize = sizeof(store->size);
+	if (req->namesize != store->namesize ||
+		strncmp(req->name, store->name, store->namesize)) {
+
+		fail(store, io);
+		return;
+	}
+
+	*((uint64_t *) req->data) = store->size;
+	req->serviced = req->datasize = sizeof(store->size);
+	io->retval = io->cb.aio_offset = io->cb.aio_nbytes = req->datasize;
 
 	complete(store, io);
 }
@@ -317,6 +329,10 @@ static int blockd(char *path, off_t size, uint32_t nr_ops,
 		return -1;
 	}
 
+	strncpy(store->name, path, TARGET_NAMELEN);
+	store->name[TARGET_NAMELEN - 1] = '\0';
+	store->namesize = strlen(store->name);
+
 	store->fd = open(path, O_RDWR);
 	while (store->fd < 0) {
 		if (errno == ENOENT && size)
@@ -333,7 +349,7 @@ static int blockd(char *path, off_t size, uint32_t nr_ops,
 			perror(path);
 			return r;
 		}
-		size = stat.st_size;
+		size = (uint64_t) stat.st_size;
 		if (size == 0) {
 			fprintf(stderr, "size cannot be zero\n");
 			return -1;
@@ -409,7 +425,7 @@ malloc_fail:
 int main(int argc, char **argv)
 {
 	char *path, *spec = "";
-	off_t size;
+	uint64_t size;
 	int i;
 	long portno;
 	uint32_t nr_ops;

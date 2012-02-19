@@ -191,7 +191,7 @@ void report_request(struct xseg_request *req)
 int cmd_info(char *name)
 {
 	uint32_t namesize = strlen(name);
-	size_t size = sizeof(off_t);
+	size_t size = sizeof(uint64_t);
 	int r;
 	xserial srl;
 	struct xseg_request *req;
