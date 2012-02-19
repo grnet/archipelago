@@ -133,6 +133,8 @@ static void *xsegdev_map(const char *name, uint64_t size)
 	dev->callback = xseg_callback;
 	xseg = (void *)dev->segment;
 
+	goto out;
+
 put_out:
 	xsegdev_put(dev);
 out:
@@ -148,6 +150,8 @@ static void xsegdev_unmap(void *ptr, uint64_t size)
 
 	//xsegdev->callarg = NULL;
 	xsegdev->callback = NULL;
+	xsegdev_put(xsegdev);
+
 	xsegdev_put(xsegdev);
 }
 
@@ -376,8 +380,13 @@ err0:
 
 int xsegbd_xseg_quit(void)
 {
+	struct xsegdev *xsegdev;
+
 	/* make sure to unmap the segment first */
+	xsegdev = xsegdev_get(0);
+	clear_bit(XSEGDEV_RESERVED, &xsegdev->flags);
 	xsegbd.xseg->type.ops.unmap(xsegbd.xseg, xsegbd.xseg->segment_size);
+	xsegdev_put(xsegdev);
 
 	xseg_unregister_peer(xseg_peer_xsegdev.name);
 	xseg_unregister_peer(xseg_peer_posix.name);
