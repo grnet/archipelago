@@ -656,7 +656,7 @@ int update_dev_sectors_from_request(	struct xsegbd_device *xsegbd_dev,
 {
 	void *data;
 
-	if (xreq->state & XS_ERROR)
+	if (xreq->state & XS_FAILED)
 		return -ENOENT;
 
 	if (!(xreq->state & XS_SERVED))

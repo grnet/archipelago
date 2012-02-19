@@ -132,7 +132,7 @@ static void complete(struct store *store, struct io *io)
 static void fail(struct store *store, struct io *io)
 {
 	struct xseg_request *req = io->req;
-	req->state |= XS_ERROR;
+	req->state |= XS_FAILED;
 	log_io("fail", io);
 	xseg_respond(store->xseg, req->portno, req);
 	xseg_signal(store->xseg, req->portno);
