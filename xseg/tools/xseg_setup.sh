@@ -3,9 +3,10 @@
 # Setup/clean all the components needed to test xseg
 # (behaviour determined by script name)
 
+# This assumes ${XSEG_HOME}/tools is in the path
 source helpers.sh
 
-[ -n "${1}" ] || usage
+# [ -n "${1}" ] || usage
 
 parse_config
 

@@ -42,13 +42,13 @@ struct io {
 
 #define READY (1 << 1)
 
-struct fdcacheNode {
+struct fdcache_node {
 	volatile int fd;
 	volatile unsigned int ref;
 	volatile unsigned long time;
 	volatile unsigned int flags;
 	pthread_cond_t cond;
-	char name[MAX_FILENAME_SIZE+1];
+	char name[MAX_FILENAME_SIZE + 1];
 };
 
 struct store {
@@ -65,7 +65,7 @@ struct store {
 	uint32_t path_len;
 	uint64_t handled_reqs;
 	unsigned long maxfds;
-	struct fdcacheNode *fdcache;
+	struct fdcache_node *fdcache;
 	pthread_t *iothread;
 	pthread_mutex_t cache_lock;
 	char path[MAX_PATH_SIZE + 1];
@@ -75,7 +75,7 @@ static unsigned long sigaction_count;
 
 static void sigaction_handler(int sig, siginfo_t *siginfo, void *arg)
 {
-	sigaction_count ++;
+	sigaction_count++;
 }
 
 static void log_io(char *msg, struct io *io)
@@ -90,8 +90,11 @@ static void log_io(char *msg, struct io *io)
 	name[end] = 0;
 	strncpy(data, io->req->data, 63);
 	data[63] = 0;
-	printf("%s: fd:%u, op:%u %llu:%lu retval: %lu, reqstate: %u\n"
-		"name[%u]:'%s', data[%llu]:\n%s------------------\n\n",
+#if 0
+vkoukis debug off
+	fprintf(stderr,
+		"%s: fd:%u, op:%u offset: %llu size: %lu retval: %lu, reqstate: %u\n"
+		"name[%u]: '%s', data[%llu]:\n%s------------------\n\n",
 		msg,
 		(unsigned int)io->fdcacheidx, //this is cacheidx not fd
 		(unsigned int)io->req->op,
@@ -101,6 +104,7 @@ static void log_io(char *msg, struct io *io)
 		(unsigned int)io->req->state,
 		(unsigned int)io->req->namesize, name,
 		(unsigned long long)io->req->datasize, data);
+#endif
 }
 
 static struct io *alloc_io(struct store *store)
@@ -158,9 +162,11 @@ static inline void prepare_io(struct store *store, struct io *io)
 }
 
 
-static int dir_open(struct store *store, struct io *io, char* name, uint32_t namesize, int mode){
+static int dir_open(	struct store *store, struct io *io,
+			char *name, uint32_t namesize, int mode	)
+{
 	int fd = -1, r;
-	struct fdcacheNode *cacheEntry = NULL;
+	struct fdcache_node *ce = NULL;
 	long i, lru;
 	uint64_t min;
 	io->fdcacheidx = -1;
@@ -175,24 +181,24 @@ start_locked:
 	min = UINT64_MAX;
 	for (i = 0; i < store->maxfds; i++) {
 		if (store->fdcache[i].ref == 0 && min > store->fdcache[i].time 
-				&& (store->fdcache[i].flags & READY)){
+				&& (store->fdcache[i].flags & READY)) {
 			min = store->fdcache[i].time;
 			lru = i;
 
 		}
-		if (!strncmp(store->fdcache[i].name, name, namesize)){
-			if (store->fdcache[i].name[namesize] == 0){
-				cacheEntry = &store->fdcache[i];
+		if (!strncmp(store->fdcache[i].name, name, namesize)) {
+			if (store->fdcache[i].name[namesize] == 0) {
+				ce = &store->fdcache[i];
 				/* if any other io thread is currently opening
 				 * the file, block until it succeeds or fails
 				 */
-				if (!(cacheEntry->flags & READY)){
-					pthread_cond_wait(&cacheEntry->cond, &store->cache_lock);
+				if (!(ce->flags & READY)) {
+					pthread_cond_wait(&ce->cond, &store->cache_lock);
 					/* when ready, restart lookup */
 					goto start_locked;
 				}
 				/* if successfully opened */
-				if (cacheEntry->fd > 0) {
+				if (ce->fd > 0) {
 					fd = store->fdcache[i].fd;
 					io->fdcacheidx = i;
 					goto out;
@@ -216,28 +222,28 @@ start_locked:
 	}
 	if (store->fdcache[lru].ref){
 		fd = -1;
-		printf("lru(%ld) ref not 0 (%lu)\n", lru, store->fdcache[lru].ref);
+		printf("lru(%ld) ref not 0 (%u)\n", lru, store->fdcache[lru].ref);
 		goto out_err_unlock;
 	}
 	/* make room for new file */
-	cacheEntry = &store->fdcache[lru];
+	ce = &store->fdcache[lru];
 	/* set name here and state to not ready, for any other requests on the
 	 * same target that may follow
 	 */
-	strncpy(cacheEntry->name, name, namesize);
-	cacheEntry->name[namesize] = 0;
-	cacheEntry->flags &= ~READY;
+	strncpy(ce->name, name, namesize);
+	ce->name[namesize] = 0;
+	ce->flags &= ~READY;
 	pthread_mutex_unlock(&store->cache_lock);
 
-	if (cacheEntry->fd >0){
-		if (close(cacheEntry->fd) < 0){
+	if (ce->fd >0){
+		if (close(ce->fd) < 0){
 			perror("close");
 		}
 	}
-	fd = openat(store->dirfd, cacheEntry->name, O_RDWR);	
+	fd = openat(store->dirfd, ce->name, O_RDWR);	
 	if (fd < 0) {
 		if (errno == ENOENT){
-			fd = openat(store->dirfd, cacheEntry->name, 
+			fd = openat(store->dirfd, ce->name, 
 					O_RDWR | O_CREAT, 0600);
 			if (fd >= 0)
 				goto new_entry;
@@ -250,10 +256,10 @@ start_locked:
 	/* insert in cache */
 new_entry:
 	pthread_mutex_lock(&store->cache_lock);
-	cacheEntry->fd = fd;
-	cacheEntry->ref = 0;
-	cacheEntry->flags = READY;
-	pthread_cond_broadcast(&cacheEntry->cond);
+	ce->fd = fd;
+	ce->ref = 0;
+	ce->flags = READY;
+	pthread_cond_broadcast(&ce->cond);
 	if (fd > 0) {
 		io->fdcacheidx = lru;
 	}
@@ -264,8 +270,8 @@ new_entry:
 
 out:
 	store->handled_reqs++;
-	cacheEntry->time= store->handled_reqs;
-	__sync_fetch_and_add(&cacheEntry->ref, 1);
+	ce->time = store->handled_reqs;
+	__sync_fetch_and_add(&ce->ref, 1);
 	pthread_mutex_unlock(&store->cache_lock);
 out_err:
 	return fd;
@@ -397,7 +403,8 @@ static void handle_info(struct store *store, struct io *io)
 
 static void dispatch(struct store *store, struct io *io)
 {
-	printf("io: %x, req: %x, op %u\n", io, io->req, io->req->op);
+	printf("io: 0x%p, req: 0x%p, op %u\n",
+		(void *)io, (void *)io->req, io->req->op);
 	switch (io->req->op) {
 	case X_READ:
 	case X_WRITE:
@@ -465,6 +472,7 @@ static struct xseg *join(char *spec)
 	if (xseg)
 		return xseg;
 
+	fprintf(stderr, "Failed to join xseg, creating it...\n");
 	(void)xseg_create(&config);
 	return xseg_join(config.type, config.name);
 }
@@ -483,8 +491,8 @@ static int filed_loop(struct store *store)
 	return 0;
 }
 
-static int blockd(char *path, unsigned long size, uint32_t nr_ops,
-		  char *spec, long portno)
+static int filed(	char *path, unsigned long size, uint32_t nr_ops,
+			char *spec, long portno	)
 {
 	struct stat stat;
 	struct sigaction sa;
@@ -520,7 +528,7 @@ static int blockd(char *path, unsigned long size, uint32_t nr_ops,
 	store->nr_ops = nr_ops;
 	store->maxfds = 2 * nr_ops;
 
-	store->fdcache = calloc(store->maxfds, sizeof(struct fdcacheNode));
+	store->fdcache = calloc(store->maxfds, sizeof(struct fdcache_node));
 	if(!store->fdcache)
 		goto malloc_fail;
 
@@ -590,7 +598,7 @@ malloc_fail:
 	}
 
 	store->portno = xseg_portno(store->xseg, store->xport);
-	printf("blockd on port %u/%u\n",
+	printf("filed on port %u/%u\n",
 		store->portno, store->xseg->config.nr_ports);
 
 	for (i = 0; i < nr_ops; i++) {
@@ -645,6 +653,6 @@ int main(int argc, char **argv)
 	if (nr_ops <= 0)
 		nr_ops = 16;
 
-	return blockd(path, size, nr_ops, spec, portno);
+	return filed(path, size, nr_ops, spec, portno);
 }
 

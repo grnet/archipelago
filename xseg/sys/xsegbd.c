@@ -681,7 +681,6 @@ static int xsegbd_get_size(struct xsegbd_device *xsegbd_dev)
 		goto out;
 
 	datasize = sizeof(uint64_t);
-	BUG_ON((uint64_t)&comp < xsegbd_dev->nr_requests);
 	BUG_ON(xreq->buffersize - xsegbd_dev->namesize < datasize);
 	BUG_ON(xseg_prep_request(xreq, xsegbd_dev->namesize, datasize));
 
@@ -702,7 +701,9 @@ static int xsegbd_get_size(struct xsegbd_device *xsegbd_dev)
 	xseg_signal(xsegbd.xseg, xsegbd_dev->dst_portno);
 
 	wait_for_completion_interruptible(&comp);
+	XSEGLOG("Woken up after wait_for_completion_interruptible()\n");
 	ret = update_dev_sectors_from_request(xsegbd_dev, xreq);
+	XSEGLOG("get_size: sectors = %ld\n", (long)xsegbd_dev->sectors);
 out:
 	xseg_put_request(xsegbd.xseg, xsegbd_dev->src_portno, xreq);
 	return ret;
@@ -734,7 +735,7 @@ static long xseg_callback(void *arg)
 		if (blkreq_idx >= xsegbd_dev->nr_requests) {
 			/* someone is blocking on this request
 			   and will handle it when we wake them up. */
-			complete((void *)(long)xreq->priv);
+			complete((void *)xreq->priv);
 			/* the request is blocker's responsibility so
 			   we will not put_request(); */
 			continue;
@@ -742,7 +743,7 @@ static long xseg_callback(void *arg)
 
 		/* this is now treated as a block I/O request to end */
 		blkreq = xsegbd_dev->blk_req_pending[blkreq_idx];
-		/* WARN_ON(!blkreq); */
+		WARN_ON(!blkreq);
 		err = -EIO;
 
 		if (!(xreq->state & XS_SERVED))

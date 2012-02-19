@@ -89,7 +89,7 @@ static void posix_unmap(void *ptr, uint64_t size)
 static void handler(int signum)
 {
 	static unsigned long counter;
-	printf("%lu: signal %d: this shouldn't have happend.\n", counter, signum);
+	printf("%lu: signal %d: this shouldn't have happened.\n", counter, signum);
 	counter ++;
 }
 

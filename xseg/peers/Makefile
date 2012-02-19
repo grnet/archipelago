@@ -17,4 +17,4 @@ xseg: xseg-tool.c $(BASE)/xseg/xseg.h
 	$(CC) $(CFLAGS) -o $@ $< -L$(BASE)/lib -lxseg
 
 clean:
-	rm -f blockd xseg
+	rm -f blockd filed xseg
