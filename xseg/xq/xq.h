@@ -1,17 +1,16 @@
 #ifndef _XQ_H
 #define _XQ_H
 
-typedef unsigned int xqindex;
-
-#define None (xqindex)-1
-
 #include <sys/util.h>
+
+typedef uint32_t xqindex;
+
 #include "xq_lock.h"
 
 struct xq {
         struct xq_lock lock;
         xqindex head, tail;
-        xqindex *queue;
+        XPTR_TYPE(xqindex) queue;
         xqindex size;
 };
 

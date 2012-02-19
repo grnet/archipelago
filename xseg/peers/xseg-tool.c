@@ -13,7 +13,7 @@
 
 int help(void)
 {
-	printf("xseg <spec> [[[<src_port>]:[<dst_port>]] [<command> <arg>]* ]*\n"
+	printf("xseg <spec> [[[<src_port>]:[<dst_port>]] [<command> <arg>*] ]*\n"
 		"spec:\n"
 		"    <type:name:nr_ports:nr_requests:request_size:extra_size:page_shift>\n"
 		"global commands:\n"
@@ -184,8 +184,8 @@ void report_request(struct xseg_request *req)
 	if (max > 128)
 		max = 128;
 	req->data[max-1] = 0;
-	printf("request %llu state %u\n", (unsigned long long)req->serial, req->state);
-	printf("data: %s\n", req->data);
+	fprintf(stderr, "request %llu state %u\n", (unsigned long long)req->serial, req->state);
+	fprintf(stderr, "data: %s\n", req->data);
 }
 
 int cmd_info(char *name)
@@ -198,13 +198,13 @@ int cmd_info(char *name)
 
 	req = xseg_get_request(xseg, srcport);
 	if (!req) {
-		printf("No request!\n");
+		fprintf(stderr, "No request!\n");
 		return -1;
 	}
 
 	r = xseg_prep_request(req, namesize, size);
 	if (r < 0) {
-		printf("Cannot prepare request! (%lu, %lu)\n",
+		fprintf(stderr, "Cannot prepare request! (%lu, %lu)\n",
 			(unsigned long) namesize, (unsigned long) size);
 		xseg_put_request(xseg, srcport, req);
 		return -1;
@@ -231,13 +231,13 @@ int cmd_read(char *name, uint64_t offset, uint64_t size)
 	xserial srl;
 	struct xseg_request *req = xseg_get_request(xseg, srcport);
 	if (!req) {
-		printf("No request\n");
+		fprintf(stderr, "No request\n");
 		return -1;
 	}
 
 	r = xseg_prep_request(req, namesize, size);
 	if (r < 0) {
-		printf("Cannot prepare request! (%lu, %llu)\n",
+		fprintf(stderr, "Cannot prepare request! (%lu, %llu)\n",
 			(unsigned long)namesize, (unsigned long long)size);
 		xseg_put_request(xseg, srcport, req);
 		return -1;
@@ -267,19 +267,19 @@ int cmd_write(char *name, uint64_t offset)
 
 	inputbuf(stdin, &buf, &size);
 	if (!size) {
-		printf("No input\n");
+		fprintf(stderr, "No input\n");
 		return -1;
 	}
 
 	req = xseg_get_request(xseg, srcport);
 	if (!req) {
-		printf("No request\n");
+		fprintf(stderr, "No request\n");
 		return -1;
 	}
 
 	r = xseg_prep_request(req, namesize, size);
 	if (r < 0) {
-		printf("Cannot prepare request! (%lu, %llu)\n",
+		fprintf(stderr, "Cannot prepare request! (%lu, %llu)\n",
 			(unsigned long)namesize, (unsigned long long)size);
 		xseg_put_request(xseg, srcport, req);
 		return -1;
@@ -293,7 +293,7 @@ int cmd_write(char *name, uint64_t offset)
 
 	srl = xseg_submit(xseg, dstport, req);
 	if (srl == None) {
-		printf("Cannot submit\n");
+		fprintf(stderr, "Cannot submit\n");
 		return -1;
 	}
 
@@ -420,20 +420,20 @@ int cmd_rndwrite(long loops, int32_t seed, uint32_t namesize, uint32_t chunksize
 		return help();
 
 	if (namesize >= chunksize) {
-		printf("namesize >= chunksize\n");
+		fprintf(stderr, "namesize >= chunksize\n");
 		return -1;
 	}
 
 	char *p = realloc(namebuf, namesize+1);
 	if (!p) {
-		printf("Cannot allocate memory\n");
+		fprintf(stderr, "Cannot allocate memory\n");
 		return -1;
 	}
 	namebuf = p;
 
 	p = realloc(chunk, chunksize);
 	if (!p) {
-		printf("Cannot allocate memory\n");
+		fprintf(stderr, "Cannot allocate memory\n");
 		return -1;
 	}
 	chunk = p;
@@ -454,7 +454,7 @@ int cmd_rndwrite(long loops, int32_t seed, uint32_t namesize, uint32_t chunksize
 			xseg_cancel_wait(xseg, srcport);
 			r = xseg_prep_request(submitted, namesize, chunksize);
 			if (r < 0) {
-				printf("Cannot prepare request! (%u, %u)\n",
+				fprintf(stderr, "Cannot prepare request! (%u, %u)\n",
 					namesize, chunksize);
 				xseg_put_request(xseg, submitted->portno, submitted);
 				return -1;
@@ -489,7 +489,7 @@ int cmd_rndwrite(long loops, int32_t seed, uint32_t namesize, uint32_t chunksize
 				report_request(received);
 			}
 			if (xseg_put_request(xseg, received->portno, received))
-				printf("Cannot put request at port %u\n", received->portno);
+				fprintf(stderr, "Cannot put request at port %u\n", received->portno);
 		}
 
 		if (!submitted && !received)
@@ -497,7 +497,7 @@ int cmd_rndwrite(long loops, int32_t seed, uint32_t namesize, uint32_t chunksize
 
 			if (nr_submitted % 1000 == 0 && !reported) {
 				reported = 1;
-				printf("submitted %ld, received %ld, failed %ld\n",
+				fprintf(stderr, "submitted %ld, received %ld, failed %ld\n",
 					nr_submitted, nr_received, nr_failed);
 			}
 
@@ -505,7 +505,7 @@ int cmd_rndwrite(long loops, int32_t seed, uint32_t namesize, uint32_t chunksize
 				break;
 	}
 
-	printf("submitted %ld, received %ld, failed %ld\n",
+	fprintf(stderr, "submitted %ld, received %ld, failed %ld\n",
 		nr_submitted, nr_received, nr_failed);
 	return 0;
 }
@@ -521,20 +521,20 @@ int cmd_rndread(long loops, int32_t seed, uint32_t namesize, uint32_t chunksize,
 		return help();
 
 	if (namesize >= chunksize) {
-		printf("namesize >= chunksize\n");
+		fprintf(stderr, "namesize >= chunksize\n");
 		return -1;
 	}
 
 	char *p = realloc(namebuf, namesize+1);
 	if (!p) {
-		printf("Cannot allocate memory\n");
+		fprintf(stderr, "Cannot allocate memory\n");
 		return -1;
 	}
 	namebuf = p;
 
 	p = realloc(chunk, chunksize);
 	if (!p) {
-		printf("Cannot allocate memory\n");
+		fprintf(stderr, "Cannot allocate memory\n");
 		return -1;
 	}
 	chunk = p;
@@ -556,7 +556,7 @@ int cmd_rndread(long loops, int32_t seed, uint32_t namesize, uint32_t chunksize,
 			xseg_cancel_wait(xseg, srcport);
 			r = xseg_prep_request(submitted, namesize, chunksize);
 			if (r < 0) {
-				printf("Cannot prepare request! (%u, %u)\n",
+				fprintf(stderr, "Cannot prepare request! (%u, %u)\n",
 					namesize, chunksize);
 				xseg_put_request(xseg, submitted->portno, submitted);
 				return -1;
@@ -593,7 +593,7 @@ int cmd_rndread(long loops, int32_t seed, uint32_t namesize, uint32_t chunksize,
 			}
 
 			if (xseg_put_request(xseg, received->portno, received))
-				printf("Cannot put request at port %u\n", received->portno);
+				fprintf(stderr, "Cannot put request at port %u\n", received->portno);
 		}
 
 		if (!submitted && !received)
@@ -601,7 +601,7 @@ int cmd_rndread(long loops, int32_t seed, uint32_t namesize, uint32_t chunksize,
 
 		if (nr_submitted % 1000 == 0 && !reported) {
 			reported = 1;
-			printf("submitted %ld, received %ld, failed %ld, mismatched %ld\n",
+			fprintf(stderr, "submitted %ld, received %ld, failed %ld, mismatched %ld\n",
 			nr_submitted, nr_received, nr_failed, nr_mismatch);
 		}
 
@@ -609,7 +609,7 @@ int cmd_rndread(long loops, int32_t seed, uint32_t namesize, uint32_t chunksize,
 			break;
 	}
 
-	printf("submitted %ld, received %ld, failed %ld, mismatched %ld\n",
+	fprintf(stderr, "submitted %ld, received %ld, failed %ld, mismatched %ld\n",
 		nr_submitted, nr_received, nr_failed, nr_mismatch);
 	return 0;
 }
@@ -620,7 +620,7 @@ int cmd_report(uint32_t port)
 	fq = &xseg->ports[port].free_queue;
 	rq = &xseg->ports[port].request_queue;
 	pq = &xseg->ports[port].reply_queue;
-	printf("port %u:\n"
+	fprintf(stderr, "port %u:\n"
 		"       free_queue [%p] count : %u\n"
 		"    request_queue [%p] count : %u\n"
 		"      reply_queue [%p] count : %u\n",
@@ -638,7 +638,7 @@ int cmd_join(void)
 
 	xseg = xseg_join(cfg.type, cfg.name);
 	if (!xseg) {
-		printf("cannot join segment!\n");
+		fprintf(stderr, "cannot join segment!\n");
 		return -1;
 	}
 	return 0;
@@ -651,7 +651,7 @@ int cmd_reportall(void)
 	if (cmd_join())
 		return -1;
 
-	printf("global free requests: %u\n", xq_count(xseg->free_requests));
+	fprintf(stderr, "global free requests: %u\n", xq_count(xseg->free_requests));
 	for (t = 0; t < xseg->config.nr_ports; t++)
 		cmd_report(t);
 
@@ -662,11 +662,11 @@ int cmd_create(void)
 {
 	int r = xseg_create(&cfg);
 	if (r) {
-		printf("cannot create segment!\n");
+		fprintf(stderr, "cannot create segment!\n");
 		return -1;
 	}
 
-	printf("Segment initialized.\n");
+	fprintf(stderr, "Segment initialized.\n");
 	return 0;
 }
 
@@ -676,7 +676,7 @@ int cmd_destroy(void)
 		return -1;
 	xseg_destroy(xseg);
 	xseg = NULL;
-	printf("Segment destroyed.\n");
+	fprintf(stderr, "Segment destroyed.\n");
 	return 0;
 }
 
@@ -699,7 +699,7 @@ int cmd_put_requests(void)
 		if (!req)
 			break;
 		if (xseg_put_request(xseg, req->portno, req))
-			printf("Cannot put request at port %u\n", req->portno);
+			fprintf(stderr, "Cannot put request at port %u\n", req->portno);
 	}
 
 	return 0;
@@ -743,7 +743,7 @@ void handle_reply(struct xseg_request *req)
 	case X_COMMIT:
 	case X_CLONE:
 	case X_INFO:
-		printf("size: %llu\n", (unsigned long long)*((uint64_t *)req->data));
+		fprintf(stderr, "size: %llu\n", (unsigned long long)*((uint64_t *)req->data));
 		break;
 
 	default:
@@ -791,7 +791,7 @@ int cmd_put_replies(void)
 		req = xseg_receive(xseg, dstport);
 		if (!req)
 			break;
-		printf("request: %08llx%08llx\n"
+		fprintf(stderr, "request: %08llx%08llx\n"
 			"     op: %u\n"
 			"  state: %u\n",
 			0LL, (unsigned long long)req->serial,
@@ -812,11 +812,11 @@ int cmd_bind(long portno)
 {
 	struct xseg_port *port = xseg_bind_port(xseg, portno);
 	if (!port) {
-		printf("failed to bind port %ld\n", portno);
+		fprintf(stderr, "failed to bind port %ld\n", portno);
 		return 1;
 	}
 
-	printf("bound port %u\n", xseg_portno(xseg, port));
+	fprintf(stderr, "bound port %u\n", xseg_portno(xseg, port));
 	return 0;
 }
 
@@ -862,8 +862,8 @@ int parse_ports(char *str)
 	return ret;
 }
 
-int main(int argc, char **argv) {
-
+int main(int argc, char **argv)
+{
 	int i, ret = 0;
 	char *spec;
 
@@ -875,12 +875,12 @@ int main(int argc, char **argv) {
 	spec = argv[1];
 
 	if (xseg_parse_spec(spec, &cfg)) {
-		printf("Cannot parse spec\n");
+		fprintf(stderr, "Cannot parse spec\n");
 		return -1;
 	}
 
 	if (xseg_initialize("posix")) {
-		printf("cannot initialize!\n");
+		fprintf(stderr, "cannot initialize!\n");
 		return -1;
 	}
 
@@ -894,7 +894,7 @@ int main(int argc, char **argv) {
 		if (!strcmp(argv[i], "join")) {
 			ret = cmd_join();
 			if (!ret)
-				printf("Segment joined.\n");
+				fprintf(stderr, "Segment joined.\n");
 			continue;
 		}
 
@@ -934,13 +934,13 @@ int main(int argc, char **argv) {
 
 		if (srcport == -1) {
 			if (!parse_ports(argv[i]))
-				printf("source port undefined: %s\n", argv[i]);
+				fprintf(stderr, "source port undefined: %s\n", argv[i]);
 			continue;
 		}
 
 		if (dstport == -1) {
 			if (!parse_ports(argv[i]))
-				printf("destination port undefined: %s\n", argv[i]);
+				fprintf(stderr, "destination port undefined: %s\n", argv[i]);
 			continue;
 		}
 
@@ -1082,7 +1082,7 @@ int main(int argc, char **argv) {
 
 
 		if (!parse_ports(argv[i]))
-			printf("invalid argument: %s\n", argv[i]);
+			fprintf(stderr, "invalid argument: %s\n", argv[i]);
 	}
 
 	/* xseg_leave(); */

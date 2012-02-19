@@ -3,7 +3,7 @@
 # Helper functions for xseg testing and setup
 
 function usage {
-	echo "`basename $0` $1"
+	echo Usage: "`basename $0` $1"
 	exit 1
 }
 
@@ -14,7 +14,7 @@ function pretty_print {
 }
 
 function parse_config {
-	[ -e .xsegrc ] && source .xsegrc
+	[ -e ~/.xsegrc ] && source ~/.xsegrc
 
 	[ -n "${XSEG_HOME}" ] || XSEG_HOME="/root/archip/xseg/"
 	[ -n "${MODULES_DIR}" ] || MODULES_DIR="${XSEG_HOME}/sys/"

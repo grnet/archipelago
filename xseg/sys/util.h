@@ -26,4 +26,34 @@ void xq_mfree(void *ptr);
 #define LOGMSG(...) xseg_snprintf(__xseg_errbuf, 4096, FMTARG("%s: ", __func__, ## __VA_ARGS__, "")), \
                     __xseg_errbuf[4095] = 0, __xseg_log(__xseg_errbuf)
 
+typedef uint64_t xpointer;
+
+#define None ((xqindex)-1)
+#define Null ((xpointer)-1)
+
+
+#define XPTR_TYPE(ptrtype)	\
+	union {			\
+		ptrtype *t;	\
+		xpointer x;	\
+	}
+
+#define XPTRI(xptraddr)		\
+	(	(xpointer)(unsigned long)(xptraddr) +	\
+		(xptraddr)->x				)
+
+#define XPTRISET(xptraddr, ptrval)	\
+	((xptraddr)->x	=	(xpointer)(ptrval) -			\
+				(xpointer)(unsigned long)(xptraddr)	)
+
+#define XPTR(xptraddr)		\
+	(	(typeof((xptraddr)->t))				\
+		(unsigned long)					\
+		(	(xpointer)(unsigned long)(xptraddr) +	\
+			(xptraddr)->x		)		)
+
+#define XPTRSET(xptraddr, ptrval)	\
+	((xptraddr)->x	=	(xpointer)(unsigned long)(ptrval) -	\
+				(xpointer)(unsigned long)(xptraddr)	)
+
 #endif
