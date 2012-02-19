@@ -21,7 +21,11 @@ function parse_config {
 	[ -n "${SPEC}" ] || SPEC="xsegdev:xsegbd:128:8192:64:1024:12"
 	[ -n "${REQS}" ] || REQS=128
 	[ -n "${PORTS}" ] || PORTS=128
-
+	[ -n "${FILED_PORT}" || FILED_PORT=0
+	[ -n "${IMAGES}" ] || IMAGES="/srv/pithos/archip-data/images/"
+	[ -n "${BLOCKD_LOGS}" ] || BLOCKD_LOGS="/srv/pithos/archip-data/logs/"
+	[ -n "${DEVICE_PREFIX}" ] || DEVICE_PREFIX="/dev/xsegbd"
+	[ -n "${XSEGBD_SYSFS}" ] || XSEGBD_SYSFS="/sys/bus/xsegbd"
 	[ -n "${CHRDEV_NAME}" ] || CHRDEV_NAME="/dev/xsegdev"
 	[ -n "${CHRDEV_MAJOR}" ] || CHRDEV_MAJOR=60
 }
@@ -58,20 +62,25 @@ function load_all {
 # @param $1		target/volume name
 # @param $2		xseg port
 function spawn_blockd {
-	"${XSEG_HOME}/peers/blockd" "$1" -p "$2" -g "$SPEC"
+	"${XSEG_HOME}/peers/blockd" "$1" -p "$2" -g "$SPEC" &> "${BLOCKD_LOGS}/$1"
+}
+
+function spawn_filed {
+	"${XSEG_HOME}/peers/filed" "$1" -p "$2" -g "${SPEC}" &> "${BLOCKD_LOGS}/filed"
 }
 
 # map_volume - Map a volume to an xsegbd device
 #
 # @param $1		target/volume name
-# @param $2		(blockd) xseg port
+# @param $2		src port
+# @param $3		dst port
 function map_volume {
-	echo "$1 $(($2 + PORTS/2)):$2:${REQS}" > /sys/bus/xsegbd/add
+	echo "$1 $2:$3:${REQS}" > "${XSEGBD_SYSFS}add"
 }
 
 # unmap_device - Unmap an xsegbd device/volume
 #
 # @param $1		xsegbd device id
 function unmap_device {
-	echo "$1" > /sys/bus/xsegbd/remove
+	echo "$1" > "${XSEGBD_SYSFS}remove"
 }
