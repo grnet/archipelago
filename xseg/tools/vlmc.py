@@ -6,17 +6,17 @@
 import os, sys, subprocess, shutil, re, argparse
 
 #FIXME 
-xseg_home="/root/archip/xseg/"
-images="/srv/pithos/archip-data/images/"
-xsegbd_sysfs="/sys/bus/xsegbd/"
-device_prefix="/dev/xsegbd"
-blockd_logs="/srv/pithos/archip-data/logs/"
+XSEG_HOME="/root/archip/xseg/"
+IMAGES="/srv/pithos/archip-data/images/"
+XSEGBD_SYSFS="/sys/bus/xsegbd/"
+DEVICE_PREFIX="/dev/xsegbd"
+BLOCKD_LOGS="/srv/pithos/archip-data/logs/"
 
 def vlmc_list(args):
 	print "name\t\t\t\tsize"
 	try:
-		for f in os.listdir(images):
-			print "%s\t\t\t\t%dK" % (f, os.stat(images + f).st_size / 1024)
+		for f in os.listdir(IMAGES):
+			print "%s\t\t\t\t%dM" % (f, os.stat(IMAGES + f).st_size / 1024 / 1024)
 
 		sys.exit(0)
 	except Exception, reason:
@@ -30,7 +30,7 @@ def vlmc_create(args):
 
 	try:
 		old_dir = os.getcwd()
-		os.chdir(images)
+		os.chdir(IMAGES)
 
 		try:
 			os.stat(name)
@@ -60,7 +60,7 @@ def vlmc_remove(args):
 
 	try:
 		old_dir = os.getcwd()
-		os.chdir(images)
+		os.chdir(IMAGES)
 
 		try:
 			os.stat(name)
@@ -69,7 +69,7 @@ def vlmc_remove(args):
 			os.chdir(old_dir)
 			sys.exit(-1)
 		
-		os.unlink(images + '/' + name)
+		os.unlink(IMAGES + '/' + name)
 
 		os.chdir(old_dir)
 		sys.exit(0)
@@ -99,13 +99,13 @@ def vlmc_map(args):
 			port = 0
 			
 		old_dir = os.getcwd()
-		os.chdir(images)
-		f = os.open(blockd_logs +  name, os.O_CREAT | os.O_WRONLY)
-		r = subprocess.Popen([xseg_home + "peers/blockd", name, "-p", str(port),
+		os.chdir(IMAGES)
+		f = os.open(BLOCKD_LOGS +  name, os.O_CREAT | os.O_WRONLY)
+		r = subprocess.Popen([XSEG_HOME + "peers/blockd", name, "-p", str(port),
 		"-g", "xsegdev:xsegbd:128:4096:64:1024:12"], stdout=f, stderr=f)
 
-		os.chdir(images)
-		fd = os.open(xsegbd_sysfs + "add", os.O_WRONLY)
+		os.chdir(IMAGES)
+		fd = os.open(XSEGBD_SYSFS + "add", os.O_WRONLY)
 		os.write(fd, "%s %d:%d:128" % (name, port + 64, port))
 		os.close(fd)
 	except Exception, reason:
@@ -115,11 +115,11 @@ def vlmc_map(args):
 def vlmc_unmap(args):
 	device = args.name[0]
 	try:
-		for f in os.listdir(xsegbd_sysfs + "devices/"):
-			d_id = open(xsegbd_sysfs + "devices/" + f + "/id").read().strip()
-			name = open(xsegbd_sysfs + "devices/"+ f + "/name").read().strip()
-			if device == device_prefix + d_id:
-				fd = os.open(xsegbd_sysfs + "remove", os.O_WRONLY) 
+		for f in os.listdir(XSEGBD_SYSFS + "devices/"):
+			d_id = open(XSEGBD_SYSFS + "devices/" + f + "/id").read().strip()
+			name = open(XSEGBD_SYSFS + "devices/"+ f + "/name").read().strip()
+			if device == DEVICE_PREFIX + d_id:
+				fd = os.open(XSEGBD_SYSFS + "remove", os.O_WRONLY)
 				os.write(fd, d_id)
 				os.close(fd)
 
@@ -133,11 +133,11 @@ def vlmc_unmap(args):
 def vlmc_showmapped(args):
 	print "id\tpool\timage\tsnap\tdevice"
 	try:
-		for f in os.listdir(xsegbd_sysfs + "devices/"):
-			d_id = open(xsegbd_sysfs + "devices/" + f + "/id").read().strip()
-			name = open(xsegbd_sysfs + "devices/"+ f + "/name").read().strip()
+		for f in os.listdir(XSEGBD_SYSFS + "devices/"):
+			d_id = open(XSEGBD_SYSFS + "devices/" + f + "/id").read().strip()
+			name = open(XSEGBD_SYSFS + "devices/"+ f + "/name").read().strip()
 
-			print "%s\t%s\t%s\t%s\t%s" % (d_id, '-', name, '-', device_prefix +
+			print "%s\t%s\t%s\t%s\t%s" % (d_id, '-', name, '-', DEVICE_PREFIX +
 			d_id)
 	except Exception, reason:
 		print >> sys.stderr, reason
@@ -148,6 +148,7 @@ def vlmc_showmapped(args):
 if __name__ == "__main__":
 	# parse arguments and discpatch to the correct func
 	parser = argparse.ArgumentParser(description='vlmc tool')
+	parser.add_argument('-c', '--config', type=str, nargs='?', help='config file')
 	subparsers = parser.add_subparsers()
 
 	create_parser = subparsers.add_parser('create', help='Create volume')
@@ -191,4 +192,13 @@ if __name__ == "__main__":
 	ls_parser.add_argument('-p', '--pool', type=str, nargs='?', help='for backwards compatiblity with rbd')
 
 	args = parser.parse_args()	
+
+	try:
+		if args.config == None:
+			execfile(os.path.expanduser("~/.xsegrc"))
+		else:
+			execfile(args.config)
+	except:
+		print "Config file not found, falling back to defaults"
+
 	args.func(args)
