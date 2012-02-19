@@ -1,7 +1,6 @@
 #!/bin/bash
 #
 # Setup a development environment for xseg.
-# You need to *source* this.
 
 # Get the directory containing the script
 # into ${SCRIPTNAME}
