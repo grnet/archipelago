@@ -3,7 +3,7 @@
 # Setup/clean all the components needed to test xseg
 # (behaviour determined by script name)
 
-source helpers.sh
+source "`dirname $0`/helpers.sh"
 
 [ -n "${1}" ] && usage
 

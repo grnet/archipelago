@@ -33,7 +33,7 @@ function unload_module {
 function unload_all {
 	unload_module "xsegbd"
 	unload_module "xsegdev"
-	rm "${CHARDEV_NAME}"
+	rm "${CHRDEV_NAME}"
 	unload_module "xseg"
 }
 
