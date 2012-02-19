@@ -25,16 +25,10 @@ def vlmc_list(args):
 		
 def vlmc_create(args):
 	name = args.name[0]
-	if args.size == None and args.snap == None:
-		print >> sys.stderr, "Specify at least one of the two"
-		sys.exit(-1)
-
 	size = args.size
 	snap = args.snap
 
 	try:
-		size *= 1024*1024
-		
 		old_dir = os.getcwd()
 		os.chdir(images)
 
@@ -50,6 +44,7 @@ def vlmc_create(args):
 			shutil.copyfile(snap, name)
 		else:
 			f = os.open(name, os.O_CREAT | os.O_WRONLY, 0755)
+			size *= 1024*1024
 			os.lseek(f, size - 1, os.SEEK_SET)
 			os.write(f, "1")
 			os.close(f)
@@ -150,19 +145,15 @@ def vlmc_showmapped(args):
 
 	sys.exit(0)
 
-def check_no_opts(args, parser):
-	if args.name == None or args.size != None or args.snap != None:
-		parser.print_usage(file=sys.stderr)
-		sys.exit(-1)
-
 if __name__ == "__main__":
 	# parse arguments and discpatch to the correct func
 	parser = argparse.ArgumentParser(description='vlmc tool')
 	subparsers = parser.add_subparsers()
 
 	create_parser = subparsers.add_parser('create', help='Create volume')
-	create_parser.add_argument('-s', '--size', type=int, nargs='?', help='requested size in MB for create')
-	create_parser.add_argument('--snap', type=str, nargs='?', help='create from snapshot')
+	group = create_parser.add_mutually_exclusive_group(required=True)
+	group.add_argument('-s', '--size', type=int, nargs='?', help='requested size in MB for create')
+	group.add_argument('--snap', type=str, nargs='?', help='create from snapshot')
 	create_parser.add_argument('-p', '--pool', type=str, nargs='?', help='for backwards compatiblity with rbd')
 	create_parser.add_argument('name', type=str, nargs=1, help='volume/device name')
 	create_parser.set_defaults(func=vlmc_create)
