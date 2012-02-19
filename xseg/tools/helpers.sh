@@ -16,14 +16,14 @@ function pretty_print {
 function parse_config {
 	[ -e .xsegrc ] && source .xsegrc
 
-	[ -n "${XSEG_HOME}"] || XSEG_HOME="/root/archip/xseg/"
-	[ -n "${MODULES_DIR}"] || MODULES_DIR="${XSEG_HOME}/sys/"
+	[ -n "${XSEG_HOME}" ] || XSEG_HOME="/root/archip/xseg/"
+	[ -n "${MODULES_DIR}" ] || MODULES_DIR="${XSEG_HOME}/sys/"
 	[ -n "${SPEC}" ] || SPEC="xsegdev:xsegbd:128:8192:64:1024:12"
 	[ -n "${REQS}" ] || REQS=128
 	[ -n "${PORTS}" ] || PORTS=128
 
-	[ -n "${CHRDEV_NAME}" ] || CHARDEV_NAME="/dev/xsegdev"
-	[ -n "${CHRDEV_MAJOR}" ] || CHARDEV_MAJOR=60
+	[ -n "${CHRDEV_NAME}" ] || CHRDEV_NAME="/dev/xsegdev"
+	[ -n "${CHRDEV_MAJOR}" ] || CHRDEV_MAJOR=60
 }
 
 function unload_module {
@@ -38,7 +38,7 @@ function unload_all {
 }
 
 function load_module {
-	(lsmod | grep "$1" > /dev/null) || insmod "${MODULES_DIR}/$1.ko" "$2" || exit 1
+	(lsmod | grep "$1" > /dev/null) || insmod "${MODULES_DIR}$1.ko" "$2" || exit 1
 }
 
 function mk_chardev {

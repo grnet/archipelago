@@ -5,7 +5,7 @@
 
 source helpers.sh
 
-[ -n "${1}" ] || usage
+[ -n "${1}" ] && usage
 
 parse_config
 
