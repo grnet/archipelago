@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python2.7
 #
 # vlmc tool
 # (blockd-only atm)
@@ -7,12 +7,12 @@ import os, sys, subprocess, shutil, re, argparse
 
 #FIXME 
 xseg_home="/root/archip/xseg/"
-images="/root/images/"
+images="/srv/pithos/archip-data/images/"
 xsegbd_sysfs="/sys/bus/xsegbd/"
 device_prefix="/dev/xsegbd"
-blockd_logs="/root/logs/"
+blockd_logs="/srv/pithos/archip-data/logs/"
 
-def vlmc_list():
+def vlmc_list(args):
 	print "name\t\t\t\tsize"
 	try:
 		for f in os.listdir(images):
@@ -23,7 +23,15 @@ def vlmc_list():
 		print >> sys.stderr, reason
 		sys.exit(-1)
 		
-def vlmc_create(name, size, snap=""):
+def vlmc_create(args):
+	name = args.name[0]
+	if args.size == None and args.snap == None:
+		print >> sys.stderr, "Specify at least one of the two"
+		sys.exit(-1)
+
+	size = args.size
+	snap = args.snap
+
 	try:
 		size *= 1024*1024
 		
@@ -52,7 +60,9 @@ def vlmc_create(name, size, snap=""):
 		print >> sys.stderr, reason
 		sys.exit(-1)
 
-def vlmc_remove(name):
+def vlmc_remove(args):
+	name = args.name[0]
+
 	try:
 		old_dir = os.getcwd()
 		os.chdir(images)
@@ -72,7 +82,8 @@ def vlmc_remove(name):
 		print >> sys.stderr, reason
 		sys.exit(-1)
 
-def vlmc_map(name):
+def vlmc_map(args):
+	name = args.name[0]
 	try:
 		try:
 			r = subprocess.check_output(["ps", "-o", "command", "-C",
@@ -94,7 +105,7 @@ def vlmc_map(name):
 			
 		old_dir = os.getcwd()
 		os.chdir(images)
-		f = open(blockd_logs + '/'  + name)
+		f = os.open(blockd_logs +  name, os.O_CREAT | os.O_WRONLY)
 		r = subprocess.Popen([xseg_home + "peers/blockd", name, "-p", str(port),
 		"-g", "xsegdev:xsegbd:128:4096:64:1024:12"], stdout=f, stderr=f)
 
@@ -106,7 +117,8 @@ def vlmc_map(name):
 		print >> sys.stderr, reason
 		sys.exit(-1)
 
-def vlmc_unmap(device):
+def vlmc_unmap(args):
+	device = args.name[0]
 	try:
 		for f in os.listdir(xsegbd_sysfs + "devices/"):
 			d_id = open(xsegbd_sysfs + "devices/" + f + "/id").read().strip()
@@ -123,7 +135,7 @@ def vlmc_unmap(device):
 		print >> sys.stderr, reason
 		sys.exit(-1)
 
-def vlmc_showmapped():
+def vlmc_showmapped(args):
 	print "id\tpool\timage\tsnap\tdevice"
 	try:
 		for f in os.listdir(xsegbd_sysfs + "devices/"):
@@ -146,37 +158,46 @@ def check_no_opts(args, parser):
 if __name__ == "__main__":
 	# parse arguments and discpatch to the correct func
 	parser = argparse.ArgumentParser(description='vlmc tool')
-	parser.add_argument('op', type=str, nargs='?', help='operation requested (create, remove, map, unmap, showmapped)')
-	parser.add_argument('name', type=str, nargs='?', help='volume/device name')
-	parser.add_argument('-s', '--size', type=int, nargs='?', help='requested size in MB for create')
-	parser.add_argument('--snap', type=str, help='create from snapshot')
-	parser.add_argument('-p', '--pool', type=str, help='for backwards compatiblity with rbd')
-	args = parser.parse_args()	
+	subparsers = parser.add_subparsers()
 
-	if args.op == 'create':
-		if args.name == None or (args.snap == None and (args.size == None or args.size <= 0)) or (args.snap != None and args.size != None):
-			parser.print_usage(file=sys.stderr)
-			sys.exit(-1)
-		vlmc_create(args.name, args.size, args.snap)
-	elif args.op == 'remove':
-		check_no_opts(args, parser)
-		vlmc_remove(args.name)
-	elif args.op == 'map':
-		check_no_opts(args, parser)
-		vlmc_map(args.name)
-	elif args.op == 'unmap':
-		check_no_opts(args, parser)
-		vlmc_unmap(args.name)
-	elif args.op == 'showmapped':
-		if args.name != None or args.size != None or args.snap != None:
-			parser.print_usage(file=sys.stderr)
-			sys.exit(-1)
-		vlmc_showmapped()
-	elif args.op == 'list' or args.op == 'ls':
-		if args.name != None or args.size != None or args.snap != None:
-			parser.print_usage(file=sys.stderr)
-			sys.exit(-1)
-		vlmc_list()
-	else:
-		parser.print_usage(file=sys.stderr)
-		sys.exit(-1)
+	create_parser = subparsers.add_parser('create', help='Create volume')
+	create_parser.add_argument('-s', '--size', type=int, nargs='?', help='requested size in MB for create')
+	create_parser.add_argument('--snap', type=str, nargs='?', help='create from snapshot')
+	create_parser.add_argument('-p', '--pool', type=str, nargs='?', help='for backwards compatiblity with rbd')
+	create_parser.add_argument('name', type=str, nargs=1, help='volume/device name')
+	create_parser.set_defaults(func=vlmc_create)
+
+	remove_parser = subparsers.add_parser('remove', help='Delete volume')
+	remove_parser.add_argument('name', type=str, nargs=1, help='volume/device name')
+	remove_parser.set_defaults(func=vlmc_remove)
+	remove_parser.add_argument('-p', '--pool', type=str, nargs='?', help='for backwards compatiblity with rbd')
+
+	rm_parser = subparsers.add_parser('rm', help='Delete volume')
+	rm_parser.add_argument('name', type=str, nargs=1, help='volume/device name')
+	rm_parser.set_defaults(func=vlmc_remove)
+	rm_parser.add_argument('-p', '--pool', type=str, nargs='?', help='for backwards compatiblity with rbd')
+
+	map_parser = subparsers.add_parser('map', help='Map volume')
+	map_parser.add_argument('name', type=str, nargs=1, help='volume/device name')
+	map_parser.set_defaults(func=vlmc_map)
+	map_parser.add_argument('-p', '--pool', type=str, nargs='?', help='for backwards compatiblity with rbd')
+
+	unmap_parser = subparsers.add_parser('unmap', help='Unmap volume')
+	unmap_parser.add_argument('name', type=str, nargs=1, help='volume/device name')
+	unmap_parser.set_defaults(func=vlmc_unmap)
+	unmap_parser.add_argument('-p', '--pool', type=str, nargs='?', help='for backwards compatiblity with rbd')
+
+	showmapped_parser = subparsers.add_parser('showmapped', help='Show mapped volumes')
+	showmapped_parser.set_defaults(func=vlmc_showmapped)
+	showmapped_parser.add_argument('-p', '--pool', type=str, nargs='?', help='for backwards compatiblity with rbd')
+
+	list_parser = subparsers.add_parser('list', help='List volumes')
+	list_parser.set_defaults(func=vlmc_list)
+	list_parser.add_argument('-p', '--pool', type=str, nargs='?', help='for backwards compatiblity with rbd')
+
+	ls_parser = subparsers.add_parser('ls', help='List volumes')
+	ls_parser.set_defaults(func=vlmc_list)
+	ls_parser.add_argument('-p', '--pool', type=str, nargs='?', help='for backwards compatiblity with rbd')
+
+	args = parser.parse_args()	
+	args.func(args)
