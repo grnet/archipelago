@@ -16,9 +16,9 @@ then
 	if [ "${1}" == "filed" ]
 	then
 		spawn_filed ${IMAGES} ${FILED_PORT}
-		ln -sf "${XSEG_HOME}tools/vlmc-filed.py ${XSEG_HOME}tools/vlmc"
+		ln -sf "${XSEG_HOME}tools/vlmc-filed.py" "${XSEG_HOME}tools/vlmc"
 	else
-		ln -sf "${XSEG_HOME}tools/vlmc-blockd.py ${XSEG_HOME}tools/vlmc"
+		ln -sf "${XSEG_HOME}tools/vlmc-blockd.py" "${XSEG_HOME}tools/vlmc"
 	fi
 elif [ `basename "$0"` == "xseg_cleanup.sh" ]
 then
