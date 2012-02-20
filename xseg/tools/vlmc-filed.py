@@ -80,12 +80,14 @@ def vlmc_map(args):
     name = args.name[0]
     prev = 0
     try:
-        for f in os.listdir(XSEGBD_SYSFS + "devices/"):
-            p = open(XSEGBD_SYSFS + "devices/" + f + "/port").read().strip()
+        result = [int(open(XSEGBD_SYSFS + "devices/" + f + "/port").read().strip()) for f in os.listdir(XSEGBD_SYSFS + "devices/")]
+        result.sort()
+
+	for p in result:
             if p - prev > 1:
-                break
+               break
             else:
-                prev = p
+               prev = p
 
         port = prev + 1
         fd = os.open(XSEGBD_SYSFS + "add", os.O_WRONLY)

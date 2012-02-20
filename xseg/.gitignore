@@ -10,3 +10,4 @@
 .*.ko.cmd
 *.ko
 *.pyc
+vlmc
