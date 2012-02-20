@@ -21,7 +21,8 @@ static int usage(void)
 	printf("Usage: ./filed <path_to_directory> [options]\n"
 		"Options: [-p portno]\n"
 		"         [-g type:name:nr_ports:nr_requests:request_size:extra_size:page_shift]\n"
-		"         [-n nr_parallel_ops]\n");
+		"         [-n nr_parallel_ops]\n"
+		"         [-v]\n");
 	return 1;
 }
 
@@ -71,6 +72,8 @@ struct store {
 	char path[MAX_PATH_SIZE + 1];
 };
 
+static unsigned verbose;
+
 static unsigned long sigaction_count;
 
 static void sigaction_handler(int sig, siginfo_t *siginfo, void *arg)
@@ -90,8 +93,7 @@ static void log_io(char *msg, struct io *io)
 	name[end] = 0;
 	strncpy(data, io->req->data, 63);
 	data[63] = 0;
-#if 0
-vkoukis debug off
+
 	fprintf(stderr,
 		"%s: fd:%u, op:%u offset: %llu size: %lu retval: %lu, reqstate: %u\n"
 		"name[%u]: '%s', data[%llu]:\n%s------------------\n\n",
@@ -104,7 +106,6 @@ vkoukis debug off
 		(unsigned int)io->req->state,
 		(unsigned int)io->req->namesize, name,
 		(unsigned long long)io->req->datasize, data);
-#endif
 }
 
 static struct io *alloc_io(struct store *store)
@@ -127,7 +128,8 @@ static void complete(struct store *store, struct io *io)
 {
 	struct xseg_request *req = io->req;
 	req->state |= XS_SERVED;
-	log_io("complete", io);
+	if (verbose)
+		log_io("complete", io);
 	xseg_respond(store->xseg, req->portno, req);
 	xseg_signal(store->xseg, req->portno);
 	__sync_fetch_and_sub(&store->fdcache[io->fdcacheidx].ref, 1);
@@ -137,7 +139,8 @@ static void fail(struct store *store, struct io *io)
 {
 	struct xseg_request *req = io->req;
 	req->state |= XS_FAILED;
-	log_io("fail", io);
+	if (verbose)
+		log_io("fail", io);
 	xseg_respond(store->xseg, req->portno, req);
 	xseg_signal(store->xseg, req->portno);
 	if (io->fdcacheidx >= 0) {
@@ -403,8 +406,9 @@ static void handle_info(struct store *store, struct io *io)
 
 static void dispatch(struct store *store, struct io *io)
 {
-	printf("io: 0x%p, req: 0x%p, op %u\n",
-		(void *)io, (void *)io->req, io->req->op);
+	if (verbose)
+		printf("io: 0x%p, req: 0x%p, op %u\n",
+			(void *)io, (void *)io->req, io->req->op);
 	switch (io->req->op) {
 	case X_READ:
 	case X_WRITE:
@@ -646,6 +650,10 @@ int main(int argc, char **argv)
 		if (!strcmp(argv[i], "-n") && i + 1 < argc) {
 			nr_ops = strtoul(argv[i+1], NULL, 10);
 			i += 1;
+			continue;
+		}
+		if (!strcmp(argv[i], "-v")) {
+			verbose = 1;
 			continue;
 		}
 	}

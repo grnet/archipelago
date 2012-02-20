@@ -48,8 +48,8 @@ struct store {
 	struct sigevent sigevent;
 };
 
-static unsigned long sigaction_count;
 static unsigned verbose;
+static unsigned long sigaction_count;
 
 static void sigaction_handler(int sig, siginfo_t *siginfo, void *arg)
 {
@@ -87,36 +87,35 @@ static inline struct io *get_pending_io(struct store *store)
 
 static void log_io(char *msg, struct io *io)
 {
-	if (verbose) {
-		char name[64], data[64];
-		/* null terminate name in case of req->name is less than 63 characters,
-		 * and next character after name (aka first byte of next buffer) is not
-		 * null
-		 */
-		unsigned int end = (io->req->namesize > 63) ? 63 : io->req->namesize;
-		strncpy(name, io->req->name, end);
-		name[end] = 0;
-		strncpy(data, io->req->data, 63);
-		data[63] = 0;
-		printf("%s: fd:%u, op:%u %llu:%lu retval: %lu, reqstate: %u\n"
-			"name[%u]:'%s', data[%llu]:\n%s------------------\n\n",
-			msg,
-			(unsigned int)io->cb.aio_fildes,
-			(unsigned int)io->req->op,
-			(unsigned long long)io->cb.aio_offset,
-			(unsigned long)io->cb.aio_nbytes,
-			(unsigned long)io->retval,
-			(unsigned int)io->req->state,
-			(unsigned int)io->req->namesize, name,
-			(unsigned long long)io->req->datasize, data);
-	}
+	char name[64], data[64];
+	/* null terminate name in case of req->name is less than 63 characters,
+	 * and next character after name (aka first byte of next buffer) is not
+	 * null
+	 */
+	unsigned int end = (io->req->namesize > 63) ? 63 : io->req->namesize;
+	strncpy(name, io->req->name, end);
+	name[end] = 0;
+	strncpy(data, io->req->data, 63);
+	data[63] = 0;
+	printf("%s: fd:%u, op:%u %llu:%lu retval: %lu, reqstate: %u\n"
+		"name[%u]:'%s', data[%llu]:\n%s------------------\n\n",
+		msg,
+		(unsigned int)io->cb.aio_fildes,
+		(unsigned int)io->req->op,
+		(unsigned long long)io->cb.aio_offset,
+		(unsigned long)io->cb.aio_nbytes,
+		(unsigned long)io->retval,
+		(unsigned int)io->req->state,
+		(unsigned int)io->req->namesize, name,
+		(unsigned long long)io->req->datasize, data);
 }
 
 static void complete(struct store *store, struct io *io)
 {
 	struct xseg_request *req = io->req;
 	req->state |= XS_SERVED;
-	log_io("complete", io);
+	if (verbose)
+		log_io("complete", io);
 	xseg_respond(store->xseg, req->portno, req);
 	xseg_signal(store->xseg, req->portno);
 	free_io(store, io);
@@ -126,7 +125,8 @@ static void fail(struct store *store, struct io *io)
 {
 	struct xseg_request *req = io->req;
 	req->state |= XS_FAILED;
-	log_io("fail", io);
+	if (verbose)
+		log_io("fail", io);
 	xseg_respond(store->xseg, req->portno, req);
 	xseg_signal(store->xseg, req->portno);
 	free_io(store, io);
