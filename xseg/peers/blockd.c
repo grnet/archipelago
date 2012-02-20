@@ -457,7 +457,7 @@ int main(int argc, char **argv)
 			continue;
 		}
 
-		if (!strcmp(argv[i], "-p") && i + 1 < argc) {
+		if (!strcmp(argv[i], "-n") && i + 1 < argc) {
 			nr_ops = strtoul(argv[i+1], NULL, 10);
 			i += 1;
 			continue;
