@@ -10,7 +10,7 @@ XSEG_HOME="/root/archip/xseg/"
 IMAGES="/srv/pithos/archip-data/images/"
 XSEGBD_SYSFS="/sys/bus/xsegbd/"
 DEVICE_PREFIX="/dev/xsegbd"
-BLOCKD_LOGS="/srv/pithos/archip-data/logs/"
+BLOCKD_LOGS="/root/logs/"
 
 def vlmc_list(args):
     print "name\t\t\t\tsize"

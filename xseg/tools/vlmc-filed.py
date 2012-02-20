@@ -8,7 +8,7 @@ XSEG_HOME="/root/archip/xseg/"
 IMAGES="/srv/pithos/archip-data/images/"
 XSEGBD_SYSFS="/sys/bus/xsegbd/"
 DEVICE_PREFIX="/dev/xsegbd"
-BLOCKD_LOGS="/srv/pithos/archip-data/logs/"
+BLOCKD_LOGS="/root/logs/"
 FILED_PORT=0
 
 def vlmc_list(args):
@@ -80,7 +80,7 @@ def vlmc_map(args):
     name = args.name[0]
     prev = 0
     try:
-        result = [int(open(XSEGBD_SYSFS + "devices/" + f + "/port").read().strip()) for f in os.listdir(XSEGBD_SYSFS + "devices/")]
+        result = [int(open(XSEGBD_SYSFS + "devices/" + f + "/srcport").read().strip()) for f in os.listdir(XSEGBD_SYSFS + "devices/")]
         result.sort()
 
 	for p in result:

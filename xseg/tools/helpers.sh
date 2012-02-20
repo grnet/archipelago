@@ -23,7 +23,7 @@ function parse_config {
 	[ -n "${PORTS}" ] || PORTS=128
 	[ -n "${FILED_PORT}" ] || FILED_PORT=0
 	[ -n "${IMAGES}" ] || IMAGES="/srv/pithos/archip-data/images/"
-	[ -n "${BLOCKD_LOGS}" ] || BLOCKD_LOGS="/srv/pithos/archip-data/logs/"
+	[ -n "${BLOCKD_LOGS}" ] || BLOCKD_LOGS="/root/logs/"
 	[ -n "${DEVICE_PREFIX}" ] || DEVICE_PREFIX="/dev/xsegbd"
 	[ -n "${XSEGBD_SYSFS}" ] || XSEGBD_SYSFS="/sys/bus/xsegbd"
 	[ -n "${CHRDEV_NAME}" ] || CHRDEV_NAME="/dev/xsegdev"
