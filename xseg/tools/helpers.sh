@@ -21,7 +21,7 @@ function parse_config {
 	[ -n "${SPEC}" ] || SPEC="xsegdev:xsegbd:128:8192:64:1024:12"
 	[ -n "${REQS}" ] || REQS=128
 	[ -n "${PORTS}" ] || PORTS=128
-	[ -n "${FILED_PORT}" || FILED_PORT=0
+	[ -n "${FILED_PORT}" ] || FILED_PORT=0
 	[ -n "${IMAGES}" ] || IMAGES="/srv/pithos/archip-data/images/"
 	[ -n "${BLOCKD_LOGS}" ] || BLOCKD_LOGS="/srv/pithos/archip-data/logs/"
 	[ -n "${DEVICE_PREFIX}" ] || DEVICE_PREFIX="/dev/xsegbd"
@@ -36,8 +36,8 @@ function unload_module {
 
 function unload_all {
 	unload_module "xsegbd"
-	unload_module "xsegdev"
 	rm "${CHRDEV_NAME}"
+	unload_module "xsegdev"
 	unload_module "xseg"
 }
 
@@ -62,11 +62,11 @@ function load_all {
 # @param $1		target/volume name
 # @param $2		xseg port
 function spawn_blockd {
-	"${XSEG_HOME}/peers/blockd" "$1" -p "$2" -g "$SPEC" &> "${BLOCKD_LOGS}/$1"
+	"${XSEG_HOME}peers/blockd" "$1" -p "$2" -g "$SPEC" &> "${BLOCKD_LOGS}/$1"
 }
 
 function spawn_filed {
-	"${XSEG_HOME}/peers/filed" "$1" -p "$2" -g "${SPEC}" &> "${BLOCKD_LOGS}/filed"
+	"${XSEG_HOME}peers/filed" "$1" -p "$2" -g "${SPEC}" &> "${BLOCKD_LOGS}/filed-${HOSTNAME}" &
 }
 
 # map_volume - Map a volume to an xsegbd device

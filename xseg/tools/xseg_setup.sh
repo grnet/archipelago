@@ -22,6 +22,7 @@ then
 	if [ "${1}" == "filed" ]
 	then
 		pkill filed
+		sleep 0.5
 	fi
 
 	unload_all
