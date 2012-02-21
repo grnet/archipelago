@@ -106,7 +106,7 @@ def vlmc_map(args):
 
         os.chdir(IMAGES)
         fd = os.open(XSEGBD_SYSFS + "add", os.O_WRONLY)
-        os.write(fd, "%s %d:%d:128" % (name, port + 64, port))
+        os.write(fd, "%s %d:%d:%d" % (name, port + 64, port, REQS))
         os.close(fd)
     except Exception, reason:
         print >> sys.stderr, reason
