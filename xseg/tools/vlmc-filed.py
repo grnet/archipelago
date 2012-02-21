@@ -1,4 +1,3 @@
-#!/usr/bin/env python2.7
 #
 # vlmc tool for filed
 
@@ -91,7 +90,7 @@ def vlmc_map(args):
 
         port = prev + 1
         fd = os.open(XSEGBD_SYSFS + "add", os.O_WRONLY)
-        os.write(fd, "%s %d:%d:d" % (name, port, FILED_PORT, REQS))
+        os.write(fd, "%s %d:%d:%d" % (name, port, FILED_PORT, REQS))
         os.close(fd)
     except Exception, reason:
         print >> sys.stderr, reason
