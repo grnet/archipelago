@@ -53,7 +53,7 @@ struct store {
 	sigset_t signal_set;
 };
 
-
+static unsigned int verbose;
 
 static void sigaction_handler(int sig, siginfo_t *siginfo, void *arg)
 {
@@ -124,22 +124,24 @@ static void log_io(char *msg, struct io *io)
 	 * null
 	 */
 	unsigned int end = (io->req->namesize > 63) ? 63 : io->req->namesize;
-	strncpy(name, io->req->name, end);
-	name[end] = 0;
-	strncpy(data, io->req->data, 63);
-	data[63] = 0;
-	printf("%s: sos req id:%u, op:%u %llu:%lu serviced: %lu, retval: %lu, reqstate: %u\n"
-		"name[%u]:'%s', data[%llu]:\n%s------------------\n\n",
-		msg,
-		(unsigned int)io->sos_req.id,
-		(unsigned int)io->req->op,
-		(unsigned long long)io->sos_req.offset,
-		(unsigned long)io->sos_req.size,
-		(unsigned long)io->req->serviced,
-		(unsigned long)io->retval,
-		(unsigned int)io->req->state,
-		(unsigned int)io->req->namesize, name,
-		(unsigned long long)io->req->datasize, data);
+	if (verbose) {
+		strncpy(name, io->req->name, end);
+		name[end] = 0;
+		strncpy(data, io->req->data, 63);
+		data[63] = 0;
+		printf("%s: sos req id:%u, op:%u %llu:%lu serviced: %lu, retval: %lu, reqstate: %u\n"
+				"name[%u]:'%s', data[%llu]:\n%s------------------\n\n",
+				msg,
+				(unsigned int)io->sos_req.id,
+				(unsigned int)io->req->op,
+				(unsigned long long)io->sos_req.offset,
+				(unsigned long)io->sos_req.size,
+				(unsigned long)io->req->serviced,
+				(unsigned long)io->retval,
+				(unsigned int)io->req->state,
+				(unsigned int)io->req->namesize, name,
+				(unsigned long long)io->req->datasize, data);
+	}
 }
 
 static void complete(struct store *store, struct io *io)
@@ -632,6 +634,7 @@ int main(int argc, char **argv)
 	}
 
 	sos_set_debug_level(debug_level);
+	verbose = debug_level;
 
 	if (nr_ops <= 0)
 		nr_ops = 16;
