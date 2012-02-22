@@ -20,7 +20,7 @@ def vlmc_list(args):
     except Exception, reason:
         print >> sys.stderr, reason
         sys.exit(-1)
-        
+
 def vlmc_create(args):
     name = args.name[0]
     size = args.size
@@ -48,7 +48,7 @@ def vlmc_create(args):
             if snap != None and size < os.stat(snap).st_size:
                 print >> sys.stderr, "Given size smaller than snapshot volume size"
                 sys.exit(-1)
-        
+
         if snap != None:
             shutil.copy(snap, name)
             if size != None:
@@ -80,7 +80,7 @@ def vlmc_remove(args):
             print "file doesn't exist"
             os.chdir(old_dir)
             sys.exit(-1)
-        
+
         os.unlink(IMAGES + '/' + name)
 
         os.chdir(old_dir)
