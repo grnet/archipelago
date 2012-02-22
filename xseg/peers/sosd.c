@@ -21,9 +21,8 @@
 
 static int usage(void)
 {
-	printf("Usage: ./blockd <path_to_disk_image> [options]\n"
+	printf("Usage: ./sosd <path_to_disk_image> [options]\n"
 		"Options: [-p portno]\n"
-		"         [-s image size in bytes]\n"
 		"         [-g type:name:nr_ports:nr_requests:request_size:extra_size:page_shift]\n"
 		"         [-n nr_parallel_ops]\n");
 	return 1;
@@ -152,7 +151,7 @@ static void complete(struct store *store, struct io *io)
 	gettimeofday(&end, NULL);
 	timersub(&end, &io->start, &end);
 	us = end.tv_sec*1000000 +end.tv_usec;
-	printf("blockd: Request %lu completed after %lu us\n", io->sos_req.id, us);
+	printf("sosd: Request %lu completed after %lu us\n", io->sos_req.id, us);
 	*/
 
 	req->state |= XS_SERVED;
@@ -472,7 +471,7 @@ static void handle_accepted(struct store *store, struct io *io)
 	dispatch(store, io);
 }
 
-static int blockd_loop(struct store *store)
+static int sosd_loop(struct store *store)
 {
 	struct xseg *xseg = store->xseg;
 	uint32_t portno = store->portno;
@@ -518,7 +517,7 @@ static struct xseg *join(char *spec)
 	return xseg_join(config.type, config.name);
 }
 
-static int blockd(char *path, unsigned long size, uint32_t nr_ops,
+static int sosd(char *path, unsigned long size, uint32_t nr_ops,
 		  char *spec, long portno)
 {
 	struct store *store;
@@ -585,10 +584,10 @@ malloc_fail:
 	}
 
 	store->portno = xseg_portno(store->xseg, store->xport);
-	printf("blockd on port %u/%u\n",
+	printf("sosd on port %u/%u\n",
 		store->portno, store->xseg->config.nr_ports);
 	
-	return blockd_loop(store);
+	return sosd_loop(store);
 }
 
 int main(int argc, char **argv)
@@ -615,12 +614,6 @@ int main(int argc, char **argv)
 			continue;
 		}
 
-		if (!strcmp(argv[i], "-s") && i + 1 < argc) {
-			size = strtoul(argv[i+1], NULL, 10);
-			i += 1;
-			continue;
-		}
-
 		if (!strcmp(argv[i], "-p") && i + 1 < argc) {
 			portno = strtoul(argv[i+1], NULL, 10);
 			i += 1;
@@ -643,6 +636,6 @@ int main(int argc, char **argv)
 	if (nr_ops <= 0)
 		nr_ops = 16;
 
-	return blockd(path, size, nr_ops, spec, portno);
+	return sosd(path, size, nr_ops, spec, portno);
 }
 
