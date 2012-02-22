@@ -99,7 +99,11 @@ static inline void free_io(struct store *store, struct io *io)
 	xqindex idx = io - store->ios;
 	io->req = NULL;
 	xq_append_head(&store->free_ops, idx);
+	/* not the right place. sosd_loop couldn't sleep because of that
+	 * needed for flush support. maybe this should go to complete function
+	 *
 	signal_self(store);
+	*/
 }
 
 static void resubmit_io(struct store *store, struct io *io)
@@ -344,6 +348,7 @@ static void handle_read_write(struct store *store, struct io *io)
 	prepare_io(store, io);
 	if (!req->size) {
 		if (req->flags & XF_FLUSH) {
+#if 0
 			/* note that with FLUSH/size == 0 
 			 * there will probably be a (uint64_t)-1 offset */
 
@@ -378,6 +383,11 @@ static void handle_read_write(struct store *store, struct io *io)
 			complete(store, io);
 			return;
 		}
+#else
+			complete(store, io);
+			return;
+		}
+#endif
 	}
 	r = calculate_sosreq(req, sos_req);	
 	if (r < 0 ) {
