@@ -2,88 +2,18 @@
 #
 # vlmc tool for filed
 
-import os, sys, subprocess, shutil, re, argparse
-
-XSEG_HOME="/root/archip/xseg/"
-IMAGES="/srv/pithos/archip-data/images/"
-XSEGBD_SYSFS="/sys/bus/xsegbd/"
-DEVICE_PREFIX="/dev/xsegbd"
-BLOCKD_LOGS="/root/logs/"
-FILED_PORT=0
-
-def vlmc_list(args):
-    print "name\t\t\t\tsize"
-    try:
-        for f in os.listdir(IMAGES):
-            print "%s\t\t\t\t%dM" % (f, os.stat(IMAGES + f).st_size / 1024 / 1024)
-
-        sys.exit(0)
-    except Exception, reason:
-        print >> sys.stderr, reason
-        sys.exit(-1)
-        
-def vlmc_create(args):
-    name = args.name[0]
-    size = args.size
-    snap = args.snap
-
-    try:
-        old_dir = os.getcwd()
-        os.chdir(IMAGES)
-
-        try:
-            os.stat(name)
-            print "file exists"
-            os.chdir(old_dir)
-            sys.exit(-1)
-        except:
-            pass
-        
-        if snap:
-            shutil.copyfile(snap, name)
-        else:
-            f = os.open(name, os.O_CREAT | os.O_WRONLY, 0755)
-            size *= 1024*1024
-            os.lseek(f, size - 1, os.SEEK_SET)
-            os.write(f, "1")
-            os.close(f)
-
-        os.chdir(old_dir)
-        sys.exit(0)
-    except Exception, reason:
-        print >> sys.stderr, reason
-        sys.exit(-1)
-
-def vlmc_remove(args):
-    name = args.name[0]
-
-    try:
-        old_dir = os.getcwd()
-        os.chdir(IMAGES)
-
-        try:
-            os.stat(name)
-        except:
-            print "file doesn't exist"
-            os.chdir(old_dir)
-            sys.exit(-1)
-        
-        os.unlink(IMAGES + '/' + name)
-
-        os.chdir(old_dir)
-        sys.exit(0)
-    except Exception, reason:
-        print >> sys.stderr, reason
-        sys.exit(-1)
+from vlmc_shared import *
+import os, sys, subprocess, argparse
 
 def vlmc_map(args):
+    xsegbd_loaded()
     name = args.name[0]
     prev = 0
     try:
         result = [int(open(XSEGBD_SYSFS + "devices/" + f + "/srcport").read().strip()) for f in os.listdir(XSEGBD_SYSFS + "devices/")]
         result.sort()
 
-	for p in result:
+        for p in result:
             if p - prev > 1:
                break
             else:
@@ -98,6 +28,7 @@ def vlmc_map(args):
         sys.exit(-1)
 
 def vlmc_unmap(args):
+    xsegbd_loaded()
     device = args.name[0]
     try:
         for f in os.listdir(XSEGBD_SYSFS + "devices/"):
@@ -108,12 +39,15 @@ def vlmc_unmap(args):
                 os.write(fd, d_id)
                 os.close(fd)
 
-                break
+                sys.exit(0)
+        print >> sys.stderr, "Device %s doesn't exist" % device
+        sys.exit(-1)
     except Exception, reason:
         print >> sys.stderr, reason
         sys.exit(-1)
 
 def vlmc_showmapped(args):
+    xsegbd_loaded()
     print "id\tpool\timage\tsnap\tdevice"
     try:
         for f in os.listdir(XSEGBD_SYSFS + "devices/"):
@@ -133,9 +67,9 @@ if __name__ == "__main__":
     subparsers = parser.add_subparsers()
 
     create_parser = subparsers.add_parser('create', help='Create volume')
-    group = create_parser.add_mutually_exclusive_group(required=True)
-    group.add_argument('-s', '--size', type=int, nargs='?', help='requested size in MB for create')
-    group.add_argument('--snap', type=str, nargs='?', help='create from snapshot')
+    #group = create_parser.add_mutually_exclusive_group(required=True)
+    create_parser.add_argument('-s', '--size', type=int, nargs='?', help='requested size in MB for create')
+    create_parser.add_argument('--snap', type=str, nargs='?', help='create from snapshot')
     create_parser.add_argument('-p', '--pool', type=str, nargs='?', help='for backwards compatiblity with rbd')
     create_parser.add_argument('name', type=str, nargs=1, help='volume/device name')
     create_parser.set_defaults(func=vlmc_create)
