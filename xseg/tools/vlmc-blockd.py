@@ -11,6 +11,7 @@ IMAGES="/srv/pithos/archip-data/images/"
 XSEGBD_SYSFS="/sys/bus/xsegbd/"
 DEVICE_PREFIX="/dev/xsegbd"
 BLOCKD_LOGS="/root/logs/"
+NR_OPS=0
 
 def vlmc_list(args):
     print "name\t\t\t\tsize"
@@ -102,7 +103,7 @@ def vlmc_map(args):
         os.chdir(IMAGES)
         f = os.open(BLOCKD_LOGS +  name, os.O_CREAT | os.O_WRONLY)
         r = subprocess.Popen([XSEG_HOME + "peers/blockd", name, "-p", str(port),
-        "-g", "xsegdev:xsegbd:128:4096:64:1024:12"], stdout=f, stderr=f)
+        "-g", SPEC, "-n", NR_OPS], stdout=f, stderr=f)
 
         os.chdir(IMAGES)
         fd = os.open(XSEGBD_SYSFS + "add", os.O_WRONLY)

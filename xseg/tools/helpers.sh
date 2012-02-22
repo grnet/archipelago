@@ -28,6 +28,7 @@ function parse_config {
 	[ -n "${XSEGBD_SYSFS}" ] || XSEGBD_SYSFS="/sys/bus/xsegbd"
 	[ -n "${CHRDEV_NAME}" ] || CHRDEV_NAME="/dev/xsegdev"
 	[ -n "${CHRDEV_MAJOR}" ] || CHRDEV_MAJOR=60
+	[ -n "${NR_OPS}" ] || NR_OPS=16
 }
 
 function unload_module {
@@ -62,11 +63,11 @@ function load_all {
 # @param $1		target/volume name
 # @param $2		xseg port
 function spawn_blockd {
-	"${XSEG_HOME}peers/blockd" "$1" -p "$2" -g "$SPEC" &> "${BLOCKD_LOGS}/$1"
+	"${XSEG_HOME}peers/blockd" "$1" -p "$2" -g "$SPEC" -n ${NR_OPS} &> "${BLOCKD_LOGS}/$1"
 }
 
 function spawn_filed {
-	"${XSEG_HOME}peers/filed" "$1" -p "$2" -g "${SPEC}" &> "${BLOCKD_LOGS}/filed-${HOSTNAME}" &
+	"${XSEG_HOME}peers/filed" "$1" -p "$2" -g "${SPEC}" -n ${NR_OPS} &> "${BLOCKD_LOGS}/filed-${HOSTNAME}" &
 }
 
 # map_volume - Map a volume to an xsegbd device
