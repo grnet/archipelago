@@ -51,7 +51,7 @@ struct store {
 	long nr_ops;
 	sos_handle_t sos;
 	pid_t pid;
-	struct sigaction sa;
+	sigset_t signal_set;
 };
 
 
@@ -79,7 +79,7 @@ static int wait_signal(struct store *store)
 	ts.tv_sec = usec_timeout / 1000000;
 	ts.tv_nsec = 1000 * (usec_timeout - ts.tv_sec * 1000000);
 
-	r = sigtimedwait(&store->sa.sa_mask, &siginfo, &ts);
+	r = sigtimedwait(&store->signal_set, &siginfo, &ts);
 	if (r < 0)
 		return r;
 
@@ -543,14 +543,11 @@ static int blockd(char *path, unsigned long size, uint32_t nr_ops,
 
 	store->pid = syscall(SYS_gettid);
 
-	store->sa.sa_sigaction = sigaction_handler;
-	if (sigemptyset(&store->sa.sa_mask))
+	if (sigemptyset(&store->signal_set))
 		perror("sigemptyset");
 
-	if (sigaction(SIGIO, &store->sa, NULL)) {
-		perror("sigaction");
-		return -1;
-	}
+	if (sigaddset(&store->signal_set, SIGIO))
+		perror("sigaddset");
 
 
 	store->nr_ops = nr_ops;
