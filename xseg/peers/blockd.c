@@ -134,6 +134,8 @@ static void fail(struct store *store, struct io *io)
 
 static void pending(struct store *store, struct io *io)
 {
+	if (verbose)
+		log_io("pending", io);
 	io->req->state = XS_PENDING;
 	pending_io(store, io);
 }
