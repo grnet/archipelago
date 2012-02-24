@@ -433,8 +433,11 @@ static void handle_accepted(struct store *store, struct io *io)
 static struct io* wake_up_next_iothread(struct store *store)
 {
 	struct io *io = alloc_io(store);
+
 	if (io){	
+		pthread_mutex_lock(&io->lock);
 		pthread_cond_signal(&io->cond);
+		pthread_mutex_unlock(&io->lock);
 	}
 	return io;
 }
@@ -456,8 +459,8 @@ void *io_loop(void *arg)
 			handle_accepted(store, io);
 		}
 		else {
-			free_io(store, io);
 			pthread_mutex_lock(&io->lock);
+			free_io(store, io);
 			pthread_cond_wait(&io->cond, &io->lock);
 			pthread_mutex_unlock(&io->lock);
 		}
