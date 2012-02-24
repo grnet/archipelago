@@ -454,6 +454,16 @@ static int sos_cb(struct sos_request *sos_req, unsigned long event)
 	return 1;
 }
 
+static void handle_info(struct store *store, struct io *io)
+{
+	struct xseg_request *req = io->req;
+
+	*((uint64_t *) req->data) = store->size;
+	req->serviced = req->datasize = sizeof(store->size);
+	io->retval = req->datasize;
+
+	complete(store, io);
+}
 
 static void dispatch(struct store *store, struct io *io)
 {
@@ -461,6 +471,8 @@ static void dispatch(struct store *store, struct io *io)
 	case X_READ:
 	case X_WRITE:
 		handle_read_write(store, io); break;
+	case X_INFO:
+		handle_info(store, io); break;
 	case X_SYNC:
 	default:
 		handle_unknown(store, io);
@@ -553,6 +565,11 @@ static int sosd(char *path, unsigned long size, uint32_t nr_ops,
 		*/
 
 	store->pid = syscall(SYS_gettid);
+
+	// just a temp solution. 
+	// Make all images 20GB. Maybe use an image header object for a more
+	// permantent solution.
+	store->size=20*1024*1024;
 
 	if (sigemptyset(&store->signal_set))
 		perror("sigemptyset");
