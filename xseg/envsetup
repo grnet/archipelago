@@ -1,0 +1,41 @@
+#!/bin/bash
+
+dirname=$(dirname -- "${0}")
+if cd "${dirname}"; then
+	XSEG_HOME=$(pwd -P)
+	cd - > /dev/null
+fi
+
+if [ -z "$XSEG_HOME" ]; then
+	echo 'Cannot set $XSEG_HOME'
+	exit 1
+fi
+
+PEERS=${XSEG_HOME}/peers
+TOOLS=${XSEG_HOME}/tools
+LIBS=${XSEG_HOME}/lib
+
+if [ ! -d "${LIBS}" ] || [ ! -d "${PEERS}" ]; then
+	echo "Cannot find basic xseg layout"
+	exit 1
+fi
+
+if ! echo ${PATH} | grep -E -e '(^|:)'"${PEERS}"'(:|$)' > /dev/null 2>&1; then
+	PATH=${PATH}:${PEERS}
+fi
+
+if ! echo ${PATH} | grep -E -e '(^|:)'"${TOOLS}"'(:|$)' > /dev/null 2>&1; then
+	PATH=${PATH}:${TOOLS}
+fi
+
+if ! echo ${LD_LIBRARY_PATH} | grep -E -e '(^|:)'"${LIBS}"'(:|$)' > /dev/null 2>&1; then
+	LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:${LIBS}
+fi
+
+export PATH LD_LIBRARY_PATH XSEG_HOME
+
+[ -z "$SHELL" ] && SHELL=/bin/bash
+
+selfname=$(basename -- "${0}")
+[ "$selfname" = "envsetup" ] && exec "$SHELL"
+
