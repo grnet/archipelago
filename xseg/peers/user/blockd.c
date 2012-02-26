@@ -299,7 +299,7 @@ static int blockd_loop(struct store *store)
 		}
 
 		if (!io && !accepted) 
-			xseg_wait_signal(xseg, portno, 10000);
+			xseg_wait_signal(xseg, 10000);
 	}
 
 	return 0;
@@ -311,12 +311,12 @@ static struct xseg *join(char *spec)
 	struct xseg *xseg;
 
 	(void)xseg_parse_spec(spec, &config);
-	xseg = xseg_join(config.type, config.name);
+	xseg = xseg_join(config.type, config.name, "posix", NULL);
 	if (xseg)
 		return xseg;
 
 	(void)xseg_create(&config);
-	return xseg_join(config.type, config.name);
+	return xseg_join(config.type, config.name, "posix", NULL);
 }
 
 static int blockd(char *path, off_t size, uint32_t nr_ops,
@@ -405,7 +405,7 @@ malloc_fail:
 	xq_init_seq(&store->free_ops, nr_ops, nr_ops, store->free_bufs);
 	xq_init_empty(&store->pending_ops, nr_ops, store->pending_bufs);
 
-	if (xseg_initialize("posix")) {
+	if (xseg_initialize()) {
 		printf("cannot initialize library\n");
 		return -1;
 	}

@@ -1,0 +1,20 @@
+#!/bin/bash
+
+for driver in $*; do
+	echo -ne "int ${driver}_init(void);\n"
+done
+
+echo -ne "\n"
+echo -ne "int __xseg_preinit(void)\n"
+echo -ne "{\n"
+echo -ne "	int r;\n"
+
+for driver in $*; do
+	echo -ne "	if ((r = ${driver}_init()))\n"
+	echo -ne "		goto out;\n"
+done
+
+echo -ne "out:\n"
+echo -ne "	return r;\n"
+echo -ne "}\n"
+

@@ -1,5 +1,7 @@
 #!/bin/bash
 
+set -e
+
 dirname=$(dirname -- "${0}")
 if cd "${dirname}"; then
 	XSEG_HOME=$(pwd -P)
@@ -13,7 +15,7 @@ fi
 
 PEERS=${XSEG_HOME}/peers
 TOOLS=${XSEG_HOME}/tools
-LIBS=${XSEG_HOME}/lib
+LIBS=${XSEG_HOME}/lib/user
 
 if [ ! -d "${LIBS}" ] || [ ! -d "${PEERS}" ]; then
 	echo "Cannot find basic xseg layout"
@@ -33,9 +35,18 @@ if ! echo ${LD_LIBRARY_PATH} | grep -E -e '(^|:)'"${LIBS}"'(:|$)' > /dev/null 2>
 fi
 
 export PATH LD_LIBRARY_PATH XSEG_HOME
+source ${XSEG_HOME}/config.env
+export XSEG_DOMAIN_DIRS XSEG_DIRS
 
-[ -z "$SHELL" ] && SHELL=/bin/bash
+if [ "$1" = "show" ]; then
+	echo "export XSEG_HOME="${XSEG_HOME}
+	echo "export XSEG_DIRS="${XSEG_DIRS}
+	echo "export XSEG_DOMAIN_DIRS="${XSEG_DOMAIN_DIRS}
+	echo "export PATH="${PATH}
+	echo "export LD_LIBRARY_PATH="${LD_LIBRARY_PATH}
+else
+	[ -z "$SHELL" ] && SHELL=/bin/bash
 
-selfname=$(basename -- "${0}")
-[ "$selfname" = "envsetup" ] && exec "$SHELL"
-
+	selfname=$(basename -- "${0}")
+	[ "$selfname" = "envsetup" ] && exec "$SHELL"
+fi

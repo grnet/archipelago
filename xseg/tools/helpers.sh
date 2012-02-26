@@ -18,7 +18,7 @@ function parse_config {
 
 	[ -n "${XSEG_HOME}" ] || XSEG_HOME="/root/archip/xseg/"
 	[ -n "${MODULES_DIR}" ] || MODULES_DIR="${XSEG_HOME}/sys/"
-	[ -n "${SPEC}" ] || SPEC="xsegdev:xsegbd:128:8192:64:1024:12"
+	[ -n "${SPEC}" ] || SPEC="segdev:xsegbd:128:8192:64:1024:12"
 	[ -n "${REQS}" ] || REQS=128
 	[ -n "${PORTS}" ] || PORTS=128
 	[ -n "${FILED_PORT}" ] || FILED_PORT=0
@@ -26,7 +26,7 @@ function parse_config {
 	[ -n "${BLOCKD_LOGS}" ] || BLOCKD_LOGS="/root/logs/"
 	[ -n "${DEVICE_PREFIX}" ] || DEVICE_PREFIX="/dev/xsegbd"
 	[ -n "${XSEGBD_SYSFS}" ] || XSEGBD_SYSFS="/sys/bus/xsegbd"
-	[ -n "${CHRDEV_NAME}" ] || CHRDEV_NAME="/dev/xsegdev"
+	[ -n "${CHRDEV_NAME}" ] || CHRDEV_NAME="/dev/segdev"
 	[ -n "${CHRDEV_MAJOR}" ] || CHRDEV_MAJOR=60
 }
 
@@ -37,7 +37,8 @@ function unload_module {
 function unload_all {
 	unload_module "xsegbd"
 	rm "${CHRDEV_NAME}"
-	unload_module "xsegdev"
+	unload_module "xseg_segdev"
+	unload_module "segdev"
 	unload_module "xseg"
 }
 
@@ -52,7 +53,8 @@ function mk_chardev {
 
 function load_all {
 	load_module "xseg"
-	load_module "xsegdev"
+	load_module "segdev"
+	load_module "xseg_segdev"
 	mk_chardev
 	load_module "xsegbd" "spec=$SPEC"
 }

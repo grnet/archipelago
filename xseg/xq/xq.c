@@ -1,4 +1,5 @@
 #include <xq/xq.h>
+#include <xq/domain.h>
 
 static inline int __snap(xqindex size)
 {
@@ -98,7 +99,7 @@ void xq_print(struct xq *xq)
 {
 	xqindex i;
 
-	LOGMSG("xq head: %lu, tail: %lu, size: %lu\n",
+	XSEGLOG("xq head: %lu, tail: %lu, size: %lu\n",
 		(unsigned long)xq->head,
 		(unsigned long)xq->tail,
 		(unsigned long)xq->size);
@@ -107,7 +108,7 @@ void xq_print(struct xq *xq)
 	for (;;) {
 		if (i == xq->head)
 			break;
-		LOGMSG(	"%lu %lu\n",
+		XSEGLOG(	"%lu %lu\n",
 			(unsigned long)i,
 			(unsigned long)xq_element(xq, i) );
 		i += 1;

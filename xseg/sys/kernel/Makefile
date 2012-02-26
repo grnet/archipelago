@@ -1,0 +1,25 @@
+.PHONY: clean
+
+include $(XSEG_HOME)/base.mk
+
+KDIR := /lib/modules/$(shell uname -r)/build
+PWD := $(shell pwd)
+EXTRA_CFLAGS += -g -I$(BASE) -I$(BASE)/sys/kernel
+LIBDIR=$(BASE)/lib/kernel
+
+xseg-objs := xsegmod.o xq.k.o xseg.k.o 
+obj-m += xseg.o segdev.o
+
+default: xq.k.c xseg.k.c
+	$(MAKE) -C $(KDIR) SUBDIRS=$(PWD) V=$(V) modules
+	cp -vaf xseg.ko segdev.ko $(LIBDIR)
+
+xq.k.c: $(BASE)/xq/xq.c $(BASE)/xq/xq.h
+	ln -sf $< $@
+
+xseg.k.c: $(BASE)/xseg/xseg.c $(BASE)/xseg/xseg.h
+	ln -sf $< $@
+
+clean:
+	rm -f xq.k.c xseg.k.c
+	make -C /lib/modules/$(shell uname -r)/build M=$(PWD) V=$(V) clean

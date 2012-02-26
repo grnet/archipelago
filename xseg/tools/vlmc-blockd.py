@@ -102,7 +102,7 @@ def vlmc_map(args):
         os.chdir(IMAGES)
         f = os.open(BLOCKD_LOGS +  name, os.O_CREAT | os.O_WRONLY)
         r = subprocess.Popen([XSEG_HOME + "peers/blockd", name, "-p", str(port),
-        "-g", "xsegdev:xsegbd:128:4096:64:1024:12"], stdout=f, stderr=f)
+        "-g", "segdev:xsegbd:128:4096:64:1024:12"], stdout=f, stderr=f)
 
         os.chdir(IMAGES)
         fd = os.open(XSEGBD_SYSFS + "add", os.O_WRONLY)

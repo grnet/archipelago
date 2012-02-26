@@ -7,7 +7,7 @@
 #include <fcntl.h>
 #include <unistd.h>
 
-#include "xsegdev.h"
+#include "segdev.h"
 
 int fail(const char *msg)
 {
@@ -31,26 +31,26 @@ int main(int argc, char **argv)
 	if (segsize < 0)
 		segsize = -segsize;
 
-	fd = open("/dev/xsegdev", O_RDWR);
+	fd = open("/dev/segdev", O_RDWR);
 	if (fd < 0)
-		return fail("/dev/xsegdev");
+		return fail("/dev/segdev");
 
-	oldsize = ioctl(fd, XSEGDEV_IOC_SEGSIZE, 0);
+	oldsize = ioctl(fd, SEGDEV_IOC_SEGSIZE, 0);
 	if (oldsize < 0) {
 
 		printf("No segment found. Creating...\n");
 	
-		if (ioctl(fd, XSEGDEV_IOC_CREATESEG, segsize))
+		if (ioctl(fd, SEGDEV_IOC_CREATESEG, segsize))
 			return fail("CREATESEG");
 
 	} else if (segsize != oldsize) {
 
 		printf("Destroying old segment...\n");
 
-		if (ioctl(fd, XSEGDEV_IOC_DESTROYSEG, 0))
+		if (ioctl(fd, SEGDEV_IOC_DESTROYSEG, 0))
 			return fail("DESTROYSEG");
 
-		if (ioctl(fd, XSEGDEV_IOC_CREATESEG, segsize))
+		if (ioctl(fd, SEGDEV_IOC_CREATESEG, segsize))
 			return fail("CREATESEG");
 	}
 

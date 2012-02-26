@@ -1,0 +1,27 @@
+#!/bin/bash
+
+set -e
+
+[ -z "${XSEG_HOME}" ] && source $(dirname -- "$0")/../envsetup
+
+if [ "$1" = "-h" ] || [ "$1" = "--help" ]; then
+	echo "Usage: xseg-domain-targets"
+	exit 1
+fi
+
+TARGETS=
+
+for p in `find ${XSEG_HOME}/sys -mindepth 1 -maxdepth 1 -type d `; do
+	d=`dirname ${p}`
+	b=`basename ${p}`
+
+	if [ -f "${p}/Makefile" ] && \
+		[ -f "${XSEG_HOME}/drivers/${b}/Makefile" ] && \
+		[ -f "${XSEG_HOME}/peers/${b}/Makefile" ];
+	then
+		[ -n "${TARGETS}" ] && TARGETS=${TARGETS}" "
+		TARGETS="${TARGETS}${b}"	
+	fi
+done
+
+echo 'XSEG_DOMAIN_TARGETS="'${TARGETS}'"'

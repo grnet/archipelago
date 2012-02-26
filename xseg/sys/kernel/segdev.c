@@ -22,11 +22,11 @@
 #include <linux/spinlock.h>
 #include <linux/wait.h>
 
-#include "xsegdev.h"
+#include "segdev.h"
 
-static struct xsegdev xsegdev;
+static struct segdev segdev;
 
-int xsegdev_create_segment(struct xsegdev *dev, u64 segsize, char reserved)
+int segdev_create_segment(struct segdev *dev, u64 segsize, char reserved)
 {
 	void *segment;
 	int ret = mutex_lock_interruptible(&dev->mutex);
@@ -46,9 +46,9 @@ int xsegdev_create_segment(struct xsegdev *dev, u64 segsize, char reserved)
 	dev->segsize = segsize;
 	dev->segment = segment;
 	memset(dev->segment, 0, segsize);
-	set_bit(XSEGDEV_READY, &dev->flags);
+	set_bit(SEGDEV_READY, &dev->flags);
 	if (reserved)
-		set_bit(XSEGDEV_RESERVED, &dev->flags);
+		set_bit(SEGDEV_RESERVED, &dev->flags);
 	ret = 0;
 
 out_unlock:
@@ -57,9 +57,9 @@ out:
 	return ret;
 }
 
-EXPORT_SYMBOL(xsegdev_create_segment);
+EXPORT_SYMBOL(segdev_create_segment);
 
-int xsegdev_destroy_segment(struct xsegdev *dev)
+int segdev_destroy_segment(struct segdev *dev)
 {
 	int ret = mutex_lock_interruptible(&dev->mutex);
 	if (ret)
@@ -68,7 +68,7 @@ int xsegdev_destroy_segment(struct xsegdev *dev)
 	/* VERIFY:
 	 * The segment trully dies when everyone in userspace has unmapped it.
 	 * However, the kernel mapping is immediately destroyed.
-	 * Kernel users are notified to abort via switching of XSEGDEV_READY.
+	 * Kernel users are notified to abort via switching of SEGDEV_READY.
 	 * The mapping deallocation is performed when all kernel users
 	 * have stopped using the segment as reported by usercount.
 	*/
@@ -78,10 +78,10 @@ int xsegdev_destroy_segment(struct xsegdev *dev)
 		goto out_unlock;
 
 	ret = -EBUSY;
-	if (test_bit(XSEGDEV_RESERVED, &dev->flags))
+	if (test_bit(SEGDEV_RESERVED, &dev->flags))
 		goto out_unlock;
 
-	clear_bit(XSEGDEV_READY, &dev->flags);
+	clear_bit(SEGDEV_READY, &dev->flags);
 	ret = wait_event_interruptible(dev->wq, atomic_read(&dev->usercount) < 1);
 	if (ret)
 		goto out_unlock;
@@ -93,22 +93,22 @@ int xsegdev_destroy_segment(struct xsegdev *dev)
 
 out_unlock:
 	mutex_unlock(&dev->mutex);
-	set_bit(XSEGDEV_READY, &dev->flags);
+	set_bit(SEGDEV_READY, &dev->flags);
 out:
 	return ret;
 }
 
-EXPORT_SYMBOL(xsegdev_destroy_segment);
+EXPORT_SYMBOL(segdev_destroy_segment);
 
-struct xsegdev *xsegdev_get(int minor)
+struct segdev *segdev_get(int minor)
 {
-	struct xsegdev *dev = ERR_PTR(-ENODEV);
+	struct segdev *dev = ERR_PTR(-ENODEV);
 	if (minor)
 		goto out;
 
-	dev = &xsegdev;
+	dev = &segdev;
 	atomic_inc(&dev->usercount);
-	if (!test_bit(XSEGDEV_READY, &dev->flags))
+	if (!test_bit(SEGDEV_READY, &dev->flags))
 		goto fail_busy;
 out:
 	return dev;
@@ -119,28 +119,28 @@ fail_busy:
 	goto out;
 }
 
-EXPORT_SYMBOL(xsegdev_get);
+EXPORT_SYMBOL(segdev_get);
 
-void xsegdev_put(struct xsegdev *dev)
+void segdev_put(struct segdev *dev)
 {
 	atomic_dec(&dev->usercount);
 	wake_up(&dev->wq);
 	/* ain't all this too heavy ? */
 }
 
-EXPORT_SYMBOL(xsegdev_put);
+EXPORT_SYMBOL(segdev_put);
 
 /* ********************* */
 /* ** File Operations ** */
 /* ********************* */
 
-struct xsegdev_file {
+struct segdev_file {
 	int minor;
 };
 
-static int xsegdev_open(struct inode *inode, struct file *file)
+static int segdev_open(struct inode *inode, struct file *file)
 {
-	struct xsegdev_file *vf = kmalloc(sizeof(struct xsegdev_file), GFP_KERNEL);
+	struct segdev_file *vf = kmalloc(sizeof(struct segdev_file), GFP_KERNEL);
 	if (!vf)
 		return -ENOMEM;
 	vf->minor = 0;
@@ -148,40 +148,40 @@ static int xsegdev_open(struct inode *inode, struct file *file)
 	return 0;
 }
 
-static int xsegdev_release(struct inode *inode, struct file *file)
+static int segdev_release(struct inode *inode, struct file *file)
 {
-	struct xsegdev_file *vf = file->private_data;
+	struct segdev_file *vf = file->private_data;
 	kfree(vf);
 	return 0;
 }
 
-static long xsegdev_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
+static long segdev_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 {
-	struct xsegdev *dev;
+	struct segdev *dev;
 	char *seg;
 	long size;
 	int ret = -EINVAL;
 
 	switch (cmd) {
 
-	case XSEGDEV_IOC_CREATESEG:
-		dev = xsegdev_get(0);
+	case SEGDEV_IOC_CREATESEG:
+		dev = segdev_get(0);
 		ret = IS_ERR(dev) ? PTR_ERR(dev) : 0;
 		if (ret)
 			goto out;
 
-		ret = xsegdev_create_segment(dev, (u64)arg, 0);
-		xsegdev_put(dev);
+		ret = segdev_create_segment(dev, (u64)arg, 0);
+		segdev_put(dev);
 		goto out;
 
-	case XSEGDEV_IOC_DESTROYSEG:
-		dev = xsegdev_get(0);
-		ret = xsegdev_destroy_segment(&xsegdev);
-		xsegdev_put(dev);
+	case SEGDEV_IOC_DESTROYSEG:
+		dev = segdev_get(0);
+		ret = segdev_destroy_segment(&segdev);
+		segdev_put(dev);
 		goto out;
 
-	case XSEGDEV_IOC_SEGSIZE:
-		dev = xsegdev_get(0);
+	case SEGDEV_IOC_SEGSIZE:
+		dev = segdev_get(0);
 
 		ret = IS_ERR(dev) ? PTR_ERR(dev) : 0;
 		if (ret)
@@ -189,7 +189,7 @@ static long xsegdev_ioctl(struct file *file, unsigned int cmd, unsigned long arg
 
 		size = dev->segsize;
 		seg = dev->segment;
-		xsegdev_put(dev);
+		segdev_put(dev);
 
 		ret = -ENODEV;
 		if (!seg)
@@ -202,45 +202,52 @@ out:
 	return ret;
 }
 
-static ssize_t xsegdev_read(struct file *file, char __user *buf,
+static ssize_t segdev_read(struct file *file, char __user *buf,
 			   size_t count, loff_t *f_pos)
 {
 	return 0;
 }
 
-static ssize_t xsegdev_write(struct file *file, const char __user *buf,
+static ssize_t segdev_write(struct file *file, const char __user *buf,
 			    size_t count, loff_t *f_pos)
 {
-	struct xsegdev_file *vf = file->private_data;
-	struct xsegdev *dev = xsegdev_get(vf->minor);
-	struct xseg_port *port;
+	struct segdev_file *vf = file->private_data;
+	struct segdev *dev = segdev_get(vf->minor);
 	int ret = -ENODEV;
 	if (!dev)
 		goto out;
 
-	ret = copy_from_user(&port, buf, sizeof(port));
+	if (count > SEGDEV_BUFSIZE)
+		count = SEGDEV_BUFSIZE;
+
+	ret = copy_from_user(dev->buffer, buf, count);
 	if (ret < 0)
 		goto out;
 
-	ret = -ENOSYS;
-	if (dev->callback)
-		ret = dev->callback(port);
+	dev->buffer_index = count - ret;
 
-	xsegdev_put(dev);
+	ret = 0;
+	if (dev->callback)
+		dev->callback(dev);
+	else
+		ret = -ENOSYS;
+
+	dev->buffer_index = 0;
+	segdev_put(dev);
 out:
 	return ret;
 }
 
-static int xsegdev_mmap(struct file *file, struct vm_area_struct *vma)
+static int segdev_mmap(struct file *file, struct vm_area_struct *vma)
 {
-	struct xsegdev_file *vf = file->private_data;
-	struct xsegdev *dev;
+	struct segdev_file *vf = file->private_data;
+	struct segdev *dev;
 	size_t size = vma->vm_end - vma->vm_start;
 	unsigned long start = vma->vm_start, end = start + size;
 	char *ptr;
 	int ret = -ENODEV;
 
-	dev = xsegdev_get(vf->minor);
+	dev = segdev_get(vf->minor);
 	if (IS_ERR(dev))
 		goto out;
 
@@ -270,20 +277,20 @@ static int xsegdev_mmap(struct file *file, struct vm_area_struct *vma)
 	ret = 0;
 
 out_put:
-	xsegdev_put(dev);
+	segdev_put(dev);
 out:
 	return ret;
 }
 
-static struct file_operations xsegdev_ops = 
+static struct file_operations segdev_ops = 
 {
         .owner		= THIS_MODULE,
-	.open		= xsegdev_open,
-	.release	= xsegdev_release,
-	.read		= xsegdev_read,
-	.write		= xsegdev_write,
-	.mmap		= xsegdev_mmap,
-	.unlocked_ioctl	= xsegdev_ioctl,
+	.open		= segdev_open,
+	.release	= segdev_release,
+	.read		= segdev_read,
+	.write		= segdev_write,
+	.mmap		= segdev_mmap,
+	.unlocked_ioctl	= segdev_ioctl,
 };
 
 
@@ -291,7 +298,7 @@ static struct file_operations xsegdev_ops =
 /* ** Module Initialization ** */
 /* *************************** */
 
-static void xsegdev_init(struct xsegdev *dev, int minor)
+static void segdev_init(struct segdev *dev, int minor)
 {
 	dev->minor = 0;
 	dev->segment = NULL;
@@ -299,23 +306,23 @@ static void xsegdev_init(struct xsegdev *dev, int minor)
 	dev->flags = 0;
 	atomic_set(&dev->usercount, 0);
 	init_waitqueue_head(&dev->wq);
-	cdev_init(&dev->cdev, &xsegdev_ops);
+	cdev_init(&dev->cdev, &segdev_ops);
 	mutex_init(&dev->mutex);
 	spin_lock_init(&dev->lock);
 	dev->cdev.owner = THIS_MODULE;
-	set_bit(XSEGDEV_READY, &dev->flags);
+	set_bit(SEGDEV_READY, &dev->flags);
 }
 
-int __init xsegdev_mod_init(void)
+int __init segdev_mod_init(void)
 {
 	int ret;
-	dev_t dev_no = MKDEV(XSEGDEV_MAJOR, 0);
-	ret = register_chrdev_region(dev_no, 1, "xsegdev");
+	dev_t dev_no = MKDEV(SEGDEV_MAJOR, 0);
+	ret = register_chrdev_region(dev_no, 1, "segdev");
 	if (ret < 0)
 		goto out;
 
-	xsegdev_init(&xsegdev, 0);
-	ret = cdev_add(&xsegdev.cdev, dev_no, 1);
+	segdev_init(&segdev, 0);
+	ret = cdev_add(&segdev.cdev, dev_no, 1);
 	if (ret < 0)
 		goto out_unregister;
 
@@ -327,18 +334,18 @@ out:
 	return ret;
 }
 
-void __exit xsegdev_mod_exit(void)
+void __exit segdev_mod_exit(void)
 {
-	dev_t dev_no = MKDEV(XSEGDEV_MAJOR, 0);
-	xsegdev_destroy_segment(&xsegdev);
-	cdev_del(&xsegdev.cdev);
+	dev_t dev_no = MKDEV(SEGDEV_MAJOR, 0);
+	segdev_destroy_segment(&segdev);
+	cdev_del(&segdev.cdev);
 	unregister_chrdev_region(dev_no, 1);
 }
 
-module_init(xsegdev_mod_init);
-module_exit(xsegdev_mod_exit);
+module_init(segdev_mod_init);
+module_exit(segdev_mod_exit);
 
-MODULE_DESCRIPTION("xsegdev");
+MODULE_DESCRIPTION("segdev");
 MODULE_AUTHOR("XSEG");
 MODULE_LICENSE("GPL");
 

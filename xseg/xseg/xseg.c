@@ -1,4 +1,5 @@
 #include <xseg/xseg.h>
+#include <xseg/domain.h>
 #include <sys/util.h>
 
 #ifndef NULL
@@ -9,25 +10,10 @@
 #define XSEG_NR_PEER_TYPES 64
 #define XSEG_MIN_PAGE_SIZE 4096
 
-#define __align(x, shift) (((((x) -1) >> (shift)) +1) << (shift))
-
 static struct xseg_type *__types[XSEG_NR_TYPES];
 static unsigned int __nr_types;
 static struct xseg_peer *__peer_types[XSEG_NR_PEER_TYPES];
 static unsigned int __nr_peer_types;
-static struct xseg_peer __peer_type;
-
-/* assuming size_t is long */
-/*
-void *memcpy(void *dest, const void *src, unsigned long n);
-int strncmp(const char *s1, const char *s2, unsigned long n);
-char *strncpy(char *dest, const char *src, unsigned long n);
-void *memset(void *s, int c, unsigned long n);
-*/
-
-void __load_plugin(const char *name);
-void __xseg_preinit(void);
-uint32_t __get_id(void);
 
 static void __lock_segment(struct xseg *xseg)
 {
@@ -52,9 +38,9 @@ static struct xseg_type *__find_type(const char *name, long *index)
 	return NULL;
 }
 
-static struct xseg_peer *__find_peer_type(const char *name, long *index)
+static struct xseg_peer *__find_peer_type(const char *name, int64_t *index)
 {
-	long i;
+	int64_t i;
 	for (i = 0; (*index = i) < __nr_peer_types; i++) {
 		if (!strncmp(__peer_types[i]->name, name, XSEG_TNAMESIZE))
 			return __peer_types[i];
@@ -65,9 +51,9 @@ static struct xseg_peer *__find_peer_type(const char *name, long *index)
 void xseg_report_peer_types(void)
 {
 	long i;
-	LOGMSG("total %u peer types:\n", __nr_peer_types);
+	XSEGLOG("total %u peer types:\n", __nr_peer_types);
 	for (i = 0; i < __nr_peer_types; i++)
-		LOGMSG("%ld: '%s'\n", i, __peer_types[i]->name);
+		XSEGLOG("%ld: '%s'\n", i, __peer_types[i]->name);
 }
 
 static struct xseg_type *__find_or_load_type(const char *name)
@@ -83,7 +69,7 @@ static struct xseg_type *__find_or_load_type(const char *name)
 
 static struct xseg_peer *__find_or_load_peer_type(const char *name)
 {
-	long i;
+	int64_t i;
 	struct xseg_peer *peer_type = __find_peer_type(name, &i);
 	if (peer_type)
 		return peer_type;
@@ -96,12 +82,13 @@ static struct xseg_peer *__get_peer_type(struct xseg *xseg, uint32_t serial)
 {
 	char *name;
 	struct xseg_peer *type;
+	struct xseg_private *priv = xseg->priv;
 	char (*shared_peer_types)[XSEG_TNAMESIZE];
 
 	if (serial >= xseg->max_peer_types) 
 		return NULL;
 
-	type = xseg->peer_types[serial];
+	type = priv->peer_types[serial];
 	if (type)
 		return type;
 
@@ -117,7 +104,7 @@ static struct xseg_peer *__get_peer_type(struct xseg *xseg, uint32_t serial)
 		return NULL;
 
 	type = __find_or_load_peer_type(name);
-	xseg->peer_types[serial] = type;
+	priv->peer_types[serial] = type;
 	return type;
 }
 
@@ -214,90 +201,115 @@ int xseg_parse_spec(char *segspec, struct xseg_config *config)
 int xseg_register_type(struct xseg_type *type)
 {
 	long i;
-	struct xseg_type *__type = __find_type(type->name, &i);
+	int r = -1;
+	struct xseg_type *__type;
+	__lock_domain();
+	__type = __find_type(type->name, &i);
 	if (__type) {
-		LOGMSG("type %s already exists\n", type->name);
-		return -1;
+		XSEGLOG("type %s already exists\n", type->name);
+		goto out;
 	}
 
 	if (__nr_types >= XSEG_NR_TYPES) {
-		LOGMSG("maximum type registrations reached: %u\n", __nr_types);
-		return -2;
+		XSEGLOG("maximum type registrations reached: %u\n", __nr_types);
+		r -= 1;
+		goto out;
 	}
 
 	type->name[XSEG_TNAMESIZE-1] = 0;
 	__types[__nr_types] = type;
 	__nr_types += 1;
-
-	return 0;
+	r = 0;
+out:
+	__unlock_domain();
+	return r;
 }
 
 int xseg_unregister_type(const char *name)
 {
 	long i;
-	struct xseg_type *__type = __find_type(name, &i);
+	int r = -1;
+	struct xseg_type *__type;
+	__lock_domain();
+	__type = __find_type(name, &i);
 	if (!__type) {
-		LOGMSG("segment type '%s' does not exist\n", name);
-		return -1;
+		XSEGLOG("segment type '%s' does not exist\n", name);
+		goto out;
 	}
 
 	__nr_types -= 1;
 	__types[i] = __types[__nr_types];
 	__types[__nr_types] = NULL;
-	return 0;
+	r = 0;
+out:
+	__unlock_domain();
+	return r;
 }
 
 int xseg_register_peer(struct xseg_peer *peer_type)
 {
-	long i;
-	struct xseg_peer *type = __find_peer_type(peer_type->name, &i);
+	int64_t i;
+	int r = -1;
+	struct xseg_peer *type;
+	__lock_domain();
+	type = __find_peer_type(peer_type->name, &i);
 	if (type) {
-		LOGMSG("peer type '%s' already exists\n", type->name);
-		return -1;
+		XSEGLOG("peer type '%s' already exists\n", type->name);
+		goto out;
 	}
 
 	if (__nr_peer_types >= XSEG_NR_PEER_TYPES) {
-		LOGMSG("maximum peer type registrations reached: %u",
+		XSEGLOG("maximum peer type registrations reached: %u",
 			__nr_peer_types);
-		return -2;
+		r -= 1;
+		goto out;
 	}
 
 	if (peer_type->peer_ops.signal_init()) {
-		LOGMSG("peer type '%s': signal initialization failed\n",
+		XSEGLOG("peer type '%s': signal initialization failed\n",
 			peer_type->name);
-		return -3;
+		r -= 1;
+		goto out;
 	}
 	peer_type->name[XSEG_TNAMESIZE-1] = 0;
 	__peer_types[__nr_peer_types] = peer_type;
 	__nr_peer_types += 1;
-	return 0;
+	r = 0;
+out:
+	__unlock_domain();
+	return r;
 }
 
 int xseg_unregister_peer(const char *name)
 {
-	long i;
-	struct xseg_peer *__type = __find_peer_type(name, &i);
-	if (!__type) {
-		LOGMSG("peer type '%s' does not exist\n", name);
-		return -1;
+	int64_t i;
+	struct xseg_peer *driver;
+	int r = -1;
+	__lock_domain();
+	driver = __find_peer_type(name, &i);
+	if (!driver) {
+		XSEGLOG("peer type '%s' does not exist\n", name);
+		goto out;
 	}
 
 	__nr_peer_types -= 1;
 	__peer_types[i] = __peer_types[__nr_peer_types];
 	__peer_types[__nr_peer_types] = NULL;
-	__type->peer_ops.signal_quit();
-
-	return 0;
+	driver->peer_ops.signal_quit();
+	r = 0;
+out:
+	__unlock_domain();
+	return r;
 }
 
-long __enable_driver(struct xseg *xseg, struct xseg_peer *driver)
+int64_t __enable_driver(struct xseg *xseg, struct xseg_peer *driver)
 {
-	long r;
+	int64_t r;
 	char (*drivers)[XSEG_TNAMESIZE];
 	uint32_t max_drivers = xseg->max_peer_types;
 
 	if (xseg->shared->nr_peer_types >= max_drivers) {
-		LOGMSG("cannot register '%s': driver namespace full\n",
+		XSEGLOG("cannot register '%s': driver namespace full\n",
 			driver->name);
 		return -1;
 	}
@@ -320,39 +332,50 @@ bind:
 	drivers[r][XSEG_TNAMESIZE-1] = 0;
 
 success:
-	xseg->peer_types[r] = driver;
+	xseg->priv->peer_types[r] = driver;
 	return r;
 }
 
-long xseg_enable_driver(struct xseg *xseg, const char *name)
+int64_t xseg_enable_driver(struct xseg *xseg, const char *name)
 {
-	long r;
-	struct xseg_peer *driver = __find_peer_type(name, &r);
+	int64_t r = -1;
+	struct xseg_peer *driver;
 
+	__lock_domain();
+	driver = __find_peer_type(name, &r);
 	if (!driver) {
-		LOGMSG("driver '%s' not found\n", name);
-		return -1;
+		XSEGLOG("driver '%s' not found\n", name);
+		goto out;
 	}
 
 	__lock_segment(xseg);
 	r = __enable_driver(xseg, driver);
 	__unlock_segment(xseg);
+out:
+	__unlock_domain();
 	return r;
 }
 
 int xseg_disable_driver(struct xseg *xseg, const char *name)
 {
-	long i;
-	struct xseg_peer *driver =  __find_peer_type(name, &i);
+	int64_t i;
+	int r = -1;
+	struct xseg_private *priv = xseg->priv;
+	struct xseg_peer *driver;
+	__lock_domain();
+	driver =  __find_peer_type(name, &i);
 	if (!driver) {
-		LOGMSG("driver '%s' not found\n", name);
-		return -1;
+		XSEGLOG("driver '%s' not found\n", name);
+		goto out;
 	}
 
 	for (i = 0; i < xseg->max_peer_types; i++)
-		if (xseg->peer_types[i] == driver)
-			xseg->peer_types[i] = NULL;
-	return 0;
+		if (priv->peer_types[i] == driver)
+			priv->peer_types[i] = NULL;
+	r = 0;
+out:
+	__unlock_domain();
+	return r;
 }
 
 /* NOTE: calculate_segment_size() and initialize_segment()
@@ -367,7 +390,7 @@ static uint64_t calculate_segment_size(struct xseg_config *config)
 	/* assert(sizeof(struct xseg) <= (1 << 9)); */
 
 	if (page_shift < 9) {
-		LOGMSG("page_shift must be >= %d\n", 9);
+		XSEGLOG("page_shift must be >= %d\n", 9);
 		return 0;
 	}
 
@@ -479,6 +502,7 @@ static long initialize_segment(struct xseg *xseg, struct xseg_config *cfg)
 
 	shared->peer_types = XSEG_MAKE_PTR(segment + size, segment);
 	size += page_size;
+	xseg->max_peer_types = page_size / XSEG_TNAMESIZE;
 
 	xseg->segment_size = size;
 	memcpy(&xseg->config, cfg, sizeof(struct xseg_config));
@@ -496,13 +520,13 @@ int xseg_create(struct xseg_config *cfg)
 	type = __find_or_load_type(cfg->type);
 	if (!type) {
 		cfg->type[XSEG_TNAMESIZE-1] = 0;
-		LOGMSG("type '%s' does not exist\n", cfg->type);
+		XSEGLOG("type '%s' does not exist\n", cfg->type);
 		goto out_err;
 	}
 
 	size = calculate_segment_size(cfg);
 	if (!size) {
-		LOGMSG("invalid config!\n");
+		XSEGLOG("invalid config!\n");
 		goto out_err;
 	}
 
@@ -510,20 +534,20 @@ int xseg_create(struct xseg_config *cfg)
 	cfg->name[XSEG_NAMESIZE-1] = 0;
 	r = xops->allocate(cfg->name, size);
 	if (r) {
-		LOGMSG("cannot allocate segment!\n");
+		XSEGLOG("cannot allocate segment!\n");
 		goto out_err;
 	}
 
 	xseg = xops->map(cfg->name, size);
 	if (!xseg) {
-		LOGMSG("cannot map segment!\n");
+		XSEGLOG("cannot map segment!\n");
 		goto out_deallocate;
 	}
 
 	r = initialize_segment(xseg, cfg);
 	xops->unmap(xseg, size);
 	if (r) {
-		LOGMSG("cannot initilize segment!\n");
+		XSEGLOG("cannot initilize segment!\n");
 		goto out_deallocate;
 	}
 
@@ -539,7 +563,7 @@ void xseg_destroy(struct xseg *xseg)
 {
 	struct xseg_type *type = __find_or_load_type(xseg->config.type);
 	if (!type) {
-		LOGMSG("no segment type '%s'\n", xseg->config.type);
+		XSEGLOG("no segment type '%s'\n", xseg->config.type);
 		return;
 	}
 
@@ -554,7 +578,7 @@ static int pointer_ok(	unsigned long ptr,
 {
 	int ret = !(ptr >= base && ptr < base + size);
 	if (ret)
-		LOGMSG("invalid pointer '->%s' [%llx on %llx]!\n",
+		XSEGLOG("invalid pointer '->%s' [%llx on %llx]!\n",
 			(unsigned long long)ptr,
 			(unsigned long long)base,
 			name);
@@ -579,40 +603,83 @@ static int xseg_validate_pointers(struct xseg *xseg)
 	return r;
 }
 
-struct xseg *xseg_join(char *typename, char *name)
+struct xseg *xseg_join(	char *segtypename,
+			char *segname,
+			char *peertypename,
+			void (*wakeup)
+			(	struct xseg *xseg,
+				uint32_t portno		))
 {
 	struct xseg *xseg, *__xseg;
 	uint64_t size;
-	struct xseg_type *type;
+	struct xseg_peer *peertype;
+	struct xseg_type *segtype;
+	struct xseg_private *priv;
 	struct xseg_operations *xops;
+	struct xseg_peer_operations *pops;
 	int r;
 
-	type = __find_or_load_type(typename);
-	if (!type) {
-		LOGMSG("no segment type '%s'\n", typename);
+	__lock_domain();
+
+	peertype = __find_or_load_peer_type(peertypename);
+	if (!peertype) {
+		XSEGLOG("Peer type '%s' not found\n", peertypename);
+		__unlock_domain();
 		goto err;
 	}
 
-	xops = &type->ops;
+	segtype = __find_or_load_type(segtypename);
+	if (!segtype) {
+		XSEGLOG("Segment type '%s' not found\n", segtypename);
+		__unlock_domain();
+		goto err;
+	}
 
-	xseg = xops->malloc(sizeof(struct xseg));
+	__unlock_domain();
+
+	xops = &segtype->ops;
+	pops = &peertype->peer_ops;
+
+	xseg = pops->malloc(sizeof(struct xseg));
 	if (!xseg) {
-		LOGMSG("cannot allocate memory\n");
+		XSEGLOG("Cannot allocate memory");
 		goto err;
 	}
 
-	__xseg = xops->map(name, XSEG_MIN_PAGE_SIZE);
-	if (!__xseg)
+	priv = pops->malloc(sizeof(struct xseg_private));
+	if (!priv) {
+		XSEGLOG("Cannot allocate memory");
 		goto err_seg;
+	}
+
+	__xseg = xops->map(segname, XSEG_MIN_PAGE_SIZE);
+	if (!__xseg) {
+		XSEGLOG("Cannot map segment");
+		goto err_priv;
+	}
 
 	size = __xseg->segment_size;
-	LOGMSG("size: %lu\n", (unsigned long)size);
+	/* XSEGLOG("joined segment of size: %lu\n", (unsigned long)size); */
 	xops->unmap(__xseg, XSEG_MIN_PAGE_SIZE);
 
-	__xseg = xops->map(name, size);
-	if (!__xseg)
-		goto err_seg;
+	__xseg = xops->map(segname, size);
+	if (!__xseg) {
+		XSEGLOG("Cannot map segment");
+		goto err_priv;
+	}
 
+	priv->segment_type = *segtype;
+	priv->peer_type = *peertype;
+	priv->wakeup = wakeup;
+
+	priv->peer_types = pops->malloc(sizeof(void *) * xseg->max_peer_types);
+	if (!priv->peer_types) {
+		XSEGLOG("Cannot allocate memory");
+		goto err_unmap;
+	}
+	memset(priv->peer_types, 0, sizeof(void *) * xseg->max_peer_types);
+
+	xseg->config = __xseg->config;
 	xseg->version = __xseg->version;
 	xseg->requests = XSEG_TAKE_PTR(__xseg->requests, __xseg);
 	xseg->free_requests = XSEG_TAKE_PTR(__xseg->free_requests, __xseg);
@@ -622,60 +689,55 @@ struct xseg *xseg_join(char *typename, char *name)
 	xseg->shared = XSEG_TAKE_PTR(__xseg->shared, __xseg);
 	xseg->segment_size = size;
 	xseg->segment = __xseg;
-	xseg->type = *type;
-	xseg->config = __xseg->config;
-	xseg->max_peer_types = (1 << xseg->config.page_shift) / XSEG_TNAMESIZE;
-	xseg->peer_types = xops->malloc(sizeof(void *) * xseg->max_peer_types);
-	if (!xseg->peer_types)
-		goto err_unmap;
-	memset(xseg->peer_types, 0, sizeof(void *) * xseg->max_peer_types);
 
-	r =xseg_validate_pointers(xseg);
+	r = xseg_validate_pointers(xseg);
 	if (r) {
-		LOGMSG("found %d invalid xseg pointers!\n", r);
-		goto err_unmap;
+		XSEGLOG("found %d invalid xseg pointers!\n", r);
+		goto err_free_types;
 	}
+
+	/* Do we need this?
+	r = xops->signal_join(xseg);
+	if (r) {
+		XSEGLOG("Cannot attach signaling to segment! (error: %d)\n", r);
+		goto err_free_types;
+	}
+	*/
+
 	return xseg;
 
+err_free_types:
+	pops->mfree(priv->peer_types);
 err_unmap:
 	xops->unmap(__xseg, size);
+err_priv:
+	pops->mfree(priv);
 err_seg:
-	xops->mfree(xseg);
+	pops->mfree(xseg);
 err:
 	return NULL;
 }
 
-/* void xseg_leave(struct xseg *xseg) { at least free malloced memory } */
+/* void xseg_leave(struct xseg *xseg) { at least free allocated memory } */
 
 int xseg_prepare_wait(struct xseg *xseg, uint32_t portno)
 {
-	struct xseg_port *port;
 	if (!__validate_port(xseg, portno))
 		return -1;
 
-	port = &xseg->ports[portno];
-	return __peer_type.peer_ops.prepare_wait(port);
+	return xseg->priv->peer_type.peer_ops.prepare_wait(xseg, portno);
 }
-
 
 int xseg_cancel_wait(struct xseg *xseg, uint32_t portno)
 {
-	struct xseg_port *port;
 	if (!__validate_port(xseg, portno))
 		return -1;
-
-	port = &xseg->ports[portno];
-	return __peer_type.peer_ops.cancel_wait(port);
+	return xseg->priv->peer_type.peer_ops.cancel_wait(xseg, portno);
 }
 
-int xseg_wait_signal(struct xseg *xseg, uint32_t portno, uint32_t usec_timeout)
+int xseg_wait_signal(struct xseg *xseg, uint32_t usec_timeout)
 {
-	struct xseg_port *port;
-	if (!__validate_port(xseg, portno))
-		return -1;
-
-	port = &xseg->ports[portno];
-	return __peer_type.peer_ops.wait_signal(port, usec_timeout);
+	return xseg->priv->peer_type.peer_ops.wait_signal(xseg, usec_timeout);
 }
 
 int xseg_signal(struct xseg *xseg, uint32_t portno)
@@ -690,7 +752,7 @@ int xseg_signal(struct xseg *xseg, uint32_t portno)
 	if (!type)
 		return -1;
 
-	return type->peer_ops.signal(port);
+	return type->peer_ops.signal(xseg, portno);
 }
 
 int xseg_alloc_requests(struct xseg *xseg, uint32_t portno, uint32_t nr)
@@ -768,8 +830,6 @@ xserial xseg_submit (	struct xseg *xseg, uint32_t portno,
 	port = &xseg->ports[portno];
 	xqi = xreq - xseg->requests;
 	serial = xq_append_tail(&port->request_queue, xqi);
-	/* who signals? we do or caller does? */
-
 out:
 	return serial;
 }
@@ -816,8 +876,6 @@ xserial xseg_respond (  struct xseg *xseg, uint32_t portno,
 	port = &xseg->ports[portno];
 	xqi = xreq - xseg->requests;
 	serial = xq_append_tail(&port->reply_queue, xqi);
-	/* who signals? we do? caller does? */
-
 out:
 	return serial;
 }
@@ -840,14 +898,14 @@ struct xseg_port *xseg_bind_port(struct xseg *xseg, uint32_t req)
 
 	__lock_segment(xseg);
 	for (; portno <= maxno; portno++) {
-		long driver;
+		int64_t driver;
 		port = &xseg->ports[portno];
 		if (port->owner && !force)
 			continue;
-		driver = __enable_driver(xseg, &__peer_type);
+		driver = __enable_driver(xseg, &xseg->priv->peer_type);
 		if (driver < 0)
 			break;
-		port->peer_type = (uint32_t)driver;
+		port->peer_type = (uint64_t)driver;
 		port->owner = id;
 		goto out;
 	}
@@ -858,18 +916,15 @@ out:
 }
 
 
-int xseg_initialize(const char *_peer_type_name)
+int xseg_initialize(void)
 {
-	struct xseg_peer *type;
+	return __xseg_preinit();	/* with or without lock ? */
+}
 
-	__xseg_preinit();
-	type = __find_or_load_peer_type(_peer_type_name);
-	if (!type) {
-		LOGMSG("Cannot initialize '%s': no driver\n", _peer_type_name);
-		return -1;
-	}
-	__peer_type = *type;
-	return 0;
+int xseg_finalize(void)
+{
+	/* finalize not supported yet */
+	return -1;
 }
 
 #ifdef __KERNEL__
