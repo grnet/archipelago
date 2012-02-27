@@ -1,7 +1,7 @@
 # Setup for xseg Makefiles.
 
 ifndef TARGET
-TARGET:=$(shell basename `dirname pwd`)
+TARGET:=$(shell basename $(shell pwd))
 endif
 
 export CC=gcc
