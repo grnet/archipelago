@@ -15,7 +15,7 @@ ifndef CSTD
 export CSTD=-std=gnu99 -pedantic
 endif
 
-INC+=-I$(BASE)
+INC=-I$(BASE)
 INC+=-I$(BASE)/peers/$(TARGET)
 INC+=-I$(BASE)/sys/$(TARGET)
 INC+=-I$(BASE)/drivers/$(TARGET)

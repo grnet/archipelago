@@ -1,5 +1,6 @@
 .PHONY: default clean target-list
 
+TARGET=default
 include ./base.mk
 
 XSEG_CLEAN_TARGETS=$(patsubst %,clean-%,$(XSEG_DOMAIN_TARGETS))
