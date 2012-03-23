@@ -16,6 +16,8 @@ then
 	if [ "${1}" == "filed" ]
 	then
 		spawn_filed ${IMAGES} ${FILED_PORT}
+		sleep 0.5
+		pgrep filed &> /dev/null || fail "failed to spawn filed!"
 		ln -sf "${XSEG_HOME}tools/vlmc-filed.py" "${XSEG_HOME}tools/vlmc"
 	else
 		ln -sf "${XSEG_HOME}tools/vlmc-blockd.py" "${XSEG_HOME}tools/vlmc"
@@ -24,7 +26,7 @@ elif [ `basename "$0"` == "xseg_cleanup.sh" ]
 then
 	if [ "${1}" == "filed" ]
 	then
-		pkill filed
+		pkill filed &> /dev/null
 		sleep 0.5
 	fi
 

@@ -13,6 +13,11 @@ function pretty_print {
 	echo "======================="
 }
 
+function fail {
+	echo "${1}"
+	exit 1
+}
+
 function parse_config {
 	[ -e ~/.xsegrc ] && source ~/.xsegrc
 
@@ -22,7 +27,7 @@ function parse_config {
 	[ -n "${REQS}" ] || REQS=128
 	[ -n "${PORTS}" ] || PORTS=128
 	[ -n "${FILED_PORT}" ] || FILED_PORT=0
-	[ -n "${IMAGES}" ] || IMAGES="/srv/pithos/archip-data/images/"
+	[ -n "${IMAGES}" ] || IMAGES="/srv/archip/images/"
 	[ -n "${BLOCKD_LOGS}" ] || BLOCKD_LOGS="/root/logs/"
 	[ -n "${DEVICE_PREFIX}" ] || DEVICE_PREFIX="/dev/xsegbd"
 	[ -n "${XSEGBD_SYSFS}" ] || XSEGBD_SYSFS="/sys/bus/xsegbd"
@@ -63,7 +68,7 @@ function load_all {
 # @param $1		target/volume name
 # @param $2		xseg port
 function spawn_blockd {
-	"${XSEG_HOME}peers/blockd" "$1" -p "$2" -g "$SPEC" -n ${NR_OPS} &> "${BLOCKD_LOGS}/$1"
+	"${XSEG_HOME}peers/blockd" "$1" -p "$2" -g "$SPEC" -n ${NR_OPS} &> "${BLOCKD_LOGS}/$1" || fail "blockd"
 }
 
 function spawn_filed {
@@ -76,12 +81,12 @@ function spawn_filed {
 # @param $2		src port
 # @param $3		dst port
 function map_volume {
-	echo "$1 $2:$3:${REQS}" > "${XSEGBD_SYSFS}add"
+	echo "$1 $2:$3:${REQS}" > "${XSEGBD_SYSFS}add" || exit 1
 }
 
 # unmap_device - Unmap an xsegbd device/volume
 #
 # @param $1		xsegbd device id
 function unmap_device {
-	echo "$1" > "${XSEGBD_SYSFS}remove"
+	echo "$1" > "${XSEGBD_SYSFS}remove" || exit 1
 }
