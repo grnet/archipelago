@@ -3,10 +3,10 @@
 import os, sys, shutil, glob, argparse
 
 XSEG_HOME="/root/archip/xseg/"
-IMAGES="/srv/pithos/archip-data/images/"
+IMAGES="/srv/archip/"
 XSEGBD_SYSFS="/sys/bus/xsegbd/"
 DEVICE_PREFIX="/dev/xsegbd"
-BLOCKD_LOGS="/root/logs/"
+BLOCKD_LOGS="/root/archip_logs/"
 FILED_PORT=0
 NR_OPS=16
 
@@ -95,3 +95,13 @@ def xsegbd_loaded():
     except Exception, reason:
         print >> sys.stderr, reason
         sys.exit(-1)
+
+def loadrc(rc):
+    #FIXME
+    try:
+        if rc == None:
+            execfile(os.path.expanduser("~/.xsegrc"), globals())
+        else:
+            execfile(rc, globals())
+    except:
+        pass

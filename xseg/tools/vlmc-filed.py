@@ -108,13 +108,6 @@ if __name__ == "__main__":
 
     args = parser.parse_args()    
 
-    #FIXME
-    try:
-        if args.config == None:
-            execfile(os.path.expanduser("~/.xsegrc"))
-        else:
-            execfile(args.config)
-    except:
-        pass
+    loadrc(args.config)
 
     args.func(args)
