@@ -1,21 +1,39 @@
-.PHONY: clean
+.PHONY: default clean target-list
 
-XSEG_HOME=$(shell pwd)
-export XSEG_HOME
+TARGET=default
+include ./base.mk
 
-include config.mk
-include base.mk
+XSEG_CLEAN_TARGETS=$(patsubst %,clean-%,$(XSEG_DOMAIN_TARGETS))
 
-default:
-	for f in $(MAKEDIRS); do \
-		make -C $$f || break; \
-		echo "-------------------------------------------------------------------"; \
+default: targets
+
+target-list:
+	@echo $(XSEG_DOMAIN_TARGETS)
+
+targets: $(XSEG_DOMAIN_TARGETS)
+
+clean: $(XSEG_CLEAN_TARGETS)
+
+.PHONY: $(XSEG_DOMAIN_TARGETS)
+$(XSEG_DOMAIN_TARGETS):
+	@for f in $(XSEG_DOMAIN_DIRS); do \
+		echo " "; \
+		echo "=== $@ in $$f ==="; \
+		echo " "; \
+		make -C $$f/$@ TARGET=$@ default || exit 1; \
 		echo " "; \
 	done
+	@echo " "
 
-clean:
-	for f in $(MAKEDIRS); do \
-		make -C $$f clean || break; \
+.PHONY: $(XSEG_CLEAN_TARGETS)
+$(XSEG_CLEAN_TARGETS):
+	@for f in $(XSEG_DOMAIN_DIRS); do \
+		echo " "; \
+		echo "=== $@ in $$f ==="; \
+		echo " "; \
+		make -C $$f/$(@:clean-%=%) TARGET=$@ clean || true; \
 		echo " "; \
 	done
+	rm -f ./config.mk
+	@echo " "
 

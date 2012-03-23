@@ -475,13 +475,13 @@ static struct xseg *join(char *spec)
 	struct xseg *xseg;
 
 	(void)xseg_parse_spec(spec, &config);
-	xseg = xseg_join(config.type, config.name);
+	xseg = xseg_join(config.type, config.name, "posix", NULL);
 	if (xseg)
 		return xseg;
 
 	fprintf(stderr, "Failed to join xseg, creating it...\n");
 	(void)xseg_create(&config);
-	return xseg_join(config.type, config.name);
+	return xseg_join(config.type, config.name, "posix", NULL);
 }
 
 static int filed_loop(struct store *store)
@@ -493,7 +493,7 @@ static int filed_loop(struct store *store)
 	for (;;) {
 		io = wake_up_next_iothread(store);
 		xseg_prepare_wait(xseg, portno);
-		xseg_wait_signal(xseg, portno, 10000);
+		xseg_wait_signal(xseg, 10000);
 	}
 	return 0;
 }
@@ -590,7 +590,7 @@ malloc_fail:
 		return -1;
 	}
 */
-	if (xseg_initialize("posix")) {
+	if (xseg_initialize()) {
 		printf("cannot initialize library\n");
 		return -1;
 	}

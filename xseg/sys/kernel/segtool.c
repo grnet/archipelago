@@ -10,7 +10,7 @@
 #include <unistd.h>
 #include <string.h>
 
-#include "xsegdev.h"
+#include "segdev.h"
 
 int help(void)
 {
@@ -84,9 +84,9 @@ out:
 
 static int opendev(void)
 {
-	int fd = open("/dev/xsegdev", O_RDWR);
+	int fd = open("/dev/segdev", O_RDWR);
 	if (fd < 0)
-		perror("/dev/xsegdev");
+		perror("/dev/segdev");
 	return fd;
 }
 
@@ -99,7 +99,7 @@ int cmd_create(uint64_t size)
 	if (fd < 0)
 		return fd;
 
-	r = ioctl(fd, XSEGDEV_IOC_CREATESEG, size);
+	r = ioctl(fd, SEGDEV_IOC_CREATESEG, size);
 	if (r < 0)
 		perror("CREATESEG");
 
@@ -113,7 +113,7 @@ int cmd_destroy(void)
 	if (fd < 0)
 		return fd;
 
-	r = ioctl(fd, XSEGDEV_IOC_DESTROYSEG, 0);
+	r = ioctl(fd, SEGDEV_IOC_DESTROYSEG, 0);
 	if (r < 0)
 		perror("DESTROYSEG");
 
@@ -127,7 +127,7 @@ int cmd_info(void)
 	if (fd < 0)
 		return fd;
 
-	r = ioctl(fd, XSEGDEV_IOC_SEGSIZE, 0);
+	r = ioctl(fd, SEGDEV_IOC_SEGSIZE, 0);
 	if (r < 0)
 		perror("SEGSIZE");
 	else
@@ -148,7 +148,7 @@ int cmd_map(uint64_t offset, uint64_t size)
 		goto out;
 
 	if (!size) {
-		r = ioctl(fd, XSEGDEV_IOC_SEGSIZE, 0);
+		r = ioctl(fd, SEGDEV_IOC_SEGSIZE, 0);
 		if (r < 0) {
 			perror("SEGSIZE");
 			goto out;

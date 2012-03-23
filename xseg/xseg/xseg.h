@@ -2,7 +2,7 @@
 #define _XSEG_H
 
 #ifndef XSEG_VERSION
-#define XSEG_VERSION 2011072801
+#define XSEG_VERSION 2012022601
 #endif
 
 #ifndef XSEG_PAGE_SHIFT
@@ -54,11 +54,10 @@ typedef uint64_t xserial;
  *
 */
 
+struct xseg;
 struct xseg_port;
 
 struct xseg_operations {
-	void *(*malloc)(uint64_t size);
-	void *(*realloc)(void *mem, uint64_t size);
 	void  (*mfree)(void *mem);
 	long  (*allocate)(const char *name, uint64_t size);
 	long  (*deallocate)(const char *name);
@@ -77,10 +76,12 @@ struct xseg_type {
 struct xseg_peer_operations {
 	int   (*signal_init)(void);
 	void  (*signal_quit)(void);
-	int   (*prepare_wait)(struct xseg_port *port);
-	int   (*cancel_wait)(struct xseg_port *port);
-	int   (*wait_signal)(struct xseg_port *port, uint32_t usec_timeout);
-	int   (*signal)(struct xseg_port *port);
+	int   (*signal_join)(struct xseg *xseg);
+	int   (*signal_leave)(struct xseg *xseg);
+	int   (*prepare_wait)(struct xseg *xseg, uint32_t portno);
+	int   (*cancel_wait)(struct xseg *xseg, uint32_t portno);
+	int   (*wait_signal)(struct xseg *xseg, uint32_t usec_timeout);
+	int   (*signal)(struct xseg *xseg, uint32_t portno);
 	void *(*malloc)(uint64_t size);
 	void *(*realloc)(void *mem, uint64_t size);
 	void  (*mfree)(void *mem);
@@ -104,15 +105,13 @@ struct xseg_config {
 	char name[XSEG_NAMESIZE];  /* zero-terminated identifier */
 };
 
-struct xseg;
-
 struct xseg_port {
 	struct xq free_queue;
 	struct xq request_queue;
 	struct xq reply_queue;
 	uint64_t owner;
 	volatile uint64_t waitcue;
-	uint32_t peer_type;
+	uint64_t peer_type;
 };
 
 struct xseg_request;
@@ -179,20 +178,27 @@ struct xseg_shared {
 	uint32_t nr_peer_types;
 };
 
+struct xseg_private {
+	struct xseg_type segment_type;
+	struct xseg_peer peer_type;
+	struct xseg_peer **peer_types;
+	uint32_t max_peer_types;
+	void (*wakeup)(struct xseg *xseg, uint32_t portno);
+};
+
 struct xseg {
 	uint64_t version;
+	uint64_t segment_size;
+	struct xseg *segment;
 	struct xseg_request *requests;
 	struct xq *free_requests;
 	struct xseg_port *ports;
 	char *buffers;
 	char *extra;
 	struct xseg_shared *shared;
-	uint64_t segment_size;
-	struct xseg *segment;
-	struct xseg_type type;
-	struct xseg_config config;
-	struct xseg_peer **peer_types;
+	struct xseg_private *priv;
 	uint32_t max_peer_types;
+	struct xseg_config config;
 };
 
 #define XSEG_F_LOCK 0x1
@@ -200,7 +206,9 @@ struct xseg {
 /* ================= XSEG REQUEST INTERFACE ================================= */
 /*                     ___________________                         _________  */
 /*                    /                   \                       /         \ */
-                int    xseg_initialize      ( const char          * peer_type );
+                int    xseg_initialize      ( void                            );
+
+                int    xseg_finalize        ( void                            );
 
                 int    xseg_parse_spec      ( char                * spec,
                                               struct xseg_config  * config    );
@@ -221,10 +229,10 @@ struct xseg {
 
                void    xseg_report_peer_types( void );
 
-               long    xseg_enable_driver   ( struct xseg         * xseg,
-		                              const char          * name      );
+            int64_t    xseg_enable_driver   ( struct xseg         * xseg,
+                                              const char          * name      );
                 int    xseg_disable_driver  ( struct xseg         * xseg,
-		                              const char          * name      );
+                                              const char          * name      );
 /*                    \___________________/                       \_________/ */
 /*                     ___________________                         _________  */
 /*                    /                   \                       /         \ */
@@ -234,8 +242,12 @@ struct xseg {
 /*                    \___________________/                       \_________/ */
 /*                     ___________________                         _________  */
 /*                    /                   \                       /         \ */
-        struct xseg *  xseg_join            ( char                * typename,
-                                              char                * name      );
+        struct xseg *  xseg_join            ( char                * segtype,
+                                              char                * segname,
+                                              char                * peertype,
+                                              void               (* wakeup    )
+                                             (struct xseg         * xseg,
+                                              uint32_t              portno   ));
 
                void    xseg_leave           ( struct xseg         * xseg      );
 /*                    \___________________/                       \_________/ */
@@ -288,7 +300,6 @@ struct xseg_request *  xseg_accept          ( struct xseg         * xseg,
                                               uint32_t              portno    );
 
                 int    xseg_wait_signal     ( struct xseg         * xseg,
-                                              uint32_t              portno,
                                               uint32_t              utimeout  );
 
                 int    xseg_signal          ( struct xseg         * xseg,

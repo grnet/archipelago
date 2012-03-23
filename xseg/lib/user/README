@@ -1,0 +1,3 @@
+Make files in other directories will send their
+libraries and plugins in this directory.
+However, they will never clean it up.

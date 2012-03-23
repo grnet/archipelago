@@ -8,9 +8,27 @@
 #include <errno.h>
 #include <sys/util.h>
 
+#include <sys/domain.h>
+#include <xq/domain.h>
+#include <xseg/domain.h>
+
+#include <xq/xq_lock.h>
+
 int (*xseg_snprintf)(char *str, size_t size, const char *format, ...) = snprintf;
 
 char __xseg_errbuf[4096];
+
+static struct xq_lock __lock;
+
+void __lock_domain(void)
+{
+	(void)xq_acquire(&__lock, 1);
+}
+
+void __unlock_domain(void)
+{
+	xq_release(&__lock);
+}
 
 void __load_plugin(const char *name)
 {
@@ -25,7 +43,7 @@ void __load_plugin(const char *name)
 	_name[5 + namesize + 3 ] = 0;
 	dl = dlopen(_name, RTLD_NOW);
 	if (!dl) {
-		LOGMSG("Cannot load plugin '%s': %s\n", _name, dlerror());
+		XSEGLOG("Cannot load plugin '%s': %s\n", _name, dlerror());
 		return;
 	}
 
@@ -33,17 +51,17 @@ void __load_plugin(const char *name)
 	_name[127] = 0;
 	init = (void (*)(void))(long)dlsym(dl, _name);
 	if (!init) {
-		LOGMSG("Init function '%s' not found!\n", _name);
+		XSEGLOG("Init function '%s' not found!\n", _name);
 		return;
 	}
 
 	init();
-	//LOGMSG("Plugin '%s' loaded.\n", name);
+	//XSEGLOG("Plugin '%s' loaded.\n", name);
 }
 
-uint32_t __get_id(void)
+uint64_t __get_id(void)
 {
-	return syscall(SYS_gettid);
+	return (uint64_t)syscall(SYS_gettid);
 }
 
 void __xseg_log(const char *msg)

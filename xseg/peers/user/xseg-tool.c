@@ -401,7 +401,7 @@ int cmd_bridge(uint32_t portno1, uint32_t portno2, char *logfile, char *how)
 				if (reloop)
 					break;
 				/* wait on multiple queues? */
-				xseg_wait_signal(xseg, portno1, 100000);
+				xseg_wait_signal(xseg, 100000);
 				break;
 			} else {
 				xseg_cancel_wait(xseg, portno1);	
@@ -493,7 +493,7 @@ int cmd_rndwrite(long loops, int32_t seed, uint32_t namesize, uint32_t chunksize
 		}
 
 		if (!submitted && !received)
-			xseg_wait_signal(xseg, srcport, 1000000);
+			xseg_wait_signal(xseg, 1000000);
 
 			if (nr_submitted % 1000 == 0 && !reported) {
 				reported = 1;
@@ -597,7 +597,7 @@ int cmd_rndread(long loops, int32_t seed, uint32_t namesize, uint32_t chunksize,
 		}
 
 		if (!submitted && !received)
-			xseg_wait_signal(xseg, srcport, 1000000);
+			xseg_wait_signal(xseg, 1000000);
 
 		if (nr_submitted % 1000 == 0 && !reported) {
 			reported = 1;
@@ -636,7 +636,7 @@ int cmd_join(void)
 	if (xseg)
 		return 0;
 
-	xseg = xseg_join(cfg.type, cfg.name);
+	xseg = xseg_join(cfg.type, cfg.name, "posix", NULL);
 	if (!xseg) {
 		fprintf(stderr, "cannot join segment!\n");
 		return -1;
@@ -774,7 +774,7 @@ int cmd_wait(uint32_t nr)
 		if (ret)
 			return -1;
 
-		ret = xseg_wait_signal(xseg, srcport, 1000000);
+		ret = xseg_wait_signal(xseg, 1000000);
 		ret = xseg_cancel_wait(xseg, srcport);
 		if (ret)
 			return -1;
@@ -879,7 +879,7 @@ int main(int argc, char **argv)
 		return -1;
 	}
 
-	if (xseg_initialize("posix")) {
+	if (xseg_initialize()) {
 		fprintf(stderr, "cannot initialize!\n");
 		return -1;
 	}

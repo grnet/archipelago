@@ -21,7 +21,7 @@ static long posix_allocate(const char *name, uint64_t size)
 	int fd, r;
 	fd = shm_open(name, O_RDWR | O_CREAT, 0770);
 	if (fd < 0) {
-		LOGMSG("Cannot create shared segment: %s\n",
+		XSEGLOG("Cannot create shared segment: %s\n",
 			strerror_r(errno, errbuf, ERRSIZE));
 		return fd;
 	}
@@ -29,7 +29,7 @@ static long posix_allocate(const char *name, uint64_t size)
 	r = lseek(fd, size -1, SEEK_SET);
 	if (r < 0) {
 		close(fd);
-		LOGMSG("Cannot seek into segment file: %s\n",
+		XSEGLOG("Cannot seek into segment file: %s\n",
 			strerror_r(errno, errbuf, ERRSIZE));
 		return r;
 	}
@@ -38,7 +38,7 @@ static long posix_allocate(const char *name, uint64_t size)
 	r = write(fd, errbuf, 1);
 	if (r != 1) {
 		close(fd);
-		LOGMSG("Failed to set segment size: %s\n",
+		XSEGLOG("Failed to set segment size: %s\n",
 			strerror_r(errno, errbuf, ERRSIZE));
 		return r;
 	}
@@ -58,7 +58,7 @@ static void *posix_map(const char *name, uint64_t size)
 	int fd;
 	fd = shm_open(name, O_RDWR, 0000);
 	if (fd < 0) {
-		LOGMSG("Failed to open '%s' for mapping: %s\n",
+		XSEGLOG("Failed to open '%s' for mapping: %s\n",
 			name, strerror_r(errno, errbuf, ERRSIZE));
 		return NULL;
 	}
@@ -70,7 +70,7 @@ static void *posix_map(const char *name, uint64_t size)
 			fd, 0	);
 
 	if (xseg == MAP_FAILED) {
-		LOGMSG("Could not map segment: %s\n",
+		XSEGLOG("Could not map segment: %s\n",
 			strerror_r(errno, errbuf, ERRSIZE));
 		return NULL;
 	}
@@ -117,23 +117,26 @@ static int posix_signal_init(void)
 
 static void posix_signal_quit(void)
 {
+	pid = 0;
 	signal(SIGIO, SIG_DFL);
 	sigprocmask(SIG_SETMASK, &savedset, NULL);
 }
 
-static int posix_prepare_wait(struct xseg_port *port)
+static int posix_prepare_wait(struct xseg *xseg, uint32_t portno)
 {
+	struct xseg_port *port = &xseg->ports[portno];
 	port->waitcue = pid;
 	return 0;
 }
 
-static int posix_cancel_wait(struct xseg_port *port)
+static int posix_cancel_wait(struct xseg *xseg, uint32_t portno)
 {
+	struct xseg_port *port = &xseg->ports[portno];
 	port->waitcue = 0;
 	return 0;
 }
 
-static int posix_wait_signal(struct xseg_port *port, uint32_t usec_timeout)
+static int posix_wait_signal(struct xseg *xseg, uint32_t usec_timeout)
 {
 	int r;
 	siginfo_t siginfo;
@@ -149,13 +152,14 @@ static int posix_wait_signal(struct xseg_port *port, uint32_t usec_timeout)
 	return siginfo.si_signo;
 }
 
-static int posix_signal(struct xseg_port *port)
+static int posix_signal(struct xseg *xseg, uint32_t portno)
 {
-	union sigval sigval = {0};
+	struct xseg_port *port = &xseg->ports[portno];
 	pid_t cue = (pid_t)port->waitcue;
 	if (!cue)
 		return 0;
-	sigqueue(cue, SIGIO, sigval);
+
+	syscall(SYS_tkill, SIGIO, cue);
 	/* XXX: on error what? */
 	return 1;
 }
@@ -178,8 +182,6 @@ static void posix_mfree(void *mem)
 static struct xseg_type xseg_posix = {
 	/* xseg_operations */
 	{
-		.malloc		= posix_malloc,
-		.realloc	= posix_realloc,
 		.mfree		= posix_mfree,
 		.allocate	= posix_allocate,
 		.deallocate	= posix_deallocate,
