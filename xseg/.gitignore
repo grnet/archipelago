@@ -11,3 +11,7 @@
 *.ko
 *.pyc
 tools/vlmc
+config.mk
+*tmp_versions*
+*Module*
+*modules*
