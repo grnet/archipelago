@@ -1,0 +1,76 @@
+#!/usr/bin/env python
+#
+# Copyright (C) 2011 Greek Research and Technology Network
+#
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 2 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful, but
+# WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+# General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write to the Free Software
+# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
+# 02110-1301, USA.
+
+"""Remove an existing rbd Image from a RADOS cluster
+
+This program removes an rbd Image file from a RADOS cluster.
+It takes it's input from environment variables. Specifically the
+following variables should be present:
+
+ - VOL_NAME: The name of the Image file to remove
+ - POOL:     The RADOS pool in which the Image resides
+
+Returns O upon successfull removal, 1 upon failure
+
+"""
+
+import os
+import sys
+
+from ganeti import utils
+
+
+def ReadEnv():
+  """Read the mandatory enviromental variables
+
+  """
+  name = os.getenv("VOL_NAME")
+  if name is None:
+    sys.stderr.write('The environment variable VOL_NAME is missing.\n')
+    return None
+#  pool = os.getenv("POOL")
+  pool = "rbd"
+  if pool is None:
+    sys.stderr.write('The environment variable POOL is missing.\n')
+    return None
+
+  return (name, pool)
+
+
+def main():
+  env = ReadEnv()
+  if env is None:
+    sys.stderr.write('Wrong environment. Aborting...\n')
+    return 1
+
+  rbd_name, rbd_pool = env
+
+  cmd = ["/root/archip/xseg/tools/vlmc", "rm", "-p", "%s" % rbd_pool, "%s" % rbd_name]
+  result = utils.RunCmd(cmd)
+  if result.failed:
+    sys.stderr.write("Can't remove Image %s from cluster with rbd rm: "
+                     "%s - %s" % 
+                     (rbd_name, result.fail_reason, result.output))
+    return 1
+
+  return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

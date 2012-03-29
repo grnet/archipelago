@@ -1,0 +1,84 @@
+#!/usr/bin/env python
+#
+# Copyright (C) 2011 Greek Research and Technology Network
+#
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 2 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful, but
+# WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+# General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write to the Free Software
+# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
+# 02110-1301, USA.
+
+"""Grow an existing rbd Image
+
+This program grows an existing rbd Image which resides in a
+RADOS cluster
+
+It takes it's input from environment variables. Specifically the
+following variables should be present:
+
+ - VOL_NAME: The name of the Image to grow
+ - POOL:     The RADOS pool in which the Image resides
+ - VOL_SIZE: The current Image's size
+ - VOL_NEW_SIZE: The new size of the Image after it's grown
+
+Returns 0 upon successful grow, 1 upon failure
+
+"""
+
+import os
+import sys
+
+from ganeti import utils
+
+
+def ReadEnv():
+  """Read the mandatory enviromental variables
+
+  """
+  name = os.getenv("VOL_NAME")
+  if name is None:
+    sys.stderr.write('The environment variable VOL_NAME is missing.\n')
+    return None
+#  pool = os.getenv("POOL")
+  pool = "rbd"
+  if pool is None:
+    sys.stderr.write('The environment variable POOL is missing.\n')
+    return None
+  new_size = os.getenv("VOL_NEW_SIZE")
+  if new_size is None:
+    sys.stderr.write('The environment variable VOL_NEW_SIZE is missing.\n')
+    return None
+
+  return (name, pool, new_size)
+
+
+def main():
+  env = ReadEnv()
+  if env is None:
+    sys.stderr.write('Wrong environment. Aborting...\n')
+    return 1
+
+  rbd_name, rbd_pool, new_size = env
+
+  cmd = ["/root/archip/xseg/tools/vlmc", "resize", "-p", "%s" % rbd_pool, "%s" % rbd_name,
+         "--size", "%s" % new_size]
+  result = utils.RunCmd(cmd)
+  if result.failed:
+    sys.stderr.write('rbd resize failed (%s): %s\n' %
+                     (result.fail_reason, result.output))
+    return 1
+
+  return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
