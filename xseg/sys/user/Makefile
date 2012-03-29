@@ -67,7 +67,6 @@ libxseg.a: xseg.o xq/xq.o drivers _initialize.o
 clean:
 	make -C xq clean
 	rm -f _initialize.c _initialize.o
-	rm -f xseg.o xseg.pic.o
-	rm -f libxseg.a
+	rm -f xseg.o xseg.pic.o xseg_user.o
+	rm -f libxseg.a libxseg.map
 	rm -f libxseg.so libxseg.so.$(MAJOR) libxseg.so.$(MAJOR).$(MINOR)
-

@@ -10,6 +10,7 @@ EXPORT_SYMBOL(xseg_disable_driver);
 EXPORT_SYMBOL(xseg_create);
 EXPORT_SYMBOL(xseg_destroy);
 EXPORT_SYMBOL(xseg_join);
+EXPORT_SYMBOL(xseg_leave);
 EXPORT_SYMBOL(xseg_bind_port);
 EXPORT_SYMBOL(xseg_alloc_requests);
 EXPORT_SYMBOL(xseg_free_requests);

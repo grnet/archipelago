@@ -82,7 +82,7 @@ int segdev_destroy_segment(struct segdev *dev)
 		goto out_unlock;
 
 	clear_bit(SEGDEV_READY, &dev->flags);
-	ret = wait_event_interruptible(dev->wq, atomic_read(&dev->usercount) < 1);
+	ret = wait_event_interruptible(dev->wq, atomic_read(&dev->usercount) <= 1);
 	if (ret)
 		goto out_unlock;
 

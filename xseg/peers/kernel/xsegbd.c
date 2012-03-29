@@ -478,7 +478,7 @@ static void xseg_callback(struct xseg *xseg, uint32_t portno)
 	int err;
 
 	for (;;) {
-		xreq = xseg_receive(xseg, xsegbd_dev->src_portno);
+		xreq = xseg_receive(xseg, portno);
 		if (!xreq)
 			break;
 

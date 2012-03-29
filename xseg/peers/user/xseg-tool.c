@@ -674,6 +674,7 @@ int cmd_destroy(void)
 {
 	if (!xseg && cmd_join())
 		return -1;
+	xseg_leave(xseg);
 	xseg_destroy(xseg);
 	xseg = NULL;
 	fprintf(stderr, "Segment destroyed.\n");

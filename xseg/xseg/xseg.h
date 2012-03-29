@@ -61,7 +61,7 @@ struct xseg_operations {
 	void  (*mfree)(void *mem);
 	long  (*allocate)(const char *name, uint64_t size);
 	long  (*deallocate)(const char *name);
-	void *(*map)(const char *name, uint64_t size);
+	void *(*map)(const char *name, uint64_t size, struct xseg *seg);
 	void  (*unmap)(void *xseg, uint64_t size);
 };
 

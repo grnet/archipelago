@@ -62,6 +62,7 @@ function load_all {
 	load_module "segdev"
 	load_module "xseg_segdev"
 	mk_chardev
+        "${XSEG_HOME}/peers/user/xseg" "${SPEC}" create
 	load_module "xsegbd" "spec=$SPEC"
 }
 
@@ -70,11 +71,11 @@ function load_all {
 # @param $1		target/volume name
 # @param $2		xseg port
 function spawn_blockd {
-	"${XSEG_HOME}peers/blockd" "$1" -p "$2" -g "$SPEC" -n ${NR_OPS} &> "${BLOCKD_LOGS}/$1" || fail "blockd"
+	"${XSEG_HOME}peers/user/blockd" "$1" -p "$2" -g "$SPEC" -n ${NR_OPS} &> "${BLOCKD_LOGS}/$1" || fail "blockd"
 }
 
 function spawn_filed {
-	"${XSEG_HOME}peers/filed" "$1" -p "$2" -g "${SPEC}" -n ${NR_OPS} &> "${BLOCKD_LOGS}/filed-${HOSTNAME}" &
+	"${XSEG_HOME}peers/user/filed" "$1" -p "$2" -g "${SPEC}" -n ${NR_OPS} &> "${BLOCKD_LOGS}/filed-${HOSTNAME}" &
 }
 
 # map_volume - Map a volume to an xsegbd device

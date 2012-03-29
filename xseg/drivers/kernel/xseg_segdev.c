@@ -95,11 +95,12 @@ static long segdev_deallocate(const char *name)
 	return r;
 }
 
-static void *segdev_map(const char *name, uint64_t size)
+static void *segdev_map(const char *name, uint64_t size, struct xseg *seg)
 {
 	struct xseg *xseg = NULL;
 	/* map() holds a reference to the segment */
 	struct segdev *dev = segdev_get(0);
+	struct segpriv *priv;
 	int r;
 	r = IS_ERR(dev) ? PTR_ERR(dev) : 0;
 	if (r)
@@ -111,6 +112,13 @@ static void *segdev_map(const char *name, uint64_t size)
 	if (size > dev->segsize)
 		goto out;
 
+	priv = dev->priv;
+	if (priv->segno >= nr_xsegments)
+		goto out;
+
+	if (seg)
+		xsegments[priv->segno] = seg;
+
 	xseg = (void *)dev->segment;
 out:
 	return xseg;
@@ -119,11 +127,21 @@ out:
 static void segdev_unmap(void *ptr, uint64_t size)
 {
 	struct segdev *segdev = segdev_get(0);
+	struct segpriv *priv;
 	int r = IS_ERR(segdev) ? PTR_ERR(segdev) : 0;
 	if (r)
 		return;
 
+	priv = segdev->priv;
+	if (priv->segno >= nr_xsegments)
+		goto out;
+
+	xsegments[priv->segno] = NULL;
+
+out:
 	/* unmap() releases the reference taken by map() */
+	segdev_put(segdev);
+
 	segdev_put(segdev);
 }
 
@@ -133,7 +151,7 @@ static void segdev_callback(struct segdev *dev)
 	struct segpriv *priv = dev->priv;
 	struct xseg_private *xpriv;
 	uint32_t portno;
-	if (priv->segno > nr_xsegments)
+	if (priv->segno >= nr_xsegments)
 		return;
 
 	if (dev->buffer_index != sizeof(uint32_t)) {
@@ -141,11 +159,12 @@ static void segdev_callback(struct segdev *dev)
 		return;
 	}
 
-	portno = *(uint32_t *)dev->buffer;
 	xseg = xsegments[priv->segno];
 	xpriv = xseg->priv;
-	if (xpriv->wakeup)
+	if (xpriv->wakeup) {
+		portno = *(uint32_t *)dev->buffer;
 		xpriv->wakeup(xseg, portno);
+	}
 }
 
 static struct xseg_type xseg_segdev = {
@@ -182,6 +201,7 @@ static int segdev_signal_init(void)
 	segdev->priv = segpriv;
 	r = 0;
 out:
+	segdev_put(segdev);
 	return r;
 }
 
@@ -192,6 +212,8 @@ static void segdev_signal_quit(void)
 	xsegments[0] = NULL;
 	if (!r)
 		segdev->callback = NULL;
+
+	segdev_put(segdev);
 	return;
 }
 

@@ -4,7 +4,7 @@ include $(XSEG_HOME)/base.mk
 
 default: all
 
-all: blockd filed vlmcd xseg
+all: blockd filed xseg
 
 filed: filed.c $(BASE)/xseg/xseg.h
 	$(CC) $(CFLAGS) -o $@ $< $(INC) -L$(LIB) -lxseg -lpthread

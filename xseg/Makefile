@@ -1,4 +1,4 @@
-.PHONY: default clean target-list
+.PHONY: default clean target-list distclean
 
 TARGET=default
 include ./base.mk
@@ -37,3 +37,6 @@ $(XSEG_CLEAN_TARGETS):
 	rm -f ./config.mk
 	@echo " "
 
+distclean:
+	rm -f lib/user/*.so* lib/user/*.a
+	rm -f lib/kernel/*.ko

@@ -538,7 +538,7 @@ int xseg_create(struct xseg_config *cfg)
 		goto out_err;
 	}
 
-	xseg = xops->map(cfg->name, size);
+	xseg = xops->map(cfg->name, size, NULL);
 	if (!xseg) {
 		XSEGLOG("cannot map segment!\n");
 		goto out_deallocate;
@@ -561,14 +561,19 @@ out_err:
 
 void xseg_destroy(struct xseg *xseg)
 {
-	struct xseg_type *type = __find_or_load_type(xseg->config.type);
+	struct xseg_type *type;
+
+	__lock_domain();
+	type = __find_or_load_type(xseg->config.type);
 	if (!type) {
 		XSEGLOG("no segment type '%s'\n", xseg->config.type);
-		return;
+		goto out;
 	}
 
 	/* should destroy() leave() first? */
 	type->ops.deallocate(xseg->config.name);
+out:
+	__unlock_domain();
 }
 
 static int pointer_ok(	unsigned long ptr,
@@ -652,7 +657,7 @@ struct xseg *xseg_join(	char *segtypename,
 		goto err_seg;
 	}
 
-	__xseg = xops->map(segname, XSEG_MIN_PAGE_SIZE);
+	__xseg = xops->map(segname, XSEG_MIN_PAGE_SIZE, NULL);
 	if (!__xseg) {
 		XSEGLOG("Cannot map segment");
 		goto err_priv;
@@ -662,7 +667,7 @@ struct xseg *xseg_join(	char *segtypename,
 	/* XSEGLOG("joined segment of size: %lu\n", (unsigned long)size); */
 	xops->unmap(__xseg, XSEG_MIN_PAGE_SIZE);
 
-	__xseg = xops->map(segname, size);
+	__xseg = xops->map(segname, size, xseg);
 	if (!__xseg) {
 		XSEGLOG("Cannot map segment");
 		goto err_priv;
@@ -671,6 +676,7 @@ struct xseg *xseg_join(	char *segtypename,
 	priv->segment_type = *segtype;
 	priv->peer_type = *peertype;
 	priv->wakeup = wakeup;
+	xseg->max_peer_types = __xseg->max_peer_types;
 
 	priv->peer_types = pops->malloc(sizeof(void *) * xseg->max_peer_types);
 	if (!priv->peer_types) {
@@ -679,6 +685,7 @@ struct xseg *xseg_join(	char *segtypename,
 	}
 	memset(priv->peer_types, 0, sizeof(void *) * xseg->max_peer_types);
 
+	xseg->priv = priv;
 	xseg->config = __xseg->config;
 	xseg->version = __xseg->version;
 	xseg->requests = XSEG_TAKE_PTR(__xseg->requests, __xseg);
@@ -718,7 +725,21 @@ err:
 	return NULL;
 }
 
-/* void xseg_leave(struct xseg *xseg) { at least free allocated memory } */
+void xseg_leave(struct xseg *xseg)
+{
+	struct xseg_type *type;
+
+	__lock_domain();
+	type = __find_or_load_type(xseg->config.type);
+	if (!type) {
+		XSEGLOG("no segment type '%s'\n", xseg->config.type);
+		__unlock_domain();
+		return;
+	}
+	__unlock_domain();
+
+	type->ops.unmap(xseg->segment, xseg->segment_size);
+}
 
 int xseg_prepare_wait(struct xseg *xseg, uint32_t portno)
 {

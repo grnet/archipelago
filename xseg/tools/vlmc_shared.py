@@ -9,6 +9,7 @@ DEVICE_PREFIX="/dev/xsegbd"
 BLOCKD_LOGS="/root/archip_logs/"
 FILED_PORT=0
 NR_OPS=16
+REQS=512
 
 def vlmc_list(args):
     print "name\t\t\t\tsize"

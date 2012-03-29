@@ -52,10 +52,14 @@ static long posix_deallocate(const char *name)
 	return shm_unlink(name);
 }
 
-static void *posix_map(const char *name, uint64_t size)
+static void *posix_map(const char *name, uint64_t size, struct xseg *seg)
 {
 	struct xseg *xseg;
 	int fd;
+
+	if (seg)
+		XSEGLOG("struct xseg * is not NULL. Ignoring...\n");
+
 	fd = shm_open(name, O_RDWR, 0000);
 	if (fd < 0) {
 		XSEGLOG("Failed to open '%s' for mapping: %s\n",

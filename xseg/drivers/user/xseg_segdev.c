@@ -99,10 +99,14 @@ static long segdev_deallocate(const char *name)
 	return 0;
 }
 
-static void *segdev_map(const char *name, uint64_t size)
+static void *segdev_map(const char *name, uint64_t size, struct xseg *seg)
 {
 	struct xseg *xseg;
 	int fd;
+
+	if (seg)
+		XSEGLOG("struct xseg * not NULL. Ignoring...\n");
+
 	fd = opendev();
 	if (fd < 0)
 		return NULL;
@@ -169,8 +173,7 @@ static int segdev_wait_signal(struct xseg *xseg, uint32_t timeout)
 
 static int segdev_signal(struct xseg *xseg, uint32_t portno)
 {
-	struct xseg_port *port = &xseg->ports[portno];
-	return write(opendev(), &port, sizeof(port));
+	return write(opendev(), &portno, sizeof(portno));
 }
 
 static void *segdev_malloc(uint64_t size)
