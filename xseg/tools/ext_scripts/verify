@@ -1,3 +1,1 @@
-!#/bin/bash
-
-exit 0
+vlmc_wrapper.py
