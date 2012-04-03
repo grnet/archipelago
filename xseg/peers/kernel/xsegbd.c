@@ -55,6 +55,7 @@ static spinlock_t __lock;
 static struct xsegbd xsegbd;
 static DEFINE_MUTEX(xsegbd_mutex);
 static LIST_HEAD(xsegbd_dev_list);
+static DEFINE_SPINLOCK(xsegbd_dev_list_lock);
 
 /* ************************* */
 /* ***** sysfs helpers ***** */
@@ -288,6 +289,9 @@ static void xsegbd_dev_release(struct device *dev)
 
 	unregister_blkdev(xsegbd_dev->major, XSEGBD_NAME);
 
+	spin_lock(&xsegbd_dev_list_lock);
+	list_del_init(&xsegbd_dev->node);
+	spin_unlock(&xsegbd_dev_list_lock);
 	kfree(xsegbd_dev);
 
 	module_put(THIS_MODULE);
@@ -700,7 +704,7 @@ static ssize_t xsegbd_add(struct bus_type *bus, const char *buf, size_t count)
 	}
 	xsegbd_dev->namesize = strlen(xsegbd_dev->name);
 
-	mutex_lock_nested(&xsegbd_mutex, SINGLE_DEPTH_NESTING);
+	spin_lock(&xsegbd_dev_list_lock);
 
 	list_for_each(tmp, &xsegbd_dev_list) {
 		struct xsegbd_device *entry;
@@ -720,7 +724,7 @@ static ssize_t xsegbd_add(struct bus_type *bus, const char *buf, size_t count)
 
 	list_add_tail(&xsegbd_dev->node, &xsegbd_dev_list);
 
-	mutex_unlock(&xsegbd_mutex);
+	spin_unlock(&xsegbd_dev_list_lock);
 
 	XSEGLOG("registering block device major %d", major);
 	ret = register_blkdev(major, XSEGBD_NAME);
@@ -763,12 +767,7 @@ static ssize_t xsegbd_add(struct bus_type *bus, const char *buf, size_t count)
 	return count;
 
 out_bus:
-	mutex_lock_nested(&xsegbd_mutex, SINGLE_DEPTH_NESTING);
-
-	list_del_init(&xsegbd_dev->node);
 	xsegbd_bus_del_dev(xsegbd_dev);
-
-	mutex_unlock(&xsegbd_mutex);
 
 	return ret;
 
@@ -776,11 +775,11 @@ out_blkdev:
 	unregister_blkdev(xsegbd_dev->major, XSEGBD_NAME);
 
 out_delentry:
-	mutex_lock_nested(&xsegbd_mutex, SINGLE_DEPTH_NESTING);
+	spin_lock(&xsegbd_dev_list_lock);
 	list_del_init(&xsegbd_dev->node);
 
 out_unlock:
-	mutex_unlock(&xsegbd_mutex);
+	spin_unlock(&xsegbd_dev_list_lock);
 
 out_dev:
 	kfree(xsegbd_dev);
@@ -794,13 +793,16 @@ static struct xsegbd_device *__xsegbd_get_dev(unsigned long id)
 	struct list_head *tmp;
 	struct xsegbd_device *xsegbd_dev;
 
+
+	spin_lock(&xsegbd_dev_list_lock);
 	list_for_each(tmp, &xsegbd_dev_list) {
 		xsegbd_dev = list_entry(tmp, struct xsegbd_device, node);
-		if (xsegbd_dev->id == id)
+		if (xsegbd_dev->id == id) {
+			spin_unlock(&xsegbd_dev_list_lock);
 			return xsegbd_dev;
-
+		}
 	}
-
+	spin_unlock(&xsegbd_dev_list_lock);
 	return NULL;
 }
 
@@ -827,8 +829,6 @@ static ssize_t xsegbd_remove(struct bus_type *bus, const char *buf, size_t count
 		goto out_unlock;
 	}
 
-	list_del_init(&xsegbd_dev->node);
-
 	xsegbd_bus_del_dev(xsegbd_dev);
 
 out_unlock:
@@ -846,21 +846,22 @@ static int xsegbd_sysfs_init(void)
 {
 	int ret;
 
-	xsegbd_bus_type.bus_attrs = xsegbd_bus_attrs;
-
-	ret = bus_register(&xsegbd_bus_type);
+	ret = device_register(&xsegbd_root_dev);
 	if (ret < 0)
 		return ret;
 
-	ret = device_register(&xsegbd_root_dev);
+	xsegbd_bus_type.bus_attrs = xsegbd_bus_attrs;
+	ret = bus_register(&xsegbd_bus_type);
+	if (ret < 0)
+		device_unregister(&xsegbd_root_dev);
 
 	return ret;
 }
 
 static void xsegbd_sysfs_cleanup(void)
 {
-	device_unregister(&xsegbd_root_dev);
 	bus_unregister(&xsegbd_bus_type);
+	device_unregister(&xsegbd_root_dev);
 }
 
 /* *************************** */
