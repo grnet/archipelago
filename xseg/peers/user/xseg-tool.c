@@ -52,7 +52,8 @@ char *chunk;
 struct xseg_config cfg;
 struct xseg *xseg;
 uint32_t srcport, dstport;
-
+uint64_t reqs;
+struct timval *tv;
 
 #define mkname mkname_heavy
 /* heavy distributes duplicates much more widely than light
@@ -330,9 +331,49 @@ int cmd_clone(char *src, char *dst)
 	return 0;
 }
 
-void log_req(	uint32_t portno2, uint32_t portno1, int op, int method,
+void log_req(int logfd, uint32_t portno2, uint32_t portno1, int op, int method,
 		struct xseg_request *req)
 {
+	char name[64], data[64];
+	/* null terminate name in case of req->name is less than 63 characters,
+	 * and next character after name (aka first byte of next buffer) is not
+	 * null
+	 */
+	unsigned int end = (req->namesize > 63) ? 63 : req->namesize;
+
+	switch(method) {
+	case 0:
+		strncpy(name, req->name, end);
+		name[end] = 0;
+		strncpy(data, req->data, 63);
+		data[63] = 0;
+
+		fprintf(stderr,
+			"src port: %u, dst port: %u,  op:%u offset: %llu size: %lu, reqstate: %u\n"
+			"name[%u]: '%s', data[%llu]:\n%s------------------\n\n",
+			(unsigned int)portno1,
+			(unsigned int)portno2,
+			(unsigned int)req->op,
+			(unsigned long long)req->offset,
+			(unsigned long)req->size,
+			(unsigned int)req->state,
+			(unsigned int)req->namesize, name,
+			(unsigned long long)req->datasize, data);
+		break;
+	case 1:
+		fprintf(logfd,
+			"src port: %u, dst port: %u, op: %u\n",
+			(unsigned int)portno1,
+			(unsigned int)portno2,
+			(unsigned int)req->op);
+		break;
+	case 2:
+		fprintf(logfd, "src port: %u, dst port: %u, reqs: %u\n",
+			(unsigned int)portno1,
+			(unsigned int)portno2,
+			++reqs);
+	}
+
 	return;
 }
 
@@ -355,7 +396,7 @@ int cmd_bridge(uint32_t portno1, uint32_t portno2, char *logfile, char *how)
 
 	if (!strcmp(how, "full"))
 		method = 0;
-	else if (!strcmp(how, "full"))
+	else if (!strcmp(how, "summary"))
 		method = 1;
 	else
 		method = 2;
@@ -372,28 +413,28 @@ int cmd_bridge(uint32_t portno1, uint32_t portno2, char *logfile, char *how)
 			req = xseg_accept(xseg, portno1);
 			if (req) {
 				xseg_submit(xseg, portno2, req);
-				log_req(portno1, portno2, LOG_ACCEPT, method, req);
+				log_req(logfd, portno1, portno2, LOG_ACCEPT, method, req);
 				active += 1;
 			}
 
 			req = xseg_accept(xseg, portno2);
 			if (req) {
 				xseg_submit(xseg, portno1, req);
-				log_req(portno2, portno1, LOG_ACCEPT, method, req);
+				log_req(logfd, portno2, portno1, LOG_ACCEPT, method, req);
 				active += 1;
 			}
 
 			req = xseg_receive(xseg, portno1);
 			if (req) {
 				xseg_respond(xseg, portno2, req);
-				log_req(portno1, portno2, LOG_RECEIVE, method, req);
+				log_req(logfd, portno1, portno2, LOG_RECEIVE, method, req);
 				active += 1;
 			}
 
 			req = xseg_receive(xseg, portno2);
 			if (req) {
 				xseg_respond(xseg, portno1, req);
-				log_req(portno2, portno1, LOG_RECEIVE, method, req);
+				log_req(logfd, portno2, portno1, LOG_RECEIVE, method, req);
 				active += 1;
 			}
 
@@ -410,6 +451,8 @@ int cmd_bridge(uint32_t portno1, uint32_t portno2, char *logfile, char *how)
 			}
 		}
 	}
+
+	close(logfd);
 
 	return 0;
 }
