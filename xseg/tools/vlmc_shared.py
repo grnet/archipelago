@@ -97,6 +97,39 @@ def xsegbd_loaded():
         print >> sys.stderr, reason
         sys.exit(-1)
 
+def vlmc_resize(args):
+    name = args.name[0]
+    size = args.size[0]
+
+    try:
+        old_dir = os.getcwd()
+        os.chdir(IMAGES)
+
+        size *= 1024*1024
+
+        f = os.open(name, os.O_WRONLY, 0755)
+        if size >= os.stat(name).st_size:
+            os.lseek(f, size - 1, os.SEEK_SET)
+            os.write(f, "1")
+        else:
+            os.ftruncate(f, size)
+
+        os.close(f)
+        os.chdir(old_dir)
+
+        for f in os.listdir(XSEGBD_SYSFS + "devices/"):
+            d_id = open(XSEGBD_SYSFS + "devices/" + f + "/id").read().strip()
+            d_name = open(XSEGBD_SYSFS + "devices/"+ f + "/name").read().strip()
+            if name == d_name:
+                fd = os.open(XSEGBD_SYSFS + "devices/" +  d_id +"/refresh", os.O_WRONLY)
+                os.write(fd, "1")
+                os.close(fd)
+
+        sys.exit(0)
+    except Exception, reason:
+        print >> sys.stderr, reason
+        sys.exit(-1)
+
 def loadrc(rc):
     #FIXME
     try:

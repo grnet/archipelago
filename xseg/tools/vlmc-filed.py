@@ -106,8 +106,12 @@ if __name__ == "__main__":
     ls_parser.set_defaults(func=vlmc_list)
     ls_parser.add_argument('-p', '--pool', type=str, nargs='?', help='for backwards compatiblity with rbd')
 
-    args = parser.parse_args()    
+    resize_parser = subparsers.add_parser('resize', help='Resize volume')
+    resize_parser.add_argument('-s', '--size', type=int, nargs=1, help='requested size in MB for resize')
+    resize_parser.add_argument('name', type=str, nargs=1, help='volume/device name')
+    resize_parser.set_defaults(func=vlmc_resize)
+    resize_parser.add_argument('-p', '--pool', type=str, nargs='?', help='for backwards compatiblity with rbd')
 
+    args = parser.parse_args()
     loadrc(args.config)
-
     args.func(args)

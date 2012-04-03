@@ -218,6 +218,9 @@ static void handle_read_write(struct store *store, struct io *io)
 static void handle_info(struct store *store, struct io *io)
 {
 	struct xseg_request *req = io->req;
+	struct stat stat;
+	int r;
+	off_t size;
 
 	if (req->namesize != store->namesize ||
 		strncmp(req->name, store->name, store->namesize)) {
@@ -226,7 +229,16 @@ static void handle_info(struct store *store, struct io *io)
 		return;
 	}
 
+	r = fstat(store->fd, &stat);
+	if (r < 0) {
+		perror("fstat");
+		fail(store, io);
+		return;
+	}
+
+	size = stat.st_size;
 	*((uint64_t *) req->data) = store->size;
+
 	req->serviced = req->datasize = sizeof(store->size);
 	io->retval = io->cb.aio_offset = io->cb.aio_nbytes = req->datasize;
 

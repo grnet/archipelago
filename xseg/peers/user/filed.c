@@ -382,7 +382,7 @@ static void handle_read_write(struct store *store, struct io *io)
 static void handle_info(struct store *store, struct io *io)
 {
 	struct xseg_request *req = io->req;
-        struct stat stat;
+	struct stat stat;
 	int fd, r;
 	off_t size;
 
