@@ -348,7 +348,7 @@ void log_req(int logfd, uint32_t portno2, uint32_t portno1, int op, int method,
 		strncpy(data, req->data, 63);
 		data[63] = 0;
 
-		fprintf(stderr,
+		fprintf(logfd,
 			"src port: %u, dst port: %u,  op:%u offset: %llu size: %lu, reqstate: %u\n"
 			"name[%u]: '%s', data[%llu]:\n%s------------------\n\n",
 			(unsigned int)portno1,
