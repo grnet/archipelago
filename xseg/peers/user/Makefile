@@ -22,4 +22,4 @@ xseg: xseg-tool.c $(BASE)/xseg/xseg.h
 	$(CC) $(CFLAGS) -o $@ $< $(INC) -L$(LIB) -lxseg
 
 clean:
-	rm -f blockd filed xseg
+	rm -f blockd filed xseg sosd
