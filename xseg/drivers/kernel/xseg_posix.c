@@ -19,6 +19,10 @@
 #include <linux/device.h>
 #include <linux/completion.h>
 
+#include <xseg/xseg.h>
+#include <sys/kernel/segdev.h>
+#include <sys/util.h>
+
 MODULE_DESCRIPTION("xseg_posix");
 MODULE_AUTHOR("XSEG");
 MODULE_LICENSE("GPL");
@@ -57,6 +61,11 @@ static int posix_signal(struct xseg *xseg, uint32_t portno)
 
 	rcu_read_lock();
 	/* XXX Security: xseg peers can kill anyone */
+	if (!port->waitcue) {
+		ret = 0;
+		goto out;
+	}
+
 	pid = find_vpid((pid_t)port->waitcue);
 	if (!pid)
 		goto out;

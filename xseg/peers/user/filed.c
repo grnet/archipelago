@@ -493,7 +493,7 @@ static int filed_loop(struct store *store)
 	for (;;) {
 		io = wake_up_next_iothread(store);
 		xseg_prepare_wait(xseg, portno);
-		xseg_wait_signal(xseg, 10000);
+		xseg_wait_signal(xseg, 1000000UL);
 	}
 	return 0;
 }

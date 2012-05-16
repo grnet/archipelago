@@ -149,6 +149,9 @@ static int posix_wait_signal(struct xseg *xseg, uint32_t usec_timeout)
 	ts.tv_sec = usec_timeout / 1000000;
 	ts.tv_nsec = 1000 * (usec_timeout - ts.tv_sec * 1000000);
 
+	/* FIXME: Now that posix signaling is fixed, we could get rid of the timeout
+	 * and use a NULL timespec linux-specific)
+	 */
 	r = sigtimedwait(&set, &siginfo, &ts);
 	if (r < 0)
 		return r;
@@ -163,9 +166,8 @@ static int posix_signal(struct xseg *xseg, uint32_t portno)
 	if (!cue)
 		return 0;
 
-	syscall(SYS_tkill, SIGIO, cue);
-	/* XXX: on error what? */
-	return 1;
+	/* FIXME: Make calls to xseg_signal() check for errors */
+	return syscall(SYS_tkill, cue, SIGIO);
 }
 
 static void *posix_malloc(uint64_t size)
