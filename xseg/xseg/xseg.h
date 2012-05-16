@@ -170,6 +170,8 @@ struct xseg_request {
 	uint64_t bufferlen;
 	xqindex task;
 	uint64_t priv;
+	struct timeval timestamp;
+	uint64_t elapsed;
 };
 
 struct xseg_shared {
@@ -186,6 +188,11 @@ struct xseg_private {
 	void (*wakeup)(struct xseg *xseg, uint32_t portno);
 };
 
+struct xseg_counters {
+	uint64_t avg_req_lat;
+	uint64_t req_cnt;
+};
+
 struct xseg {
 	uint64_t version;
 	uint64_t segment_size;
@@ -199,6 +206,7 @@ struct xseg {
 	struct xseg_private *priv;
 	uint32_t max_peer_types;
 	struct xseg_config config;
+	struct xseg_counters counters;
 };
 
 #define XSEG_F_LOCK 0x1

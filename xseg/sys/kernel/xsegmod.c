@@ -2,6 +2,7 @@
 #include <linux/types.h>
 #include <linux/slab.h>
 #include <linux/module.h>
+#include <linux/time.h>
 
 #include <sys/domain.h>
 #include <xq/domain.h>
@@ -54,6 +55,11 @@ void *xq_malloc(unsigned long size)
 void xq_mfree(void *ptr)
 {
 	return kfree(ptr);
+}
+
+void __get_current_time(struct timeval *tv)
+{
+	do_gettimeofday(tv);
 }
 
 static int __init xsegmod_init(void)

@@ -271,10 +271,12 @@ int xseg_register_peer(struct xseg_peer *peer_type)
 		r -= 1;
 		goto out;
 	}
+
 	peer_type->name[XSEG_TNAMESIZE-1] = 0;
 	__peer_types[__nr_peer_types] = peer_type;
 	__nr_peer_types += 1;
 	r = 0;
+
 out:
 	__unlock_domain();
 	return r;
@@ -506,6 +508,10 @@ static long initialize_segment(struct xseg *xseg, struct xseg_config *cfg)
 
 	xseg->segment_size = size;
 	memcpy(&xseg->config, cfg, sizeof(struct xseg_config));
+
+	xseg->counters.req_cnt = 0;
+	xseg->counters.avg_req_lat = 0;
+
 	return 0;
 }
 
@@ -550,6 +556,7 @@ int xseg_create(struct xseg_config *cfg)
 		XSEGLOG("cannot initilize segment!\n");
 		goto out_deallocate;
 	}
+
 
 	return 0;
 
@@ -811,6 +818,10 @@ struct xseg_request *xseg_get_request(struct xseg *xseg, uint32_t portno)
 
 	req = &xseg->requests[xqi];
 	req->portno = portno;
+
+	req->elapsed = 0;
+	req->timestamp.tv_sec = 0;
+
 	return req;
 }
 
@@ -823,6 +834,17 @@ int xseg_put_request (  struct xseg *xseg,
 	xreq->datalen = xreq->bufferlen;
 	xreq->target = NULL;
 	xreq->targetlen = 0;
+
+#ifdef DEBUG_PERF
+	XSEGLOG("request's @%p rtt is: %llu usecs\n", xreq, xreq->elapsed);
+#endif
+	if (xreq->elapsed != 0) {
+		__lock_segment(xseg);
+		++(xseg->counters.req_cnt);
+		xseg->counters.avg_req_lat += xreq->elapsed;
+		__unlock_segment(xseg);
+	}
+
 	return xq_append_head(&xseg->ports[portno].free_queue, xqi) == None;
 }
 
@@ -839,6 +861,23 @@ int xseg_prep_request ( struct xseg_request *req,
 	return 0;
 }
 
+static void __update_timestamp(struct xseg_request *xreq)
+{
+	struct timeval tv;
+
+	__get_current_time(&tv);
+	if (xreq->timestamp.tv_sec != 0)
+		/*
+		 * FIXME: Make xreq->elapsed timeval/timespec again to avoid the
+		 * 		  multiplication?
+		 */
+		xreq->elapsed += (tv.tv_sec - xreq->timestamp.tv_sec) * 1000000 
+						+ (tv.tv_usec - xreq->timestamp.tv_usec);
+
+	xreq->timestamp.tv_sec = tv.tv_sec;
+	xreq->timestamp.tv_usec = tv.tv_usec;
+}
+
 xserial xseg_submit (	struct xseg *xseg, uint32_t portno,
 			struct xseg_request *xreq	)
 {
@@ -847,6 +886,8 @@ xserial xseg_submit (	struct xseg *xseg, uint32_t portno,
 	struct xseg_port *port;
 	if (!__validate_port(xseg, portno))
 		goto out;
+
+	__update_timestamp(xreq);
 
 	port = &xseg->ports[portno];
 	xqi = xreq - xseg->requests;
@@ -867,6 +908,8 @@ struct xseg_request *xseg_receive(struct xseg *xseg, uint32_t portno)
 	if (xqi == None)
 		return NULL;
 
+	__update_timestamp(&xseg->requests[xqi]);
+
 	return xseg->requests + xqi;
 }
 
@@ -882,6 +925,8 @@ struct xseg_request *xseg_accept(struct xseg *xseg, uint32_t portno)
 	if (xqi == None)
 		return NULL;
 
+	__update_timestamp(&xseg->requests[xqi]);
+
 	return xseg->requests + xqi;
 }
 
@@ -893,6 +938,8 @@ xserial xseg_respond (  struct xseg *xseg, uint32_t portno,
 	struct xseg_port *port;
 	if (!__validate_port(xseg, portno))
 		goto out;
+
+	__update_timestamp(xreq);
 
 	port = &xseg->ports[portno];
 	xqi = xreq - xseg->requests;

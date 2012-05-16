@@ -7,6 +7,7 @@
 #include <sys/syscall.h>
 #include <errno.h>
 #include <sys/util.h>
+#include <sys/time.h>
 
 #include <sys/domain.h>
 #include <xq/domain.h>
@@ -78,3 +79,8 @@ void xq_mfree(void *ptr)
 {
 	free(ptr);
 }
+
+void __get_current_time(struct timeval *tv) {
+	gettimeofday(tv, NULL);
+}
+

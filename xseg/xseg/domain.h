@@ -7,5 +7,6 @@ void __unlock_domain(void);
 void __load_plugin(const char *name);
 int __xseg_preinit(void);
 uint64_t __get_id(void);
+void __get_current_time(struct timeval *tv);
 
 #endif
