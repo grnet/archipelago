@@ -47,7 +47,7 @@ def vlmc_unmap(args):
     try:
         for f in os.listdir(XSEGBD_SYSFS + "devices/"):
             d_id = open(XSEGBD_SYSFS + "devices/" + f + "/id").read().strip()
-            name = open(XSEGBD_SYSFS + "devices/"+ f + "/name").read().strip()
+            name = open(XSEGBD_SYSFS + "devices/"+ f + "/target").read().strip()
             if device == DEVICE_PREFIX + d_id:
                 fd = os.open(XSEGBD_SYSFS + "remove", os.O_WRONLY)
                 os.write(fd, d_id)
@@ -66,7 +66,7 @@ def vlmc_showmapped(args):
     try:
         for f in os.listdir(XSEGBD_SYSFS + "devices/"):
             d_id = open(XSEGBD_SYSFS + "devices/" + f + "/id").read().strip()
-            name = open(XSEGBD_SYSFS + "devices/"+ f + "/name").read().strip()
+            name = open(XSEGBD_SYSFS + "devices/"+ f + "/target").read().strip()
 
             print "%s\t%s\t%s\t%s\t%s" % (d_id, '-', name, '-', DEVICE_PREFIX +
             d_id)
