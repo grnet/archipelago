@@ -219,7 +219,12 @@ static int xsegbd_dev_init(struct xsegbd_device *xsegbd_dev)
 	/* vkoukis says we don't need partitions */
 	xsegbd_dev->gd = disk = alloc_disk(1);
 	if (!disk)
-		goto out_disk;
+		/* FIXME: We call xsegbd_dev_release if something goes wrong, to cleanup
+		 * disks/queues/etc.
+		 * Would it be better to do the cleanup here, and conditionally cleanup
+		 * in dev_release?
+		 */
+		goto out;
 
 	disk->major = xsegbd_dev->major;
 	disk->first_minor = 0; // id * XSEGBD_MINORS;
@@ -238,7 +243,7 @@ static int xsegbd_dev_init(struct xsegbd_device *xsegbd_dev)
 	spin_unlock_irq(&__lock);
 
 	if (ret)
-		goto out_disk;
+		goto out;
 
 	/* allow a non-zero sector_size parameter to override the disk size */
 	if (sector_size)
@@ -246,18 +251,15 @@ static int xsegbd_dev_init(struct xsegbd_device *xsegbd_dev)
 	else {
 		ret = xsegbd_get_size(xsegbd_dev);
 		if (ret)
-			goto out_disk;
+			goto out;
 	}
 
-	
 	set_capacity(disk, xsegbd_dev->sectors);
 	XSEGLOG("xsegbd active...");
 	add_disk(disk); /* immediately activates the device */
 
 	return 0;
 
-out_disk:
-	put_disk(disk);
 out:
 	return ret;
 }
@@ -277,8 +279,11 @@ static void xsegbd_dev_release(struct device *dev)
 	}
 
 	/* reset the port's waitcue (aka cancel_wait) */
-	if ((port = &xsegbd.xseg->ports[xsegbd_dev->src_portno]) != NULL) {
-		port->waitcue = (long) NULL;
+	port = &xsegbd.xseg->ports[xsegbd_dev->src_portno];
+	port->waitcue = (long) NULL;
+
+	if (xseg_free_requests(xsegbd.xseg, xsegbd_dev->src_portno, xsegbd_dev->nr_requests) != 0)
+		XSEGLOG("Error trying to free requests!\n");
 
 		if (xseg_free_requests(xsegbd.xseg, xsegbd_dev->src_portno, xsegbd_dev->nr_requests) != 0)
 			XSEGLOG("Error trying to free requests!\n");
@@ -398,13 +403,9 @@ static void xseg_request_fn(struct request_queue *rq)
 		BUG_ON(xseg_submit(xsegbd.xseg, xsegbd_dev->dst_portno, xreq) == NoSerial);
 	}
 
-	/* TODO:
-	 * This is going to happen at least once.
-	 * Add a WARN_ON when debugging find out why it happens more than once.
-	 */
-	xseg_signal(xsegbd_dev->xsegbd->xseg, xsegbd_dev->dst_portno);
+	WARN_ON(xseg_signal(xsegbd_dev->xsegbd->xseg, xsegbd_dev->dst_portno) < 0);
 	if (xreq)
-		xseg_put_request(xsegbd_dev->xsegbd->xseg, xsegbd_dev->src_portno, xreq);
+		BUG_ON(xseg_put_request(xsegbd_dev->xsegbd->xseg, xsegbd_dev->src_portno, xreq) == NoSerial);
 }
 
 int update_dev_sectors_from_request(	struct xsegbd_device *xsegbd_dev,
@@ -462,14 +463,14 @@ static int xsegbd_get_size(struct xsegbd_device *xsegbd_dev)
 	port->waitcue = (uint64_t)(long)xsegbd_dev;
 
 	BUG_ON(xseg_submit(xsegbd.xseg, xsegbd_dev->dst_portno, xreq) == NoSerial);
-	xseg_signal(xsegbd.xseg, xsegbd_dev->dst_portno);
+	WARN_ON(xseg_signal(xsegbd.xseg, xsegbd_dev->dst_portno) < 0);
 
 	wait_for_completion_interruptible(&comp);
 	XSEGLOG("Woken up after wait_for_completion_interruptible()\n");
 	ret = update_dev_sectors_from_request(xsegbd_dev, xreq);
 	XSEGLOG("get_size: sectors = %ld\n", (long)xsegbd_dev->sectors);
 out:
-	xseg_put_request(xsegbd.xseg, xsegbd_dev->src_portno, xreq);
+	BUG_ON(xseg_put_request(xsegbd.xseg, xsegbd_dev->src_portno, xreq) == NoSerial);
 	return ret;
 }
 
@@ -534,7 +535,7 @@ static void xseg_callback(struct xseg *xseg, uint32_t portno)
 blk_end:
 		blk_end_request_all(blkreq, err);
 		xq_append_head(&blk_queue_pending, blkreq_idx);
-		xseg_put_request(xseg, xreq->portno, xreq);
+		BUG_ON(xseg_put_request(xseg, xreq->portno, xreq) == NoSerial);
 	}
 
 	if (xsegbd_dev) {
