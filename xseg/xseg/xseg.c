@@ -92,9 +92,6 @@ static struct xseg_peer *__get_peer_type(struct xseg *xseg, uint32_t serial)
 	if (type)
 		return type;
 
-	if (serial >= (1 << xseg->config.page_shift) / XSEG_TNAMESIZE)
-		return NULL;
-
 	/* xseg->shared->peer_types is an append-only array,
 	 * therefore this should be safe
 	 * without either locking or string copying. */
@@ -104,6 +101,7 @@ static struct xseg_peer *__get_peer_type(struct xseg *xseg, uint32_t serial)
 		return NULL;
 
 	type = __find_or_load_peer_type(name);
+
 	priv->peer_types[serial] = type;
 	return type;
 }
@@ -821,6 +819,7 @@ struct xseg_request *xseg_get_request(struct xseg *xseg, uint32_t portno)
 
 	req->elapsed = 0;
 	req->timestamp.tv_sec = 0;
+	req->timestamp.tv_usec = 0;
 
 	return req;
 }
@@ -835,9 +834,6 @@ int xseg_put_request (  struct xseg *xseg,
 	xreq->target = NULL;
 	xreq->targetlen = 0;
 
-#ifdef DEBUG_PERF
-	XSEGLOG("request's @%p rtt is: %llu usecs\n", xreq, xreq->elapsed);
-#endif
 	if (xreq->elapsed != 0) {
 		__lock_segment(xseg);
 		++(xseg->counters.req_cnt);
@@ -925,8 +921,6 @@ struct xseg_request *xseg_accept(struct xseg *xseg, uint32_t portno)
 	if (xqi == None)
 		return NULL;
 
-	__update_timestamp(&xseg->requests[xqi]);
-
 	return xseg->requests + xqi;
 }
 
@@ -938,8 +932,6 @@ xserial xseg_respond (  struct xseg *xseg, uint32_t portno,
 	struct xseg_port *port;
 	if (!__validate_port(xseg, portno))
 		goto out;
-
-	__update_timestamp(xreq);
 
 	port = &xseg->ports[portno];
 	xqi = xreq - xseg->requests;
@@ -954,18 +946,18 @@ struct xseg_port *xseg_bind_port(struct xseg *xseg, uint32_t req)
 	uint32_t portno, maxno, id = __get_id(), force;
 	struct xseg_port *port;
 
-	if (req > xseg->config.nr_ports) {
+	if (req >= xseg->config.nr_ports) {
 		portno = 0;
 		maxno = xseg->config.nr_ports;
 		force = 0;
 	} else {
 		portno = req;
-		maxno = req;
+		maxno = req + 1;
 		force = 1;
 	}
 
 	__lock_segment(xseg);
-	for (; portno <= maxno; portno++) {
+	for (; portno < maxno; portno++) {
 		int64_t driver;
 		port = &xseg->ports[portno];
 		if (port->owner && !force)
