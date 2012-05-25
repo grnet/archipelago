@@ -29,20 +29,21 @@ int help(void)
 		"    free_requests (from source) <nr>\n"
 		"    put_requests (all from dest)\n"
 		"    put_replies (all from dest)\n"
-		"    wait     <nr_replies>\n"
-		"    complete <nr_requests>\n"
-		"    fail     <nr_requests>\n"
-		"    rndwrite <nr_loops> <seed> <targetlen> <datalen> <objectsize>\n"
-		"    rndread  <nr_loops> <seed> <targetlen> <datalen> <objectsize>\n"
-		"    info     <target>\n"
-		"    read     <target> <offset> <size>\n"
-		"    write    <target> <offset> < data\n"
-		"    truncate <target> <size>\n"
-		"    delete   <target>\n"
-		"    acquire  <target>\n"
-		"    release  <target>\n"
-		"    copy     <src>  <dst>\n"
-		"    clone    <src>  <dst>\n"
+		"    wait        <nr_replies>\n"
+		"    complete    <nr_requests>\n"
+		"    fail        <nr_requests>\n"
+		"    rndwrite    <nr_loops> <seed> <targetlen> <datalen> <objectsize>\n"
+		"    rndread     <nr_loops> <seed> <targetlen> <datalen> <objectsize>\n"
+		"    submit_reqs <nr_loops> <concurrent_reqs>\n"
+		"    info        <target>\n"
+		"    read        <target> <offset> <size>\n"
+		"    write       <target> <offset> < data\n"
+		"    truncate    <target> <size>\n"
+		"    delete      <target>\n"
+		"    acquire     <target>\n"
+		"    release     <target>\n"
+		"    copy        <src>  <dst>\n"
+		"    clone       <src>  <dst>\n"
 	);
 	return 1;
 }
@@ -53,8 +54,6 @@ struct xseg_config cfg;
 struct xseg *xseg;
 uint32_t srcport, dstport;
 uint64_t reqs;
-struct timval *tv;
-
 #define mkname mkname_heavy
 /* heavy distributes duplicates much more widely than light
  * ./xseg-tool random 100000 | cut -d' ' -f2- | sort | uniq -d -c |wc -l
@@ -657,6 +656,80 @@ int cmd_rndread(long loops, int32_t seed, uint32_t targetlen, uint32_t chunksize
 	return 0;
 }
 
+int cmd_submit_reqs(long loops, long concurrent_reqs)
+{
+	if (loops < 0)
+		return help();
+
+	struct xseg_request *submitted = NULL, *received;
+	long nr_submitted = 0, nr_received = 0, nr_failed = 0, nr_mismatch = 0, nr_flying = 0;
+	int reported = 0, r;
+	uint64_t offset;
+	uint32_t targetlen = 10, chunksize = 4000;
+	struct timeval tv1, tv2;
+	xserial srl;
+
+	xseg_bind_port(xseg, srcport);
+
+	gettimeofday(&tv1, NULL);
+	for (;;) {
+		submitted = NULL;
+		xseg_prepare_wait(xseg, srcport);
+		if (nr_submitted < loops &&  nr_flying < concurrent_reqs &&
+		    (submitted = xseg_get_request(xseg, srcport))) {
+			xseg_cancel_wait(xseg, srcport);
+			r = xseg_prep_request(submitted, targetlen, chunksize);
+			if (r < 0) {
+				fprintf(stderr, "Cannot prepare request! (%u, %u)\n",
+					targetlen, chunksize);
+				xseg_put_request(xseg, submitted->portno, submitted);
+				return -1;
+			}
+
+			++nr_flying;
+			nr_submitted += 1;
+			reported = 0;
+			offset = 0;//pick(size);
+
+			submitted->offset = offset;
+			submitted->size = chunksize;
+			submitted->op = X_READ;
+
+			srl = xseg_submit(xseg, dstport, submitted);
+			(void)srl;
+			if (xseg_signal(xseg, dstport) < 0)
+				perror("Cannot signal peer");
+		}
+
+		received = xseg_receive(xseg, srcport);
+		if (received) {
+			xseg_cancel_wait(xseg, srcport);
+			--nr_flying;
+			nr_received += 1;
+			if (!(received->state & XS_SERVED)) {
+				nr_failed += 1;
+				//report_request(received);
+			}
+
+			if (xseg_put_request(xseg, received->portno, received))
+				fprintf(stderr, "Cannot put request at port %u\n", received->portno);
+		}
+
+		if (!submitted && !received)
+			xseg_wait_signal(xseg, 1000000);
+
+		if (nr_received >= loops)
+			break;
+	}
+	gettimeofday(&tv2, NULL);
+
+	fprintf(stderr, "submitted %ld, received %ld, failed %ld, mismatched %ld\n",
+		nr_submitted, nr_received, nr_failed, nr_mismatch);
+	long t = (tv2.tv_sec - tv1.tv_sec)*1000000 + (tv2.tv_usec - tv1.tv_usec);
+	fprintf(stderr, "time: %lu usecs, avg_lat: %lf usecs\n", t, ((double) t) / nr_submitted);
+	return 0;
+}
+
 int cmd_report(uint32_t port)
 {
 	struct xq *fq, *rq, *pq;
@@ -753,16 +826,23 @@ int cmd_finish(unsigned long nr, int fail)
 {
 	struct xseg_request *req;
 
+	xseg_bind_port(xseg, srcport);
+
 	for (; nr--;) {
+		xseg_prepare_wait(xseg, srcport);
 		req = xseg_accept(xseg, srcport);
-		if (!req)
-			break;
-		if (fail)
-			req->state &= ~XS_SERVED;
-		else
-			req->state |= XS_SERVED;
-		xseg_respond(xseg, dstport, req);
-		xseg_signal(xseg, dstport);
+		if (req) {
+			xseg_cancel_wait(xseg, srcport);
+			if (fail)
+				req->state &= ~XS_SERVED;
+			else
+				req->state |= XS_SERVED;
+			xseg_respond(xseg, dstport, req);
+			xseg_signal(xseg, dstport);
+			continue;
+		}
+		++nr;
+		xseg_wait_signal(xseg, 10000);
 	}
 
 	return 0;
@@ -1052,6 +1132,14 @@ int main(int argc, char **argv)
 			unsigned long objectsize = atol(argv[i+5]);
 			ret = cmd_rndread(nr_loops, seed, targetlen, chunksize, objectsize);
 			i += 5;
+			continue;
+		}
+
+		if (!strcmp(argv[i], "submit_reqs") && (i + 2 < argc)) {
+			long nr_loops = atol(argv[i+1]);
+			long concurrent_reqs = atol(argv[i+2]);
+			ret = cmd_submit_reqs(nr_loops, concurrent_reqs);
+			i += 2;
 			continue;
 		}
 
