@@ -89,7 +89,7 @@ static int wait_signal(struct store *store)
 static struct io *alloc_io(struct store *store)
 {
 	xqindex idx = xq_pop_head(&store->free_ops);
-	if (idx == None)
+	if (idx == Noneidx)
 		return NULL;
 	return store->ios + idx;
 }
@@ -115,7 +115,7 @@ static void resubmit_io(struct store *store, struct io *io)
 static struct io* get_resubmitted_io(struct store *store)
 {
 	xqindex idx = xq_pop_head(&store->resubmit_ops);
-	if (idx == None)
+	if (idx == Noneidx)
 		return NULL;
 	return store->ios + idx;
 }

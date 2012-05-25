@@ -34,7 +34,7 @@ xqindex xlist_add_head(struct xlist *list, struct xlist_node *node)
 	struct xlist_node *head;
 	xqindex nr = XPTRI(&list->node.list) + 1;
 
-	if (nr == None)
+	if (nr == Noneidx)
 		goto out;
 
 	__xlist_detach(node);
@@ -51,7 +51,7 @@ xqindex xlist_add_tail(struct xlist *list, struct xlist_node *node)
 	struct xlist_node *tail;
 	xqindex nr = XPTRI(&list->node.list) + 1;
 
-	if (nr == None)
+	if (nr == Noneidx)
 		goto out;
 
 	__xlist_detach(node);

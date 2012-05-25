@@ -111,7 +111,7 @@ static void log_io(char *msg, struct io *io)
 static struct io *alloc_io(struct store *store)
 {
 	xqindex idx = xq_pop_head(&store->free_ops);
-	if (idx == None)
+	if (idx == Noneidx)
 		return NULL;
 	return store->ios + idx;
 }

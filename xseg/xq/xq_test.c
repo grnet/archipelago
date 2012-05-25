@@ -50,7 +50,7 @@ int basic_sanity_test(struct xq *q) {
     r = xq_append_tail(q, 9183);
     //xq_print(q);
     //printf("\n");
-    assert(r != None);
+    assert(r != Noneidx);
 
     //printf("pop_head 9183\n");
     r = xq_pop_head(q);
@@ -62,7 +62,7 @@ int basic_sanity_test(struct xq *q) {
     r = xq_append_head(q, 1834);
     //xq_print(q);
     //printf("\n");
-    assert(r != None);
+    assert(r != Noneidx);
 
     //printf("pop_tail 1834\n");
     r = xq_pop_tail(q);
@@ -84,7 +84,7 @@ int basic_sanity_test(struct xq *q) {
     r = xq_append_tail(q, 1983);
     //xq_print(q);
     //printf("\n");
-    assert(r != None);
+    assert(r != Noneidx);
 
     //printf("pop_tail 1983\n");
     r = xq_pop_tail(q);
@@ -96,7 +96,7 @@ int basic_sanity_test(struct xq *q) {
     r = xq_append_head(q, 8134);
     //xq_print(q);
     //printf("\n");
-    assert(r != None);
+    assert(r != Noneidx);
 
     //printf("pop_head 8134\n");
     r = xq_pop_head(q);
@@ -116,29 +116,29 @@ int basic_sanity_test(struct xq *q) {
     //printf("\n");
     assert(r == 5294);
 
-    //printf("pop_tail None\n");
+    //printf("pop_tail Noneidx\n");
     r = xq_pop_tail(q);
     //xq_print(q);
     //printf("\n");
-    assert(r == None);
+    assert(r == Noneidx);
 
-    //printf("pop_head None\n");
+    //printf("pop_head Noneidx\n");
     r = xq_pop_head(q);
     //xq_print(q);
     //printf("\n");
-    assert(r == None);
+    assert(r == Noneidx);
 
     xqindex qsize = q->size;
     for (t = 0; t < qsize; t += 1) {
          r = xq_append_tail(q, t);
-         //if (r == None) printf("None: %lu\n", (unsigned long)t);
+         //if (r == Noneidx) printf("Noneidx: %lu\n", (unsigned long)t);
          //xq_print(q);
-         assert(r != None);
+         assert(r != Noneidx);
     }
 
     //xq_print(q);
 
-    for (t = qsize-1; t != None; t -= 1) {
+    for (t = qsize-1; t != Noneidx; t -= 1) {
          r = xq_pop_tail(q);
          assert(t == r);
          //printf("%lu vs %lu\n", t, (unsigned long)xq_pop_tail(q));
@@ -191,28 +191,28 @@ void *random_test_thread(void *arg) {
          switch (rand & 3) {
          case 0:
              xqi = xq_pop_tail(&q[0]);
-             if (xqi == None) goto unlock;
+             if (xqi == Noneidx) goto unlock;
              items[xqi].seed = rand;
              item_calculate(&items[xqi]);
              xq_append_head(&q[1], xqi);
              break;
          case 1:
              xqi = xq_pop_head(&q[0]);
-             if (xqi == None) goto unlock;
+             if (xqi == Noneidx) goto unlock;
              items[xqi].seed = rand;
              item_calculate(&items[xqi]);
              xq_append_tail(&q[1], xqi);
              break;
          case 2:
              xqi = xq_pop_tail(&q[1]);
-             if (xqi == None) goto unlock;
+             if (xqi == Noneidx) goto unlock;
              items[xqi].seed = rand;
              item_calculate(&items[xqi]);
              xq_append_head(&q[0], xqi);
              break;
          case 3:
              xqi = xq_pop_head(&q[1]);
-             if (xqi == None) goto unlock;
+             if (xqi == Noneidx) goto unlock;
              items[xqi].seed = rand;
              item_calculate(&items[xqi]);
              xq_append_tail(&q[0], xqi);

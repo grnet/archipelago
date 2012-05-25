@@ -130,7 +130,7 @@ xqindex xq_append_heads(struct xq *xq,
 	xqindex serial = xq_acquire(&xq->lock, nr);
 
 	if (!(xq_count(xq) + nr <= xq->size)) {
-		serial = None;
+		serial = Noneidx;
 		goto out;
 	}
 
@@ -148,7 +148,7 @@ xqindex xq_append_head(struct xq *xq, xqindex xqi)
 	xqindex serial = xq_acquire(&xq->lock, 1);
 
 	if (xq_count(xq) >= xq->size) {
-		serial = None;
+		serial = Noneidx;
 		goto out;
 	}
 	XPTR(&xq->queue)[__xq_append_head(xq, 1) & (xq->size -1)] = xqi;
@@ -172,7 +172,7 @@ xqindex xq_pop_heads(struct xq *xq,
 	xqindex serial = xq_acquire(&xq->lock, nr);
 
 	if (xq_count(xq) < nr) {
-		serial = None;
+		serial = Noneidx;
 		goto out;
 	}
 
@@ -187,7 +187,7 @@ out:
 
 xqindex xq_pop_head(struct xq *xq)
 {
-	xqindex value = None;
+	xqindex value = Noneidx;
 	(void)xq_acquire(&xq->lock, 1);
 	if (!xq_count(xq))
 		goto out;
@@ -212,7 +212,7 @@ xqindex xq_append_tails(struct xq *xq,
 	xqindex serial = xq_acquire(&xq->lock, nr);
 
 	if (!(xq_count(xq) + nr <= xq->size)) {
-		serial = None;
+		serial = Noneidx;
 		goto out;
 	}
 
@@ -230,7 +230,7 @@ xqindex xq_append_tail(struct xq *xq, xqindex xqi)
 	xqindex serial = xq_acquire(&xq->lock, 1);
 
 	if (!(xq_count(xq) + 1 <= xq->size)) {
-		serial = None;
+		serial = Noneidx;
 		goto out;
 	}
 	XPTR(&xq->queue)[__xq_append_tail(xq, 1) & (xq->size -1)] = xqi;
@@ -252,7 +252,7 @@ xqindex xq_pop_tails(struct xq *xq, xqindex nr, xqindex *tails)
 	xqindex serial = xq_acquire(&xq->lock, nr);
 
 	if (xq_count(xq) < nr) {
-		serial = None;
+		serial = Noneidx;
 		goto out;
 	}
 
@@ -267,7 +267,7 @@ out:
 
 xqindex xq_pop_tail(struct xq *xq)
 {
-	xqindex value = None;
+	xqindex value = Noneidx;
 	(void)xq_acquire(&xq->lock, 1);
 	if (!xq_count(xq))
 		goto out;

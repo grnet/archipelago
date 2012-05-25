@@ -216,7 +216,7 @@ int cmd_info(char *target)
 	req->op = X_INFO;
 
 	srl = xseg_submit(xseg, dstport, req);
-	if (srl == None)
+	if (srl == Noneidx)
 		return -1;
 
 	xseg_signal(xseg, dstport);
@@ -249,7 +249,7 @@ int cmd_read(char *target, uint64_t offset, uint64_t size)
 	req->op = X_READ;
 
 	srl = xseg_submit(xseg, dstport, req);
-	if (srl == None)
+	if (srl == Noneidx)
 		return -1;
 
 	xseg_signal(xseg, dstport);
@@ -292,7 +292,7 @@ int cmd_write(char *target, uint64_t offset)
 	req->op = X_WRITE;
 
 	srl = xseg_submit(xseg, dstport, req);
-	if (srl == None) {
+	if (srl == Noneidx) {
 		fprintf(stderr, "Cannot submit\n");
 		return -1;
 	}

@@ -811,7 +811,7 @@ struct xseg_request *xseg_get_request(struct xseg *xseg, uint32_t portno)
 
 	port = &xseg->ports[portno];
 	xqi = xq_pop_head(&port->free_queue);
-	if (xqi == None)
+	if (xqi == Noneidx)
 		return NULL;
 
 	req = &xseg->requests[xqi];
@@ -841,7 +841,7 @@ int xseg_put_request (  struct xseg *xseg,
 		__unlock_segment(xseg);
 	}
 
-	return xq_append_head(&xseg->ports[portno].free_queue, xqi) == None;
+	return xq_append_head(&xseg->ports[portno].free_queue, xqi) == Noneidx;
 }
 
 int xseg_prep_request ( struct xseg_request *req,
@@ -901,7 +901,7 @@ struct xseg_request *xseg_receive(struct xseg *xseg, uint32_t portno)
 
 	port = &xseg->ports[portno];
 	xqi = xq_pop_head(&port->reply_queue);
-	if (xqi == None)
+	if (xqi == Noneidx)
 		return NULL;
 
 	__update_timestamp(&xseg->requests[xqi]);
@@ -918,7 +918,7 @@ struct xseg_request *xseg_accept(struct xseg *xseg, uint32_t portno)
 
 	port = &xseg->ports[portno];
 	xqi = xq_pop_head(&port->request_queue);
-	if (xqi == None)
+	if (xqi == Noneidx)
 		return NULL;
 
 	return xseg->requests + xqi;

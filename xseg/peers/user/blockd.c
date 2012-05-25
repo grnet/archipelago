@@ -59,7 +59,7 @@ static void sigaction_handler(int sig, siginfo_t *siginfo, void *arg)
 static struct io *alloc_io(struct store *store)
 {
 	xqindex idx = xq_pop_head(&store->free_ops);
-	if (idx == None)
+	if (idx == Noneidx)
 		return NULL;
 	return store->ios + idx;
 }
@@ -80,7 +80,7 @@ static inline void pending_io(struct store *store, struct io *io)
 static inline struct io *get_pending_io(struct store *store)
 {
 	xqindex idx = xq_pop_head(&store->pending_ops);
-	if (idx == None)
+	if (idx == Noneidx)
 		return NULL;
 	return store->ios + idx;
 }

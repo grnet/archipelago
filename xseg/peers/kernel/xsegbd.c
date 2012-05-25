@@ -370,7 +370,7 @@ static void xseg_request_fn(struct request_queue *rq)
 		target = XSEG_TAKE_PTR(xreq->target, xsegbd.xseg->segment);
 		strncpy(target, xsegbd_dev->target, xsegbd_dev->targetlen);
 		blkreq_idx = xq_pop_head(&blk_queue_pending);
-		BUG_ON(blkreq_idx == None);
+		BUG_ON(blkreq_idx == Noneidx);
 		pending = &blk_req_pending[blkreq_idx];
 		pending->dev = xsegbd_dev;
 		pending->request = blkreq;
@@ -445,7 +445,7 @@ static int xsegbd_get_size(struct xsegbd_device *xsegbd_dev)
 
 	init_completion(&comp);
 	blkreq_idx = xq_pop_head(&blk_queue_pending);
-	BUG_ON(blkreq_idx == None);
+	BUG_ON(blkreq_idx == Noneidx);
 	pending = &blk_req_pending[blkreq_idx];
 	pending->dev = xsegbd_dev;
 	pending->request = NULL;

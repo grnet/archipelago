@@ -10,7 +10,7 @@
 
 typedef uint64_t xpointer;
 
-#define None ((xqindex)-1)
+#define Noneidx ((xqindex)-1)
 #define Null ((xpointer)-1)
 
 #define __align(x, shift) (((((x) -1) >> (shift)) +1) << (shift))
