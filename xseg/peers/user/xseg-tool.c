@@ -656,7 +656,7 @@ int cmd_rndread(long loops, int32_t seed, uint32_t targetlen, uint32_t chunksize
 	return 0;
 }
 
-int cmd_submit_reqs(long loops, long concurrent_reqs)
+int cmd_submit_reqs(long loops, long concurrent_reqs, int op)
 {
 	if (loops < 0)
 		return help();
@@ -665,9 +665,10 @@ int cmd_submit_reqs(long loops, long concurrent_reqs)
 	long nr_submitted = 0, nr_received = 0, nr_failed = 0, nr_mismatch = 0, nr_flying = 0;
 	int reported = 0, r;
 	uint64_t offset;
-	uint32_t targetlen = 10, chunksize = 4000;
+	uint32_t targetlen = 10, chunksize = 4096;
 	struct timeval tv1, tv2;
 	xserial srl;
+	char name = "bench";
 
 	xseg_bind_port(xseg, srcport);
 
@@ -693,18 +694,28 @@ int cmd_submit_reqs(long loops, long concurrent_reqs)
 
 			submitted->offset = offset;
 			submitted->size = chunksize;
-			submitted->op = X_READ;
+
+			if (op == 0)
+				submitted->op = X_INFO;
+			else if (op == 1)
+				submitted->op = X_READ;
+			else if (op == 2) {
+				submitted->op = X_WRITE;
+				mkchunk(submitted->buffer, submitted->datalen, submitted->target, submitted->targetlen, submitted->offset);
+			}
 
 			srl = xseg_submit(xseg, dstport, submitted);
 			(void)srl;
 			if (xseg_signal(xseg, dstport) < 0)
 				perror("Cannot signal peer");
 		}
-
+t
 		received = xseg_receive(xseg, srcport);
 		if (received) {
 			xseg_cancel_wait(xseg, srcport);
 			--nr_flying;
+			if (nr_received == 0)
+				fprintf(stderr, "latency (time for the first req to complete): %llu usecs\n", received->elapsed);
 			nr_received += 1;
 			if (!(received->state & XS_SERVED)) {
 				nr_failed += 1;
@@ -716,7 +727,7 @@ int cmd_submit_reqs(long loops, long concurrent_reqs)
 		}
 
 		if (!submitted && !received)
-			xseg_wait_signal(xseg, 1000000);
+			xseg_wait_signal(xseg, 10000000L);
 
 		if (nr_received >= loops)
 			break;
@@ -726,7 +737,8 @@ int cmd_submit_reqs(long loops, long concurrent_reqs)
 	fprintf(stderr, "submitted %ld, received %ld, failed %ld, mismatched %ld\n",
 		nr_submitted, nr_received, nr_failed, nr_mismatch);
 	long t = (tv2.tv_sec - tv1.tv_sec)*1000000 + (tv2.tv_usec - tv1.tv_usec);
-	fprintf(stderr, "time: %lu usecs, avg_lat: %lf usecs\n", t, ((double) t) / nr_submitted);
+	fprintf(stderr, "elpased time: %lf secs, throughput: %lf reqs/sec\n", (double) t / 1000000.0, (double) nr_submitted / (t / 1000000.0));
+
 	return 0;
 }
 
@@ -825,6 +837,7 @@ int cmd_put_requests(void)
 int cmd_finish(unsigned long nr, int fail)
 {
 	struct xseg_request *req;
+	char *buf = malloc(sizeof(char) * 8128);
 
 	xseg_bind_port(xseg, srcport);
 
@@ -833,17 +846,29 @@ int cmd_finish(unsigned long nr, int fail)
 		req = xseg_accept(xseg, srcport);
 		if (req) {
 			xseg_cancel_wait(xseg, srcport);
-			if (fail)
+			if (fail == 1)
 				req->state &= ~XS_SERVED;
-			else
+			else {
+				if (req->op == X_READ)
+					mkchunk(req->buffer, req->datalen, req->target, req->targetlen, req->offset);
+				else if (req->op == X_WRITE) 
+					memcpy(buf, req->data, (sizeof(*buf) > req->datalen) ? req->datalen : sizeof(*buf));
+				else if (req->op == X_INFO)
+					*((uint64_t *) req->data) = 4294967296;
+				
 				req->state |= XS_SERVED;
+				req->serviced = req->size;
+			}
+
 			xseg_respond(xseg, dstport, req);
 			xseg_signal(xseg, dstport);
 			continue;
 		}
 		++nr;
-		xseg_wait_signal(xseg, 10000);
+		xseg_wait_signal(xseg, 10000000L);
 	}
+
+	free(buf);
 
 	return 0;
 }
@@ -1135,11 +1160,12 @@ int main(int argc, char **argv)
 			continue;
 		}
 
-		if (!strcmp(argv[i], "submit_reqs") && (i + 2 < argc)) {
+		if (!strcmp(argv[i], "submit_reqs") && (i + 3 < argc)) {
 			long nr_loops = atol(argv[i+1]);
 			long concurrent_reqs = atol(argv[i+2]);
-			ret = cmd_submit_reqs(nr_loops, concurrent_reqs);
-			i += 2;
+			int op = atoi(argv[i+3]);
+			ret = cmd_submit_reqs(nr_loops, concurrent_reqs, op);
+			i += 3;
 			continue;
 		}
 
