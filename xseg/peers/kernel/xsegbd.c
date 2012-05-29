@@ -277,11 +277,13 @@ static void xsegbd_dev_release(struct device *dev)
 	}
 
 	/* reset the port's waitcue (aka cancel_wait) */
-	port = &xsegbd.xseg->ports[xsegbd_dev->src_portno];
-	port->waitcue = (long) NULL;
+	if ((port = &xsegbd.xseg->ports[xsegbd_dev->src_portno]) != NULL) {
+		port->waitcue = (long) NULL;
 
-	xseg_free_requests(xsegbd.xseg, xsegbd_dev->src_portno, xsegbd_dev->nr_requests);
-
+		if (xseg_free_requests(xsegbd.xseg, xsegbd_dev->src_portno, xsegbd_dev->nr_requests) != 0)
+			XSEGLOG("Error trying to free requests!\n");
+	}
+	
 	WARN_ON(nr_pending < xsegbd_dev->nr_requests);
 	spin_lock_irq(&__lock);
 	nr_pending -= xsegbd_dev->nr_requests;
