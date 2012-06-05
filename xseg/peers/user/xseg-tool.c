@@ -333,12 +333,17 @@ int cmd_clone(char *src, char *dst)
 void log_req(int logfd, uint32_t portno2, uint32_t portno1, int op, int method,
 		struct xseg_request *req)
 {
+	FILE *logfp;
 	char target[64], data[64];
 	/* null terminate name in case of req->target is less than 63 characters,
 	 * and next character after name (aka first byte of next buffer) is not
 	 * null
 	 */
 	unsigned int end = (req->targetlen > 63) ? 63 : req->targetlen;
+
+	logfp = fdopen(logfd, "a");
+	if (!logfp)
+		return;
 
 	switch(method) {
 	case 0:
@@ -347,7 +352,7 @@ void log_req(int logfd, uint32_t portno2, uint32_t portno1, int op, int method,
 		strncpy(data, req->data, 63);
 		data[63] = 0;
 
-		fprintf(logfd,
+		fprintf(logfp,
 			"src port: %u, dst port: %u,  op:%u offset: %llu size: %lu, reqstate: %u\n"
 			"target[%u]: '%s', data[%llu]:\n%s------------------\n\n",
 			(unsigned int)portno1,
@@ -360,19 +365,20 @@ void log_req(int logfd, uint32_t portno2, uint32_t portno1, int op, int method,
 			(unsigned long long)req->datalen, data);
 		break;
 	case 1:
-		fprintf(logfd,
+		fprintf(logfp,
 			"src port: %u, dst port: %u, op: %u\n",
 			(unsigned int)portno1,
 			(unsigned int)portno2,
 			(unsigned int)req->op);
 		break;
 	case 2:
-		fprintf(logfd, "src port: %u, dst port: %u, reqs: %u\n",
+		fprintf(logfp, "src port: %u, dst port: %u, reqs: %llu\n",
 			(unsigned int)portno1,
 			(unsigned int)portno2,
-			++reqs);
+			(unsigned long long)++reqs);
 	}
 
+	fclose(logfp);
 	return;
 }
 
@@ -668,7 +674,6 @@ int cmd_submit_reqs(long loops, long concurrent_reqs, int op)
 	uint32_t targetlen = 10, chunksize = 4096;
 	struct timeval tv1, tv2;
 	xserial srl;
-	char name = "bench";
 
 	xseg_bind_port(xseg, srcport);
 
@@ -709,13 +714,13 @@ int cmd_submit_reqs(long loops, long concurrent_reqs, int op)
 			if (xseg_signal(xseg, dstport) < 0)
 				perror("Cannot signal peer");
 		}
-t
 		received = xseg_receive(xseg, srcport);
 		if (received) {
 			xseg_cancel_wait(xseg, srcport);
 			--nr_flying;
 			if (nr_received == 0)
-				fprintf(stderr, "latency (time for the first req to complete): %llu usecs\n", received->elapsed);
+				fprintf(stderr, "latency (time for the first req to complete): %llu usecs\n",
+					(unsigned long long)received->elapsed);
 			nr_received += 1;
 			if (!(received->state & XS_SERVED)) {
 				nr_failed += 1;
