@@ -839,7 +839,7 @@ static ssize_t xsegbd_remove(struct bus_type *bus, const char *buf, size_t count
 	int id, ret;
 	unsigned long ul_id;
 
-	ret = kstrtoul(buf, 10, &ul_id);
+	ret = strict_strtoul(buf, 10, &ul_id);
 	if (ret)
 		return ret;
 
