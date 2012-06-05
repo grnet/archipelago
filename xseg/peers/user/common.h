@@ -8,10 +8,10 @@
 #define _COMMON_H
 
 #ifdef DEBUG
-#define p_debug(str, arg...)	\
-	perr(PD, 0, "%s: " str, __func__ , ##arg)
+#define p_debug(str, ...)	\
+	perr(PD, 0, "%s: " str, __func__ , __VA_ARGS__)
 #else
-#define p_debug(arg...)		do { } while (0)
+#define p_debug(str, ...)	do {const char *s = __VA_ARGS__} while (0)
 #endif
 
 #define always_assert(condition) \
@@ -50,16 +50,19 @@ void perr_func(int type, int want_errno, char *fmt, ...)
 	__attribute__ ((format (printf, 3, 4)));
 
 /* No inline form of perr can be used, since it is variadic (See gcc manual) */
+
+#define __fmt2(fmt0, arg0, arg1, fmt1, ...) fmt0 fmt1 "%s", arg0, arg1, __VA_ARGS__
+
 #ifdef DEBUG
-#define perr(type, want_errno, fmt, arg...) \
-	perr_func(type, want_errno, "%s: %d: " fmt, \
-		 __func__, __LINE__, ##arg)
+#define perr(type, want_errno, ...) \
+	perr_func(type, want_errno, \
+		__fmt2("%s: %d: ", __func__, __LINE__, __VA_ARGS__, ""))
 #else
-#define perr(type, want_errno, fmt, arg...) \
+#define perr(type, want_errno, ...) \
 	do {                        \
 		if (type > PD)      \
-		perr_func(type, want_errno, "%s: %d: " fmt, \
-			__func__, __LINE__, ##arg); \
+		perr_func(type, want_errno, \
+			__fmt2("%s: %d: ", __func__, __LINE__, __VA_ARGS__, "")); \
 	} while (0)
 #endif
 
