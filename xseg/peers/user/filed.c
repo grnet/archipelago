@@ -168,7 +168,7 @@ static inline void prepare_io(struct store *store, struct io *io)
 static int dir_open(	struct store *store, struct io *io,
 			char *target, uint32_t targetlen, int mode	)
 {
-	int fd = -1, r;
+	int fd = -1;
 	struct fdcache_node *ce = NULL;
 	long i, lru;
 	uint64_t min;
@@ -501,11 +501,9 @@ static int filed_loop(struct store *store)
 static int filed(	char *path, unsigned long size, uint32_t nr_ops,
 			char *spec, long portno	)
 {
-	struct stat stat;
 	struct sigaction sa;
 	struct store *store;
-	int r, mode, i;
-	void *status;
+	int i;
 
 	store = malloc(sizeof(struct store));
 	if (!store) {
