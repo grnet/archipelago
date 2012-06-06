@@ -15,6 +15,7 @@ default: all
 
 all: libxseg.a libxseg.so
 	make -C xq all
+	make -C python all
 
 COMMA=,
 _initialize.c: drivers
@@ -66,6 +67,7 @@ libxseg.a: xseg.o xq/xq.o drivers _initialize.o
 
 clean:
 	make -C xq clean
+	make -C python clean
 	rm -f _initialize.c _initialize.o
 	rm -f xseg.o xseg.pic.o xseg_user.o
 	rm -f libxseg.a libxseg.map
