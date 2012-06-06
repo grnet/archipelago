@@ -4,12 +4,15 @@ include $(XSEG_HOME)/base.mk
 
 default: all
 
-all: blockd filed xseg sosd
+all: blockd filed xseg sosd vlmcd mapperd
 
 filed: filed.c $(BASE)/xseg/xseg.h
 	$(CC) $(CFLAGS) -o $@ $< $(INC) -L$(LIB) -lxseg -lpthread
 
-vlmcd: vlmcd.c common.c $(BASE)/xseg/xseg.h common.h 
+vlmcd: vlmcd.c common.c $(BASE)/xseg/xseg.h $(BASE)/xseg/protocol.h common.h 
+	$(CC) $(CFLAGS) -o $@ $< common.c $(INC) -L$(LIB) -lxseg
+
+mapperd: mapperd.c common.c $(BASE)/xseg/xseg.h $(BASE)/xseg/protocol.h common.h 
 	$(CC) $(CFLAGS) -o $@ $< common.c $(INC) -L$(LIB) -lxseg
 
 blockd: blockd.c $(BASE)/xseg/xseg.h
@@ -22,4 +25,4 @@ xseg: xseg-tool.c $(BASE)/xseg/xseg.h
 	$(CC) $(CFLAGS) -o $@ $< $(INC) -L$(LIB) -lxseg
 
 clean:
-	rm -f blockd filed xseg sosd
+	rm -f blockd filed xseg sosd vlmcd mapperd
