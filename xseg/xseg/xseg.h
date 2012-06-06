@@ -24,11 +24,11 @@ typedef uint64_t xserial;
 #define NoSerial ((xserial)-1)
 
 /* Peers and Segments
- *  
+ *
  *  Segments are memory segments shared among peers.
  *  Peers are local execution contexes that share a segment.
  *
- * xseg_type and xseg_peer
+ *  xseg_type and xseg_peer
  *
  *  A peer needs an xseg_type in order to
  *  create or access a certain segment type,
@@ -137,6 +137,8 @@ struct xseg_task {
 #define X_CLONE     9
 #define X_COMMIT   10
 #define X_INFO     11
+#define X_MAPR     12
+#define X_MAPW     13
 
 /* FLAGS */
 #define XF_NOSYNC (1 << 0)
@@ -155,7 +157,8 @@ struct xseg_task {
 struct xseg_request {
 	xserial serial;
 	uint64_t offset;
-	uint64_t size;
+	uint64_t size; /* FIXME: why are there both size and datalen fields? */
+		/* FIXME: why does filed use ->datalen instead of ->size? */
 	uint64_t serviced;
 	char *data;
 	uint64_t datalen;
@@ -221,7 +224,7 @@ struct xseg {
                 int    xseg_parse_spec      ( char                * spec,
                                               struct xseg_config  * config    );
 
-   struct xseg_port *  xseg_bind_port       ( struct xseg         * xseg,      
+   struct xseg_port *  xseg_bind_port       ( struct xseg         * xseg,
                                               uint32_t              portno    );
 
     static uint32_t    xseg_portno          ( struct xseg         * xseg,
@@ -297,7 +300,7 @@ struct xseg_request *  xseg_accept          ( struct xseg         * xseg,
 
             xserial    xseg_respond         ( struct xseg         * xseg,
                                               uint32_t              portno,
-                                              struct xseg_request * xreq      );   
+                                              struct xseg_request * xreq      );
 /*                    \___________________/                       \_________/ */
 /*                     ___________________                         _________  */
 /*                    /                   \                       /         \ */
