@@ -158,16 +158,16 @@ struct xseg_request {
 	uint64_t size;
 	uint64_t serviced;
 	char *data;
-	uint64_t datasize;
-	char *name;		/* target name */
-	uint32_t namesize;
+	uint64_t datalen;
+	char *target;
+	uint32_t targetlen;
 	uint32_t op;
 	uint32_t state;
 	uint32_t flags;
-        uint32_t portno;
-        /* pad */
+	uint32_t portno;
+	/* pad */
 	char *buffer;
-	uint64_t buffersize;
+	uint64_t bufferlen;
 	xqindex task;
 	uint64_t priv;
 };
@@ -269,8 +269,8 @@ struct xseg_request *  xseg_get_request     ( struct xseg         * xseg,
                                               struct xseg_request * xreq      );
 
                 int    xseg_prep_request    ( struct xseg_request * xreq,
-                                              uint32_t              namesize,
-                                              uint64_t              datasize  );
+                                              uint32_t              targetlen,
+                                              uint64_t              datalen  );
 /*                    \___________________/                       \_________/ */
 /*                     ___________________                         _________  */
 /*                    /                   \                       /         \ */

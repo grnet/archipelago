@@ -6,8 +6,8 @@
 
 struct sos_request {
 	unsigned long id;		/* request id 			*/
-	char *name;			/* target object name 		*/
-	uint32_t namesize;		/* target object name length	*/
+	char *target;			/* target object name 		*/
+	uint32_t targetlen;		/* target object name length	*/
 	uint64_t offset;		/* target object offset 	*/
 	uint64_t size;			/* requested size of data 	*/
 	char *data;			/* data pointer 		*/

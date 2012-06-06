@@ -122,19 +122,19 @@ static struct io* get_resubmitted_io(struct store *store)
 
 static void log_io(char *msg, struct io *io)
 {
-	char name[64], data[64];
-	/* null terminate name in case of req->name is less than 63 characters,
+	char target[64], data[64];
+	/* null terminate name in case of req->target is less than 63 characters,
 	 * and next character after name (aka first byte of next buffer) is not
 	 * null
 	 */
-	unsigned int end = (io->req->namesize > 63) ? 63 : io->req->namesize;
+	unsigned int end = (io->req->targetlen> 63) ? 63 : io->req->targetlen;
 	if (verbose) {
-		strncpy(name, io->req->name, end);
-		name[end] = 0;
+		strncpy(target, io->req->target, end);
+		target[end] = 0;
 		strncpy(data, io->req->data, 63);
 		data[63] = 0;
 		printf("%s: sos req id:%u, op:%u %llu:%lu serviced: %lu, retval: %lu, reqstate: %u\n"
-				"name[%u]:'%s', data[%llu]:\n%s------------------\n\n",
+				"target[%u]:'%s', data[%llu]:\n%s------------------\n\n",
 				msg,
 				(unsigned int)io->sos_req.id,
 				(unsigned int)io->req->op,
@@ -143,8 +143,8 @@ static void log_io(char *msg, struct io *io)
 				(unsigned long)io->req->serviced,
 				(unsigned long)io->retval,
 				(unsigned int)io->req->state,
-				(unsigned int)io->req->namesize, name,
-				(unsigned long long)io->req->datasize, data);
+				(unsigned int)io->req->targetlen, target,
+				(unsigned long long)io->req->datalen, data);
 	}
 }
 
@@ -185,7 +185,7 @@ static void pending(struct store *store, struct io *io)
 static void handle_unknown(struct store *store, struct io *io)
 {
 	struct xseg_request *req = io->req;
-	snprintf(req->data, req->datasize, "unknown request op");
+	snprintf(req->data, req->datalen, "unknown request op");
 	fail(store, io);
 }
 
@@ -220,36 +220,36 @@ static int calculate_sosreq(struct xseg_request *xseg_req, struct sos_request *s
 	char *buf;
 
 	/* get object name from offset in volume */
-	buf = sos_req->name;
+	buf = sos_req->target;
 	suffix = (unsigned int) ((xseg_req->offset+xseg_req->serviced) / (uint64_t)objsize) ;
 //	printf("suffix: %u\n", suffix);
-	if (xseg_req->namesize > MAX_VOL_NAME){
-		printf("xseg_req namesize > MAX_VOL_NAME\n");
+	if (xseg_req->targetlen> MAX_VOL_NAME){
+		printf("xseg_req targetlen > MAX_VOL_NAME\n");
 		return -1;
 	}
-	strncpy(buf, xseg_req->name, xseg_req->namesize);
-	buf[xseg_req->namesize] = '_';
-	r = snprintf(buf+xseg_req->namesize+1, 13, "%012u", suffix);
+	strncpy(buf, xseg_req->target, xseg_req->targetlen);
+	buf[xseg_req->targetlen] = '_';
+	r = snprintf(buf+xseg_req->targetlen+1, 13, "%012u", suffix);
 	if (r >= 13)
 		return -1;
 
-	//sos_req->name = buf;
-	sos_req->namesize = xseg_req->namesize+1+12;
+	//sos_req->target = buf;
+	sos_req->targetlen = xseg_req->targetlen+1+12;
 
 	/* offset should be set to offset in object */
 	sos_req->offset = (xseg_req->offset + xseg_req->serviced) % objsize;
 	/* sos_req offset + sos_req size  < objsize always
 	 * request data up to the end of object.
 	 */
-	sos_req->size = (xseg_req->datasize - xseg_req->serviced) ;  /* should this be xseg_req->size ? */
+	sos_req->size = (xseg_req->datalen - xseg_req->serviced) ;  /* should this be xseg_req->size ? */
 	if (sos_req->size > objsize - sos_req->offset)
 		sos_req->size = objsize - sos_req->offset;
 	/* this should have been checked before this call */
-       	if (xseg_req->serviced < xseg_req->datasize)
+	if (xseg_req->serviced < xseg_req->datalen)
 		sos_req->data = xseg_req->data + xseg_req->serviced;
 	else
 		return -1;
-//	printf("name: %s, size: %lu, offset: %lu, data:%s\n", sos_req->name, 
+//	printf("name: %s, size: %lu, offset: %lu, data:%s\n", sos_req->target, 
 //			sos_req->size, sos_req->offset, sos_req->data);
 	return 0;
 }
@@ -263,7 +263,7 @@ static void prepare_sosreq(struct store *store, struct io *io)
 	sos_req->retval = 0;
 	sos_req->op = get_sos_op(xseg_req->op);
 	sos_req->priv = store;
-	sos_req->name = io->objname;
+	sos_req->target = io->objname;
 }
 
 static inline void prepare_io(struct store *store, struct io *io)
@@ -307,7 +307,7 @@ static void complete_rw(struct store *store, struct io *io)
 		return;
 	}
 	/* request completed ? */
-	if (req->serviced >= req->datasize) {
+	if (req->serviced >= req->datalen) {
 		complete(store, io);
 		return;
 	}
@@ -328,7 +328,7 @@ static void complete_rw(struct store *store, struct io *io)
 		signal_self(store);
 		break;
 	default:
-		snprintf(req->data, req->datasize,
+		snprintf(req->data, req->datalen,
 			 "wtf, corrupt op %u?\n", req->op);
 		fail(store, io);
 		return;
@@ -355,8 +355,8 @@ static void handle_read_write(struct store *store, struct io *io)
 			/* size must be zero */
 			sos_req->size = 0;
 			/* all these should be irrelevant on a flush request */
-			sos_req->name = 0;
-			sos_req->namesize = 0;
+			sos_req->target = 0;
+			sos_req->targetlen= 0;
 			sos_req->data = 0;
 			sos_req->offset = 0;
 			/* philipgian:
@@ -403,14 +403,14 @@ static void handle_read_write(struct store *store, struct io *io)
 		r = sos_submit(store->sos, sos_req);
 		break;
 	default:
-		snprintf(req->data, req->datasize,
+		snprintf(req->data, req->datalen,
 			 "wtf, corrupt op %u?\n", req->op);
 		fail(store, io);
 		return;
 	}
 
 	if (r) {
-		strerror_r(errno, req->data, req->datasize);
+		strerror_r(errno, req->data, req->datalen);
 		fail(store, io);
 		return;
 	}
@@ -459,8 +459,8 @@ static void handle_info(struct store *store, struct io *io)
 	struct xseg_request *req = io->req;
 
 	*((uint64_t *) req->data) = store->size;
-	req->serviced = req->datasize = sizeof(store->size);
-	io->retval = req->datasize;
+	req->serviced = req->datalen = sizeof(store->size);
+	io->retval = req->datalen;
 
 	complete(store, io);
 }

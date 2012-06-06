@@ -455,9 +455,9 @@ static long initialize_segment(struct xseg *xseg, struct xseg_config *cfg)
 		struct xseg_request *req = XSEG_TAKE_PTR(&xseg->requests[i], segment);
 		/* xseg_allocate() zeroes the segment out */
 		req->buffer = xseg->buffers + i * cfg->request_size * page_size;
-		req->buffersize = cfg->request_size * page_size;
+		req->bufferlen = cfg->request_size * page_size;
 		req->data = req->buffer;
-		req->datasize = req->buffersize;
+		req->datalen = req->bufferlen;
 	}
 
 	xseg->ports = XSEG_MAKE_PTR(segment + size, segment);
@@ -820,22 +820,22 @@ int xseg_put_request (  struct xseg *xseg,
 {
 	xqindex xqi = xreq - xseg->requests;
 	xreq->data = xreq->buffer;
-	xreq->datasize = xreq->buffersize;
-	xreq->name = NULL;
-	xreq->namesize = 0;
+	xreq->datalen = xreq->bufferlen;
+	xreq->target = NULL;
+	xreq->targetlen = 0;
 	return xq_append_head(&xseg->ports[portno].free_queue, xqi) == None;
 }
 
 int xseg_prep_request ( struct xseg_request *req,
-			uint32_t namesize, uint64_t datasize )
+			uint32_t targetlen, uint64_t datalen )
 {
-	if (namesize + datasize > req->buffersize)
+	if (targetlen + datalen > req->bufferlen)
 		return -1;
 
 	req->data = req->buffer;
-	req->name = req->buffer + req->buffersize - namesize;
-	req->datasize = datasize;
-	req->namesize = namesize;
+	req->target = req->buffer + req->bufferlen - targetlen;
+	req->datalen = datalen;
+	req->targetlen = targetlen;
 	return 0;
 }
 

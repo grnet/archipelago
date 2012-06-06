@@ -203,7 +203,7 @@ static int handle_async_io(sos_handle_t sos, struct sos_request *req){
 	int r;
 	rados_completion_t rados_compl;
 	struct rados_arg *rarg;
-	if (req->namesize >= MAX_NAME_LEN){
+	if (req->targetlen >= MAX_NAME_LEN){
 		req->retval = -1;
 		return -1;
 	}
@@ -214,10 +214,10 @@ static int handle_async_io(sos_handle_t sos, struct sos_request *req){
 	rarg->sos = sos;
 	rarg->req = req;
 	rarg->state = S_PENDING;
-	strncpy(rarg->obj_name, req->name, req->namesize);
-       	rarg->obj_name[req->namesize]=0;
+	strncpy(rarg->obj_name, req->target, req->targetlen);
+	rarg->obj_name[req->targetlen]=0;
 	SOSLOG(2, "Request %lu assigned to object[%u]: %s  \n", req->id, \
-			req->namesize, rarg->obj_name);
+			req->targetlen, rarg->obj_name);
 	
 #ifdef __SOS_TIME	
 	/* set time request started */
@@ -254,7 +254,7 @@ static int handle_sync_io(sos_handle_t sos, struct sos_request *req){
 	int r;
 	rados_completion_t rados_compl;
 	struct rados_arg *rarg;
-	if (req->namesize >= MAX_NAME_LEN){
+	if (req->targetlen>= MAX_NAME_LEN){
 		req->retval = -1;
 		return -1;
 	}
@@ -265,10 +265,10 @@ static int handle_sync_io(sos_handle_t sos, struct sos_request *req){
 	rarg->sos = sos;
 	rarg->req = req;
 	rarg->state = S_PENDING;
-	strncpy(rarg->obj_name, req->name, req->namesize);
-       	rarg->obj_name[req->namesize]=0;
+	strncpy(rarg->obj_name, req->target, req->targetlen);
+	rarg->obj_name[req->targetlen]=0;
 	SOSLOG(2, "Request %lu assigned to object[%u]: %s  \n", req->id, \
-			req->namesize, rarg->obj_name);
+			req->targetlen, rarg->obj_name);
 #ifdef __SOS_TIME	
 	/* set time request started */
 	gettimeofday(&rarg->start, NULL);

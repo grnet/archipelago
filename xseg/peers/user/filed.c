@@ -49,7 +49,7 @@ struct fdcache_node {
 	volatile unsigned long time;
 	volatile unsigned int flags;
 	pthread_cond_t cond;
-	char name[MAX_FILENAME_SIZE + 1];
+	char target[MAX_FILENAME_SIZE + 1];
 };
 
 struct store {
@@ -83,20 +83,20 @@ static void sigaction_handler(int sig, siginfo_t *siginfo, void *arg)
 
 static void log_io(char *msg, struct io *io)
 {
-	char name[64], data[64];
-	/* null terminate name in case of req->name is less than 63 characters,
+	char target[64], data[64];
+	/* null terminate name in case of req->target is less than 63 characters,
 	 * and next character after name (aka first byte of next buffer) is not
 	 * null
 	 */
-	unsigned int end = (io->req->namesize > 63) ? 63 : io->req->namesize;
-	strncpy(name, io->req->name, end);
-	name[end] = 0;
+	unsigned int end = (io->req->targetlen> 63) ? 63 : io->req->targetlen;
+	strncpy(target, io->req->target, end);
+	target[end] = 0;
 	strncpy(data, io->req->data, 63);
 	data[63] = 0;
 
 	fprintf(stderr,
 		"%s: fd:%u, op:%u offset: %llu size: %lu retval: %lu, reqstate: %u\n"
-		"name[%u]: '%s', data[%llu]:\n%s------------------\n\n",
+		"target[%u]: '%s', data[%llu]:\n%s------------------\n\n",
 		msg,
 		(unsigned int)io->fdcacheidx, //this is cacheidx not fd
 		(unsigned int)io->req->op,
@@ -104,8 +104,8 @@ static void log_io(char *msg, struct io *io)
 		(unsigned long)io->req->size,
 		(unsigned long)io->retval,
 		(unsigned int)io->req->state,
-		(unsigned int)io->req->namesize, name,
-		(unsigned long long)io->req->datasize, data);
+		(unsigned int)io->req->targetlen, target,
+		(unsigned long long)io->req->datalen, data);
 }
 
 static struct io *alloc_io(struct store *store)
@@ -156,7 +156,7 @@ static void pending(struct store *store, struct io *io)
 static void handle_unknown(struct store *store, struct io *io)
 {
 	struct xseg_request *req = io->req;
-	snprintf(req->data, req->datasize, "unknown request op");
+	snprintf(req->data, req->datalen, "unknown request op");
 	fail(store, io);
 }
 
@@ -166,14 +166,14 @@ static inline void prepare_io(struct store *store, struct io *io)
 
 
 static int dir_open(	struct store *store, struct io *io,
-			char *name, uint32_t namesize, int mode	)
+			char *target, uint32_t targetlen, int mode	)
 {
 	int fd = -1, r;
 	struct fdcache_node *ce = NULL;
 	long i, lru;
 	uint64_t min;
 	io->fdcacheidx = -1;
-	if (namesize > MAX_FILENAME_SIZE)
+	if (targetlen> MAX_FILENAME_SIZE)
 		goto out_err;
 
 start:
@@ -189,8 +189,8 @@ start_locked:
 			lru = i;
 
 		}
-		if (!strncmp(store->fdcache[i].name, name, namesize)) {
-			if (store->fdcache[i].name[namesize] == 0) {
+		if (!strncmp(store->fdcache[i].target, target, targetlen)) {
+			if (store->fdcache[i].target[targetlen] == 0) {
 				ce = &store->fdcache[i];
 				/* if any other io thread is currently opening
 				 * the file, block until it succeeds or fails
@@ -233,8 +233,8 @@ start_locked:
 	/* set name here and state to not ready, for any other requests on the
 	 * same target that may follow
 	 */
-	strncpy(ce->name, name, namesize);
-	ce->name[namesize] = 0;
+	strncpy(ce->target, target, targetlen);
+	ce->target[targetlen] = 0;
 	ce->flags &= ~READY;
 	pthread_mutex_unlock(&store->cache_lock);
 
@@ -243,10 +243,10 @@ start_locked:
 			perror("close");
 		}
 	}
-	fd = openat(store->dirfd, ce->name, O_RDWR);	
+	fd = openat(store->dirfd, ce->target, O_RDWR);	
 	if (fd < 0) {
 		if (errno == ENOENT){
-			fd = openat(store->dirfd, ce->name, 
+			fd = openat(store->dirfd, ce->target, 
 					O_RDWR | O_CREAT, 0600);
 			if (fd >= 0)
 				goto new_entry;
@@ -293,7 +293,7 @@ static void handle_read_write(struct store *store, struct io *io)
 		mode = 1;
 	else
 		mode = 0;
-	fd = dir_open(store, io, req->name, req->namesize, mode);
+	fd = dir_open(store, io, req->target, req->targetlen, mode);
 	if (fd < 0){
 		perror("dir_open");
 		fail(store, io);
@@ -320,18 +320,18 @@ static void handle_read_write(struct store *store, struct io *io)
 
 	switch (req->op) {
 	case X_READ:
-		while (req->serviced < req->datasize) {
+		while (req->serviced < req->datalen) {
 			r = pread(fd, req->data + req->serviced, 
-					req->datasize - req->serviced,
+					req->datalen - req->serviced,
 				       	req->offset + req->serviced);
 			if (r < 0) {
-				req->datasize = req->serviced;
+				req->datalen = req->serviced;
 				perror("pread");
 			}
 			else if (r == 0) {
 				/* reached end of file. zero out the rest data buffer */
-				memset(req->data + req->serviced, 0, req->datasize - req->serviced);
-				req->serviced = req->datasize;
+				memset(req->data + req->serviced, 0, req->datalen - req->serviced);
+				req->serviced = req->datalen;
 			}
 			else {
 				req->serviced += r;
@@ -339,17 +339,17 @@ static void handle_read_write(struct store *store, struct io *io)
 		}
 		break;
 	case X_WRITE:
-		while (req->serviced < req->datasize) {
+		while (req->serviced < req->datalen) {
 			r = pwrite(fd, req->data + req->serviced, 
-					req->datasize - req->serviced,
+					req->datalen - req->serviced,
 				       	req->offset + req->serviced);
 			if (r < 0) {
-				req->datasize = req->serviced;
+				req->datalen = req->serviced;
 			}
 			else if (r == 0) {
 				/* reached end of file. zero out the rest data buffer */
-				memset(req->data + req->serviced, 0, req->datasize - req->serviced);
-				req->serviced = req->datasize;
+				memset(req->data + req->serviced, 0, req->datalen - req->serviced);
+				req->serviced = req->datalen;
 			}
 			else {
 				req->serviced += r;
@@ -363,7 +363,7 @@ static void handle_read_write(struct store *store, struct io *io)
 		}
 		break;
 	default:
-		snprintf(req->data, req->datasize,
+		snprintf(req->data, req->datalen,
 			 "wtf, corrupt op %u?\n", req->op);
 		fail(store, io);
 		return;
@@ -373,7 +373,7 @@ static void handle_read_write(struct store *store, struct io *io)
 		complete(store, io);
 	}
 	else {
-		strerror_r(errno, req->data, req->datasize);
+		strerror_r(errno, req->data, req->datalen);
 		fail(store, io);
 	}
 	return;
@@ -386,7 +386,7 @@ static void handle_info(struct store *store, struct io *io)
 	int fd, r;
 	off_t size;
 
-	fd = dir_open(store, io, req->name, req->namesize, 0);
+	fd = dir_open(store, io, req->target, req->targetlen, 0);
 	if (fd < 0) {
 		fail(store, io);
 		return;
@@ -399,7 +399,7 @@ static void handle_info(struct store *store, struct io *io)
 	}
 	size = stat.st_size;
 	*((off_t *) req->data) = size;
-	req->datasize = sizeof(size);
+	req->datalen = sizeof(size);
 
 	complete(store, io);
 }

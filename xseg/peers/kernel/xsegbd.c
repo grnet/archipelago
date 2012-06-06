@@ -338,8 +338,8 @@ static void xseg_request_fn(struct request_queue *rq)
 	struct request *blkreq;
 	struct pending *pending;
 	xqindex blkreq_idx;
-	char *name;
-	uint64_t datasize;
+	char *target;
+	uint64_t datalen;
 
 	for (;;) {
 		xreq = xseg_get_request(xsegbd.xseg, xsegbd_dev->src_portno);
@@ -356,12 +356,12 @@ static void xseg_request_fn(struct request_queue *rq)
 		}
 
 
-		datasize = blk_rq_bytes(blkreq);
-		BUG_ON(xreq->buffersize - xsegbd_dev->namesize < datasize);
-		BUG_ON(xseg_prep_request(xreq, xsegbd_dev->namesize, datasize));
+		datalen = blk_rq_bytes(blkreq);
+		BUG_ON(xreq->bufferlen - xsegbd_dev->targetlen < datalen);
+		BUG_ON(xseg_prep_request(xreq, xsegbd_dev->targetlen, datalen));
 
-		name = XSEG_TAKE_PTR(xreq->name, xsegbd.xseg->segment);
-		strncpy(name, xsegbd_dev->name, xsegbd_dev->namesize);
+		target = XSEG_TAKE_PTR(xreq->target, xsegbd.xseg->segment);
+		strncpy(target, xsegbd_dev->target, xsegbd_dev->targetlen);
 		blkreq_idx = xq_pop_head(&blk_queue_pending);
 		BUG_ON(blkreq_idx == None);
 		pending = &blk_req_pending[blkreq_idx];
@@ -369,7 +369,7 @@ static void xseg_request_fn(struct request_queue *rq)
 		pending->request = blkreq;
 		pending->comp = NULL;
 		xreq->priv = (uint64_t)blkreq_idx;
-		xreq->size = datasize;
+		xreq->size = datalen;
 		xreq->offset = blk_rq_pos(blkreq) << 9;
 		/*
 		if (xreq->offset >= (sector_size << 9))
@@ -425,8 +425,8 @@ static int xsegbd_get_size(struct xsegbd_device *xsegbd_dev)
 {
 	struct xseg_request *xreq;
 	struct xseg_port *port;
-	char *name;
-	uint64_t datasize;
+	char *target;
+	uint64_t datalen;
 	xqindex blkreq_idx;
 	struct pending *pending;
 	struct completion comp;
@@ -436,9 +436,9 @@ static int xsegbd_get_size(struct xsegbd_device *xsegbd_dev)
 	if (!xreq)
 		goto out;
 
-	datasize = sizeof(uint64_t);
-	BUG_ON(xreq->buffersize - xsegbd_dev->namesize < datasize);
-	BUG_ON(xseg_prep_request(xreq, xsegbd_dev->namesize, datasize));
+	datalen = sizeof(uint64_t);
+	BUG_ON(xreq->bufferlen - xsegbd_dev->targetlen < datalen);
+	BUG_ON(xseg_prep_request(xreq, xsegbd_dev->targetlen, datalen));
 
 	init_completion(&comp);
 	blkreq_idx = xq_pop_head(&blk_queue_pending);
@@ -449,9 +449,9 @@ static int xsegbd_get_size(struct xsegbd_device *xsegbd_dev)
 	pending->comp = &comp;
 	xreq->priv = (uint64_t)blkreq_idx;
 
-	name = XSEG_TAKE_PTR(xreq->name, xsegbd.xseg->segment);
-	strncpy(name, xsegbd_dev->name, xsegbd_dev->namesize);
-	xreq->size = datasize;
+	target = XSEG_TAKE_PTR(xreq->target, xsegbd.xseg->segment);
+	strncpy(target, xsegbd_dev->target, xsegbd_dev->targetlen);
+	xreq->size = datalen;
 	xreq->offset = 0;
 
 	xreq->op = X_INFO;
@@ -597,12 +597,12 @@ static ssize_t xsegbd_reqs_show(struct device *dev,
 	return sprintf(buf, "%u\n", (unsigned) xsegbd_dev->nr_requests);
 }
 
-static ssize_t xsegbd_name_show(struct device *dev,
+static ssize_t xsegbd_target_show(struct device *dev,
 					struct device_attribute *attr, char *buf)
 {
 	struct xsegbd_device *xsegbd_dev = dev_to_xsegbd(dev);
 
-	return sprintf(buf, "%s\n", xsegbd_dev->name);
+	return sprintf(buf, "%s\n", xsegbd_dev->target);
 }
 
 static ssize_t xsegbd_image_refresh(struct device *dev,
@@ -634,7 +634,7 @@ static DEVICE_ATTR(srcport, S_IRUGO, xsegbd_srcport_show, NULL);
 static DEVICE_ATTR(dstport, S_IRUGO, xsegbd_dstport_show, NULL);
 static DEVICE_ATTR(id , S_IRUGO, xsegbd_id_show, NULL);
 static DEVICE_ATTR(reqs , S_IRUGO, xsegbd_reqs_show, NULL);
-static DEVICE_ATTR(name , S_IRUGO, xsegbd_name_show, NULL);
+static DEVICE_ATTR(target, S_IRUGO, xsegbd_target_show, NULL);
 static DEVICE_ATTR(refresh , S_IWUSR, NULL, xsegbd_image_refresh);
 
 static struct attribute *xsegbd_attrs[] = {
@@ -644,7 +644,7 @@ static struct attribute *xsegbd_attrs[] = {
 	&dev_attr_dstport.attr,
 	&dev_attr_id.attr,
 	&dev_attr_reqs.attr,
-	&dev_attr_name.attr,
+	&dev_attr_target.attr,
 	&dev_attr_refresh.attr,
 	NULL
 };
@@ -722,12 +722,12 @@ static ssize_t xsegbd_add(struct bus_type *bus, const char *buf, size_t count)
 
 	/* parse cmd */
 	if (sscanf(buf, "%" __stringify(XSEGBD_TARGET_NAMELEN) "s "
-			"%d:%d:%d", xsegbd_dev->name, &xsegbd_dev->src_portno,
+			"%d:%d:%d", xsegbd_dev->target, &xsegbd_dev->src_portno,
 			&xsegbd_dev->dst_portno, &xsegbd_dev->nr_requests) < 3) {
 		ret = -EINVAL;
 		goto out_dev;
 	}
-	xsegbd_dev->namesize = strlen(xsegbd_dev->name);
+	xsegbd_dev->targetlen = strlen(xsegbd_dev->target);
 
 	spin_lock(&xsegbd_dev_list_lock);
 

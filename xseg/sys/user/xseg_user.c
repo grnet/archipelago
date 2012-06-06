@@ -35,19 +35,19 @@ void __load_plugin(const char *name)
 	void *dl;
 	void (*init)(void);
 	char _name[128];
-        unsigned int namesize = strlen(name);
+	unsigned int namelen = strlen(name);
 
-        strncpy(_name, "xseg_", 5);
+	strncpy(_name, "xseg_", 5);
 	strncpy(_name + 5, name, 80);
-        strncpy(_name + 5 + namesize, ".so", 3);
-	_name[5 + namesize + 3 ] = 0;
+	strncpy(_name + 5 + namelen, ".so", 3);
+	_name[5 + namelen + 3 ] = 0;
 	dl = dlopen(_name, RTLD_NOW);
 	if (!dl) {
 		XSEGLOG("Cannot load plugin '%s': %s\n", _name, dlerror());
 		return;
 	}
 
-	strncpy(_name + 5 + namesize, "_init", 5);
+	strncpy(_name + 5 + namelen, "_init", 5);
 	_name[127] = 0;
 	init = (void (*)(void))(long)dlsym(dl, _name);
 	if (!init) {

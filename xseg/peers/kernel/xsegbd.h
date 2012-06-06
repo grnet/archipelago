@@ -32,8 +32,8 @@ struct xsegbd_device {
 	struct request **blk_req_pending;
 	struct device dev;
 	struct list_head node;
-	char name[XSEGBD_TARGET_NAMELEN + 1];
-	uint32_t namesize;
+	char target[XSEGBD_TARGET_NAMELEN + 1];
+	uint32_t targetlen;
 };
 
 #endif

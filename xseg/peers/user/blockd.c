@@ -36,8 +36,8 @@ struct store {
 	struct xseg_port *xport;
 	uint32_t portno;
 	int fd;
-	char name[TARGET_NAMELEN];
-	uint32_t namesize;
+	char target[TARGET_NAMELEN];
+	uint32_t targetlen;
 	uint64_t size;
 	struct io *ios;
 	struct xq free_ops;
@@ -87,18 +87,18 @@ static inline struct io *get_pending_io(struct store *store)
 
 static void log_io(char *msg, struct io *io)
 {
-	char name[64], data[64];
-	/* null terminate name in case of req->name is less than 63 characters,
+	char target[64], data[64];
+	/* null terminate name in case of req->target is less than 63 characters,
 	 * and next character after name (aka first byte of next buffer) is not
 	 * null
 	 */
-	unsigned int end = (io->req->namesize > 63) ? 63 : io->req->namesize;
-	strncpy(name, io->req->name, end);
-	name[end] = 0;
+	unsigned int end = (io->req->targetlen > 63) ? 63 : io->req->targetlen;
+	strncpy(target, io->req->target, end);
+	target[end] = 0;
 	strncpy(data, io->req->data, 63);
 	data[63] = 0;
 	printf("%s: fd:%u, op:%u %llu:%lu retval: %lu, reqstate: %u\n"
-		"name[%u]:'%s', data[%llu]:\n%s------------------\n\n",
+		"target[%u]:'%s', data[%llu]:\n%s------------------\n\n",
 		msg,
 		(unsigned int)io->cb.aio_fildes,
 		(unsigned int)io->req->op,
@@ -106,8 +106,8 @@ static void log_io(char *msg, struct io *io)
 		(unsigned long)io->cb.aio_nbytes,
 		(unsigned long)io->retval,
 		(unsigned int)io->req->state,
-		(unsigned int)io->req->namesize, name,
-		(unsigned long long)io->req->datasize, data);
+		(unsigned int)io->req->targetlen, target,
+		(unsigned long long)io->req->datalen, data);
 }
 
 static void complete(struct store *store, struct io *io)
@@ -143,7 +143,7 @@ static void pending(struct store *store, struct io *io)
 static void handle_unknown(struct store *store, struct io *io)
 {
 	struct xseg_request *req = io->req;
-	snprintf(req->data, req->datasize, "unknown request op");
+	snprintf(req->data, req->datalen, "unknown request op");
 	fail(store, io);
 }
 
@@ -165,13 +165,13 @@ static void handle_read_write(struct store *store, struct io *io)
 			req->serviced += io->retval;
 		else if (io->retval == 0){
 			/* reached end of file. zero out the rest data buffer */
-			memset(req->data + req->serviced, 0, req->datasize - req->serviced);
-			req->serviced = req->datasize;
+			memset(req->data + req->serviced, 0, req->datalen - req->serviced);
+			req->serviced = req->datalen;
 		}
 		else 
-			req->datasize = req->serviced;
+			req->datalen = req->serviced;
 
-		if (req->serviced >= req->datasize) {
+		if (req->serviced >= req->datalen) {
 			complete(store, io);
 			return;
 		}
@@ -194,7 +194,7 @@ static void handle_read_write(struct store *store, struct io *io)
 
 	prepare_io(store, io);
 	cb->aio_buf = req->data + req->serviced;
-	cb->aio_nbytes = req->datasize - req->serviced;
+	cb->aio_nbytes = req->datalen - req->serviced;
 	cb->aio_offset = req->offset + req->serviced;
 
 	switch (req->op) {
@@ -205,14 +205,14 @@ static void handle_read_write(struct store *store, struct io *io)
 		r = aio_write(cb);
 		break;
 	default:
-		snprintf(req->data, req->datasize,
+		snprintf(req->data, req->datalen,
 			 "wtf, corrupt op %u?\n", req->op);
 		fail(store, io);
 		return;
 	}
 
 	if (r) {
-		strerror_r(errno, req->data, req->datasize);
+		strerror_r(errno, req->data, req->datalen);
 		fail(store, io);
 		return;
 	}
@@ -227,8 +227,8 @@ static void handle_info(struct store *store, struct io *io)
 	int r;
 	off_t size;
 
-	if (req->namesize != store->namesize ||
-		strncmp(req->name, store->name, store->namesize)) {
+	if (req->targetlen!= store->targetlen ||
+		strncmp(req->target, store->target, store->targetlen)) {
 
 		fail(store, io);
 		return;
@@ -244,8 +244,8 @@ static void handle_info(struct store *store, struct io *io)
 	size = stat.st_size;
 	*((uint64_t *) req->data) = store->size;
 
-	req->serviced = req->datasize = sizeof(store->size);
-	io->retval = io->cb.aio_offset = io->cb.aio_nbytes = req->datasize;
+	req->serviced = req->datalen = sizeof(store->size);
+	io->retval = io->cb.aio_offset = io->cb.aio_nbytes = req->datalen;
 
 	complete(store, io);
 }
@@ -352,9 +352,9 @@ static int blockd(char *path, off_t size, uint32_t nr_ops,
 		return -1;
 	}
 
-	strncpy(store->name, path, TARGET_NAMELEN);
-	store->name[TARGET_NAMELEN - 1] = '\0';
-	store->namesize = strlen(store->name);
+	strncpy(store->target, path, TARGET_NAMELEN);
+	store->target[TARGET_NAMELEN - 1] = '\0';
+	store->targetlen = strlen(store->target);
 
 	store->fd = open(path, O_RDWR);
 	while (store->fd < 0) {

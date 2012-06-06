@@ -32,15 +32,15 @@ int help(void)
 		"    wait     <nr_replies>\n"
 		"    complete <nr_requests>\n"
 		"    fail     <nr_requests>\n"
-		"    rndwrite <nr_loops> <seed> <namesize> <datasize> <objectsize>\n"
-		"    rndread  <nr_loops> <seed> <namesize> <datasize> <objectsize>\n"
-		"    info     <name>\n"
-		"    read     <name> <offset> <size>\n"
-		"    write    <name> <offset> < data\n"
-		"    truncate <name> <size>\n"
-		"    delete   <name>\n"
-		"    acquire  <name>\n"
-		"    release  <name>\n"
+		"    rndwrite <nr_loops> <seed> <targetlen> <datalen> <objectsize>\n"
+		"    rndread  <nr_loops> <seed> <targetlen> <datalen> <objectsize>\n"
+		"    info     <target>\n"
+		"    read     <target> <offset> <size>\n"
+		"    write    <target> <offset> < data\n"
+		"    truncate <target> <size>\n"
+		"    delete   <target>\n"
+		"    acquire  <target>\n"
+		"    release  <target>\n"
 		"    copy     <src>  <dst>\n"
 		"    clone    <src>  <dst>\n"
 	);
@@ -60,11 +60,11 @@ struct timval *tv;
  * ./xseg-tool random 100000 | cut -d' ' -f2- | sort | uniq -d -c |wc -l
  */
 
-void mkname_heavy(char *name, uint32_t namesize, uint32_t seed)
+void mkname_heavy(char *name, uint32_t namelen, uint32_t seed)
 {
 	int i;
 	char c;
-	for (i = 0; i < namesize; i += 1) {
+	for (i = 0; i < namelen; i += 1) {
 		c = seed + (seed >> 8) + (seed >> 16) + (seed >> 24);
 		c = '0' + ((c + (c >> 4)) & 0xf);
 		if (c > '9')
@@ -74,11 +74,11 @@ void mkname_heavy(char *name, uint32_t namesize, uint32_t seed)
 	}
 }
 
-void mkname_light(char *name, uint32_t namesize, uint32_t seed)
+void mkname_light(char *name, uint32_t namelen, uint32_t seed)
 {
 	int i;
 	char c;
-	for (i = 0; i < namesize; i += 1) {
+	for (i = 0; i < namelen; i += 1) {
 		c = seed;
 		name[i] = 'A' + (c & 0xf);
 		seed += 1;
@@ -90,38 +90,38 @@ uint64_t pick(uint64_t size)
 	return (uint64_t)((double)(RAND_MAX) / random());
 }
 
-void mkchunk(	char *chunk, uint32_t datasize,
-		char *name, uint32_t namesize, uint64_t offset)
+void mkchunk(	char *chunk, uint32_t datalen,
+		char *target, uint32_t targetlen, uint64_t offset)
 {
-	long i, r, bufsize = namesize + 16;
+	long i, r, bufsize = targetlen + 16;
 	char buf[bufsize];
-	r = datasize % bufsize;
-	snprintf(buf, bufsize, "%016llx%s", (unsigned long long)offset, name);
+	r = datalen % bufsize;
+	snprintf(buf, bufsize, "%016llx%s", (unsigned long long)offset, target);
 
-	for (i = 0; i <= (long)datasize - bufsize; i += bufsize)
+	for (i = 0; i <= (long)datalen - bufsize; i += bufsize)
 		memcpy(chunk + i, buf, bufsize);
 
-	memcpy(chunk + datasize - r, buf, r);
+	memcpy(chunk + datalen - r, buf, r);
 }
 
-int chkchunk(	char *chunk, uint32_t datasize,
-		char *name, uint32_t namesize, uint64_t offset)
+int chkchunk(	char *chunk, uint32_t datalen,
+		char *target, uint32_t targetlen, uint64_t offset)
 {
 	long i, r;
-	int bufsize = namesize + 16;
+	int bufsize = targetlen + 16;
 	char buf[bufsize];
-	r = datasize % namesize;
-	snprintf(buf, bufsize, "%016llx%s", (unsigned long long)offset, name);
+	r = datalen % targetlen;
+	snprintf(buf, bufsize, "%016llx%s", (unsigned long long)offset, target);
 
-	for (i = 0; i <= (long)datasize - bufsize; i += bufsize)
+	for (i = 0; i <= (long)datalen - bufsize; i += bufsize)
 		if (memcmp(chunk + i, buf, bufsize)) {
 			/*printf("mismatch: '%*s'* vs '%*s'\n",
-				bufsize, buf, datasize, chunk);
+				bufsize, buf, datalen, chunk);
 			*/
 			return 0;
 		}
 
-	if (memcmp(chunk + datasize - r, buf, r))
+	if (memcmp(chunk + datalen - r, buf, r))
 		return 0;
 
 	return 1;
@@ -181,7 +181,7 @@ out:
 
 void report_request(struct xseg_request *req)
 {
-	uint32_t max = req->datasize;
+	uint32_t max = req->datalen;
 	if (max > 128)
 		max = 128;
 	req->data[max-1] = 0;
@@ -189,9 +189,9 @@ void report_request(struct xseg_request *req)
 	fprintf(stderr, "data: %s\n", req->data);
 }
 
-int cmd_info(char *name)
+int cmd_info(char *target)
 {
-	uint32_t namesize = strlen(name);
+	uint32_t targetlen = strlen(target);
 	size_t size = sizeof(uint64_t);
 	int r;
 	xserial srl;
@@ -203,15 +203,15 @@ int cmd_info(char *name)
 		return -1;
 	}
 
-	r = xseg_prep_request(req, namesize, size);
+	r = xseg_prep_request(req, targetlen, size);
 	if (r < 0) {
 		fprintf(stderr, "Cannot prepare request! (%lu, %lu)\n",
-			(unsigned long) namesize, (unsigned long) size);
+			(unsigned long) targetlen, (unsigned long) size);
 		xseg_put_request(xseg, srcport, req);
 		return -1;
 	}
 
-	strncpy(req->name, name, namesize);
+	strncpy(req->target, target, targetlen);
 	req->offset = 0;
 	req->size = size;
 	req->op = X_INFO;
@@ -225,9 +225,9 @@ int cmd_info(char *name)
 	return 0;
 }
 
-int cmd_read(char *name, uint64_t offset, uint64_t size)
+int cmd_read(char *target, uint64_t offset, uint64_t size)
 {
-	uint32_t namesize = strlen(name);
+	uint32_t targetlen = strlen(target);
 	int r;
 	xserial srl;
 	struct xseg_request *req = xseg_get_request(xseg, srcport);
@@ -236,15 +236,15 @@ int cmd_read(char *name, uint64_t offset, uint64_t size)
 		return -1;
 	}
 
-	r = xseg_prep_request(req, namesize, size);
+	r = xseg_prep_request(req, targetlen, size);
 	if (r < 0) {
 		fprintf(stderr, "Cannot prepare request! (%lu, %llu)\n",
-			(unsigned long)namesize, (unsigned long long)size);
+			(unsigned long)targetlen, (unsigned long long)size);
 		xseg_put_request(xseg, srcport, req);
 		return -1;
 	}
 
-	strncpy(req->name, name, namesize);
+	strncpy(req->target, target, targetlen);
 	req->offset = offset;
 	req->size = size;
 	req->op = X_READ;
@@ -257,13 +257,13 @@ int cmd_read(char *name, uint64_t offset, uint64_t size)
 	return 0;
 }
 
-int cmd_write(char *name, uint64_t offset)
+int cmd_write(char *target, uint64_t offset)
 {
 	char *buf = NULL;
 	int r;
 	xserial srl;
 	uint64_t size = 0;
-	uint32_t namesize = strlen(name);
+	uint32_t targetlen = strlen(target);
 	struct xseg_request *req;
 
 	inputbuf(stdin, &buf, &size);
@@ -278,15 +278,15 @@ int cmd_write(char *name, uint64_t offset)
 		return -1;
 	}
 
-	r = xseg_prep_request(req, namesize, size);
+	r = xseg_prep_request(req, targetlen, size);
 	if (r < 0) {
 		fprintf(stderr, "Cannot prepare request! (%lu, %llu)\n",
-			(unsigned long)namesize, (unsigned long long)size);
+			(unsigned long)targetlen, (unsigned long long)size);
 		xseg_put_request(xseg, srcport, req);
 		return -1;
 	}
 
-	strncpy(req->name, name, namesize);
+	strncpy(req->target, target, targetlen);
 	memcpy(req->buffer, buf, size);
 	req->offset = offset;
 	req->size = size;
@@ -301,22 +301,22 @@ int cmd_write(char *name, uint64_t offset)
 	return 0;
 }
 
-int cmd_truncate(char *name, uint64_t offset)
+int cmd_truncate(char *target, uint64_t offset)
 {
 	return 0;
 }
 
-int cmd_delete(char *name)
+int cmd_delete(char *target)
 {
 	return 0;
 }
 
-int cmd_acquire(char *name)
+int cmd_acquire(char *target)
 {
 	return 0;
 }
 
-int cmd_release(char *name)
+int cmd_release(char *target)
 {
 	return 0;
 }
@@ -334,31 +334,31 @@ int cmd_clone(char *src, char *dst)
 void log_req(int logfd, uint32_t portno2, uint32_t portno1, int op, int method,
 		struct xseg_request *req)
 {
-	char name[64], data[64];
-	/* null terminate name in case of req->name is less than 63 characters,
+	char target[64], data[64];
+	/* null terminate name in case of req->target is less than 63 characters,
 	 * and next character after name (aka first byte of next buffer) is not
 	 * null
 	 */
-	unsigned int end = (req->namesize > 63) ? 63 : req->namesize;
+	unsigned int end = (req->targetlen > 63) ? 63 : req->targetlen;
 
 	switch(method) {
 	case 0:
-		strncpy(name, req->name, end);
-		name[end] = 0;
+		strncpy(target, req->target, end);
+		target[end] = 0;
 		strncpy(data, req->data, 63);
 		data[63] = 0;
 
 		fprintf(logfd,
 			"src port: %u, dst port: %u,  op:%u offset: %llu size: %lu, reqstate: %u\n"
-			"name[%u]: '%s', data[%llu]:\n%s------------------\n\n",
+			"target[%u]: '%s', data[%llu]:\n%s------------------\n\n",
 			(unsigned int)portno1,
 			(unsigned int)portno2,
 			(unsigned int)req->op,
 			(unsigned long long)req->offset,
 			(unsigned long)req->size,
 			(unsigned int)req->state,
-			(unsigned int)req->namesize, name,
-			(unsigned long long)req->datasize, data);
+			(unsigned int)req->targetlen, target,
+			(unsigned long long)req->datalen, data);
 		break;
 	case 1:
 		fprintf(logfd,
@@ -457,17 +457,17 @@ int cmd_bridge(uint32_t portno1, uint32_t portno2, char *logfile, char *how)
 	return 0;
 }
 
-int cmd_rndwrite(long loops, int32_t seed, uint32_t namesize, uint32_t chunksize, uint64_t size)
+int cmd_rndwrite(long loops, int32_t seed, uint32_t targetlen, uint32_t chunksize, uint64_t size)
 {
 	if (loops < 0)
 		return help();
 
-	if (namesize >= chunksize) {
-		fprintf(stderr, "namesize >= chunksize\n");
+	if (targetlen >= chunksize) {
+		fprintf(stderr, "targetlen >= chunksize\n");
 		return -1;
 	}
 
-	char *p = realloc(namebuf, namesize+1);
+	char *p = realloc(namebuf, targetlen+1);
 	if (!p) {
 		fprintf(stderr, "Cannot allocate memory\n");
 		return -1;
@@ -495,10 +495,10 @@ int cmd_rndwrite(long loops, int32_t seed, uint32_t namesize, uint32_t chunksize
 		if (nr_submitted < loops &&
 		    (submitted = xseg_get_request(xseg, srcport))) {
 			xseg_cancel_wait(xseg, srcport);
-			r = xseg_prep_request(submitted, namesize, chunksize);
+			r = xseg_prep_request(submitted, targetlen, chunksize);
 			if (r < 0) {
 				fprintf(stderr, "Cannot prepare request! (%u, %u)\n",
-					namesize, chunksize);
+					targetlen, chunksize);
 				xseg_put_request(xseg, submitted->portno, submitted);
 				return -1;
 			}
@@ -506,12 +506,12 @@ int cmd_rndwrite(long loops, int32_t seed, uint32_t namesize, uint32_t chunksize
 			nr_submitted += 1;
 			reported = 0;
 			seed = random();
-			mkname(namebuf, namesize, seed);
-			namebuf[namesize] = 0;
+			mkname(namebuf, targetlen, seed);
+			namebuf[targetlen] = 0;
 			//printf("%ld: %s\n", nr_submitted, namebuf);
-			strncpy(submitted->name, namebuf, namesize);
+			strncpy(submitted->target, namebuf, targetlen);
 			offset = 0;// pick(size);
-			mkchunk(submitted->buffer, chunksize, namebuf, namesize, offset);
+			mkchunk(submitted->buffer, chunksize, namebuf, targetlen, offset);
 
 			submitted->offset = offset;
 			submitted->size = chunksize;
@@ -558,17 +558,17 @@ int cmd_rndwrite(long loops, int32_t seed, uint32_t namesize, uint32_t chunksize
  * files are converted to independent chunk access patterns,
 */
 
-int cmd_rndread(long loops, int32_t seed, uint32_t namesize, uint32_t chunksize, uint64_t size)
+int cmd_rndread(long loops, int32_t seed, uint32_t targetlen, uint32_t chunksize, uint64_t size)
 {
 	if (loops < 0)
 		return help();
 
-	if (namesize >= chunksize) {
-		fprintf(stderr, "namesize >= chunksize\n");
+	if (targetlen >= chunksize) {
+		fprintf(stderr, "targetlen >= chunksize\n");
 		return -1;
 	}
 
-	char *p = realloc(namebuf, namesize+1);
+	char *p = realloc(namebuf, targetlen+1);
 	if (!p) {
 		fprintf(stderr, "Cannot allocate memory\n");
 		return -1;
@@ -597,10 +597,10 @@ int cmd_rndread(long loops, int32_t seed, uint32_t namesize, uint32_t chunksize,
 		if (nr_submitted < loops &&
 		    (submitted = xseg_get_request(xseg, srcport))) {
 			xseg_cancel_wait(xseg, srcport);
-			r = xseg_prep_request(submitted, namesize, chunksize);
+			r = xseg_prep_request(submitted, targetlen, chunksize);
 			if (r < 0) {
 				fprintf(stderr, "Cannot prepare request! (%u, %u)\n",
-					namesize, chunksize);
+					targetlen, chunksize);
 				xseg_put_request(xseg, submitted->portno, submitted);
 				return -1;
 			}
@@ -608,12 +608,12 @@ int cmd_rndread(long loops, int32_t seed, uint32_t namesize, uint32_t chunksize,
 			nr_submitted += 1;
 			reported = 0;
 			seed = random();
-			mkname(namebuf, namesize, seed);
-			namebuf[namesize] = 0;
+			mkname(namebuf, targetlen, seed);
+			namebuf[targetlen] = 0;
 			//printf("%ld: %s\n", nr_submitted, namebuf);
 			offset = 0;//pick(size);
 
-			strncpy(submitted->name, namebuf, namesize);
+			strncpy(submitted->target, namebuf, targetlen);
 			submitted->offset = offset;
 			submitted->size = chunksize;
 			submitted->op = X_READ;
@@ -630,8 +630,8 @@ int cmd_rndread(long loops, int32_t seed, uint32_t namesize, uint32_t chunksize,
 			if (!(received->state & XS_SERVED)) {
 				nr_failed += 1;
 				report_request(received);
-			} else if (!chkchunk(received->data, received->datasize,
-					received->name, received->namesize, received->offset)) {
+			} else if (!chkchunk(received->data, received->datalen,
+					received->target, received->targetlen, received->offset)) {
 				nr_mismatch += 1;
 			}
 
@@ -777,7 +777,7 @@ void handle_reply(struct xseg_request *req)
 
 	switch (req->op) {
 	case X_READ:
-		fwrite(req->data, 1, req->datasize, stdout);
+		fwrite(req->data, 1, req->datalen, stdout);
 		break;
 
 	case X_WRITE:
@@ -843,7 +843,7 @@ int cmd_put_replies(void)
 			req->state);
 		report_request(req);
 
-		//fwrite(req->buffer, 1, req->buffersize, stdout);
+		//fwrite(req->buffer, 1, req->bufferlen, stdout);
 
 		if (xseg_put_request(xseg, req->portno, req))
 			fprintf(stderr, "Cannot put reply\n");
@@ -1036,10 +1036,10 @@ int main(int argc, char **argv)
 		if (!strcmp(argv[i], "rndwrite") && (i + 5 < argc)) {
 			long nr_loops = atol(argv[i+1]);
 			unsigned int seed = atoi(argv[i+2]);
-			unsigned int namesize = atoi(argv[i+3]);
+			unsigned int targetlen = atoi(argv[i+3]);
 			unsigned int chunksize = atoi(argv[i+4]);
 			unsigned long objectsize = atol(argv[i+5]);
-			ret = cmd_rndwrite(nr_loops, seed, namesize, chunksize, objectsize);
+			ret = cmd_rndwrite(nr_loops, seed, targetlen, chunksize, objectsize);
 			i += 5;
 			continue;
 		}
@@ -1047,56 +1047,56 @@ int main(int argc, char **argv)
 		if (!strcmp(argv[i], "rndread") && (i + 5 < argc)) {
 			long nr_loops = atol(argv[i+1]);
 			unsigned int seed = atoi(argv[i+2]);
-			unsigned int namesize = atoi(argv[i+3]);
+			unsigned int targetlen = atoi(argv[i+3]);
 			unsigned int chunksize = atoi(argv[i+4]);
 			unsigned long objectsize = atol(argv[i+5]);
-			ret = cmd_rndread(nr_loops, seed, namesize, chunksize, objectsize);
+			ret = cmd_rndread(nr_loops, seed, targetlen, chunksize, objectsize);
 			i += 5;
 			continue;
 		}
 
 		if (!strcmp(argv[i], "read") && (i + 3 < argc)) {
-			char *name = argv[i+1];
+			char *target = argv[i+1];
 			uint64_t offset = atol(argv[i+2]);
 			uint64_t size   = atol(argv[i+3]);
-			ret = cmd_read(name, offset, size);
+			ret = cmd_read(target, offset, size);
 			i += 3;
 			continue;
 		}
 
 		if (!strcmp(argv[i], "write") && (i + 2 < argc)) {
-			char *name = argv[i+1];
+			char *target = argv[i+1];
 			uint64_t offset = atol(argv[i+2]);
-			ret = cmd_write(name, offset);
+			ret = cmd_write(target, offset);
 			i += 2;
 			continue;
 		}
 
 		if (!strcmp(argv[i], "truncate") && (i + 2 < argc)) {
-			char *name = argv[i+1];
+			char *target = argv[i+1];
 			uint64_t offset = atol(argv[i+2]);
-			ret = cmd_truncate(name, offset);
+			ret = cmd_truncate(target, offset);
 			i += 2;
 			continue;
 		}
 
 		if (!strcmp(argv[i], "delete") && (i + 1 < argc)) {
-			char *name = argv[i+1];
-			ret = cmd_delete(name);
+			char *target = argv[i+1];
+			ret = cmd_delete(target);
 			i += 1;
 			continue;
 		}
 
 		if (!strcmp(argv[i], "acquire") && (i + 1 < argc)) {
-			char *name = argv[i+1];
-			ret = cmd_acquire(name);
+			char *target = argv[i+1];
+			ret = cmd_acquire(target);
 			i += 1;
 			continue;
 		}
 
 		if (!strcmp(argv[i], "release") && (i + 1 < argc)) {
-			char *name = argv[i+1];
-			ret = cmd_release(name);
+			char *target = argv[i+1];
+			ret = cmd_release(target);
 			i += 1;
 			continue;
 		}
@@ -1118,8 +1118,8 @@ int main(int argc, char **argv)
 		}
 
 		if (!strcmp(argv[i], "info") && (i + 1 < argc)) {
-			char *name = argv[i+1];
-			ret = cmd_info(name);
+			char *target = argv[i+1];
+			ret = cmd_info(target);
 			i += 1;
 			continue;
 		}
