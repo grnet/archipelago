@@ -285,10 +285,6 @@ static void xsegbd_dev_release(struct device *dev)
 	if (xseg_free_requests(xsegbd.xseg, xsegbd_dev->src_portno, xsegbd_dev->nr_requests) != 0)
 		XSEGLOG("Error trying to free requests!\n");
 
-		if (xseg_free_requests(xsegbd.xseg, xsegbd_dev->src_portno, xsegbd_dev->nr_requests) != 0)
-			XSEGLOG("Error trying to free requests!\n");
-	}
-	
 	WARN_ON(nr_pending < xsegbd_dev->nr_requests);
 	spin_lock_irq(&__lock);
 	nr_pending -= xsegbd_dev->nr_requests;
