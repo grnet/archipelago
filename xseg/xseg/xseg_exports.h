@@ -1,4 +1,5 @@
 EXPORT_SYMBOL(xseg_initialize);
+EXPORT_SYMBOL(xseg_finalize);
 EXPORT_SYMBOL(xseg_parse_spec);
 EXPORT_SYMBOL(xseg_register_type);
 EXPORT_SYMBOL(xseg_unregister_type);
