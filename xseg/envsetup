@@ -45,8 +45,10 @@ if [ "$1" = "show" ]; then
 	echo "export PATH="${PATH}
 	echo "export LD_LIBRARY_PATH="${LD_LIBRARY_PATH}
 else
-	[ -z "$SHELL" ] && SHELL=/bin/bash
+	if [ -z "${NONINTERACTIVE}" ]; then
+		[ -z "$SHELL" ] && SHELL=/bin/bash
 
-	selfname=$(basename -- "${0}")
-	[ "$selfname" = "envsetup" ] && exec "$SHELL"
+		selfname=$(basename -- "${0}")
+		[ "$selfname" = "envsetup" ] && exec "$SHELL"
+	fi
 fi
