@@ -85,8 +85,11 @@ static struct xseg_peer *__get_peer_type(struct xseg *xseg, uint32_t serial)
 	struct xseg_private *priv = xseg->priv;
 	char (*shared_peer_types)[XSEG_TNAMESIZE];
 
-	if (serial >= xseg->max_peer_types) 
+	if (serial >= xseg->max_peer_types) {
+		XSEGLOG("invalid peer type serial %d >= %d\n",
+			 serial, xseg->max_peer_types);
 		return NULL;
+	}
 
 	type = priv->peer_types[serial];
 	if (type)
@@ -97,10 +100,15 @@ static struct xseg_peer *__get_peer_type(struct xseg *xseg, uint32_t serial)
 	 * without either locking or string copying. */
 	shared_peer_types = XSEG_TAKE_PTR(xseg->shared->peer_types, xseg->segment);
 	name = shared_peer_types[serial];
-	if (!*name)
+	if (!*name) {
+		XSEGLOG("nonexistent peer type serial %d\n", serial);
 		return NULL;
+	}
 
 	type = __find_or_load_peer_type(name);
+	if (!type)
+		XSEGLOG("could not find driver for peer type %d [%s]\n",
+			 serial, name);
 
 	priv->peer_types[serial] = type;
 	return type;
