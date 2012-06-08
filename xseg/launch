@@ -1,0 +1,163 @@
+#!/bin/bash
+#
+# Launcher for xseg configurations
+
+NI_SAVED=${NONINTERACTIVE}
+export NONINTERACTIVE=1
+source envsetup
+export NONINTERACTIVE=${NI_SAVED}
+
+function pretty_print {
+	echo "======================="
+	echo "$1"
+	echo "======================="
+}
+
+function fail {
+	echo "${1}"
+	exit 1
+}
+
+function parse_config {
+	[ -e ~/.xsegrc ] && source ~/.xsegrc
+
+	[ -z "${HOSTNAME}" ] && HOSTNAME=`hostname`
+	[ -z "${XSEG_HOME}" ] && XSEG_HOME="/root/archip/xseg"
+	[ -z "${MODULES_DIR}" ] && MODULES_DIR="${XSEG_HOME}/lib/kernel"
+	#type:name:nr_ports:nr_requests:request_size:extra_size:page_shift
+	[ -z "${SPEC}" ] && SPEC="segdev:xsegbd:16:512:32:1024:12"
+	[ -z "${REQS}" ] && REQS=512
+	[ -z "${PORTS}" ] && PORTS=16
+	[ -z "${IMAGES}" ] && IMAGES="/srv/archip/images"
+	[ -z "${XSEG_LOGS}" ] && BLOCKD_LOGS="/srv/archip/logs"
+	[ -z "${DEVICE_PREFIX}" ] && DEVICE_PREFIX="/dev/xsegbd"
+	[ -z "${XSEGBD_SYSFS}" ] && XSEGBD_SYSFS="/sys/bus/xsegbd"
+	[ -z "${CHRDEV_NAME}" ] && CHRDEV_NAME=/dev/`cat /proc/devices | grep segdev | awk '{print $2}'`
+	[ "${CHRDEV_NAME}" = "/dev/" ] && CHRDEV_NAME="/dev/segdev"
+	[ -z "${CHRDEV_MAJOR}" ] && CHRDEV_MAJOR=`cat /proc/devices | grep segdev | awk '{print $1}'`
+	[ -z "${CHRDEV_MAJOR}" ] && CHRDEV_MAJOR=60
+	[ -z "${NR_OPS}" ] && NR_OPS=16
+}
+
+function unload_module {
+	rmmod "$1"
+}
+
+function unload_all {
+	unload_module "xsegbd"
+	rm "${CHRDEV_NAME}" || true
+	unload_module "xseg_segdev"
+	unload_module "xseg_posix"
+	unload_module "segdev"
+	unload_module "xseg"
+}
+
+function load_module {
+	(lsmod | grep "$1" > /dev/null) || insmod "${MODULES_DIR}/$1.ko" "$2" || exit 1
+}
+
+function mk_chardev {
+	ls "${CHRDEV_NAME}" &> /dev/null || \
+	mknod "${CHRDEV_NAME}" c "${CHRDEV_MAJOR}" 0 || exit 1
+}
+
+function load_all {
+	load_module "xseg"
+	load_module "segdev"
+	load_module "xseg_posix"
+	load_module "xseg_segdev"
+	mk_chardev
+        "${XSEG_HOME}/peers/user/xseg" "${SPEC}" create
+	load_module "xsegbd" "spec=$SPEC"
+}
+
+# spawn_filed - Spawn a filed instance
+#
+# @param $1		root directory	
+# @param $2		xseg port
+
+function spawn_filed {
+	"${XSEG_HOME}/peers/user/filed" "$1" -p "$2" -g "${SPEC}" -n ${NR_OPS} &> "${XSEG_LOGS}/filed-${HOSTNAME}" &
+}
+
+# map_volume - Map a volume to an xsegbd device
+#
+# @param $1		target/volume name
+# @param $2		src port
+# @param $3		dst port
+function map_volume {
+	echo "$1 $2:$3:${REQS}" > "${XSEGBD_SYSFS}/add" || exit 1
+}
+
+# unmap_device - Unmap an xsegbd device/volume
+#
+# @param $1		xsegbd device id
+function unmap_device {
+	echo "$1" > "${XSEGBD_SYSFS}/remove" || exit 1
+}
+
+function help {
+	echo "Usage: ./launch [list | <configuration> [start | stop] | insmod | rmmod]"
+}
+
+if [ -n "$NONINTERACTIVE" ]; then
+	exit 0
+fi
+
+parse_config
+
+case $1 in
+list)
+	echo "filed [start|stop]"
+	echo " "
+	echo "insmod"
+	echo "rmmod"
+	;;
+insmod)
+	load_all
+	mk_chardev
+	;;
+rmmod)
+	rm ${CHRDEV_NAME}
+	unload_all
+	;;
+config)
+	echo "HOSTNAME=${HOSTNAME}"
+	echo "XSEG_HOME=${XSEG_HOME}"
+	echo "MODULES_DIR=${MODULES_DIR}"
+	echo "SPEC=${SPEC}"
+	echo "REQS=${REQS}"
+	echo "PORTS=${PORTS}"
+	echo "IMAGES=${IMAGES}"
+	echo "XSEG_LOGS=${XSEG_LOGS}"
+	echo "DEVICE_PREFIX=${DEVICE_PREFIX}"
+	echo "XSEGBD_SYSFS=${XSEGBD_SYSFS}"
+	echo "CHRDEV_NAME=${CHRDEV_NAME}"
+	echo "CHRDEV_MAJOR=${CHRDEV_MAJOR}"
+	echo "NR_OPS=${NR_OPS}"
+	;;
+filed)
+	case $2 in
+	start)
+		mk_chardev
+		load_all
+		spawn_filed ${IMAGES} 1
+		map_volume xsegvol 0 1
+		;;
+	stop)
+		pkill -f peers/user/filed
+		sleep 0.5
+		unmap_device 0
+		rm ${CHRDEV_NAME}
+		unload_all
+		;;
+	*)
+		help
+		;;
+	esac
+	;;
+*)
+	help
+	;;
+esac
+
