@@ -10,25 +10,25 @@
 #include <sys/time.h>
 
 #include <sys/domain.h>
-#include <xq/domain.h>
+#include <xtypes/domain.h>
 #include <xseg/domain.h>
 
-#include <xq/xq_lock.h>
+#include <xtypes/xlock.h>
 
 int (*xseg_snprintf)(char *str, size_t size, const char *format, ...) = snprintf;
 
 char __xseg_errbuf[4096];
 
-static struct xq_lock __lock;
+static struct xlock __lock;
 
 void __lock_domain(void)
 {
-	(void)xq_acquire(&__lock, 1);
+	(void)xlock_acquire(&__lock, 1);
 }
 
 void __unlock_domain(void)
 {
-	xq_release(&__lock);
+	xlock_release(&__lock);
 }
 
 void __load_plugin(const char *name)
@@ -70,12 +70,12 @@ void __xseg_log(const char *msg)
 	(void)puts(msg);
 }
 
-void *xq_malloc(unsigned long size)
+void *xtypes_malloc(unsigned long size)
 {
 	return malloc(size);
 }
 
-void xq_mfree(void *ptr)
+void xtypes_free(void *ptr)
 {
 	free(ptr);
 }

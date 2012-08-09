@@ -2,8 +2,8 @@
 #define __PHASH_H__
 
 #include <stdbool.h>
-#include "xseg_util.h"
-
+#include <sys/util.h>
+#include <xtypes/domain.h>
 /* based on: 
  *
  * python hash for C

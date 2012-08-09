@@ -21,7 +21,7 @@ COMMA=,
 _initialize.c: drivers
 	$(BASE)/tools/create_initializer $(DRIVERS) > _initialize.c
 
-xseg.o: $(BASE)/xseg/xseg.c $(BASE)/xseg/xseg.h $(BASE)/xq/xq.h
+xseg.o: $(BASE)/xseg/xseg.c $(BASE)/xseg/xseg.h $(BASE)/xtypes/xq.h
 	$(CC) $(CFLAGS) $(INC) -c -o $@ $<
 
 xseg.pic.o: $(BASE)/xseg/xseg.c $(BASE)/xseg/xseg.h _initialize.c
@@ -44,18 +44,30 @@ xq/xq.o:
 xq/xq.pic.o:
 	make -C xq xq.pic.o
 
+xpool/xpool.o:
+	make -C xpool xpool.o
+
+xpool/xpool.pic.o:
+	make -C xpool xpool.pic.o
+
+xhash/xhash.o:
+	make -C xhash xhash.o
+
+xhash/xhash.pic.o:
+	make -C xhash xhash.pic.o
 xseg_user.o: xseg_user.c
 	$(CC) $(CFLAGS) $(INC) -Wall -O2 -finline-functions -fPIC -c -o $@ $<
 
-libxseg.map: $(BASE)/xq/xq_exports.h $(BASE)/xseg/xseg_exports.h
-	cat $(BASE)/xq/xq_exports.h $(BASE)/xseg/xseg_exports.h | ./make_symbol_map.sh > $@
+libxseg.map: $(BASE)/xtypes/xq_exports.h $(BASE)/xseg/xseg_exports.h
+	cat $(BASE)/xtypes/xq_exports.h $(BASE)/xseg/xseg_exports.h | ./make_symbol_map.sh > $@
 
 libxseg.so.$(MAJOR).$(MINOR): xseg.pic.o xseg_user.o libxseg.map \
-				 xq/xq.pic.o $(DRVOBJS)
+				 xq/xq.pic.o xpool/xpool.pic.o xhash/xhash.pic.o $(DRVOBJS)
 	$(CC) $(CFLAGS) -shared \
                         -Wl,-soname=libxseg.so.$(MAJOR) \
                         -o libxseg.so.$(MAJOR).$(MINOR) \
                         xseg.pic.o xseg_user.o xq/xq.pic.o \
+			xpool/xpool.pic.o xhash/xhash.pic.o\
 			 _initialize.o $(DRVOBJS) \
                         -Wl,--version-script=libxseg.map \
                         -ldl -lrt
@@ -67,6 +79,8 @@ libxseg.a: xseg.o xq/xq.o drivers _initialize.o
 
 clean:
 	make -C xq clean
+	make -C xpool clean
+	make -C xhash clean
 	make -C python clean
 	rm -f _initialize.c _initialize.o
 	rm -f xseg.o xseg.pic.o xseg_user.o

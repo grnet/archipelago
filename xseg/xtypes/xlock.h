@@ -1,5 +1,5 @@
-#ifndef _XQ_LOCK_H
-#define _XQ_LOCK_H
+#ifndef _XLOCK_H
+#define _XLOCK_H
 
 #define MFENCE() __sync_synchronize()
 #define BARRIER() __asm__ __volatile__ ("" ::: "memory")
@@ -9,11 +9,11 @@
 
 #define Noone ((unsigned long)-1)
 
-struct xq_lock {
+struct xlock {
 	long owner;
 } __attribute__ ((aligned (16))); /* support up to 128bit longs */
 
-static inline unsigned long xq_acquire(struct xq_lock *lock, unsigned long who)
+static inline unsigned long xlock_acquire(struct xlock *lock, unsigned long who)
 {
 	for (;;) {
 		for (; *(volatile unsigned long *)(&lock->owner) != Noone; )
@@ -26,12 +26,12 @@ static inline unsigned long xq_acquire(struct xq_lock *lock, unsigned long who)
 	return who;
 }
 
-static inline void xq_release(struct xq_lock *lock)
+static inline void xlock_release(struct xlock *lock)
 {
 	lock->owner = Noone;
 }
 
-static inline unsigned long xq_get_owner(struct xq_lock *lock)
+static inline unsigned long xlock_get_owner(struct xlock *lock)
 {
 	return *(volatile unsigned long *)(&lock->owner);
 }

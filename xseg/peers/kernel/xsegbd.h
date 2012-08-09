@@ -9,7 +9,7 @@
 #include <linux/kernel.h>
 #include <linux/types.h>
 #include <xseg/xseg.h>
-#include <xq/xq.h>
+#include <xtypes/xq.h>
 
 struct xsegbd {
 	char name[XSEGBD_SEGMENT_NAMELEN];

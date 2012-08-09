@@ -796,7 +796,7 @@ int xseg_alloc_requests(struct xseg *xseg, uint32_t portno, uint32_t nr)
 		return -1;
 
 	port = &xseg->ports[portno];
-	return xq_head_to_tail(xseg->free_requests, &port->free_queue, nr);
+	return xq_head_to_tail(xseg->free_requests, &port->free_queue, nr, portno);
 }
 
 int xseg_free_requests(struct xseg *xseg, uint32_t portno, int nr)
@@ -806,7 +806,7 @@ int xseg_free_requests(struct xseg *xseg, uint32_t portno, int nr)
 		return -1;
 
 	port = &xseg->ports[portno];
-	return xq_head_to_tail(&port->free_queue, xseg->free_requests, nr);
+	return xq_head_to_tail(&port->free_queue, xseg->free_requests, nr, portno);
 }
 
 struct xseg_request *xseg_get_request(struct xseg *xseg, uint32_t portno)
@@ -818,7 +818,7 @@ struct xseg_request *xseg_get_request(struct xseg *xseg, uint32_t portno)
 		return NULL;
 
 	port = &xseg->ports[portno];
-	xqi = xq_pop_head(&port->free_queue);
+	xqi = xq_pop_head(&port->free_queue, portno);
 	if (xqi == Noneidx)
 		return NULL;
 
@@ -849,7 +849,7 @@ int xseg_put_request (  struct xseg *xseg,
 		__unlock_segment(xseg);
 	}
 
-	return xq_append_head(&xseg->ports[portno].free_queue, xqi) == Noneidx;
+	return xq_append_head(&xseg->ports[portno].free_queue, xqi, portno) == Noneidx;
 }
 
 int xseg_prep_request ( struct xseg_request *req,
@@ -895,7 +895,7 @@ xserial xseg_submit (	struct xseg *xseg, uint32_t portno,
 
 	port = &xseg->ports[portno];
 	xqi = xreq - xseg->requests;
-	serial = xq_append_tail(&port->request_queue, xqi);
+	serial = xq_append_tail(&port->request_queue, xqi, portno);
 out:
 	return serial;
 }
@@ -908,7 +908,7 @@ struct xseg_request *xseg_receive(struct xseg *xseg, uint32_t portno)
 		return NULL;
 
 	port = &xseg->ports[portno];
-	xqi = xq_pop_head(&port->reply_queue);
+	xqi = xq_pop_head(&port->reply_queue, portno);
 	if (xqi == Noneidx)
 		return NULL;
 
@@ -925,7 +925,7 @@ struct xseg_request *xseg_accept(struct xseg *xseg, uint32_t portno)
 		return NULL;
 
 	port = &xseg->ports[portno];
-	xqi = xq_pop_head(&port->request_queue);
+	xqi = xq_pop_head(&port->request_queue, portno);
 	if (xqi == Noneidx)
 		return NULL;
 
@@ -943,7 +943,7 @@ xserial xseg_respond (  struct xseg *xseg, uint32_t portno,
 
 	port = &xseg->ports[portno];
 	xqi = xreq - xseg->requests;
-	serial = xq_append_tail(&port->reply_queue, xqi);
+	serial = xq_append_tail(&port->reply_queue, xqi, portno);
 out:
 	return serial;
 }

@@ -11,18 +11,18 @@ all: xq.o xq.pic.o xq_test xq_lock_test
 $(BASE)/sys/user/xseg_user.o:
 	make -C $(BASE)/sys/user xseg_user.o
 
-xq_test: $(BASE)/xq/xq_test.c xq.o $(BASE)/sys/user/xseg_user.o
+xq_test: $(BASE)/xtypes/xq_test.c xq.o $(BASE)/sys/user/xseg_user.o
 	$(CC) $(CFLAGS) $(INC) -L$(LIB) -o $@ $< xq.o \
 	$(BASE)/sys/user/xseg_user.o -lrt -lm -ldl -lpthread
 
-xq_lock_test: $(BASE)/xq/xq_lock_test.c xq.o $(BASE)/sys/user/xseg_user.o
+xq_lock_test: $(BASE)/xtypes/xq_lock_test.c xq.o $(BASE)/sys/user/xseg_user.o
 	$(CC) $(CFLAGS) $(INC) -L$(LIB) -o $@ $< xq.o \
 	$(BASE)/sys/user/xseg_user.o -lrt -lm -ldl -lpthread
 
-xq.o: $(BASE)/xq/xq.c $(BASE)/xq/xq.h $(BASE)/xq/xq_lock.h
+xq.o: $(BASE)/xtypes/xq.c $(BASE)/xtypes/xq.h $(BASE)/xtypes/xlock.h
 	$(CC) $(CFLAGS) $(INC) -c -o $@ $<
 
-xq.pic.o: $(BASE)/xq/xq.c $(BASE)/xq/xq.h $(BASE)/xq/xq_lock.h
+xq.pic.o: $(BASE)/xtypes/xq.c $(BASE)/xtypes/xq.h $(BASE)/xtypes/xlock.h
 	$(CC) $(CFLAGS) $(INC) -fPIC -c -o $@ $<
 
 clean:

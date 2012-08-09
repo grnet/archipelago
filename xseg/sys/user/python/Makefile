@@ -12,7 +12,8 @@ all: xseg/xseg_api.py xseg/xprotocol.py
 $(BASE)/sys/user/libxseg.so:
 	make -C $(BASE)/sys/user libxseg.so
 
-xseg.xml: $(BASE)/xseg/xseg.h $(BASE)/xq/xq.h $(BASE)/xq/xq_lock.h \
+xseg.xml: $(BASE)/xseg/xseg.h $(BASE)/xtypes/xq.h $(BASE)/xtypes/xlock.h \
+ $(BASE)/xtypes/xpool.h $(BASE)/xtypes/xhash.h \
  $(BASE)/sys/domain.h $(BASE)/sys/util.h $(BASE)/sys/user/_sysutil.h $(BASE)/xseg/protocol.h
 	$(H2XML) -c $(INC) -o $@ $(BASE)/xseg/xseg.h
 

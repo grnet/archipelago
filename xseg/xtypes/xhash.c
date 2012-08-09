@@ -1,29 +1,15 @@
-#include <stdio.h>
-#include <stdlib.h>
+//#include <stdio.h>
+//#include <stdlib.h>
 #include <assert.h>
-#include <unistd.h>
-#include <stdbool.h>
+//#include <unistd.h>
+//#include <stdbool.h>
 
 /* python hash for C
  *  originally by gtsouk@cslab.ece.ntua.gr
  *  -- kkourt@cslab.ece.ntua.gr
  */
 
-
-#include "xhash.h"
-
-
-void *xtypes_malloc(unsigned long size)
-{
-	return malloc(size);
-}
-
-void xtypes_free(void *ptr)
-{
-	free(ptr);
-}
-
-
+#include <xtypes/xhash.h>
 
 #define UNUSED (~(ul_t)0)      /* this entry was never used */
 #define DUMMY  ((~(ul_t)0)-1)  /* this entry was used, but now its empty */

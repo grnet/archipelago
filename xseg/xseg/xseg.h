@@ -18,7 +18,7 @@
 #define XSEG_MAKE_PTR(ptr, base) XSEG_PTR_CONVERT(ptr, base, XSEG_BASE)
 
 #include <sys/util.h>
-#include <xq/xq.h>
+#include <xtypes/xq.h>
 
 typedef uint64_t xserial;
 #define NoSerial ((xserial)-1)

@@ -7,11 +7,11 @@
 #include <assert.h>
 #include <math.h>
 
-#include "xq_lock.h"
+#include "xlock.h"
 
 struct thread_data {
     long loops;
-    struct xq_lock *lock;
+    struct xlock *lock;
     long *counter;
     int id;
 };
@@ -20,7 +20,7 @@ void *race_thread(void *arg)
 {
     struct thread_data *th = arg;
     long loops = th->loops;
-    struct xq_lock *lock = th->lock;
+    struct xlock *lock = th->lock;
     long *counter = th->counter;
     unsigned long serial = 0, oldserial = 0, total = 0, maxdiff = 0, diff = 0;
     double totaldiff = 0.0;
@@ -33,15 +33,15 @@ void *race_thread(void *arg)
         return NULL;
     }
 
-    oldserial = xq_acquire(lock, 1);
-    xq_release(lock);
+    oldserial = xlock_acquire(lock, 1);
+    xlock_release(lock);
 
     printf("%d: starting at %lu\n", th->id, oldserial);
     for (i = 0; i < loops; i++) {
         //if ((i & 15) == 0)
         //printf("%d: %lu\n", th->id, i);
         asm volatile ("#boo");
-        serial = xq_acquire(lock, 1);
+        serial = xlock_acquire(lock, 1);
         asm volatile ("#bee");
         //serial = oldserial +1;
         (*counter) ++;
@@ -54,16 +54,16 @@ void *race_thread(void *arg)
             total += 1;
             totaldiff += diff;
         }
-        xq_release(lock);
+        xlock_release(lock);
     }
 
-    xq_acquire(lock, 1);
+    xlock_acquire(lock, 1);
     printf("%d: serial %lu, avediff: %.0lf/%lu = %lf maxdiff: %lu\n",
             th->id, serial, totaldiff, total, totaldiff/total, maxdiff);
     printf("stats:\n");
     for (i = 0; i < (int)log2(loops); i++)
         printf("    %012lu: %lu\n", (unsigned long)powl(2, i), diffstat[i]);
-    xq_release(lock);
+    xlock_release(lock);
     return NULL;
 }
 
@@ -72,7 +72,7 @@ int error(const char *msg) {
     return 1;
 }
 
-long lock_race(long nr_threads, long loops, struct xq_lock *lock, long *counter)
+long lock_race(long nr_threads, long loops, struct xlock *lock, long *counter)
 {
     struct thread_data *th = malloc(nr_threads * sizeof(struct thread_data));
     long t, r;
@@ -103,7 +103,7 @@ long lock_race(long nr_threads, long loops, struct xq_lock *lock, long *counter)
     return nr_threads * loops - *counter;
 }
 
-struct xq_lock lock;
+struct xlock lock;
 long counter;
 
 int main(int argc, char **argv)
@@ -111,7 +111,7 @@ int main(int argc, char **argv)
     long loops, nr_threads, r;
 
     if (argc < 3) {
-        printf("Usage: xq_lock_test <nr_threads> <nr_loops>\n");
+        printf("Usage: xlock_test <nr_threads> <nr_loops>\n");
         return 1;
     }
 

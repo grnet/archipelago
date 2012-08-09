@@ -5,10 +5,10 @@
 
 typedef uint32_t xqindex;
 
-#include "xq_lock.h"
+#include "xlock.h"
 
 struct xq {
-        struct xq_lock lock;
+        struct xlock lock;
         xqindex head, tail;
         XPTR_TYPE(xqindex) queue;
         xqindex size;

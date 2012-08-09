@@ -5,7 +5,7 @@
 #include <linux/time.h>
 
 #include <sys/domain.h>
-#include <xq/domain.h>
+#include <xtypes/domain.h>
 #include <xseg/domain.h>
 
 int (*xseg_snprintf)(char *str, size_t size, const char *format, ...) = snprintf;
@@ -47,12 +47,12 @@ void __xseg_log(const char *msg)
 }
 EXPORT_SYMBOL(__xseg_log);
 
-void *xq_malloc(unsigned long size)
+void *xtypes_malloc(unsigned long size)
 {
 	return kmalloc(size, GFP_KERNEL);
 }
 
-void xq_mfree(void *ptr)
+void xtypes_free(void *ptr)
 {
 	return kfree(ptr);
 }

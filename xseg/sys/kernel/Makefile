@@ -7,14 +7,17 @@ PWD := $(shell pwd)
 EXTRA_CFLAGS += -g -I$(BASE) -I$(BASE)/sys/kernel
 LIBDIR=$(BASE)/lib/kernel
 
-xseg-objs := xsegmod.o xq.k.o xseg.k.o 
+xseg-objs := xsegmod.o xq.k.o xpool.k.o xseg.k.o 
 obj-m += xseg.o segdev.o
 
-default: xq.k.c xseg.k.c
+default: xq.k.c xpool.k.c xseg.k.c
 	$(MAKE) -C $(KDIR) SUBDIRS=$(PWD) V=$(V) modules
 	cp -vaf xseg.ko segdev.ko $(LIBDIR)
 
-xq.k.c: $(BASE)/xq/xq.c $(BASE)/xq/xq.h
+xq.k.c: $(BASE)/xtypes/xq.c $(BASE)/xtypes/xq.h
+	ln -sf $< $@
+
+xpool.k.c: $(BASE)/xtypes/xpool.c $(BASE)/xtypes/xpool.h
 	ln -sf $< $@
 
 xseg.k.c: $(BASE)/xseg/xseg.c $(BASE)/xseg/xseg.h

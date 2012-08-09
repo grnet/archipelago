@@ -2,7 +2,7 @@
 #define XPOOL_H
 
 #include <sys/util.h>
-#include <xq/xq_lock.h>
+#include <xtypes/xlock.h>
 //#include <xseg/xseg.h>
 
 typedef uint64_t xpool_index;
@@ -19,7 +19,7 @@ struct xpool_node {
 };
 
 struct xpool {
-	struct xq_lock lock;
+	struct xlock lock;
 	//XPTR_TYPE(struct xpool_node) list;
 	//XPTR_TYPE(struct xpool_node) free;
 	xpool_index list;

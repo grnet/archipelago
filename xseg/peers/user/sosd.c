@@ -88,7 +88,7 @@ static int wait_signal(struct store *store)
 
 static struct io *alloc_io(struct store *store)
 {
-	xqindex idx = xq_pop_head(&store->free_ops);
+	xqindex idx = xq_pop_head(&store->free_ops, 1);
 	if (idx == Noneidx)
 		return NULL;
 	return store->ios + idx;
@@ -98,7 +98,7 @@ static inline void free_io(struct store *store, struct io *io)
 {
 	xqindex idx = io - store->ios;
 	io->req = NULL;
-	xq_append_head(&store->free_ops, idx);
+	xq_append_head(&store->free_ops, idx, 1);
 	/* not the right place. sosd_loop couldn't sleep because of that
 	 * needed for flush support. maybe this should go to complete function
 	 *
@@ -109,12 +109,12 @@ static inline void free_io(struct store *store, struct io *io)
 static void resubmit_io(struct store *store, struct io *io)
 {
 	xqindex idx = io - store->ios;
-	xq_append_tail(&store->resubmit_ops, idx);
+	xq_append_tail(&store->resubmit_ops, idx, 1);
 }
 
 static struct io* get_resubmitted_io(struct store *store)
 {
-	xqindex idx = xq_pop_head(&store->resubmit_ops);
+	xqindex idx = xq_pop_head(&store->resubmit_ops, 1);
 	if (idx == Noneidx)
 		return NULL;
 	return store->ios + idx;

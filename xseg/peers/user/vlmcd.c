@@ -99,7 +99,7 @@ static inline xqindex __idx_from_io(struct vlmcd *vlmcd, struct io *io)
 
 static inline struct io *alloc_io(struct vlmcd *vlmcd)
 {
-	xqindex idx = xq_pop_head(&vlmcd->free_ios);
+	xqindex idx = xq_pop_head(&vlmcd->free_ios, 1);
 	if (idx == Noneidx)
 		return NULL;
 	++vlmcd->flying;
@@ -110,7 +110,7 @@ static inline struct io *alloc_io(struct vlmcd *vlmcd)
 static inline void free_io(struct vlmcd *vlmcd, struct io *io)
 {
 	/* FIXME: what if xq_append_head() fails? */
-	xq_append_head(&vlmcd->free_ios, __idx_from_io(vlmcd, io));
+	xq_append_head(&vlmcd->free_ios, __idx_from_io(vlmcd, io), 1);
 	--vlmcd->flying;
 }
 

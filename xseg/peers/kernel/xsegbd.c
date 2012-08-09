@@ -365,7 +365,7 @@ static void xseg_request_fn(struct request_queue *rq)
 
 		target = XSEG_TAKE_PTR(xreq->target, xsegbd.xseg->segment);
 		strncpy(target, xsegbd_dev->target, xsegbd_dev->targetlen);
-		blkreq_idx = xq_pop_head(&blk_queue_pending);
+		blkreq_idx = xq_pop_head(&blk_queue_pending, 1);
 		BUG_ON(blkreq_idx == Noneidx);
 		pending = &blk_req_pending[blkreq_idx];
 		pending->dev = xsegbd_dev;
@@ -440,7 +440,7 @@ static int xsegbd_get_size(struct xsegbd_device *xsegbd_dev)
 	BUG_ON(xseg_prep_request(xreq, xsegbd_dev->targetlen, datalen));
 
 	init_completion(&comp);
-	blkreq_idx = xq_pop_head(&blk_queue_pending);
+	blkreq_idx = xq_pop_head(&blk_queue_pending, 1);
 	BUG_ON(blkreq_idx == Noneidx);
 	pending = &blk_req_pending[blkreq_idx];
 	pending->dev = xsegbd_dev;
@@ -530,7 +530,7 @@ static void xseg_callback(struct xseg *xseg, uint32_t portno)
 		err = 0;
 blk_end:
 		blk_end_request_all(blkreq, err);
-		xq_append_head(&blk_queue_pending, blkreq_idx);
+		xq_append_head(&blk_queue_pending, blkreq_idx, 1);
 		BUG_ON(xseg_put_request(xseg, xreq->portno, xreq) == NoSerial);
 	}
 
