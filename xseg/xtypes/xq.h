@@ -43,19 +43,44 @@ void         xq_init_seq     ( struct xq  * xq,
 
 void         xq_free         ( struct xq  * xq  );
 
-xqindex      xq_append_head  ( struct xq  * xq,
+xqindex      __xq_append_head( struct xq  * xq,
                                xqindex      xqi );
 
-xqindex      xq_pop_head     ( struct xq  * xq  );
+xqindex      xq_append_head  ( struct xq  * xq,
+                               xqindex      xqi,
+			       unsigned long who);
+
+xqindex      __xq_pop_head   ( struct xq  * xq  );
+xqindex      xq_pop_head     ( struct xq  * xq,
+			       unsigned long who);
+
+xqindex      __xq_append_tail( struct xq  * xq,
+                               xqindex      xqi );
 
 xqindex      xq_append_tail  ( struct xq  * xq,
-                               xqindex      xqi );
+                               xqindex      xqi,
+			       unsigned long who);
 
-xqindex      xq_pop_tail     ( struct xq  * xq  );
+
+xqindex      __xq_peek_head    ( struct xq  * xq);
+
+xqindex      xq_peek_head    ( struct xq  * xq,
+			       unsigned long who);
+
+xqindex      __xq_peek_tail    ( struct xq  * xq);
+
+xqindex      xq_peek_tail    ( struct xq  * xq,
+			       unsigned long who);
+
+xqindex      __xq_pop_tail   ( struct xq  * xq  );
+
+xqindex      xq_pop_tail     ( struct xq  * xq,
+			       unsigned long who);
 
 int          xq_head_to_tail ( struct xq  * hq,
                                struct xq  * tq,
-                               xqindex      nr  );
+                               xqindex      nr ,
+			       unsigned long who);
 
 xqindex      xq_size         ( struct xq  * xq  );
 
@@ -63,5 +88,11 @@ xqindex      xq_count        ( struct xq  * xq  );
 
 void         xq_print        ( struct xq  * xq  );
 
+int 	     __xq_check      ( struct xq  * xq, 
+		               xqindex      idx );
+
+int 	     xq_check        ( struct xq  * xq, 
+		               xqindex      idx,
+			       unsigned long who );
 #endif
 

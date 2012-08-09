@@ -47,90 +47,90 @@ int basic_sanity_test(struct xq *q) {
     xqindex t, r;
 
     //printf("append_tail 9183\n");
-    r = xq_append_tail(q, 9183);
+    r = xq_append_tail(q, 9183, 0);
     //xq_print(q);
     //printf("\n");
     assert(r != Noneidx);
 
     //printf("pop_head 9183\n");
-    r = xq_pop_head(q);
+    r = xq_pop_head(q, 0);
     //xq_print(q);
     //printf("\n");
     assert(r == 9183);
 
     //printf("append_head 1834\n");
-    r = xq_append_head(q, 1834);
+    r = xq_append_head(q, 1834, 0);
     //xq_print(q);
     //printf("\n");
     assert(r != Noneidx);
 
     //printf("pop_tail 1834\n");
-    r = xq_pop_tail(q);
+    r = xq_pop_tail(q, 0);
     //xq_print(q);
     //printf("\n");
     assert(r == 1834);
 
     //printf("append_tail 3814\n");
-    xq_append_tail(q, 3814);
+    xq_append_tail(q, 3814, 0);
     //xq_print(q);
     //printf("\n");
 
     //printf("append_head 5294\n");
-    xq_append_head(q, 5294);
+    xq_append_head(q, 5294, 0);
     //xq_print(q);
     //printf("\n");
 
     //printf("append_tail 1983\n");
-    r = xq_append_tail(q, 1983);
+    r = xq_append_tail(q, 1983, 0);
     //xq_print(q);
     //printf("\n");
     assert(r != Noneidx);
 
     //printf("pop_tail 1983\n");
-    r = xq_pop_tail(q);
+    r = xq_pop_tail(q, 0);
     //xq_print(q);
     //printf("\n");
     assert(r == 1983);
 
     //printf("append_head 8134\n");
-    r = xq_append_head(q, 8134);
+    r = xq_append_head(q, 8134, 0);
     //xq_print(q);
     //printf("\n");
     assert(r != Noneidx);
 
     //printf("pop_head 8134\n");
-    r = xq_pop_head(q);
+    r = xq_pop_head(q, 0);
     //xq_print(q);
     //printf("\n");
     assert(r == 8134);
 
     //printf("pop_tail 3814\n");
-    r = xq_pop_tail(q);
+    r = xq_pop_tail(q, 0);
     //xq_print(q);
     //printf("\n");
     assert(r == 3814);
 
     //printf("pop_head 5294\n");
-    r = xq_pop_head(q);
+    r = xq_pop_head(q, 0);
     //xq_print(q);
     //printf("\n");
     assert(r == 5294);
 
     //printf("pop_tail Noneidx\n");
-    r = xq_pop_tail(q);
+    r = xq_pop_tail(q, 0);
     //xq_print(q);
     //printf("\n");
     assert(r == Noneidx);
 
     //printf("pop_head Noneidx\n");
-    r = xq_pop_head(q);
+    r = xq_pop_head(q, 0);
     //xq_print(q);
     //printf("\n");
     assert(r == Noneidx);
 
     xqindex qsize = q->size;
     for (t = 0; t < qsize; t += 1) {
-         r = xq_append_tail(q, t);
+         r = xq_append_tail(q, t, 0);
          //if (r == Noneidx) printf("Noneidx: %lu\n", (unsigned long)t);
          //xq_print(q);
          assert(r != Noneidx);
@@ -139,7 +139,7 @@ int basic_sanity_test(struct xq *q) {
     //xq_print(q);
 
     for (t = qsize-1; t != Noneidx; t -= 1) {
-         r = xq_pop_tail(q);
+         r = xq_pop_tail(q, 0);
          assert(t == r);
          //printf("%lu vs %lu\n", t, (unsigned long)xq_pop_tail(q));
     }
@@ -190,32 +190,32 @@ void *random_test_thread(void *arg) {
 
          switch (rand & 3) {
          case 0:
-             xqi = xq_pop_tail(&q[0]);
+             xqi = xq_pop_tail(&q[0], arg);
              if (xqi == Noneidx) goto unlock;
              items[xqi].seed = rand;
              item_calculate(&items[xqi]);
-             xq_append_head(&q[1], xqi);
+             xq_append_head(&q[1], xqi, arg);
              break;
          case 1:
-             xqi = xq_pop_head(&q[0]);
+             xqi = xq_pop_head(&q[0], arg);
              if (xqi == Noneidx) goto unlock;
              items[xqi].seed = rand;
              item_calculate(&items[xqi]);
-             xq_append_tail(&q[1], xqi);
+             xq_append_tail(&q[1], xqi, arg);
              break;
          case 2:
-             xqi = xq_pop_tail(&q[1]);
+             xqi = xq_pop_tail(&q[1], arg);
              if (xqi == Noneidx) goto unlock;
              items[xqi].seed = rand;
              item_calculate(&items[xqi]);
-             xq_append_head(&q[0], xqi);
+             xq_append_head(&q[0], xqi, arg);
              break;
          case 3:
-             xqi = xq_pop_head(&q[1]);
+             xqi = xq_pop_head(&q[1], arg);
              if (xqi == Noneidx) goto unlock;
              items[xqi].seed = rand;
              item_calculate(&items[xqi]);
-             xq_append_tail(&q[0], xqi);
+             xq_append_tail(&q[0], xqi, arg);
              break;
          }
     unlock:
@@ -244,10 +244,10 @@ int random_test(long seed, long nr_threads, long loops, xqindex qsize, struct xq
     for (t = 0; t < qsize; t += 1) item_calculate(&items[t]);
 
     for (t = 0; t < qsize; t += 4) {
-         xq_append_tail(&q[0], t+0);
-         xq_append_head(&q[0], t+1);
-         xq_append_tail(&q[1], t+2);
-         xq_append_head(&q[1], t+3);
+         xq_append_tail(&q[0], t+0, 0);
+         xq_append_head(&q[0], t+1, 0);
+         xq_append_tail(&q[1], t+2, 0);
+         xq_append_head(&q[1], t+3, 0);
     }
 
     pthread_t *threads = malloc(nr_threads * sizeof(pthread_t));
