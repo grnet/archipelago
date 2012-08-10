@@ -21,6 +21,8 @@
 #include <xtypes/xq.h>
 
 typedef uint64_t xserial;
+typedef uint32_t xptr;
+
 #define NoSerial ((xserial)-1)
 
 /* Peers and Segments
@@ -56,6 +58,42 @@ typedef uint64_t xserial;
 
 struct xseg;
 struct xseg_port;
+
+#define MAGIC_OBJH 	1
+#define MAGIC_REQ 	2
+#define MAGIC_PORT 	3
+#define MAGIC_BUF4K 	4
+#define MAGIC_BUF256K 	5
+#define MAGIC_BUF4M 	6
+
+struct xseg_heap {
+	uint64_t size;
+	xptr start;
+	xptr cur;
+	XPTR_TYPE(struct xseg) xseg;
+};
+
+struct xseg_free_space_header {
+	uint64_t size;
+};
+
+struct xseg_object {
+	uint32_t magic;
+	uint64_t size;
+	xptr next;
+};
+
+struct xseg_object_handler {
+	uint32_t magic;
+	uint64_t obj_size;
+	xptr allocated;
+	xptr list;
+	uint32_t flags;
+	xlock lock;
+	xptr heap;
+	XPTR_TYPE(struct xseg) xseg;
+};
+
 
 struct xseg_operations {
 	void  (*mfree)(void *mem);
@@ -93,22 +131,16 @@ struct xseg_peer {
 };
 
 struct xseg_config {
-	uint32_t nr_ports;      /* max ports (endpoints) supported on segment */
-	uint32_t nr_requests;   /* how many requests to live on the segment.
-				   requests are globally shared among ports. */
-	uint32_t request_size;  /* default request buffer size in pages.
-				   users may override this temporarily */
-	uint64_t extra_size;	/* extra memory in pages to allocate beyond
-				   overhead and request buffers */
+	uint64_t heap_size;
 	uint32_t page_shift;	/* the alignment unit */
 	char type[XSEG_TNAMESIZE]; /* zero-terminated identifier */
 	char name[XSEG_NAMESIZE];  /* zero-terminated identifier */
 };
 
 struct xseg_port {
-	struct xq free_queue;
-	struct xq request_queue;
-	struct xq reply_queue;
+	xptr free_queue;
+	xptr request_queue;
+	xptr reply_queue;
 	uint64_t owner;
 	volatile uint64_t waitcue;
 	uint64_t peer_type;
@@ -160,16 +192,16 @@ struct xseg_request {
 	uint64_t size; /* FIXME: why are there both size and datalen fields? */
 		/* FIXME: why does filed use ->datalen instead of ->size? */
 	uint64_t serviced;
-	char *data;
+	xptr data;
 	uint64_t datalen;
-	char *target;
+	xptr target;
 	uint32_t targetlen;
 	uint32_t op;
 	uint32_t state;
 	uint32_t flags;
 	uint32_t portno;
 	/* pad */
-	char *buffer;
+	xptr buffer;
 	uint64_t bufferlen;
 	xqindex task;
 	uint64_t priv;
@@ -200,11 +232,15 @@ struct xseg {
 	uint64_t version;
 	uint64_t segment_size;
 	struct xseg *segment;
-	struct xseg_request *requests;
-	struct xq *free_requests;
-	struct xseg_port *ports;
-	char *buffers;
-	char *extra;
+	struct xseg_heap *heap;
+	struct xseg_object_handler *object_handlers;
+
+	struct xseg_object_handler *requests;
+	struct xseg_object_handler *ports;
+	struct xseg_object_handler *buffers4K;
+	struct xseg_object_handler *buffers256K;
+	struct xseg_object_handler *buffers4M;
+
 	struct xseg_shared *shared;
 	struct xseg_private *priv;
 	uint32_t max_peer_types;
@@ -316,6 +352,17 @@ struct xseg_request *  xseg_accept          ( struct xseg         * xseg,
                 int    xseg_signal          ( struct xseg         * xseg,
                                               uint32_t              portno    );
 /*                    \___________________/                       \_________/ */
+
+
+
+xptr xseg_get_obj(struct xseg_object_handler * obj_h, uint32_t flags);
+void xseg_put_obj(struct xseg_object_handler * obj_h, struct xseg_object *obj);
+int xseg_alloc_obj(struct xseg_object_handler *obj_h, uint64_t nr);
+xptr xseg_allocate(struct xseg_heap *heap, uint64_t bytes);
+void xseg_free(struct xseg_heap *heap, xptr ptr);
+int xseg_init_object_handler(struct xseg *xseg, struct xseg_object_handler *obj_h, 
+		uint32_t magic,	uint64_t size, xptr heap);
+
 /*                                                                            */
 /* ================= XSEG REQUEST INTERFACE ================================= */
 
