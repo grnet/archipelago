@@ -472,6 +472,7 @@ static long initialize_segment(struct xseg *xseg, struct xseg_config *cfg)
 	xseg->requests = mem;
 	
 	//allocate ports handler
+	obj_h = XSEG_TAKE_PTR(xseg->object_handlers, segment);
 	mem = xseg_get_obj(obj_h, X_ALLOC);
 	if (!mem)
 		return -1;
@@ -483,6 +484,7 @@ static long initialize_segment(struct xseg *xseg, struct xseg_config *cfg)
 	xseg->ports = mem;
 	
 	//allocate buffers4K handler
+	obj_h = XSEG_TAKE_PTR(xseg->object_handlers, segment);
 	mem = xseg_get_obj(obj_h, X_ALLOC);
 	if (!mem)
 		return -1;
@@ -494,6 +496,7 @@ static long initialize_segment(struct xseg *xseg, struct xseg_config *cfg)
 	xseg->buffers4K = mem;
 
 	//allocate buffers256K handler
+	obj_h = XSEG_TAKE_PTR(xseg->object_handlers, segment);
 	mem = xseg_get_obj(obj_h, X_ALLOC);
 	if (!mem)
 		return -1;
@@ -505,6 +508,7 @@ static long initialize_segment(struct xseg *xseg, struct xseg_config *cfg)
 	xseg->buffers256K = mem;
 
 	//allocate buffers4M handler
+	obj_h = XSEG_TAKE_PTR(xseg->object_handlers, segment);
 	mem = xseg_get_obj(obj_h, X_ALLOC);
 	if (!mem)
 		return -1;
@@ -1239,7 +1243,7 @@ void xseg_put_port(struct xseg *xseg, struct xseg_port *port)
 		port->reply_queue = 0;
 	}
 
-	xseg_put_request(obj_h, port);
+	xseg_put_obj(obj_h, port);
 }
 
 #ifdef __KERNEL__

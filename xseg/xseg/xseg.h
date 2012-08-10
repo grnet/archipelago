@@ -21,6 +21,8 @@
 #include <xtypes/xq.h>
 
 typedef uint64_t xserial;
+
+/* this should be the same with xqindex */
 typedef uint32_t xptr;
 
 #define NoSerial ((xserial)-1)
