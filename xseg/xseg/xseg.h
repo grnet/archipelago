@@ -72,7 +72,7 @@ struct xseg_heap {
 	uint64_t size;
 	xptr start;
 	xptr cur;
-	XPTR_TYPE(struct xseg) xseg;
+	XPTR_TYPE(struct xseg) segment;
 };
 
 struct xseg_free_space_header {
@@ -93,7 +93,7 @@ struct xseg_object_handler {
 	uint32_t flags;
 	xlock lock;
 	xptr heap;
-	XPTR_TYPE(struct xseg) xseg;
+	XPTR_TYPE(struct xseg) segment;
 };
 
 

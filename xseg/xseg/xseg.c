@@ -1018,9 +1018,15 @@ int xseg_finalize(void)
 
 #define X_ALLOC ((uint32_t) (1 << 0))
 
+/*
+ * xseg -> address of malloced struct xseg, each peer takes on join
+ * segment -> address of mmapped segment
+ */
+
+
 xptr xseg_get_obj(struct xseg_object_handler * obj_h, uint32_t flags)
 {
-	struct xseg *segment = XPTR(obj_h->xseg);
+	struct xseg *segment = XPTR(obj_h->segment);
 	struct xseg_object *obj;
 	xptr list, objptr;
 retry:
@@ -1044,8 +1050,8 @@ retry:
 
 void xseg_put_obj(struct xseg_object_handler * obj_h, struct xseg_object *obj)
 {
-	struct xseg *xseg = XPTR(obj_h->xseg);
-	xptr list, objptr = XSEG_MAKE_PTR(obj, xseg);
+	struct xseg *segment = XPTR(obj_h->segment);
+	xptr list, objptr = XSEG_MAKE_PTR(obj, segment);
 	do {
 		list = obj_h->list;
 		obj->next = list;
@@ -1065,7 +1071,7 @@ uint64_t __get_alloc_bytes(uint64_t bytes)
 //should be called with object_handler lock held
 int xseg_alloc_obj(struct xseg_object_handler *obj_h, uint64_t nr)
 {
-	struct xseg *segment = XPTR(&obj_h->xseg);
+	struct xseg *segment = XPTR(&obj_h->segment);
 	struct xseg_heap *heap = XSEG_TAKE_PTR(obj_h->heap, segment);
 	uint64_t used, bytes = nr * obj_h->size;
 	xptr objptr, mem = xseg_allocate(heap, bytes);
@@ -1117,7 +1123,7 @@ int xseg_alloc_obj(struct xseg_object_handler *obj_h, uint64_t nr)
 
 xptr xseg_allocate(struct xseg_heap *heap, uint64_t bytes)
 {
-	struct xseg *xseg = XPTR(&heap->xseg);
+	struct xseg *segment = XPTR(&heap->segment);
 	struct xseg_free_space_header *fsh;
 	xptr ret = 0;
 
@@ -1128,7 +1134,7 @@ xptr xseg_allocate(struct xseg_heap *heap, uint64_t bytes)
 		ret = xseg_heap->cur;
 	} while (!__sync_bool_compare_and_swap(&heap->cur, ret, (xptr) cur + bytes));
 
-	fsh = (struct xseg_free_space_header *) XSEG_TAKE_PTR(xseg, ret);
+	fsh = (struct xseg_free_space_header *) XSEG_TAKE_PTR(segment, ret);
 	fsh->size = bytes;
 	ret += sizeof(struct xseg_free_space_header);
 	return ret;
@@ -1136,9 +1142,9 @@ xptr xseg_allocate(struct xseg_heap *heap, uint64_t bytes)
 
 void xseg_free(struct xseg_heap *heap, xptr ptr)
 {
-	struct xseg *xseg = XPTR(&heap->xseg);
+	struct xseg *segment = XPTR(&heap->segment);
 	struct xseg_free_space_header *fsh;
-	uint64_t size = XSEG_TAKE_PTR(xseg, ptr);
+	uint64_t size = XSEG_TAKE_PTR(segment, ptr);
 	//split space to objects
 }
 
@@ -1160,7 +1166,7 @@ int xseg_init_object_handler(struct xseg *xseg, struct xseg_object_handler *obj_
 	obj_h->list = 0;
 	obj_h->flags = 0;
 	obj_h->heap = heap;
-	XPTRSET(&obj_h->xseg, xseg);
+	XPTRSET(&obj_h->segment, xseg->segment);
 	xlock_release(&obj_h->lock);
 	return 0;
 }
