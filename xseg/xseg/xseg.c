@@ -409,8 +409,8 @@ static uint64_t calculate_segment_size(struct xseg_config *config)
 
 	page_size = 1 << page_shift;
 
-	/* struct xseg itself */
-	size += page_size + config->heap_size;
+	/* struct xseg itself + struct xheap */
+	size += 2*page_size + config->heap_size;
 	size = __align(size, page_shift);
 	
 	return size;
@@ -424,10 +424,11 @@ static long initialize_segment(struct xseg *xseg, struct xseg_config *cfg)
 	struct xq *q;
 	void *qmem;
 	uint64_t bodysize, size = page_size, i;
-	xptr mem;
-	struct xseg_heap *heap;
+	void *mem;
+	struct xheap *heap;
 	xhash_t *xhash;
-	struct xseg_object_handler *obj_h;
+	struct xobject_h *obj_h;
+	int r;
 
 
 	if (page_size < XSEG_MIN_PAGE_SIZE)
@@ -437,23 +438,23 @@ static long initialize_segment(struct xseg *xseg, struct xseg_config *cfg)
 	xseg->segment = segment;
 
 	/* build heap */
-	xseg->heap = XSEG_MAKE_PTR(segment + size, segment);
-	size += sizeof(xseg_heap);
+	xseg->heap = XPTR_MAKE(segment + size, segment);
+	size += sizeof(struct xheap);
 	size = __align(size, page_shift);
 
-	heap = XSEG_TAKE_PTR(xseg->heap, segment);
-	heap->size = config->heap_size;
-	heap->start = XSEG_MAKE_PTR(segment+size, segment);
-	heap->cur = heap->start;
+	heap = XPTR_TAKE(xseg->heap, segment);
+	r = xheap_init(heap, config->heap_size, page_shift, segment);
+	if (r < 0)
+		return -1;
 
 	/* build object_handler handler */
 	mem = xseg_allocate(heap, sizeof(struct xseg_object_handler));
 	if (!mem)
 		return -1;
-	xseg->object_handlers = mem;
-	obj_h = XSEG_TAKE_PTR(xseg->object_handlers, segment);
-	r = xseg_init_object_handler(segment, obj_h, MAGIC_OBJH, 
-			sizeof(struct xseg_object_handler), xseg->heap);
+	xseg->object_handlers = XPTR_MAKE(mem, segment);
+	obj_h = mem;
+	r = xobj_handler_init(obj_h, segment, MAGIC_OBJH, 
+			sizeof(struct xobject_h), heap);
 	if (!r)
 		return -1;
 
@@ -464,75 +465,39 @@ static long initialize_segment(struct xseg *xseg, struct xseg_config *cfg)
 	mem = xseg_get_obj(obj_h, X_ALLOC);
 	if (!mem)
 		return -1;
-	obj_h = XSEG_TAKE_PTR(mem, segment);
-	r = xseg_init_object_handler(segment, obj_h, MAGIC_REQ, 
-			sizeof(struct xseg_request), xseg->heap);
+	obj_h = mem;
+	r = xobj_handler_init(obj_h, segment, MAGIC_REQ, 
+			sizeof(struct xseg_request), heap);
 	if (!r)
 		return -1;
-	xseg->requests = mem;
+	xseg->requests = XPTR_MAKE(obj_h, segment);
 	
 	//allocate ports handler
-	obj_h = XSEG_TAKE_PTR(xseg->object_handlers, segment);
+	obj_h = XPTR_TAKE(xseg->object_handlers, segment);
 	mem = xseg_get_obj(obj_h, X_ALLOC);
 	if (!mem)
 		return -1;
-	obj_h = XSEG_TAKE_PTR(mem, segment);
-	r = xseg_init_object_handler(segment, obj_h, MAGIC_PORT, 
-			sizeof(struct xseg_port), xseg->heap);
+	obj_h = mem;
+	r = xobj_handler_init(obj_h, segment, MAGIC_PORT, 
+			sizeof(struct xseg_port), heap);
 	if (!r)
 		return -1;
-	xseg->ports = mem;
+	xseg->ports = XPTR_MAKE(mem, segment);
 	
-	//allocate buffers4K handler
-	obj_h = XSEG_TAKE_PTR(xseg->object_handlers, segment);
-	mem = xseg_get_obj(obj_h, X_ALLOC);
-	if (!mem)
-		return -1;
-	obj_h = XSEG_TAKE_PTR(mem, segment);
-	r = xseg_init_object_handler(segment, obj_h, MAGIC_4K, 
-			4096, xseg->heap);
-	if (!r)
-		return -1;
-	xseg->buffers4K = mem;
-
-	//allocate buffers256K handler
-	obj_h = XSEG_TAKE_PTR(xseg->object_handlers, segment);
-	mem = xseg_get_obj(obj_h, X_ALLOC);
-	if (!mem)
-		return -1;
-	obj_h = XSEG_TAKE_PTR(mem, segment);
-	r = xseg_init_object_handler(segment, obj_h, MAGIC_256K, 
-			256*1024, xseg->heap);
-	if (!r)
-		return -1;
-	xseg->buffers256K = mem;
-
-	//allocate buffers4M handler
-	obj_h = XSEG_TAKE_PTR(xseg->object_handlers, segment);
-	mem = xseg_get_obj(obj_h, X_ALLOC);
-	if (!mem)
-		return -1;
-	obj_h = XSEG_TAKE_PTR(mem, segment);
-	r = xseg_init_object_handler(segment, obj_h, MAGIC_4M, 
-			4096*1024, xseg->heap);
-	if (!r)
-		return -1;
-	xseg->buffers4M = mem;
-
 	//allocate xseg_shared memory
 	mem = xseg_allocate(heap, sizeof(struct xseg_shared));
 	if (!mem)
 		return -1;
-	shared = (struct xseg_shared *) XSEG_TAKE_PTR(mem, segment);
+	shared = (struct xseg_shared *) mem;
 	shared->flags = 0;
 	shared->nr_peer_types = 0;
-	xseg->shared = mem;
+	xseg->shared = XPTR_MAKE(mem, segment);
 	
 	mem = xseg_allocate(heap, page_size);
 	if (!mem)
 		return -1;
-	shared->peer_types = mem;
-	xseg->max_peer_types = get_alloc_bytes(page_size) / XSEG_TNAMESIZE;
+	shared->peer_types = XPTR_MAKE(mem, segment);
+	xseg->max_peer_types = xheap_get_chunk_size(mem) / XSEG_TNAMESIZE;
 
 	memcpy(&xseg->config, cfg, sizeof(struct xseg_config));
 
@@ -610,6 +575,7 @@ out:
 	__unlock_domain();
 }
 
+//FIXME
 static int pointer_ok(	unsigned long ptr,
 			unsigned long base,
 			uint64_t size,
@@ -722,12 +688,12 @@ struct xseg *xseg_join(	char *segtypename,
 	xseg->priv = priv;
 	xseg->config = __xseg->config;
 	xseg->version = __xseg->version;
-	xseg->requests = XSEG_TAKE_PTR(__xseg->requests, __xseg);
-	xseg->free_requests = XSEG_TAKE_PTR(__xseg->free_requests, __xseg);
-	xseg->ports = XSEG_TAKE_PTR(__xseg->ports, __xseg);
-	xseg->buffers = XSEG_TAKE_PTR(__xseg->buffers, __xseg);
-	xseg->extra = XSEG_TAKE_PTR(__xseg->extra, __xseg);
-	xseg->shared = XSEG_TAKE_PTR(__xseg->shared, __xseg);
+	xseg->requests = XPTR_TAKE(__xseg->requests, __xseg);
+	xseg->free_requests = XPTR_TAKE(__xseg->free_requests, __xseg);
+	xseg->ports = XPTR_TAKE(__xseg->ports, __xseg);
+	xseg->buffers = XPTR_TAKE(__xseg->buffers, __xseg);
+	xseg->extra = XPTR_TAKE(__xseg->extra, __xseg);
+	xseg->shared = XPTR_TAKE(__xseg->shared, __xseg);
 	xseg->segment_size = size;
 	xseg->segment = __xseg;
 
@@ -1095,6 +1061,12 @@ void xseg_put_port(struct xseg *xseg, struct xseg_port *port)
 	}
 
 	xseg_put_obj(obj_h, port);
+}
+
+void *xseg_get_buffer(struct xseg *xseg, uint64_t size)
+{
+	struct xheap *heap = xseg->heap;
+	return xheap_allocate(heap, size);
 }
 
 #ifdef __KERNEL__

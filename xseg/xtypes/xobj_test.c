@@ -135,7 +135,8 @@ int basic_test()
 	timersub(&end, &start, &end);
 	unsigned long us;
 	us = end.tv_sec * 1000000 + end.tv_usec;
-	printf("Allocated %lu objects\n", c);
+	printf("Allocated %lu objects of size %d (Total size: %lu)\n",
+			c, sizeof(struct foo), c*sizeof(struct foo));
 	printf("Total time: %lu us\n", us);
 	unsigned long tpa =  (unsigned long) ((us*1000) / allocations);
 	printf("Time per allocation: %lu ns\n\n", tpa);

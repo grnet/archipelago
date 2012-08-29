@@ -19,6 +19,7 @@
 
 #include <sys/util.h>
 #include <xtypes/xq.h>
+#include <xtypes/xobj.h>
 
 typedef uint64_t xserial;
 
@@ -61,9 +62,6 @@ struct xseg_port;
 #define MAGIC_OBJH 	1
 #define MAGIC_REQ 	2
 #define MAGIC_PORT 	3
-#define MAGIC_BUF4K 	4
-#define MAGIC_BUF256K 	5
-#define MAGIC_BUF4M 	6
 
 struct xseg_operations {
 	void  (*mfree)(void *mem);
@@ -202,14 +200,11 @@ struct xseg {
 	uint64_t version;
 	uint64_t segment_size;
 	struct xseg *segment;
-	struct xseg_heap *heap;
-	struct xseg_object_handler *object_handlers;
+	struct xheap *heap;
+	struct xobject_h *object_handlers;
 
-	struct xseg_object_handler *requests;
-	struct xseg_object_handler *ports;
-	struct xseg_object_handler *buffers4K;
-	struct xseg_object_handler *buffers256K;
-	struct xseg_object_handler *buffers4M;
+	struct xobject_h *requests;
+	struct xobject_h *ports;
 
 	struct xseg_shared *shared;
 	struct xseg_private *priv;
@@ -324,14 +319,6 @@ struct xseg_request *  xseg_accept          ( struct xseg         * xseg,
 /*                    \___________________/                       \_________/ */
 
 
-
-xptr xseg_get_obj(struct xseg_object_handler * obj_h, uint32_t flags);
-void xseg_put_obj(struct xseg_object_handler * obj_h, struct xseg_object *obj);
-int xseg_alloc_obj(struct xseg_object_handler *obj_h, uint64_t nr);
-xptr xseg_allocate(struct xseg_heap *heap, uint64_t bytes);
-void xseg_free(struct xseg_heap *heap, xptr ptr);
-int xseg_init_object_handler(struct xseg *xseg, struct xseg_object_handler *obj_h, 
-		uint32_t magic,	uint64_t size, xptr heap);
 
 /*                                                                            */
 /* ================= XSEG REQUEST INTERFACE ================================= */

@@ -13,6 +13,7 @@ int xobj_handler_init(struct xobject_h *obj_h, void *container,
 	else
 		obj_h->obj_size = size;
 
+	//TODO convert this to xset
 	/* request space of an xhash of sizeshift 3 */
 	xhash = (xhash_t *) xheap_allocate(heap, xhash_get_alloc_size(3));
 	if (!xhash)
@@ -70,9 +71,11 @@ retry:
 		//ugly
 		if (r == -XHASH_ERESIZE) {
 			ul_t sizeshift = grow_size_shift(allocated);
+//			printf("new sizeshift: %lu\n", sizeshift);
 			uint64_t size;
 			xhash_t *new;
 			size = xhash_get_alloc_size(sizeshift); 
+//			printf("new size: %lu\n", size);
 			//printf("%llu\n", xheap_get_chunk_size(allocated));
 			new = xheap_allocate(heap, size);
 //			printf("requested %llu, got %llu\n", size, xheap_get_chunk_size(new));
@@ -88,7 +91,6 @@ retry:
 		}
 	}
 	do {
-		//assert obj_h->list == 0
 		objptr = obj_h->list;
 		obj->next = objptr; 
 	}while(!__sync_bool_compare_and_swap(&obj_h->list, objptr, XPTR_MAKE((unsigned long) mem, container)));

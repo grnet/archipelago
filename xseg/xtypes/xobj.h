@@ -8,7 +8,7 @@
 
 #define X_ALLOC ((uint32_t) (1 << 0))
 
-struct xseg_object_header {
+struct xobject_header {
 	XPTR_TYPE(struct xseg_object_handler) obj_h;
 };
 
@@ -35,5 +35,7 @@ int xobj_alloc_obj(struct xobject_h * obj_h, uint64_t nr);
 int xobj_handler_init(struct xobject_h *obj_h, void *container,
 		uint32_t magic,	uint64_t size, struct xheap *heap);
 
-
+//TODO 
+//xobj_handler_destroy()
+//releases allocated pages
 #endif

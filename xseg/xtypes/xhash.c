@@ -177,6 +177,7 @@ get_alloc_size(ul_t size_shift, bool vals)
 {
     ul_t nr_items = 1UL << size_shift;
     size_t keys_size = nr_items*sizeof(ul_t);
+    //FIXME this should be  << 1 right?
     size_t alloc_size = vals ? keys_size<<2 : keys_size;
     return sizeof(struct xhash) + alloc_size;
 }
@@ -240,6 +241,7 @@ grow_size_shift(xhash_t *xhash)
     ul_t u;
 
     u = xhash->used;
+    //printf("used: %lu\n", u);
     if (u/2 + u >= ((ul_t)1 << old_size_shift)) {
         new_size_shift = old_size_shift + 1;
     } else {
