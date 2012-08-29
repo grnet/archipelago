@@ -10,6 +10,10 @@
 
 typedef uint64_t xpointer;
 
+/* type to be used as absolute pointer
+ * this should be the same with xqindex */
+typedef uint64_t xptr; 
+
 #define Noneidx ((xqindex)-1)
 #define Null ((xpointer)-1)
 
@@ -38,5 +42,14 @@ typedef uint64_t xpointer;
 #define XPTRSET(xptraddr, ptrval)	\
 	((xptraddr)->x	=	(xpointer)(unsigned long)(ptrval) -	\
 				(xpointer)(unsigned long)(xptraddr)	)
+
+
+
+#define XPTR_OFFSET(base, ptr) ((unsigned long)(ptr) - (unsigned long)(base))
+
+#define XPTR_MAKE(ptrval, base) ((xptr) XPTR_OFFSET(base, ptrval))
+
+#define XPTR_TAKE(xptrval, base)	\
+	( (void *) ( (unsigned long) base + (unsigned long) xptrval))
 
 #endif

@@ -28,7 +28,7 @@ static inline unsigned long xlock_acquire(struct xlock *lock, unsigned long who)
 
 static inline unsigned long xlock_try_lock(struct xlock *lock, unsigned long who)
 {
-	return __sync_bool_compare_and_swap(&lock->owner, Noone, who)
+	return __sync_bool_compare_and_swap(&lock->owner, Noone, who);
 }
 
 static inline void xlock_release(struct xlock *lock)

@@ -22,9 +22,6 @@
 
 typedef uint64_t xserial;
 
-/* this should be the same with xqindex */
-typedef uint32_t xptr;
-
 #define NoSerial ((xserial)-1)
 
 /* Peers and Segments
@@ -67,35 +64,6 @@ struct xseg_port;
 #define MAGIC_BUF4K 	4
 #define MAGIC_BUF256K 	5
 #define MAGIC_BUF4M 	6
-
-struct xseg_heap {
-	uint64_t size;
-	xptr start;
-	xptr cur;
-	XPTR_TYPE(struct xseg) segment;
-};
-
-struct xseg_free_space_header {
-	uint64_t size;
-};
-
-struct xseg_object {
-	uint32_t magic;
-	uint64_t size;
-	xptr next;
-};
-
-struct xseg_object_handler {
-	uint32_t magic;
-	uint64_t obj_size;
-	xptr allocated;
-	xptr list;
-	uint32_t flags;
-	xlock lock;
-	xptr heap;
-	XPTR_TYPE(struct xseg) segment;
-};
-
 
 struct xseg_operations {
 	void  (*mfree)(void *mem);
