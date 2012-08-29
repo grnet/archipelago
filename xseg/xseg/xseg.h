@@ -100,6 +100,7 @@ struct xseg_peer {
 
 struct xseg_config {
 	uint64_t heap_size;
+	uint32_t nr_ports;
 	uint32_t page_shift;	/* the alignment unit */
 	char type[XSEG_TNAMESIZE]; /* zero-terminated identifier */
 	char name[XSEG_NAMESIZE];  /* zero-terminated identifier */
@@ -203,8 +204,9 @@ struct xseg {
 	struct xheap *heap;
 	struct xobject_h *object_handlers;
 
-	struct xobject_h *requests;
-	struct xobject_h *ports;
+	struct xobject_h *request_h;
+	struct xobject_h *port_h;
+	xptr *ports;
 
 	struct xseg_shared *shared;
 	struct xseg_private *priv;

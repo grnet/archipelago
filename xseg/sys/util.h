@@ -14,6 +14,7 @@ typedef uint64_t xpointer;
  * this should be the same as xqindex
  * and must fit into a ptr type
  */
+//FIXME xqindex is set to uint32_t
 typedef uint64_t xptr; 
 
 #define Noneidx ((xqindex)-1)

@@ -38,4 +38,10 @@ int xobj_handler_init(struct xobject_h *obj_h, void *container,
 //TODO 
 //xobj_handler_destroy()
 //releases allocated pages
+//
+//maybe we need lock free versions of get/put obj
+//
+//also an
+//unsigned long xobj_get_objs(obj_h, flags, uint64_t nr, void **buf)
+//which will put nr objects in buf
 #endif
