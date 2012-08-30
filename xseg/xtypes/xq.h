@@ -3,7 +3,7 @@
 
 #include <sys/util.h>
 
-typedef uint32_t xqindex;
+typedef uint64_t xqindex;
 
 #include "xlock.h"
 

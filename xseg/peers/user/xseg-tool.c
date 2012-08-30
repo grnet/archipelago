@@ -526,7 +526,6 @@ int cmd_rndwrite(long loops, int32_t seed, uint32_t targetlen, uint32_t chunksiz
 			req_target = xseg_get_target(xseg, submitted);
 			req_data = xseg_get_data(xseg, submitted);
 
-			nr_submitted += 1;
 			reported = 0;
 			seed = random();
 			mkname(namebuf, targetlen, seed);
@@ -542,8 +541,12 @@ int cmd_rndwrite(long loops, int32_t seed, uint32_t targetlen, uint32_t chunksiz
 			submitted->flags |= XF_NOSYNC;
 
 			srl = xseg_submit(xseg, dstport, submitted);
-			(void)srl;
-			xseg_signal(xseg, dstport);
+			if (srl == Noneidx) {
+				xseg_put_request(xseg, submitted->portno, submitted);
+			} else {
+				nr_submitted += 1;
+				xseg_signal(xseg, dstport);
+			}
 		}
 
 		received = xseg_receive(xseg, srcport);
@@ -630,7 +633,6 @@ int cmd_rndread(long loops, int32_t seed, uint32_t targetlen, uint32_t chunksize
 			}
 
 			req_target = xseg_get_target(xseg, submitted);
-			nr_submitted += 1;
 			reported = 0;
 			seed = random();
 			mkname(namebuf, targetlen, seed);
@@ -644,8 +646,12 @@ int cmd_rndread(long loops, int32_t seed, uint32_t targetlen, uint32_t chunksize
 			submitted->op = X_READ;
 
 			srl = xseg_submit(xseg, dstport, submitted);
-			(void)srl;
-			xseg_signal(xseg, dstport);
+			if (srl == Noneidx) {
+				xseg_put_request(xseg, submitted->portno, submitted);
+			} else {
+				nr_submitted += 1;
+				xseg_signal(xseg, dstport);
+			}
 		}
 
 		received = xseg_receive(xseg, srcport);
