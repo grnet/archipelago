@@ -55,6 +55,19 @@ xhash/xhash.o:
 
 xhash/xhash.pic.o:
 	make -C xhash xhash.pic.o
+
+xheap/xheap.o:
+	make -C xheap xheap.o
+
+xheap/xheap.pic.o:
+	make -C xheap xheap.pic.o
+
+xobj/xobj.o:
+	make -C xobj xobj.o
+
+xobj/xobj.pic.o:
+	make -C xobj xobj.pic.o
+
 xseg_user.o: xseg_user.c
 	$(CC) $(CFLAGS) $(INC) -Wall -O2 -finline-functions -fPIC -c -o $@ $<
 
@@ -62,12 +75,14 @@ libxseg.map: $(BASE)/xtypes/xq_exports.h $(BASE)/xseg/xseg_exports.h
 	cat $(BASE)/xtypes/xq_exports.h $(BASE)/xseg/xseg_exports.h | ./make_symbol_map.sh > $@
 
 libxseg.so.$(MAJOR).$(MINOR): xseg.pic.o xseg_user.o libxseg.map \
-				 xq/xq.pic.o xpool/xpool.pic.o xhash/xhash.pic.o $(DRVOBJS)
+				 xq/xq.pic.o xpool/xpool.pic.o xhash/xhash.pic.o \
+				 xheap/xheap.pic.o xobj/xobj.pic.o $(DRVOBJS)
 	$(CC) $(CFLAGS) -shared \
                         -Wl,-soname=libxseg.so.$(MAJOR) \
                         -o libxseg.so.$(MAJOR).$(MINOR) \
                         xseg.pic.o xseg_user.o xq/xq.pic.o \
 			xpool/xpool.pic.o xhash/xhash.pic.o\
+			xheap/xheap.pic.o xobj/xobj.pic.o \
 			 _initialize.o $(DRVOBJS) \
                         -Wl,--version-script=libxseg.map \
                         -ldl -lrt
