@@ -1155,7 +1155,8 @@ struct xseg_port *xseg_bind_port(struct xseg *xseg, uint32_t req)
 	port = xseg_alloc_port(xseg, X_ALLOC, 512);
 	if (!port)
 		return NULL;
-
+	//FIXME use previously allocated port, pointed out 
+	//by port map. to be used with force binding
 	__lock_segment(xseg);
 	for (; portno < maxno; portno++) {
 		int64_t driver;
