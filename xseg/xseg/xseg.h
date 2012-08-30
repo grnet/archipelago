@@ -113,6 +113,7 @@ struct xseg_port {
 	uint64_t owner;
 	volatile uint64_t waitcue;
 	uint64_t peer_type;
+	uint32_t portno;
 };
 
 struct xseg_request;
@@ -328,7 +329,7 @@ struct xseg_request *  xseg_accept          ( struct xseg         * xseg,
 
 static inline uint32_t xseg_portno(struct xseg *xseg, struct xseg_port *port)
 {
-	return port - xseg->ports;
+	return port->portno;
 }
 
 #endif

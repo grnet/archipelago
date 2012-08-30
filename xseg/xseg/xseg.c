@@ -1172,6 +1172,7 @@ struct xseg_port *xseg_bind_port(struct xseg *xseg, uint32_t req)
 			break;
 		port->peer_type = (uint64_t)driver;
 		port->owner = id;
+		port->portno = portno;
 		xseg->ports[portno] = XPTR_MAKE(port, xseg->segment);
 		goto out;
 	}
