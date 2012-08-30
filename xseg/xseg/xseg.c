@@ -754,6 +754,129 @@ void xseg_leave(struct xseg *xseg)
 	type->ops.unmap(xseg->segment, xseg->segment_size);
 }
 
+struct xseg_port* xseg_get_port(struct xseg *xseg, uint32_t portno)
+{
+	if (!__validate_port(xseg, portno))
+		return NULL;
+	xptr p = xseg->ports[portno];
+	return XPTR_TAKE(p, xseg->segment);
+}
+
+struct xseg_port *xseg_alloc_port(struct xseg *xseg, uint32_t flags, uint64_t nr_reqs)
+{
+	struct xobject_h *obj_h = XPTR_TAKE(xseg->port_h, xseg->segment);
+	struct xseg_port *port = xobj_get_obj(obj_h, flags);
+	if (!port)
+		return NULL;
+
+	void *mem;
+	struct xseg_heap *heap = XPTR_TAKE(xseg->heap, xseg->segment);
+	struct xq *q;
+	char *buf;
+	uint64_t bytes;
+	
+	//TODO since max number of requests is not fixed
+	//	maybe we should make xqs expand when necessary
+
+	//how many bytes to allocate for a queue
+	bytes = sizeof(struct xq) + nr_reqs*sizeof(xqindex);
+	mem = xseg_allocate(heap, bytes);
+	if (!mem)
+		goto err_free;
+
+	//how many did we got, and calculate what's left of buffer
+	bytes = xheap_get_chunk_size(mem) - sizeof(struct xq);
+	port->free_queue = XPTR_MAKE(mem, xseg->segment);
+	//initialize queue with max nr it can hold
+	q = (struct xq *)XPTR_TAKE(port->free_queue, xseg->segment);
+	buf = mem + sizeof(struct xq);
+	xq_init_empty(q, bytes/sizeof(xqindex), buf); 
+
+	//and for request queue
+	bytes = sizeof(struct xq) + nr_reqs*sizeof(xqindex);
+	mem = xseg_allocate(heap, bytes);
+	if (!mem)
+		goto err_req;
+
+	bytes = xheap_get_chunk_size(mem) - sizeof(struct xq);
+	port->request_queue = XPTR_MAKE(mem, xseg->segment);
+	//initialize queue with max nr it can hold
+	q = (struct xq *)XPTR_TAKE(port->request_queue, xseg->segment);
+	buf = mem + sizeof(struct xq);
+	xq_init_empty(q, bytes/sizeof(xqindex), buf); 
+	
+	//and for reply_queue
+	bytes = sizeof(struct xq) + nr_reqs*sizeof(xqindex);
+	mem = xseg_allocate(heap, bytes);
+	if (!mem)
+		goto err_reply;
+
+	bytes = xheap_get_chunk_size(mem) - sizeof(struct xq);
+	port->reply_queue = XPTR_MAKE(mem, xseg->segment);
+	//initialize queue with max nr it can hold
+	q = (struct xq *)XPTR_TAKE(port->reply_queue, xseg->segment);
+	buf = mem + sizeof(struct xq);
+	xq_init_empty(q, bytes/sizeof(xqindex), buf); 
+
+	return port;
+
+err_reply:
+	xheap_free(heap, XPTR_TAKE(port->request_queue, xseg->segment));
+	port->request_queue = 0;
+err_req:
+	xheap_free(heap, XPTR_TAKE(port->free_queue, xseg->segment));
+	port->free_queue = 0;
+err_free:
+	xobj_put_obj(obj_h, port);
+
+	return NULL;
+	
+}
+
+void xseg_free_port(struct xseg *xseg, struct xseg_port *port)
+
+	struct xseg_heap *heap = XPTR_TAKE(xseg->heap, xseg->segment);
+	struct xobject_h *obj_h = XPTR_TAKE(xseg->port_h, xseg->segment);
+
+	if (port->request_queue) {
+		xheap_free(heap, XPTR_TAKE(port->request_queue, xseg->segment));
+		port->request_queue = 0;
+	}
+	if (port->free_queue) {
+		xheap_free(heap, XPTR_TAKE(port->free_queue, xseg->segment));
+		port->free_queue = 0;
+	}
+	if (port->reply_queue) {
+		xheap_free(heap, XPTR_TAKE(port->reply_queue, xseg->segment));
+		port->reply_queue = 0;
+	}
+	xobj_put_obj(obj_h, port);
+}
+
+void* xseg_alloc_buffer(struct xseg *xseg, uint64_t size)
+{
+	struct xheap *heap = xseg->heap;
+	return xheap_allocate(heap, size);
+}
+
+void xseg_free_buffer(struct xseg *xseg, void *ptr)
+{
+	struct xheap *heap = xseg->heap;
+	xheap_free(ptr);
+}
+
+struct xseg_request* xseg_alloc_request(struct xseg *xseg, uint32_t flags)
+{
+	struct xobject_h *obj_h = XPTR_TAKE(xseg->request_h, xseg->segment);
+	return xobj_get_obj(obj_h, flags);
+}
+
+void xseg_free_request xseg_free_request(struct xseg *xseg, void *ptr)
+{
+	struct xobject_h *obj_h = XPTR_TAKE(xseg->request_h, xseg->segment);
+	xobj_put_obj(obj_h, ptr);
+}
+
 int xseg_prepare_wait(struct xseg *xseg, uint32_t portno)
 {
 	if (!__validate_port(xseg, portno))
@@ -777,11 +900,10 @@ int xseg_wait_signal(struct xseg *xseg, uint32_t usec_timeout)
 int xseg_signal(struct xseg *xseg, uint32_t portno)
 {
 	struct xseg_peer *type;
-	struct xseg_port *port;
-	if (!__validate_port(xseg, portno))
+	struct xseg_port *port = xseg_get_port(xseg, portno);
+	if (!port)
 		return -1;
-
-	port = &xseg->ports[portno];
+	
 	type = __get_peer_type(xseg, port->peer_type);
 	if (!type)
 		return -1;
@@ -791,23 +913,47 @@ int xseg_signal(struct xseg *xseg, uint32_t portno)
 
 int xseg_alloc_requests(struct xseg *xseg, uint32_t portno, uint32_t nr)
 {
-	//FIXME
+	unsigned long i = 0;
+	xqindex xqi;
+	struct xq *q;
+	struct xseg_request *req;
 	struct xseg_port *port = xseg_get_port(xseg, portno);
 	if (!port)
 		return -1;
 
+	q = XPTR_TAKE(port->free_queue, xseg->segment);
+	while ((req = xseg_alloc_request(xseg, X_ALLOC, 512)) != NULL && i < nr) {
+		xqi = XPTR_MAKE(req, xseg->segment);
+		xqi = xq_append_tail(q, xqi, portno);
+		if (xqi == Noneidx)
+			break;
+		i++;
+	}
 
-	return xq_head_to_tail(xseg->free_requests, &port->free_queue, nr, portno);
+	if (i == 0)
+		i = -1;
+	return i;
 }
 
 int xseg_free_requests(struct xseg *xseg, uint32_t portno, int nr)
 {
-	struct xseg_port *port;
-	if (!__validate_port(xseg, portno))
+	unsigned long i = 0;
+	xqindex xqi;
+	struct xq *q;
+	struct xseg_request *req;
+	struct xseg_port *port = xseg_get_port(xseg, portno);
+	if (!port)
 		return -1;
 
-	port = &xseg->ports[portno];
-	return xq_head_to_tail(&port->free_queue, xseg->free_requests, nr, portno);
+	q = XPTR_TAKE(port->free_queue, xseg->segment);
+	while ((xqi = xq_pop_head(q, portno)) != Noneidx && i < nr) {
+		req = XPTR_TAKE(xqi, xseg->segment);
+		xseg_free_request(xseg, req);
+		i++;
+	}
+	if (i == 0)
+		i = -1;
+	return i;
 }
 
 struct xseg_request *xseg_get_request(struct xseg *xseg, uint32_t portno)
@@ -846,8 +992,6 @@ done:
 	req->timestamp.tv_usec = 0;
 
 	return req;
-
-
 }
 
 int xseg_put_request (  struct xseg *xseg,
@@ -1014,19 +1158,24 @@ struct xseg_port *xseg_bind_port(struct xseg *xseg, uint32_t req)
 		force = 1;
 	}
 
+	port = xseg_alloc_port(xseg, X_ALLOC, 512);
+	if (!port)
+		return NULL;
+
 	__lock_segment(xseg);
 	for (; portno < maxno; portno++) {
 		int64_t driver;
-		port = &xseg->ports[portno];
-		if (port->owner && !force)
+		if (xseg->ports[portno] && !force)
 			continue;
 		driver = __enable_driver(xseg, &xseg->priv->peer_type);
 		if (driver < 0)
 			break;
 		port->peer_type = (uint64_t)driver;
 		port->owner = id;
+		xseg->ports[portno] = XPTR_MAKE(port, xseg->segment);
 		goto out;
 	}
+	xseg_free_port(xseg, port);
 	port = NULL;
 out:
 	__unlock_segment(xseg);
@@ -1045,128 +1194,6 @@ int xseg_finalize(void)
 	return -1;
 }
 
-struct xseg_port* xseg_get_port(struct xseg *xseg, uint32_t portno)
-{
-	if (!__validate_port(xseg, portno))
-		return NULL;
-	xptr p = xseg->ports[portno];
-	return XPTR_TAKE(p, xseg->segment);
-}
-
-struct xseg_port *xseg_alloc_port(struct xseg *xseg, uint32_t flags, uint64_t nr_reqs)
-{
-	struct xobject_h *obj_h = XPTR_TAKE(xseg->port_h, xseg->segment);
-	struct xseg_port *port = xobj_get_obj(obj_h, flags);
-	if (!port)
-		return NULL;
-
-	void *mem;
-	struct xseg_heap *heap = XPTR_TAKE(xseg->heap, xseg->segment);
-	struct xq *q;
-	char *buf;
-	uint64_t bytes;
-	
-	//TODO since max number of requests is not fixed
-	//	maybe we should make xqs expand when necessary
-
-	//how many bytes to allocate for a queue
-	bytes = sizeof(struct xq) + nr_reqs*sizeof(xqindex);
-	mem = xseg_allocate(heap, bytes);
-	if (!mem)
-		goto err_free;
-
-	//how many did we got, and calculate what's left of buffer
-	bytes = xheap_get_chunk_size(mem) - sizeof(struct xq);
-	port->free_queue = XPTR_MAKE(mem, xseg->segment);
-	//initialize queue with max nr it can hold
-	q = (struct xq *)XPTR_TAKE(port->free_queue, xseg->segment);
-	buf = mem + sizeof(struct xq);
-	xq_init_empty(q, bytes/sizeof(xqindex), buf); 
-
-	//and for request queue
-	bytes = sizeof(struct xq) + nr_reqs*sizeof(xqindex);
-	mem = xseg_allocate(heap, bytes);
-	if (!mem)
-		goto err_req;
-
-	bytes = xheap_get_chunk_size(mem) - sizeof(struct xq);
-	port->request_queue = XPTR_MAKE(mem, xseg->segment);
-	//initialize queue with max nr it can hold
-	q = (struct xq *)XPTR_TAKE(port->request_queue, xseg->segment);
-	buf = mem + sizeof(struct xq);
-	xq_init_empty(q, bytes/sizeof(xqindex), buf); 
-	
-	//and for reply_queue
-	bytes = sizeof(struct xq) + nr_reqs*sizeof(xqindex);
-	mem = xseg_allocate(heap, bytes);
-	if (!mem)
-		goto err_reply;
-
-	bytes = xheap_get_chunk_size(mem) - sizeof(struct xq);
-	port->reply_queue = XPTR_MAKE(mem, xseg->segment);
-	//initialize queue with max nr it can hold
-	q = (struct xq *)XPTR_TAKE(port->reply_queue, xseg->segment);
-	buf = mem + sizeof(struct xq);
-	xq_init_empty(q, bytes/sizeof(xqindex), buf); 
-
-	return port;
-
-err_reply:
-	xheap_free(heap, XPTR_TAKE(port->request_queue, xseg->segment));
-	port->request_queue = 0;
-err_req:
-	xheap_free(heap, XPTR_TAKE(port->free_queue, xseg->segment));
-	port->free_queue = 0;
-err_free:
-	xobj_put_obj(obj_h, port);
-
-	return NULL;
-	
-}
-
-void xseg_free_port(struct xseg *xseg, struct xseg_port *port)
-
-	struct xseg_heap *heap = XPTR_TAKE(xseg->heap, xseg->segment);
-	struct xobject_h *obj_h = XPTR_TAKE(xseg->port_h, xseg->segment);
-
-	if (port->request_queue) {
-		xheap_free(heap, XPTR_TAKE(port->request_queue, xseg->segment));
-		port->request_queue = 0;
-	}
-	if (port->free_queue) {
-		xheap_free(heap, XPTR_TAKE(port->free_queue, xseg->segment));
-		port->free_queue = 0;
-	}
-	if (port->reply_queue) {
-		xheap_free(heap, XPTR_TAKE(port->reply_queue, xseg->segment));
-		port->reply_queue = 0;
-	}
-	xobj_put_obj(obj_h, port);
-}
-
-void* xseg_alloc_buffer(struct xseg *xseg, uint64_t size)
-{
-	struct xheap *heap = xseg->heap;
-	return xheap_allocate(heap, size);
-}
-
-void xseg_free_buffer(struct xseg *xseg, void *ptr)
-{
-	struct xheap *heap = xseg->heap;
-	xheap_free(ptr);
-}
-
-struct xseg_request* xseg_alloc_request(struct xseg *xseg, uint32_t flags)
-{
-	struct xobject_h *obj_h = XPTR_TAKE(xseg->request_h, xseg->segment);
-	return xobj_get_obj(obj_h, flags);
-}
-
-void xseg_free_request xseg_free_request(struct xseg *xseg, void *ptr)
-{
-	struct xobject_h *obj_h = XPTR_TAKE(xseg->request_h, xseg->segment);
-	xobj_put_obj(obj_h, ptr);
-}
 
 #ifdef __KERNEL__
 #include <linux/module.h>
