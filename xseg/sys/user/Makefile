@@ -100,6 +100,8 @@ clean:
 	make -C xq clean
 	make -C xpool clean
 	make -C xhash clean
+	make -C xheap clean
+	make -C xobj clean
 	make -C python clean
 	rm -f _initialize.c _initialize.o
 	rm -f xseg.o xseg.pic.o xseg_user.o
