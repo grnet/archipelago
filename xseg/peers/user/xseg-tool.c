@@ -181,11 +181,12 @@ out:
 void report_request(struct xseg_request *req)
 {
 	uint32_t max = req->datalen;
+	char *data = xseg_get_data(xseg, req);
 	if (max > 128)
 		max = 128;
-	req->data[max-1] = 0;
+	data[max-1] = 0;
 	fprintf(stderr, "request %llu state %u\n", (unsigned long long)req->serial, req->state);
-	fprintf(stderr, "data: %s\n", req->data);
+	fprintf(stderr, "data: %s\n", data);
 }
 
 int cmd_info(char *target)
@@ -195,6 +196,7 @@ int cmd_info(char *target)
 	int r;
 	xserial srl;
 	struct xseg_request *req;
+	char *req_target;
 
 	req = xseg_get_request(xseg, srcport);
 	if (!req) {
@@ -202,7 +204,7 @@ int cmd_info(char *target)
 		return -1;
 	}
 
-	r = xseg_prep_request(req, targetlen, size);
+	r = xseg_prep_request(xseg, req, targetlen, size);
 	if (r < 0) {
 		fprintf(stderr, "Cannot prepare request! (%lu, %lu)\n",
 			(unsigned long) targetlen, (unsigned long) size);
@@ -210,7 +212,8 @@ int cmd_info(char *target)
 		return -1;
 	}
 
-	strncpy(req->target, target, targetlen);
+	req_target = xseg_get_target(xseg, req);
+	strncpy(req_target, target, targetlen);
 	req->offset = 0;
 	req->size = size;
 	req->op = X_INFO;
@@ -229,13 +232,14 @@ int cmd_read(char *target, uint64_t offset, uint64_t size)
 	uint32_t targetlen = strlen(target);
 	int r;
 	xserial srl;
+	char *req_target;
 	struct xseg_request *req = xseg_get_request(xseg, srcport);
 	if (!req) {
 		fprintf(stderr, "No request\n");
 		return -1;
 	}
 
-	r = xseg_prep_request(req, targetlen, size);
+	r = xseg_prep_request(xseg, req, targetlen, size);
 	if (r < 0) {
 		fprintf(stderr, "Cannot prepare request! (%lu, %llu)\n",
 			(unsigned long)targetlen, (unsigned long long)size);
@@ -243,7 +247,8 @@ int cmd_read(char *target, uint64_t offset, uint64_t size)
 		return -1;
 	}
 
-	strncpy(req->target, target, targetlen);
+	req_target = xseg_get_target(xseg, req);
+	strncpy(req_target, target, targetlen);
 	req->offset = offset;
 	req->size = size;
 	req->op = X_READ;
@@ -262,6 +267,7 @@ int cmd_write(char *target, uint64_t offset)
 	int r;
 	xserial srl;
 	uint64_t size = 0;
+	char *req_target, *req_data;
 	uint32_t targetlen = strlen(target);
 	struct xseg_request *req;
 
@@ -277,7 +283,7 @@ int cmd_write(char *target, uint64_t offset)
 		return -1;
 	}
 
-	r = xseg_prep_request(req, targetlen, size);
+	r = xseg_prep_request(xseg, req, targetlen, size);
 	if (r < 0) {
 		fprintf(stderr, "Cannot prepare request! (%lu, %llu)\n",
 			(unsigned long)targetlen, (unsigned long long)size);
@@ -285,8 +291,11 @@ int cmd_write(char *target, uint64_t offset)
 		return -1;
 	}
 
-	strncpy(req->target, target, targetlen);
-	memcpy(req->buffer, buf, size);
+	req_target = xseg_get_target(xseg, req);
+	strncpy(req_target, target, targetlen);
+	
+	req_data = xseg_get_data(xseg, req);
+	memcpy(req_data, buf, size);
 	req->offset = offset;
 	req->size = size;
 	req->op = X_WRITE;
@@ -335,11 +344,15 @@ void log_req(int logfd, uint32_t portno2, uint32_t portno1, int op, int method,
 {
 	FILE *logfp;
 	char target[64], data[64];
+	char *req_target, *req_data;
 	/* null terminate name in case of req->target is less than 63 characters,
 	 * and next character after name (aka first byte of next buffer) is not
 	 * null
 	 */
 	unsigned int end = (req->targetlen > 63) ? 63 : req->targetlen;
+	
+	req_target = xseg_get_target(xseg, req);
+	req_data = xseg_get_data(xseg, req);
 
 	logfp = fdopen(logfd, "a");
 	if (!logfp)
@@ -347,9 +360,9 @@ void log_req(int logfd, uint32_t portno2, uint32_t portno1, int op, int method,
 
 	switch(method) {
 	case 0:
-		strncpy(target, req->target, end);
+		strncpy(target, req_target, end);
 		target[end] = 0;
-		strncpy(data, req->data, 63);
+		strncpy(data, req_data, 63);
 		data[63] = 0;
 
 		fprintf(logfp,
@@ -494,19 +507,23 @@ int cmd_rndwrite(long loops, int32_t seed, uint32_t targetlen, uint32_t chunksiz
 	int reported = 0, r;
 	uint64_t offset;
 	xserial srl;
+	char *req_data, *req_target;
 
 	for (;;) {
 		xseg_prepare_wait(xseg, srcport);
 		if (nr_submitted < loops &&
 		    (submitted = xseg_get_request(xseg, srcport))) {
 			xseg_cancel_wait(xseg, srcport);
-			r = xseg_prep_request(submitted, targetlen, chunksize);
+			r = xseg_prep_request(xseg, submitted, targetlen, chunksize);
 			if (r < 0) {
 				fprintf(stderr, "Cannot prepare request! (%u, %u)\n",
 					targetlen, chunksize);
 				xseg_put_request(xseg, submitted->portno, submitted);
 				return -1;
 			}
+			
+			req_target = xseg_get_target(xseg, submitted);
+			req_data = xseg_get_data(xseg, submitted);
 
 			nr_submitted += 1;
 			reported = 0;
@@ -514,9 +531,9 @@ int cmd_rndwrite(long loops, int32_t seed, uint32_t targetlen, uint32_t chunksiz
 			mkname(namebuf, targetlen, seed);
 			namebuf[targetlen] = 0;
 			//printf("%ld: %s\n", nr_submitted, namebuf);
-			strncpy(submitted->target, namebuf, targetlen);
+			strncpy(req_target, namebuf, targetlen);
 			offset = 0;// pick(size);
-			mkchunk(submitted->buffer, chunksize, namebuf, targetlen, offset);
+			mkchunk(req_data, chunksize, namebuf, targetlen, offset);
 
 			submitted->offset = offset;
 			submitted->size = chunksize;
@@ -595,6 +612,7 @@ int cmd_rndread(long loops, int32_t seed, uint32_t targetlen, uint32_t chunksize
 	int reported = 0, r;
 	uint64_t offset;
 	xserial srl;
+	char *req_data, *req_target;
 
 	for (;;) {
 		submitted = NULL;
@@ -602,7 +620,7 @@ int cmd_rndread(long loops, int32_t seed, uint32_t targetlen, uint32_t chunksize
 		if (nr_submitted < loops &&
 		    (submitted = xseg_get_request(xseg, srcport))) {
 			xseg_cancel_wait(xseg, srcport);
-			r = xseg_prep_request(submitted, targetlen, chunksize);
+			r = xseg_prep_request(xseg, submitted, targetlen, chunksize);
 			if (r < 0) {
 				fprintf(stderr, "Cannot prepare request! (%u, %u)\n",
 					targetlen, chunksize);
@@ -610,6 +628,7 @@ int cmd_rndread(long loops, int32_t seed, uint32_t targetlen, uint32_t chunksize
 				return -1;
 			}
 
+			req_target = xseg_get_target(xseg, submitted);
 			nr_submitted += 1;
 			reported = 0;
 			seed = random();
@@ -618,7 +637,7 @@ int cmd_rndread(long loops, int32_t seed, uint32_t targetlen, uint32_t chunksize
 			//printf("%ld: %s\n", nr_submitted, namebuf);
 			offset = 0;//pick(size);
 
-			strncpy(submitted->target, namebuf, targetlen);
+			strncpy(req_target, namebuf, targetlen);
 			submitted->offset = offset;
 			submitted->size = chunksize;
 			submitted->op = X_READ;
@@ -632,11 +651,13 @@ int cmd_rndread(long loops, int32_t seed, uint32_t targetlen, uint32_t chunksize
 		if (received) {
 			xseg_cancel_wait(xseg, srcport);
 			nr_received += 1;
+			req_target = xseg_get_target(xseg, received);
+			req_data = xseg_get_data(xseg, received);
 			if (!(received->state & XS_SERVED)) {
 				nr_failed += 1;
 				report_request(received);
-			} else if (!chkchunk(received->data, received->datalen,
-					received->target, received->targetlen, received->offset)) {
+			} else if (!chkchunk(req_data, received->datalen,
+					req_target, received->targetlen, received->offset)) {
 				nr_mismatch += 1;
 			}
 
@@ -674,6 +695,7 @@ int cmd_submit_reqs(long loops, long concurrent_reqs, int op)
 	uint32_t targetlen = 10, chunksize = 4096;
 	struct timeval tv1, tv2;
 	xserial srl;
+	char *req_data, *req_target;
 
 	xseg_bind_port(xseg, srcport);
 
@@ -684,7 +706,7 @@ int cmd_submit_reqs(long loops, long concurrent_reqs, int op)
 		if (nr_submitted < loops &&  nr_flying < concurrent_reqs &&
 		    (submitted = xseg_get_request(xseg, srcport))) {
 			xseg_cancel_wait(xseg, srcport);
-			r = xseg_prep_request(submitted, targetlen, chunksize);
+			r = xseg_prep_request(xseg, submitted, targetlen, chunksize);
 			if (r < 0) {
 				fprintf(stderr, "Cannot prepare request! (%u, %u)\n",
 					targetlen, chunksize);
@@ -699,6 +721,8 @@ int cmd_submit_reqs(long loops, long concurrent_reqs, int op)
 
 			submitted->offset = offset;
 			submitted->size = chunksize;
+			req_target = xseg_get_target(xseg, submitted);
+			req_data = xseg_get_data(xseg, submitted);
 
 			if (op == 0)
 				submitted->op = X_INFO;
@@ -706,7 +730,7 @@ int cmd_submit_reqs(long loops, long concurrent_reqs, int op)
 				submitted->op = X_READ;
 			else if (op == 2) {
 				submitted->op = X_WRITE;
-				mkchunk(submitted->buffer, submitted->datalen, submitted->target, submitted->targetlen, submitted->offset);
+				mkchunk(req_data, submitted->datalen, req_target, submitted->targetlen, submitted->offset);
 			}
 
 			srl = xseg_submit(xseg, dstport, submitted);
@@ -747,17 +771,18 @@ int cmd_submit_reqs(long loops, long concurrent_reqs, int op)
 	return 0;
 }
 
-int cmd_report(uint32_t port)
+int cmd_report(uint32_t portno)
 {
+	struct xseg_port *port = xseg_get_port(xseg, portno);
 	struct xq *fq, *rq, *pq;
-	fq = &xseg->ports[port].free_queue;
-	rq = &xseg->ports[port].request_queue;
-	pq = &xseg->ports[port].reply_queue;
+	fq = xseg_get_queue(xseg, port, free_queue);
+	rq = xseg_get_queue(xseg, port, request_queue);
+	pq = xseg_get_queue(xseg, port, reply_queue);
 	fprintf(stderr, "port %u:\n"
 		"       free_queue [%p] count : %u\n"
 		"    request_queue [%p] count : %u\n"
 		"      reply_queue [%p] count : %u\n",
-		port,
+		portno,
 		(void *)fq, xq_count(fq),
 		(void *)rq, xq_count(rq),
 		(void *)pq, xq_count(pq));
@@ -784,7 +809,7 @@ int cmd_reportall(void)
 	if (cmd_join())
 		return -1;
 
-	fprintf(stderr, "global free requests: %u\n", xq_count(xseg->free_requests));
+	//fprintf(stderr, "global free requests: %u\n", xq_count(xseg->free_requests));
 	for (t = 0; t < xseg->config.nr_ports; t++)
 		cmd_report(t);
 
@@ -843,21 +868,23 @@ int cmd_finish(unsigned long nr, int fail)
 {
 	struct xseg_request *req;
 	char *buf = malloc(sizeof(char) * 8128);
-
+	char *req_target, *req_data;
 	xseg_bind_port(xseg, srcport);
 
 	for (; nr--;) {
 		xseg_prepare_wait(xseg, srcport);
 		req = xseg_accept(xseg, srcport);
 		if (req) {
+			req_target = xseg_get_target(xseg, req);
+			req_data = xseg_get_data(xseg, req);
 			xseg_cancel_wait(xseg, srcport);
 			if (fail == 1)
 				req->state &= ~XS_SERVED;
 			else {
 				if (req->op == X_READ)
-					mkchunk(req->buffer, req->datalen, req->target, req->targetlen, req->offset);
+					mkchunk(req_data, req->datalen, req_target, req->targetlen, req->offset);
 				else if (req->op == X_WRITE) 
-					memcpy(buf, req->data, (sizeof(*buf) > req->datalen) ? req->datalen : sizeof(*buf));
+					memcpy(buf, req_data, (sizeof(*buf) > req->datalen) ? req->datalen : sizeof(*buf));
 				else if (req->op == X_INFO)
 					*((uint64_t *) req->data) = 4294967296;
 				
@@ -880,6 +907,7 @@ int cmd_finish(unsigned long nr, int fail)
 
 void handle_reply(struct xseg_request *req)
 {
+	char *req_data = xseg_get_data(xseg, req);
 	if (!(req->state & XS_SERVED)) {
 		report_request(req);
 		goto put;
@@ -887,7 +915,7 @@ void handle_reply(struct xseg_request *req)
 
 	switch (req->op) {
 	case X_READ:
-		fwrite(req->data, 1, req->datalen, stdout);
+		fwrite(req_data, 1, req->datalen, stdout);
 		break;
 
 	case X_WRITE:
@@ -897,7 +925,7 @@ void handle_reply(struct xseg_request *req)
 	case X_COMMIT:
 	case X_CLONE:
 	case X_INFO:
-		fprintf(stderr, "size: %llu\n", (unsigned long long)*((uint64_t *)req->data));
+		fprintf(stderr, "size: %llu\n", (unsigned long long)*((uint64_t *)req_data));
 		break;
 
 	default:

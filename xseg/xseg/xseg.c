@@ -743,9 +743,10 @@ void xseg_leave(struct xseg *xseg)
 
 struct xseg_port* xseg_get_port(struct xseg *xseg, uint32_t portno)
 {
+	xptr p;
 	if (!__validate_port(xseg, portno))
 		return NULL;
-	xptr p = xseg->ports[portno];
+	p = xseg->ports[portno];
 	return XPTR_TAKE(p, xseg->segment);
 }
 
@@ -972,6 +973,11 @@ struct xseg_request *xseg_get_request(struct xseg *xseg, uint32_t portno)
 done:
 	req->portno = portno;
 
+	req->target = 0;
+	req->data = 0;
+	req->datalen = 0;
+	req->targetlen = 0;
+	
 	req->elapsed = 0;
 	req->timestamp.tv_sec = 0;
 	req->timestamp.tv_usec = 0;

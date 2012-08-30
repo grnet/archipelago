@@ -328,6 +328,7 @@ struct xseg_request *  xseg_accept          ( struct xseg         * xseg,
 /*                                                                            */
 /* ================= XSEG REQUEST INTERFACE ================================= */
 
+struct xseg_port* xseg_get_port(struct xseg *xseg, uint32_t portno);
 
 static inline uint32_t xseg_portno(struct xseg *xseg, struct xseg_port *port)
 {
@@ -343,4 +344,8 @@ static inline char* xseg_get_data(struct xseg* xseg, struct xseg_request *req)
 {
 	return (char *) XPTR_TAKE(req->data, xseg->segment);
 }
+
+#define xseg_get_queue(__xseg, __port, queue) \
+	((struct xq *) XPTR_TAKE(__port->queue, __xseg->segment))
+
 #endif

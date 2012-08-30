@@ -26,3 +26,4 @@ EXPORT_SYMBOL(xseg_prepare_wait);
 EXPORT_SYMBOL(xseg_cancel_wait);
 EXPORT_SYMBOL(xseg_wait_signal);
 EXPORT_SYMBOL(xseg_signal);
+EXPORT_SYMBOL(xseg_get_port);

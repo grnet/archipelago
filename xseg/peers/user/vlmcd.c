@@ -269,7 +269,7 @@ static int dispatch(struct vlmcd *vlmcd, struct io *io, struct xseg_request *xre
 		 * and hope the mapper reply fits in the remaining datalen
 		 * bytes.
 		 */
-		ret = xseg_prep_request(io->mreq, io->vreq->targetlen,
+		ret = xseg_prep_request(xseg, io->mreq, io->vreq->targetlen,
 			io->mreq->bufferlen - io->vreq->targetlen);
 		always_assert(ret == 0);
 
@@ -341,7 +341,7 @@ static int dispatch(struct vlmcd *vlmcd, struct io *io, struct xseg_request *xre
 				always_assert(breq);
 				always_assert(datalen + targetlen <= breq->bufferlen);
 
-				ret = xseg_prep_request(breq, targetlen, datalen);
+				ret = xseg_prep_request(xseg, breq, targetlen, datalen);
 				breq->datalen = datalen;
 				breq->offset = offset;
 				breq->size = datalen;
