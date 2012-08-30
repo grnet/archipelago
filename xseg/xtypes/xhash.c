@@ -1,8 +1,10 @@
 //#include <stdio.h>
 //#include <stdlib.h>
-#include <assert.h>
+//#include <assert.h>
 //#include <unistd.h>
 //#include <stdbool.h>
+
+#define assert(...) 
 
 /* python hash for C
  *  originally by gtsouk@cslab.ece.ntua.gr
