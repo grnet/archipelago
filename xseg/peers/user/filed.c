@@ -88,10 +88,17 @@ static void log_io(char *msg, struct io *io)
 	 * and next character after name (aka first byte of next buffer) is not
 	 * null
 	 */
-	unsigned int end = (io->req->targetlen> 63) ? 63 : io->req->targetlen;
-	strncpy(target, io->req->target, end);
+	struct store* store = io->store;
+	struct xseg *xseg = store->xseg;
+	struct xseg_request *req = io->req;
+	char *req_target = xseg_get_target(xseg, req);
+	char *req_data = xseg_get_data(xseg, req);
+
+	unsigned int end = (req->targetlen> 63) ? 63 : req->targetlen;
+
+	strncpy(target, req_target, end);
 	target[end] = 0;
-	strncpy(data, io->req->data, 63);
+	strncpy(data, req_data, 63);
 	data[63] = 0;
 
 	fprintf(stderr,
@@ -99,13 +106,13 @@ static void log_io(char *msg, struct io *io)
 		"target[%u]: '%s', data[%llu]:\n%s------------------\n\n",
 		msg,
 		(unsigned int)io->fdcacheidx, //this is cacheidx not fd
-		(unsigned int)io->req->op,
-		(unsigned long long)io->req->offset,
-		(unsigned long)io->req->size,
+		(unsigned int)req->op,
+		(unsigned long long)req->offset,
+		(unsigned long)req->size,
 		(unsigned long)io->retval,
-		(unsigned int)io->req->state,
-		(unsigned int)io->req->targetlen, target,
-		(unsigned long long)io->req->datalen, data);
+		(unsigned int)req->state,
+		(unsigned int)req->targetlen, target,
+		(unsigned long long)req->datalen, data);
 }
 
 static struct io *alloc_io(struct store *store)
@@ -155,8 +162,10 @@ static void pending(struct store *store, struct io *io)
 
 static void handle_unknown(struct store *store, struct io *io)
 {
+	struct xseg *xseg = store->xseg;
 	struct xseg_request *req = io->req;
-	snprintf(req->data, req->datalen, "unknown request op");
+	char *data = xseg_get_data(xseg, req);
+	snprintf(data, req->datalen, "unknown request op");
 	fail(store, io);
 }
 
@@ -287,13 +296,16 @@ out_err_unlock:
 static void handle_read_write(struct store *store, struct io *io)
 {
 	int r, fd, mode;
+	struct xseg *xseg = store->xseg;
 	struct xseg_request *req = io->req;
+	char *target = xseg_get_target(xseg, req);
+	char *data = xseg_get_data(xseg, req);
 
 	if (req->op == X_WRITE)
 		mode = 1;
 	else
 		mode = 0;
-	fd = dir_open(store, io, req->target, req->targetlen, mode);
+	fd = dir_open(store, io, target, req->targetlen, mode);
 	if (fd < 0){
 		perror("dir_open");
 		fail(store, io);
@@ -321,7 +333,7 @@ static void handle_read_write(struct store *store, struct io *io)
 	switch (req->op) {
 	case X_READ:
 		while (req->serviced < req->datalen) {
-			r = pread(fd, req->data + req->serviced, 
+			r = pread(fd, data + req->serviced, 
 					req->datalen - req->serviced,
 				       	req->offset + req->serviced);
 			if (r < 0) {
@@ -330,7 +342,7 @@ static void handle_read_write(struct store *store, struct io *io)
 			}
 			else if (r == 0) {
 				/* reached end of file. zero out the rest data buffer */
-				memset(req->data + req->serviced, 0, req->datalen - req->serviced);
+				memset(data + req->serviced, 0, req->datalen - req->serviced);
 				req->serviced = req->datalen;
 			}
 			else {
@@ -340,7 +352,7 @@ static void handle_read_write(struct store *store, struct io *io)
 		break;
 	case X_WRITE:
 		while (req->serviced < req->datalen) {
-			r = pwrite(fd, req->data + req->serviced, 
+			r = pwrite(fd, data + req->serviced, 
 					req->datalen - req->serviced,
 				       	req->offset + req->serviced);
 			if (r < 0) {
@@ -348,7 +360,7 @@ static void handle_read_write(struct store *store, struct io *io)
 			}
 			else if (r == 0) {
 				/* reached end of file. zero out the rest data buffer */
-				memset(req->data + req->serviced, 0, req->datalen - req->serviced);
+				memset(data + req->serviced, 0, req->datalen - req->serviced);
 				req->serviced = req->datalen;
 			}
 			else {
@@ -363,7 +375,7 @@ static void handle_read_write(struct store *store, struct io *io)
 		}
 		break;
 	default:
-		snprintf(req->data, req->datalen,
+		snprintf(data, req->datalen,
 			 "wtf, corrupt op %u?\n", req->op);
 		fail(store, io);
 		return;
@@ -373,7 +385,7 @@ static void handle_read_write(struct store *store, struct io *io)
 		complete(store, io);
 	}
 	else {
-		strerror_r(errno, req->data, req->datalen);
+		strerror_r(errno, data, req->datalen);
 		fail(store, io);
 	}
 	return;
@@ -381,12 +393,15 @@ static void handle_read_write(struct store *store, struct io *io)
 
 static void handle_info(struct store *store, struct io *io)
 {
+	struct xseg *xseg = store->xseg;
 	struct xseg_request *req = io->req;
+	char *target = xseg_get_target(xseg, req);
+	char *data = xseg_get_data(xseg, req);
 	struct stat stat;
 	int fd, r;
 	off_t size;
 
-	fd = dir_open(store, io, req->target, req->targetlen, 0);
+	fd = dir_open(store, io, target, req->targetlen, 0);
 	if (fd < 0) {
 		fail(store, io);
 		return;
@@ -398,7 +413,7 @@ static void handle_info(struct store *store, struct io *io)
 		return;
 	}
 	size = stat.st_size;
-	*((off_t *) req->data) = size;
+	*((off_t *) data) = size;
 	req->datalen = sizeof(size);
 
 	complete(store, io);

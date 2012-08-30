@@ -334,4 +334,13 @@ static inline uint32_t xseg_portno(struct xseg *xseg, struct xseg_port *port)
 	return port->portno;
 }
 
+static inline char* xseg_get_target(struct xseg* xseg, struct xseg_request *req)
+{
+	return (char *) XPTR_TAKE(req->target, xseg->segment);
+}
+
+static inline char* xseg_get_data(struct xseg* xseg, struct xseg_request *req)
+{
+	return (char *) XPTR_TAKE(req->data, xseg->segment);
+}
 #endif
