@@ -55,9 +55,12 @@ static int posix_wait_signal(struct xseg *xseg, uint32_t timeout)
 static int posix_signal(struct xseg *xseg, uint32_t portno)
 {
 	struct pid *pid;
-	struct xseg_port *port = &xseg->ports[portno];
 	struct task_struct *task;
 	int ret = -ENOENT;
+	struct xseg_port *port = xseg_get_port(xseg, portno);
+	if (!port) 
+		return -1;
+
 
 	rcu_read_lock();
 	/* XXX Security: xseg peers can kill anyone */

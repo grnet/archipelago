@@ -128,14 +128,18 @@ static void posix_signal_quit(void)
 
 static int posix_prepare_wait(struct xseg *xseg, uint32_t portno)
 {
-	struct xseg_port *port = &xseg->ports[portno];
+	struct xseg_port *port = xseg_get_port(xseg, portno);
+	if (!port) 
+		return -1;
 	port->waitcue = pid;
 	return 0;
 }
 
 static int posix_cancel_wait(struct xseg *xseg, uint32_t portno)
 {
-	struct xseg_port *port = &xseg->ports[portno];
+	struct xseg_port *port = xseg_get_port(xseg, portno);
+	if (!port) 
+		return -1;
 	port->waitcue = 0;
 	return 0;
 }
@@ -161,7 +165,9 @@ static int posix_wait_signal(struct xseg *xseg, uint32_t usec_timeout)
 
 static int posix_signal(struct xseg *xseg, uint32_t portno)
 {
-	struct xseg_port *port = &xseg->ports[portno];
+	struct xseg_port *port = xseg_get_port(xseg, portno);
+	if (!port) 
+		return -1;
 	pid_t cue = (pid_t)port->waitcue;
 	if (!cue)
 		return 0;
