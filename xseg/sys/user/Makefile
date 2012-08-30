@@ -15,6 +15,10 @@ default: all
 
 all: libxseg.a libxseg.so
 	make -C xq all
+	make -C xpool all
+	make -C xhash all
+	make -C xheap all
+	make -C xobj all
 	make -C python all
 
 COMMA=,

@@ -192,6 +192,10 @@ int main(int argc, const char *argv[])
 {
 	unsigned long alloc, expected, i =0;
 	int r;
+	if (argc < 5){
+		printf("Usage: %s al_unit size chunk_size nr_threads\n", argv[0]);
+		return -1;
+	}
 	al_unit = atol(argv[1]); 
 	size = atol(argv[2]); 
 	chunk = atol(argv[3]);

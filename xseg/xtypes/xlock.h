@@ -33,6 +33,7 @@ static inline unsigned long xlock_try_lock(struct xlock *lock, unsigned long who
 
 static inline void xlock_release(struct xlock *lock)
 {
+	BARRIER();
 	lock->owner = Noone;
 }
 
