@@ -20,6 +20,7 @@
 #include <sys/util.h>
 #include <xtypes/xq.h>
 #include <xtypes/xobj.h>
+#include <xtypes/xhash.h>
 
 typedef uint64_t xserial;
 
@@ -99,7 +100,7 @@ struct xseg_peer {
 };
 
 struct xseg_config {
-	uint64_t heap_size;
+	uint64_t heap_size;	/* heap size in MB */
 	uint32_t nr_ports;
 	uint32_t page_shift;	/* the alignment unit */
 	char type[XSEG_TNAMESIZE]; /* zero-terminated identifier */
@@ -283,7 +284,8 @@ struct xseg_request *  xseg_get_request     ( struct xseg         * xseg,
                                               uint32_t              portno,
                                               struct xseg_request * xreq      );
 
-                int    xseg_prep_request    ( struct xseg_request * xreq,
+                int    xseg_prep_request    ( struct xseg	  * xseg,
+					      struct xseg_request * xreq,
                                               uint32_t              targetlen,
                                               uint64_t              datalen  );
 /*                    \___________________/                       \_________/ */
