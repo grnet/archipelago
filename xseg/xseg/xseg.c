@@ -98,7 +98,7 @@ static struct xseg_peer *__get_peer_type(struct xseg *xseg, uint32_t serial)
 	/* xseg->shared->peer_types is an append-only array,
 	 * therefore this should be safe
 	 * without either locking or string copying. */
-	shared_peer_types = XSEG_TAKE_PTR(xseg->shared->peer_types, xseg->segment);
+	shared_peer_types = XPTR_TAKE(xseg->shared->peer_types, xseg->segment);
 	name = shared_peer_types[serial];
 	if (!*name) {
 		XSEGLOG("nonexistent peer type serial %d\n", serial);
@@ -319,7 +319,7 @@ int64_t __enable_driver(struct xseg *xseg, struct xseg_peer *driver)
 		return -1;
 	}
 
-	drivers = XSEG_TAKE_PTR(xseg->shared->peer_types, xseg->segment);
+	drivers = XPTR_TAKE(xseg->shared->peer_types, xseg->segment);
 	for (r = 0; r < max_drivers; r++) {
 		if (!*drivers[r])
 			goto bind;
@@ -423,7 +423,7 @@ static long initialize_segment(struct xseg *xseg, struct xseg_config *cfg)
 	if (page_size < XSEG_MIN_PAGE_SIZE)
 		return -1;
 
-	xseg->segment_size = size;
+	xseg->segment_size = 2 * page_size + cfg->heap_size;
 	xseg->segment = segment;
 
 	/* build heap */
@@ -432,7 +432,7 @@ static long initialize_segment(struct xseg *xseg, struct xseg_config *cfg)
 	size = __align(size, page_shift);
 
 	heap = XPTR_TAKE(xseg->heap, segment);
-	r = xheap_init(heap, cfg->heap_size, page_shift, segment);
+	r = xheap_init(heap, cfg->heap_size, page_shift, segment+size);
 	if (r < 0)
 		return -1;
 
@@ -444,7 +444,7 @@ static long initialize_segment(struct xseg *xseg, struct xseg_config *cfg)
 	obj_h = mem;
 	r = xobj_handler_init(obj_h, segment, MAGIC_OBJH, 
 			sizeof(struct xobject_h), heap);
-	if (!r)
+	if (r < 0)
 		return -1;
 
 	//now that we have object handlers handler, use that to allocate
@@ -457,7 +457,7 @@ static long initialize_segment(struct xseg *xseg, struct xseg_config *cfg)
 	obj_h = mem;
 	r = xobj_handler_init(obj_h, segment, MAGIC_REQ, 
 			sizeof(struct xseg_request), heap);
-	if (!r)
+	if (r < 0)
 		return -1;
 	xseg->request_h = XPTR_MAKE(obj_h, segment);
 	
@@ -469,7 +469,7 @@ static long initialize_segment(struct xseg *xseg, struct xseg_config *cfg)
 	obj_h = mem;
 	r = xobj_handler_init(obj_h, segment, MAGIC_PORT, 
 			sizeof(struct xseg_port), heap);
-	if (!r)
+	if (r < 0)
 		return -1;
 	xseg->port_h = XPTR_MAKE(mem, segment);
 
@@ -747,18 +747,21 @@ struct xseg_port* xseg_get_port(struct xseg *xseg, uint32_t portno)
 	if (!__validate_port(xseg, portno))
 		return NULL;
 	p = xseg->ports[portno];
-	return XPTR_TAKE(p, xseg->segment);
+	if (p)
+		return XPTR_TAKE(p, xseg->segment);
+	else 
+		return NULL;
 }
 
 struct xseg_port *xseg_alloc_port(struct xseg *xseg, uint32_t flags, uint64_t nr_reqs)
 {
-	struct xobject_h *obj_h = XPTR_TAKE(xseg->port_h, xseg->segment);
+	struct xobject_h *obj_h = xseg->port_h;
 	struct xseg_port *port = xobj_get_obj(obj_h, flags);
 	if (!port)
 		return NULL;
 
 	void *mem;
-	struct xheap *heap = XPTR_TAKE(xseg->heap, xseg->segment);
+	struct xheap *heap = xseg->heap;
 	struct xq *q;
 	char *buf;
 	uint64_t bytes;
@@ -823,7 +826,7 @@ err_free:
 
 void xseg_free_port(struct xseg *xseg, struct xseg_port *port)
 {
-	struct xobject_h *obj_h = XPTR_TAKE(xseg->port_h, xseg->segment);
+	struct xobject_h *obj_h = xseg->port_h;
 
 	if (port->request_queue) {
 		xheap_free(XPTR_TAKE(port->request_queue, xseg->segment));
@@ -853,13 +856,13 @@ void xseg_free_buffer(struct xseg *xseg, void *ptr)
 
 struct xseg_request* xseg_alloc_request(struct xseg *xseg, uint32_t flags)
 {
-	struct xobject_h *obj_h = XPTR_TAKE(xseg->request_h, xseg->segment);
+	struct xobject_h *obj_h = xseg->request_h;
 	return xobj_get_obj(obj_h, flags);
 }
 
 void xseg_free_request(struct xseg *xseg, void *ptr)
 {
-	struct xobject_h *obj_h = XPTR_TAKE(xseg->request_h, xseg->segment);
+	struct xobject_h *obj_h = xseg->request_h;
 	xobj_put_obj(obj_h, ptr);
 }
 

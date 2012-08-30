@@ -234,6 +234,7 @@ int cmd_read(char *target, uint64_t offset, uint64_t size)
 	xserial srl;
 	char *req_target;
 	struct xseg_request *req = xseg_get_request(xseg, srcport);
+	printf("%x\n", req);
 	if (!req) {
 		fprintf(stderr, "No request\n");
 		return -1;
@@ -252,7 +253,7 @@ int cmd_read(char *target, uint64_t offset, uint64_t size)
 	req->offset = offset;
 	req->size = size;
 	req->op = X_READ;
-
+	report_request(req);
 	srl = xseg_submit(xseg, dstport, req);
 	if (srl == Noneidx)
 		return -1;
@@ -774,6 +775,10 @@ int cmd_submit_reqs(long loops, long concurrent_reqs, int op)
 int cmd_report(uint32_t portno)
 {
 	struct xseg_port *port = xseg_get_port(xseg, portno);
+	if (!port) {
+		printf("port %u is not assigned\n", portno);
+		return 0;
+	}
 	struct xq *fq, *rq, *pq;
 	fq = xseg_get_queue(xseg, port, free_queue);
 	rq = xseg_get_queue(xseg, port, request_queue);
