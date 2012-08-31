@@ -36,7 +36,7 @@ static long blksize = 512;
 static int major = 0;
 static int max_nr_pending = 1024;
 static char name[XSEGBD_SEGMENT_NAMELEN] = "xsegbd";
-static char spec[256] = "segdev:xsegbd:4:512:64:1024:12";
+static char spec[256] = "segdev:xsegbd:4:256:12";
 
 module_param(sector_size, long, 0644);
 module_param(blksize, long, 0644);

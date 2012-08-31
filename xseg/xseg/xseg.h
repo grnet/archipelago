@@ -27,7 +27,7 @@ typedef uint64_t xserial;
 #define NoSerial ((xserial)-1)
 
 #ifndef XSEG_DEF_REQS
-#define XSEG_DEF_REQS 512
+#define XSEG_DEF_REQS 16
 #endif
 
 /* Peers and Segments

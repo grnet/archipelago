@@ -137,7 +137,8 @@ static void complete(struct store *store, struct io *io)
 	req->state |= XS_SERVED;
 	if (verbose)
 		log_io("complete", io);
-	xseg_respond(store->xseg, req->portno, req);
+	while (xseg_respond(store->xseg, req->portno, req) == Noneidx)
+		;
 	xseg_signal(store->xseg, req->portno);
 	__sync_fetch_and_sub(&store->fdcache[io->fdcacheidx].ref, 1);
 }
@@ -148,7 +149,8 @@ static void fail(struct store *store, struct io *io)
 	req->state |= XS_FAILED;
 	if (verbose)
 		log_io("fail", io);
-	xseg_respond(store->xseg, req->portno, req);
+	while (xseg_respond(store->xseg, req->portno, req) == Noneidx)
+		;
 	xseg_signal(store->xseg, req->portno);
 	if (io->fdcacheidx >= 0) {
 		__sync_fetch_and_sub(&store->fdcache[io->fdcacheidx].ref, 1);

@@ -186,7 +186,6 @@ void report_request(struct xseg_request *req)
 		max = 128;
 	data[max-1] = 0;
 	fprintf(stderr, "request %llu state %u\n", (unsigned long long)req->serial, req->state);
-	fprintf(stderr, "data: %s\n", data);
 }
 
 int cmd_info(char *target)
@@ -509,6 +508,7 @@ int cmd_rndwrite(long loops, int32_t seed, uint32_t targetlen, uint32_t chunksiz
 	uint64_t offset;
 	xserial srl;
 	char *req_data, *req_target;
+	seed = random();
 
 	for (;;) {
 		xseg_prepare_wait(xseg, srcport);
@@ -527,7 +527,6 @@ int cmd_rndwrite(long loops, int32_t seed, uint32_t targetlen, uint32_t chunksiz
 			req_data = xseg_get_data(xseg, submitted);
 
 			reported = 0;
-			seed = random();
 			mkname(namebuf, targetlen, seed);
 			namebuf[targetlen] = 0;
 			//printf("%ld: %s\n", nr_submitted, namebuf);
@@ -544,6 +543,7 @@ int cmd_rndwrite(long loops, int32_t seed, uint32_t targetlen, uint32_t chunksiz
 			if (srl == Noneidx) {
 				xseg_put_request(xseg, submitted->portno, submitted);
 			} else {
+				seed = random();
 				nr_submitted += 1;
 				xseg_signal(xseg, dstport);
 			}
@@ -618,6 +618,7 @@ int cmd_rndread(long loops, int32_t seed, uint32_t targetlen, uint32_t chunksize
 	xserial srl;
 	char *req_data, *req_target;
 
+	seed = random();
 	for (;;) {
 		submitted = NULL;
 		xseg_prepare_wait(xseg, srcport);
@@ -634,7 +635,6 @@ int cmd_rndread(long loops, int32_t seed, uint32_t targetlen, uint32_t chunksize
 
 			req_target = xseg_get_target(xseg, submitted);
 			reported = 0;
-			seed = random();
 			mkname(namebuf, targetlen, seed);
 			namebuf[targetlen] = 0;
 			//printf("%ld: %s\n", nr_submitted, namebuf);
@@ -644,11 +644,11 @@ int cmd_rndread(long loops, int32_t seed, uint32_t targetlen, uint32_t chunksize
 			submitted->offset = offset;
 			submitted->size = chunksize;
 			submitted->op = X_READ;
-
 			srl = xseg_submit(xseg, dstport, submitted);
 			if (srl == Noneidx) {
 				xseg_put_request(xseg, submitted->portno, submitted);
 			} else {
+				seed = random();
 				nr_submitted += 1;
 				xseg_signal(xseg, dstport);
 			}
@@ -665,6 +665,7 @@ int cmd_rndread(long loops, int32_t seed, uint32_t targetlen, uint32_t chunksize
 				report_request(received);
 			} else if (!chkchunk(req_data, received->datalen,
 					req_target, received->targetlen, received->offset)) {
+	//			report_request(received);
 				nr_mismatch += 1;
 			}
 
@@ -820,7 +821,8 @@ int cmd_reportall(void)
 	if (cmd_join())
 		return -1;
 
-	//fprintf(stderr, "global free requests: %u\n", xq_count(xseg->free_requests));
+
+	fprintf(stderr, "Heap usage: %llu / %llu\n", xseg->heap->cur, xseg->config.heap_size);
 	for (t = 0; t < xseg->config.nr_ports; t++)
 		cmd_report(t);
 

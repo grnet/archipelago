@@ -773,6 +773,7 @@ struct xq * __alloc_queue(struct xseg *xseg, uint64_t nr_reqs)
 	//initialize queue with max nr of elements it can hold
 	q = (struct xq *) mem;
 	buf = (void *) (((unsigned long) mem) + sizeof(struct xq));
+	XSEGLOG("elements: %llu\n", bytes/sizeof(xqindex));
 	xq_init_empty(q, bytes/sizeof(xqindex), buf); 
 
 	return q;
