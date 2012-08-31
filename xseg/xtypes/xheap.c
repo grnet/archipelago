@@ -12,13 +12,22 @@ static inline uint64_t __get_alloc_bytes(struct xheap *xheap, uint64_t bytes)
 
 static inline struct xheap_header* __get_header(void *ptr)
 {
-	return (struct xheap_header *) (ptr - sizeof(struct xheap_header));
+	return (struct xheap_header *) ((unsigned long)ptr - sizeof(struct xheap_header));
 }
 
-static inline int __get_index(struct xheap *heap, uint64_t bytes)
+#define __ALLOC 1
+#define __FREE 2
+
+static inline int __get_index(struct xheap *heap, uint64_t bytes, int type)
 {
+	uint32_t alignment_unit = heap->alignment_unit;
 	bytes = __get_alloc_bytes(heap, bytes) - sizeof(struct xheap_header);
-	return (sizeof(bytes)*8 - __builtin_clzl(bytes -1));
+	if (bytes < (1<<alignment_unit) * 32)
+		return bytes / (1 << alignment_unit);
+	if (type = __ALLOC)
+		return (32 + sizeof(bytes)*8 - __builtin_clzl(bytes) +1);
+	else 
+		return (32 + sizeof(bytes)*8 - __builtin_clzl(bytes));
 }
 
 uint64_t xheap_get_chunk_size(void *ptr)
@@ -33,7 +42,7 @@ uint64_t xheap_get_chunk_size(void *ptr)
 void* xheap_allocate(struct xheap *heap, uint64_t bytes)
 {
 	struct xheap_header *h;
-	int r = __get_index(heap, bytes);
+	int r = __get_index(heap, bytes, __ALLOC);
 	void *mem = XPTR(&heap->mem), *addr = NULL;
 	xptr *free_list = (xptr *) mem;
 	xptr head, next;
@@ -44,6 +53,10 @@ void* xheap_allocate(struct xheap *heap, uint64_t bytes)
 	//printf("(r: %d) list[%x]: %lu\n", r, &free_list[r], list);
 	if (!head)
 		goto alloc;
+	if (head > heap->cur) {
+		XSEGLOG("invalid xptr %llu found in chunk lists\n", head);
+		goto out;
+	}
 	next = *(xptr *)(((unsigned long) mem) + head);
 	free_list[r] = next;
 //	printf("popped %llu out of list. list is now %llu\n", head, next);
@@ -94,7 +107,7 @@ void xheap_free(void *ptr)
 	void *mem = XPTR(&heap->mem);
 	uint64_t size = xheap_get_chunk_size(ptr);
 	xptr *free_list = (xptr *) mem;
-	int r = __get_index(heap, size);
+	int r = __get_index(heap, size, __FREE);
 	//printf("size: %llu, r: %d\n", size, r);
 	__add_in_free_list(heap, &free_list[r], ptr);
 //	printf("freed %lx (size: %llu)\n", ptr, __get_header(ptr)->size);
@@ -115,7 +128,7 @@ int xheap_init(struct xheap *heap, uint64_t size, uint32_t alignment_unit, void 
 	heap->alignment_unit = alignment_unit;
 	XPTRSET(&heap->mem, mem);
 	
-	r = __get_index(heap, size);
+	r = __get_index(heap, size, __ALLOC);
 	
 	/* minimum alignment unit required */
 	if (heap_page < sizeof(struct xheap_header))

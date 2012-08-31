@@ -43,8 +43,6 @@ int xobj_alloc_obj(struct xobject_h * obj_h, uint64_t nr)
 	struct xheap *heap = XPTR_TAKE(obj_h->heap, container);
 	struct xobject *obj = NULL;
 
-	unsigned long i = 0;
-
 	uint64_t used, bytes = nr * obj_h->obj_size;
 	xptr objptr;
 	xhash_t *allocated = XPTR_TAKE(obj_h->allocated, container);
@@ -69,7 +67,6 @@ int xobj_alloc_obj(struct xobject_h * obj_h, uint64_t nr)
 		obj->next = XPTR_MAKE(((unsigned long) mem) + used, container); //point to the next obj
 //		printf("foo: %lx\n", &obj->next);
 		
-		i++;
 
 retry:
 		r = xhash_insert(allocated, objptr, objptr); //keep track of allocated objects
@@ -95,7 +92,6 @@ retry:
 			goto retry;
 		}
 	}
-	XSEGLOG("allocated %lu elements\n", i);
 	if (!obj)
 		return -1;
 	objptr = obj_h->list;

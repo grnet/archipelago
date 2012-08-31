@@ -773,7 +773,6 @@ struct xq * __alloc_queue(struct xseg *xseg, uint64_t nr_reqs)
 	//initialize queue with max nr of elements it can hold
 	q = (struct xq *) mem;
 	buf = (void *) (((unsigned long) mem) + sizeof(struct xq));
-	XSEGLOG("elements: %llu\n", bytes/sizeof(xqindex));
 	xq_init_empty(q, bytes/sizeof(xqindex), buf); 
 
 	return q;
@@ -808,6 +807,9 @@ struct xseg_port *xseg_alloc_port(struct xseg *xseg, uint32_t flags, uint64_t nr
 		goto err_reply;
 	port->reply_queue = XPTR_MAKE(q, xseg->segment);
 
+	xlock_release(&port->fq_lock);
+	xlock_release(&port->rq_lock);
+	xlock_release(&port->pq_lock);
 	port->owner = 0; //should be Noone;
 	port->waitcue = 0;
 	port->portno = 0; // should be Noport;
@@ -849,7 +851,14 @@ void xseg_free_port(struct xseg *xseg, struct xseg_port *port)
 void* xseg_alloc_buffer(struct xseg *xseg, uint64_t size)
 {
 	struct xheap *heap = xseg->heap;
-	return xheap_allocate(heap, size);
+	void *mem = xheap_allocate(heap, size);
+	if (xheap_get_chunk_size(mem) < size) {
+		XSEGLOG("Buffer size %llu instead of %llu\n", 
+				xheap_get_chunk_size(mem), size);
+		xheap_free(mem);
+		mem = NULL;
+	}
+	return mem;
 }
 
 void xseg_free_buffer(struct xseg *xseg, void *ptr)
@@ -891,6 +900,7 @@ int xseg_signal(struct xseg *xseg, uint32_t portno)
 	return type->peer_ops.signal(xseg, portno);
 }
 
+//FIXME wrong types (int vs unsigned long)
 int xseg_alloc_requests(struct xseg *xseg, uint32_t portno, uint32_t nr)
 {
 	unsigned long i = 0;
@@ -1054,17 +1064,35 @@ xserial xseg_submit (	struct xseg *xseg, uint32_t portno,
 			struct xseg_request *xreq	)
 {
 	xserial serial = NoSerial;
-	xqindex xqi;
-	struct xq *q;
+	xqindex xqi, r;
+	struct xq *q, *newq;
 	struct xseg_port *port = xseg_get_port(xseg, portno);
 	if (!port)
 		goto out;
 
 	__update_timestamp(xreq);
 	
-	q = XPTR_TAKE(port->request_queue, xseg->segment);
 	xqi = XPTR_MAKE(xreq, xseg->segment);
-	serial = xq_append_tail(q, xqi, portno);
+
+	xlock_acquire(&port->rq_lock, portno);
+	q = XPTR_TAKE(port->request_queue, xseg->segment);
+	serial = __xq_append_tail(q, xqi);
+	if (serial == Noneidx) {
+		//TODO make it flag controlled
+		/* double up queue size */
+		newq = __alloc_queue(xseg, xq_count(q)*2);
+		if (!newq)
+			goto out_rel;
+		r = __xq_resize(q, newq);
+		if (r == Noneidx)
+			goto out_rel;
+		port->request_queue = XPTR_MAKE(newq, xseg->segment);
+		xheap_free(q);
+		serial = __xq_append_tail(newq, xqi);
+	}
+
+out_rel:
+	xlock_release(&port->rq_lock);
 out:
 	return serial;
 	
@@ -1079,8 +1107,11 @@ struct xseg_request *xseg_receive(struct xseg *xseg, uint32_t portno)
 	if (!port)
 		return NULL;
 
+	xlock_acquire(&port->pq_lock, portno);
 	q = XPTR_TAKE(port->reply_queue, xseg->segment);
-	xqi = xq_pop_head(q, portno);
+	xqi = __xq_pop_head(q);
+	xlock_release(&port->pq_lock);
+
 	if (xqi == Noneidx)
 		return NULL;
 
@@ -1098,8 +1129,10 @@ struct xseg_request *xseg_accept(struct xseg *xseg, uint32_t portno)
 	struct xseg_port *port = xseg_get_port(xseg, portno);
 	if (!port)
 		return NULL;
+	xlock_acquire(&port->rq_lock, portno);
 	q = XPTR_TAKE(port->request_queue, xseg->segment);
-	xqi = xq_pop_head(q, portno);
+	xqi = __xq_pop_head(q);
+	xlock_release(&port->rq_lock);
 	if (xqi == Noneidx)
 		return NULL;
 
@@ -1112,16 +1145,32 @@ xserial xseg_respond (  struct xseg *xseg, uint32_t portno,
 			struct xseg_request *xreq  )
 {
 	xserial serial = NoSerial;
-	xqindex xqi;
-	struct xq *q;
+	xqindex xqi, r;
+	struct xq *q, *newq;
 	struct xseg_port *port = xseg_get_port(xseg, portno);
 	if (!port)
 		goto out;
 
 	
-	q = XPTR_TAKE(port->reply_queue, xseg->segment);
 	xqi = XPTR_MAKE(xreq, xseg->segment);
-	serial = xq_append_tail(q, xqi, portno);
+	
+	xlock_acquire(&port->pq_lock, portno);
+	q = XPTR_TAKE(port->reply_queue, xseg->segment);
+	serial = __xq_append_tail(q, xqi);
+	if (serial == Noneidx) {
+		newq = __alloc_queue(xseg, xq_count(q)*2);
+		if (!newq)
+			goto out_rel;
+		r = __xq_resize(q, newq);
+		if (r == Noneidx)
+			goto out_rel;
+		port->reply_queue = XPTR_MAKE(newq, xseg->segment);
+		xheap_free(q);
+		serial = __xq_append_tail(newq, xqi);
+	}
+
+out_rel:
+	xlock_release(&port->pq_lock);
 out:
 	return serial;
 	

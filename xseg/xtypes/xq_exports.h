@@ -24,3 +24,5 @@ EXPORT_SYMBOL(__xq_peek_tail);
 EXPORT_SYMBOL(xq_peek_tail);
 EXPORT_SYMBOL(__xq_check);
 EXPORT_SYMBOL(xq_check);
+EXPORT_SYMBOL(__xq_resize);
+EXPORT_SYMBOL(xq_resize);

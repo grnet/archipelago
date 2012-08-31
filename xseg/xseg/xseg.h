@@ -112,6 +112,9 @@ struct xseg_config {
 };
 
 struct xseg_port {
+	struct xlock fq_lock;
+	struct xlock rq_lock;
+	struct xlock pq_lock;
 	xptr free_queue;
 	xptr request_queue;
 	xptr reply_queue;

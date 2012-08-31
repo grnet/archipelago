@@ -94,5 +94,12 @@ int 	     __xq_check      ( struct xq  * xq,
 int 	     xq_check        ( struct xq  * xq, 
 		               xqindex      idx,
 			       unsigned long who );
+
+xqindex      __xq_resize     ( struct xq  * xq,
+		               struct xq  * newxq);
+
+xqindex      xq_resize       ( struct xq  * xq,
+		               struct xq  * newxq,
+	                       unsigned long who );
 #endif
 

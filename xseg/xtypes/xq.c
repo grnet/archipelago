@@ -398,6 +398,38 @@ int xq_check(struct xq *xq, xqindex idx, unsigned long who)
 	return r;
 }
 
+xqindex __xq_resize(struct xq *xq, struct xq *newxq)
+{
+	xqindex i, mask, mask_new, head, tail, val;
+	xqindex nr = xq_count(xq);
+
+	if (nr > newxq->size) {
+		return Noneidx;
+	}
+
+	mask = xq->size -1;
+	mask_new = newxq->size -1;
+	head = __xq_peek_head_idx(xq, nr);
+	tail = __xq_append_tail_idx(newxq, nr) + nr -1;
+	for (i = 0; i < nr; i++) {
+		val = XPTR(&xq->queue)[(head + i) & mask];
+		XPTR(&newxq->queue)[(tail - i) & mask_new] = val;
+	}
+	
+	return nr;
+}
+
+xqindex xq_resize(struct xq *xq, struct xq *newxq, unsigned long who)
+{
+	xqindex r = Noneidx;
+	xlock_acquire(&xq->lock, who);
+	xlock_acquire(&newxq->lock, who);
+	r = __xq_resize(xq, newxq);
+	xlock_release(&newxq->lock);
+	xlock_release(&xq->lock);
+	return r;
+}
+
 #ifdef __KERNEL__
 #include <linux/module.h>
 #include <xtypes/xq_exports.h>
