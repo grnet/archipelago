@@ -1152,16 +1152,22 @@ struct xseg_port *xseg_bind_port(struct xseg *xseg, uint32_t req)
 		force = 1;
 	}
 
-	port = xseg_alloc_port(xseg, X_ALLOC, 512);
-	if (!port)
-		return NULL;
 	//FIXME use previously allocated port, pointed out 
 	//by port map. to be used with force binding
 	__lock_segment(xseg);
 	for (; portno < maxno; portno++) {
 		int64_t driver;
-		if (xseg->ports[portno] && !force)
+		if (!xseg->ports[portno]) {
+			port = xseg_alloc_port(xseg, X_ALLOC, 512);
+			if (!port)
+				goto out;
+		} else if (force) {
+			port = xseg_get_port(xseg, portno);
+			if (!port)
+				goto out;	
+		} else {
 			continue;
+		}
 		driver = __enable_driver(xseg, &xseg->priv->peer_type);
 		if (driver < 0)
 			break;
