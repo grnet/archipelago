@@ -26,6 +26,10 @@ typedef uint64_t xserial;
 
 #define NoSerial ((xserial)-1)
 
+#ifndef XSEG_DEF_REQS
+#define XSEG_DEF_REQS 512
+#endif
+
 /* Peers and Segments
  *
  *  Segments are memory segments shared among peers.

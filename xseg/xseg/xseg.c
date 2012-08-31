@@ -1146,7 +1146,7 @@ struct xseg_port *xseg_bind_port(struct xseg *xseg, uint32_t req)
 	for (; portno < maxno; portno++) {
 		int64_t driver;
 		if (!xseg->ports[portno]) {
-			port = xseg_alloc_port(xseg, X_ALLOC, 512);
+			port = xseg_alloc_port(xseg, X_ALLOC, XSEG_DEF_REQS);
 			if (!port)
 				goto out;
 		} else if (force) {
