@@ -854,18 +854,6 @@ void xseg_free_buffer(struct xseg *xseg, void *ptr)
 	xheap_free(ptr);
 }
 
-struct xseg_request* xseg_alloc_request(struct xseg *xseg, uint32_t flags)
-{
-	struct xobject_h *obj_h = xseg->request_h;
-	return xobj_get_obj(obj_h, flags);
-}
-
-void xseg_free_request(struct xseg *xseg, void *ptr)
-{
-	struct xobject_h *obj_h = xseg->request_h;
-	xobj_put_obj(obj_h, ptr);
-}
-
 int xseg_prepare_wait(struct xseg *xseg, uint32_t portno)
 {
 	if (!__validate_port(xseg, portno))
@@ -911,7 +899,7 @@ int xseg_alloc_requests(struct xseg *xseg, uint32_t portno, uint32_t nr)
 		return -1;
 
 	q = XPTR_TAKE(port->free_queue, xseg->segment);
-	while ((req = xseg_alloc_request(xseg, X_ALLOC)) != NULL && i < nr) {
+	while ((req = xobj_get_obj(xseg->request_h, X_ALLOC)) != NULL && i < nr) {
 		xqi = XPTR_MAKE(req, xseg->segment);
 		xqi = xq_append_tail(q, xqi, portno);
 		if (xqi == Noneidx)
@@ -937,7 +925,7 @@ int xseg_free_requests(struct xseg *xseg, uint32_t portno, int nr)
 	q = XPTR_TAKE(port->free_queue, xseg->segment);
 	while ((xqi = xq_pop_head(q, portno)) != Noneidx && i < nr) {
 		req = XPTR_TAKE(xqi, xseg->segment);
-		xseg_free_request(xseg, req);
+		xobj_put_obj(xseg->request_h, (void *) req);
 		i++;
 	}
 	if (i == 0)
@@ -970,7 +958,7 @@ struct xseg_request *xseg_get_request(struct xseg *xseg, uint32_t portno)
 	}
 
 	//else try to allocate from global heap
-	req = xseg_alloc_request(xseg, X_ALLOC);
+	req = xobj_get_obj(xseg->request_h, X_ALLOC);
 	if (!req)
 		return NULL;
 done:
@@ -1021,7 +1009,7 @@ int xseg_put_request (  struct xseg *xseg,
 		return 0;
 
 	//else return it to segment
-	xseg_free_request(xseg, xreq);
+	xobj_put_obj(xseg->request_h, (void *) xreq);
 	return 0;
 }
 
