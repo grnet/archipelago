@@ -2,7 +2,7 @@
 #include <xtypes/domain.h>
 //#include "xheap.h"
 //#include "domain.h"
-#include <stdio.h>
+//#include <stdio.h>
 
 //aligned alloc bytes with header size
 static inline uint64_t __get_alloc_bytes(struct xheap *xheap, uint64_t bytes)
@@ -33,7 +33,6 @@ uint64_t xheap_get_chunk_size(void *ptr)
 void* xheap_allocate(struct xheap *heap, uint64_t bytes)
 {
 	struct xheap_header *h;
-	uint64_t cur;
 	int r = __get_index(heap, bytes);
 	void *mem = XPTR(&heap->mem), *addr = NULL;
 	xptr *free_list = (xptr *) mem;

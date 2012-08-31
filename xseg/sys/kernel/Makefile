@@ -4,7 +4,7 @@ include $(XSEG_HOME)/base.mk
 
 KDIR := /lib/modules/$(shell uname -r)/build
 PWD := $(shell pwd)
-EXTRA_CFLAGS += -g -I$(BASE) -I$(BASE)/sys/kernel
+EXTRA_CFLAGS += -g -I$(BASE) -I$(BASE)/sys/kernel -DVAL_OVERLOAD
 LIBDIR=$(BASE)/lib/kernel
 
 xseg-objs := xsegmod.o xq.k.o xpool.k.o xhash.k.o xheap.k.o xobj.k.o xseg.k.o 

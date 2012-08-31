@@ -40,6 +40,7 @@ static bool
 item_dummy(xhash_t *xhash, ul_t idx, bool vals)
 {
     bool ret;
+    ul_t *pvals;
     ul_t *kvs = xhash_kvs(xhash);
 
     if (!vals) {
@@ -47,7 +48,7 @@ item_dummy(xhash_t *xhash, ul_t idx, bool vals)
     } else {
         #if defined(VAL_OVERLOAD)
         assert(vals);
-        ul_t *pvals = xhash_vals(xhash);
+        pvals = xhash_vals(xhash);
         ret = (pvals[idx] == DUMMY);
         #elif defined(KEY_OVERLOAD)
         ret = (kvs[idx] == DUMMY);
@@ -179,7 +180,6 @@ get_alloc_size(ul_t size_shift, bool vals)
 {
     ul_t nr_items = 1UL << size_shift;
     size_t keys_size = nr_items*sizeof(ul_t);
-    //FIXME this should be  << 1 right?
     size_t alloc_size = vals ? keys_size<<1 : keys_size;
     return sizeof(struct xhash) + alloc_size;
 }
@@ -190,8 +190,8 @@ xhash_new__(ul_t size_shift, ul_t minsize_shift, bool vals) {
     struct xhash *xhash;
     xhash = xtypes_malloc(get_alloc_size(size_shift, vals));
     if (!xhash) {
-        perror("malloc");
-        exit(1);
+	XSEGLOG("couldn't malloc\n");
+	return NULL;
     }
 
     xhash_init__(xhash, size_shift, minsize_shift, vals);
@@ -302,7 +302,7 @@ xhash_new(ul_t minsize_shift)
 
 void xhash_free(struct xhash *xhash)
 {
-    free(xhash);
+    xtypes_free(xhash);
 }
 
 void xhash_init(struct xhash *xhash, ul_t minsize_shift)
@@ -365,19 +365,19 @@ static inline void
 set_val(xhash_t *p, ul_t idx, ul_t key, ul_t val)
 {
     ul_t *kvs = xhash_kvs(p);
-    kvs[idx] = key;
     ul_t *vals = xhash_vals(p);
+    kvs[idx] = key;
     vals[idx] = val;
 }
 
 void static inline xhash_upd_set(xhash_t *p, ul_t idx, ul_t key, ul_t val)
 {
     ul_t *kvs = xhash_kvs(p);
+    ul_t *vals = xhash_vals(p);
     if (item_dummy(p, idx, true))
         p->dummies--;
     p->used++;
     kvs[idx] = key;
-    ul_t *vals = xhash_vals(p);
     vals[idx] = val;
 }
 
@@ -432,6 +432,7 @@ int xhash_freql_update(struct xhash *xhash, ul_t key, ul_t val)
 int
 xhash_resize(xhash_t *xhash, ul_t new_size_shift, xhash_t *new)
 {
+    ul_t i;
     int f = !!new;
     if (!f)
         new = xhash_new__(new_size_shift, xhash->minsize_shift, true);
@@ -439,7 +440,7 @@ xhash_resize(xhash_t *xhash, ul_t new_size_shift, xhash_t *new)
         xhash_init__(new, new_size_shift, xhash->minsize_shift, true);
         
     //fprintf(stderr, "resizing: (%lu,%lu,%lu)\n", xhash->size_shift, xhash->used, xhash->dummies);
-    for (ul_t i = 0; i < xhash_size(xhash); i++) {
+    for (i = 0; i < xhash_size(xhash); i++) {
         if (item_valid(xhash, i, true)){
             //fprintf(stderr, "rs: inserting (%lu,%lu)\n", item->k, item->v);
             xhash_insert__(new, *(xhash_kvs(xhash) + i), *(xhash_vals(xhash) + i));
@@ -567,15 +568,15 @@ void xhash_print(xhash_t *xhash)
     int ret;
 
     xhash_iter_init(xhash, &pi);
-    printf("PHASH(%p):\n", xhash);
+    XSEGLOG("PHASH(%p):\n", xhash);
     for (;;){
         ret = xhash_iterate(xhash, &pi, &key, &val);
         if (!ret){
             break;
         }
-        printf(" 0x%017lx : 0x%017lx\n", key, val);
+        XSEGLOG(" 0x%017lx : 0x%017lx\n", key, val);
     }
-    printf("\n");
+    XSEGLOG("\n");
 }
 
 #ifdef PHASH_MAIN

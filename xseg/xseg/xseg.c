@@ -418,16 +418,17 @@ static long initialize_segment(struct xseg *xseg, struct xseg_config *cfg)
 	struct xheap *heap;
 	struct xobject_h *obj_h;
 	int r;
+	xptr *ports;
 
 
 	if (page_size < XSEG_MIN_PAGE_SIZE)
 		return -1;
 
 	xseg->segment_size = 2 * page_size + cfg->heap_size;
-	xseg->segment = segment;
+	xseg->segment = (struct xseg *) segment;
 
 	/* build heap */
-	xseg->heap = XPTR_MAKE(segment + size, segment);
+	xseg->heap = (struct xheap *) XPTR_MAKE(segment + size, segment);
 	size += sizeof(struct xheap);
 	size = __align(size, page_shift);
 
@@ -440,7 +441,7 @@ static long initialize_segment(struct xseg *xseg, struct xseg_config *cfg)
 	mem = xheap_allocate(heap, sizeof(struct xobject_h));
 	if (!mem)
 		return -1;
-	xseg->object_handlers = XPTR_MAKE(mem, segment);
+	xseg->object_handlers = (struct xobject_h *) XPTR_MAKE(mem, segment);
 	obj_h = mem;
 	r = xobj_handler_init(obj_h, segment, MAGIC_OBJH, 
 			sizeof(struct xobject_h), heap);
@@ -459,7 +460,7 @@ static long initialize_segment(struct xseg *xseg, struct xseg_config *cfg)
 			sizeof(struct xseg_request), heap);
 	if (r < 0)
 		return -1;
-	xseg->request_h = XPTR_MAKE(obj_h, segment);
+	xseg->request_h = (struct xobject_h *) XPTR_MAKE(obj_h, segment);
 	
 	//allocate ports handler
 	obj_h = XPTR_TAKE(xseg->object_handlers, segment);
@@ -471,18 +472,18 @@ static long initialize_segment(struct xseg *xseg, struct xseg_config *cfg)
 			sizeof(struct xseg_port), heap);
 	if (r < 0)
 		return -1;
-	xseg->port_h = XPTR_MAKE(mem, segment);
+	xseg->port_h = (struct xobject_h *) XPTR_MAKE(mem, segment);
 
 	//allocate xptr port array to be used as a map
 	//portno <--> xptr port
 	mem = xheap_allocate(heap, sizeof(xptr)*cfg->nr_ports);
 	if (!mem)
 		return -1;
-	xptr *ports = mem;
+	ports = mem;
 	for (i = 0; i < cfg->nr_ports; i++) {
 		ports[i]=0;
 	}
-	xseg->ports = XPTR_MAKE(mem, segment);
+	xseg->ports = (xptr *) XPTR_MAKE(mem, segment);
 	
 	//allocate xseg_shared memory
 	mem = xheap_allocate(heap, sizeof(struct xseg_shared));
@@ -491,12 +492,12 @@ static long initialize_segment(struct xseg *xseg, struct xseg_config *cfg)
 	shared = (struct xseg_shared *) mem;
 	shared->flags = 0;
 	shared->nr_peer_types = 0;
-	xseg->shared = XPTR_MAKE(mem, segment);
+	xseg->shared = (struct xseg_shared *) XPTR_MAKE(mem, segment);
 	
 	mem = xheap_allocate(heap, page_size);
 	if (!mem)
 		return -1;
-	shared->peer_types = XPTR_MAKE(mem, segment);
+	shared->peer_types = (char **) XPTR_MAKE(mem, segment);
 	xseg->max_peer_types = xheap_get_chunk_size(mem) / XSEG_TNAMESIZE;
 
 	memcpy(&xseg->config, cfg, sizeof(struct xseg_config));
@@ -753,62 +754,63 @@ struct xseg_port* xseg_get_port(struct xseg *xseg, uint32_t portno)
 		return NULL;
 }
 
-struct xseg_port *xseg_alloc_port(struct xseg *xseg, uint32_t flags, uint64_t nr_reqs)
+struct xq * __alloc_queue(struct xseg *xseg, uint64_t nr_reqs)
 {
-	struct xobject_h *obj_h = xseg->port_h;
-	struct xseg_port *port = xobj_get_obj(obj_h, flags);
-	if (!port)
-		return NULL;
-
-	void *mem;
-	struct xheap *heap = xseg->heap;
-	struct xq *q;
-	char *buf;
 	uint64_t bytes;
-	
-	//TODO since max number of requests is not fixed
-	//	maybe we should make xqs expand when necessary
+	void *mem, *buf;
+	struct xq *q;
+	struct xheap *heap = xseg->heap;
 
 	//how many bytes to allocate for a queue
 	bytes = sizeof(struct xq) + nr_reqs*sizeof(xqindex);
 	mem = xheap_allocate(heap, bytes);
 	if (!mem)
-		goto err_free;
+		return NULL;
 
-	//how many did we got, and calculate what's left of buffer
+	//how many bytes did we got, and calculate what's left of buffer
 	bytes = xheap_get_chunk_size(mem) - sizeof(struct xq);
-	port->free_queue = XPTR_MAKE(mem, xseg->segment);
-	//initialize queue with max nr it can hold
-	q = (struct xq *)XPTR_TAKE(port->free_queue, xseg->segment);
-	buf = mem + sizeof(struct xq);
+
+	//initialize queue with max nr of elements it can hold
+	q = (struct xq *) mem;
+	buf = (void *) (((unsigned long) mem) + sizeof(struct xq));
 	xq_init_empty(q, bytes/sizeof(xqindex), buf); 
+
+	return q;
+}
+
+struct xseg_port *xseg_alloc_port(struct xseg *xseg, uint32_t flags, uint64_t nr_reqs)
+{
+	struct xq *q;
+	struct xobject_h *obj_h = xseg->port_h;
+	struct xseg_port *port = xobj_get_obj(obj_h, flags);
+	if (!port)
+		return NULL;
+	
+	//TODO since max number of requests is not fixed
+	//	maybe we should make xqs expand when necessary
+
+	//alloc free queue
+	q = __alloc_queue(xseg, nr_reqs);
+	if (!q)
+		goto err_free;
+	port->free_queue = XPTR_MAKE(q, xseg->segment);
 
 	//and for request queue
-	bytes = sizeof(struct xq) + nr_reqs*sizeof(xqindex);
-	mem = xheap_allocate(heap, bytes);
-	if (!mem)
+	q = __alloc_queue(xseg, nr_reqs);
+	if (!q)
 		goto err_req;
+	port->request_queue = XPTR_MAKE(q, xseg->segment);
 
-	bytes = xheap_get_chunk_size(mem) - sizeof(struct xq);
-	port->request_queue = XPTR_MAKE(mem, xseg->segment);
-	//initialize queue with max nr it can hold
-	q = (struct xq *)XPTR_TAKE(port->request_queue, xseg->segment);
-	buf = mem + sizeof(struct xq);
-	xq_init_empty(q, bytes/sizeof(xqindex), buf); 
-	
-	//and for reply_queue
-	bytes = sizeof(struct xq) + nr_reqs*sizeof(xqindex);
-	mem = xheap_allocate(heap, bytes);
-	if (!mem)
+	//and for reply queue
+	q = __alloc_queue(xseg, nr_reqs);
+	if (!q)
 		goto err_reply;
+	port->reply_queue = XPTR_MAKE(q, xseg->segment);
 
-	bytes = xheap_get_chunk_size(mem) - sizeof(struct xq);
-	port->reply_queue = XPTR_MAKE(mem, xseg->segment);
-	//initialize queue with max nr it can hold
-	q = (struct xq *)XPTR_TAKE(port->reply_queue, xseg->segment);
-	buf = mem + sizeof(struct xq);
-	xq_init_empty(q, bytes/sizeof(xqindex), buf); 
-
+	port->owner = 0; //should be Noone;
+	port->waitcue = 0;
+	port->portno = 0; // should be Noport;
+	port->peer_type = 0; //FIXME what  here ??
 	return port;
 
 err_reply:

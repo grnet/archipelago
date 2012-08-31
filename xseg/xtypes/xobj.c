@@ -5,6 +5,7 @@
 int xobj_handler_init(struct xobject_h *obj_h, void *container,
 		uint32_t magic,	uint64_t size, struct xheap *heap)
 {
+	//uint64_t bytes;
 	xhash_t *xhash;
 	obj_h->magic = magic;
 	/* minimum object size */
@@ -23,7 +24,7 @@ int xobj_handler_init(struct xobject_h *obj_h, void *container,
 	/* but initialize an xhash with sizeshift based on
 	 * allocated space. should be at least the above sizeshift
 	 */
-	uint64_t bytes = xheap_get_chunk_size(xhash);
+	//bytes = xheap_get_chunk_size(xhash);
 	
 	xhash_init(xhash, 3);
 	obj_h->allocated = XPTR_MAKE(xhash, container);
@@ -40,7 +41,7 @@ int xobj_alloc_obj(struct xobject_h * obj_h, uint64_t nr)
 {
 	void *container = XPTR(&obj_h->container);
 	struct xheap *heap = XPTR_TAKE(obj_h->heap, container);
-	struct xobject *obj;
+	struct xobject *obj = NULL;
 
 	uint64_t used, bytes = nr * obj_h->obj_size;
 	xptr objptr;
@@ -76,7 +77,7 @@ retry:
 			xhash_t *new;
 			size = xhash_get_alloc_size(sizeshift); 
 //			printf("new size: %lu\n", size);
-			//printf("%llu\n", xheap_get_chunk_size(allocated));
+//			printf("%llu\n", xheap_get_chunk_size(allocated));
 			new = xheap_allocate(heap, size);
 //			printf("requested %llu, got %llu\n", size, xheap_get_chunk_size(new));
 			if (!new) {
@@ -90,10 +91,11 @@ retry:
 			goto retry;
 		}
 	}
-	do {
-		objptr = obj_h->list;
-		obj->next = objptr; 
-	}while(!__sync_bool_compare_and_swap(&obj_h->list, objptr, XPTR_MAKE((unsigned long) mem, container)));
+	if (!obj)
+		return -1;
+	objptr = obj_h->list;
+	obj->next = objptr; 
+	obj_h->list = XPTR_MAKE((unsigned long) mem, container);
 	return 0;
 }
 
@@ -114,6 +116,7 @@ void * xobj_get_obj(struct xobject_h * obj_h, uint32_t flags)
 
 	void *container = XPTR(&obj_h->container);
 	struct xobject *obj = NULL;
+	int r;
 	xptr list, objptr;
 
 	xlock_acquire(&obj_h->lock, 1);
@@ -130,7 +133,7 @@ alloc:
 	if (!(flags & X_ALLOC)) 
 		goto out;
 	//allocate minimum 64 objects
-	int r = xobj_alloc_obj(obj_h, 64);
+	r = xobj_alloc_obj(obj_h, 64);
 	if (r<0)
 		goto out;
 	goto retry;

@@ -1,7 +1,10 @@
 #ifndef __PHASH_H__
 #define __PHASH_H__
 
+#ifndef __KERNEL__
 #include <stdbool.h>
+#endif
+
 #include <sys/util.h>
 #include <xtypes/domain.h>
 /* based on: 
