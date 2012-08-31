@@ -23,6 +23,9 @@
 #include "xsegbd.h"
 
 #define XSEGBD_MINORS 1
+/* define max request size to be used in xsegbd */
+//FIXME should we make this 4MB instead of 256KB ?
+#define XSEGBD_MAX_REQUEST_SIZE 262144U
 
 MODULE_DESCRIPTION("xsegbd");
 MODULE_AUTHOR("XSEG");
@@ -202,13 +205,8 @@ static int xsegbd_dev_init(struct xsegbd_device *xsegbd_dev)
 	blk_queue_bounce_limit(xsegbd_dev->blk_queue, BLK_BOUNCE_ANY);
 	
 	//blk_queue_max_segments(dev->blk_queue, 512);
-	/* calculate maximum block request size
-	 * request size in pages * page_size
-	 * leave one page in buffer for name
-	 */
-	max_request_size_bytes =
-		 (unsigned int)	(xsegbd.config.request_size - 1) *
-			 	( 1 << xsegbd.config.page_shift) ;
+
+	max_request_size_bytes = XSEGBD_MAX_REQUEST_SIZE;
 	blk_queue_max_hw_sectors(xsegbd_dev->blk_queue, max_request_size_bytes >> 9);
 	blk_queue_max_segment_size(xsegbd_dev->blk_queue, max_request_size_bytes);
 	blk_queue_io_min(xsegbd_dev->blk_queue, max_request_size_bytes);
@@ -267,7 +265,6 @@ out:
 static void xsegbd_dev_release(struct device *dev)
 {
 	struct xsegbd_device *xsegbd_dev = dev_to_xsegbd(dev);
-	struct xseg_port *port;
 
 	/* cleanup gendisk and blk_queue the right way */
 	if (xsegbd_dev->gd) {
@@ -278,9 +275,12 @@ static void xsegbd_dev_release(struct device *dev)
 		put_disk(xsegbd_dev->gd);
 	}
 
-	/* reset the port's waitcue (aka cancel_wait) */
-	port = &xsegbd.xseg->ports[xsegbd_dev->src_portno];
-	port->waitcue = (long) NULL;
+	/* xsegbd actually does not need use waiting. 
+	 * maybe we use xseg_cancel_wait for clarity
+	 * with xseg_segdev kernel driver convert this
+	 * to a noop
+	 */
+//	xseg_cancel_wait(xseg, xsegbd_dev->src_portno);
 
 	if (xseg_free_requests(xsegbd.xseg, xsegbd_dev->src_portno, xsegbd_dev->nr_requests) != 0)
 		XSEGLOG("Error trying to free requests!\n");
@@ -360,8 +360,8 @@ static void xseg_request_fn(struct request_queue *rq)
 
 
 		datalen = blk_rq_bytes(blkreq);
+		BUG_ON(xseg_prep_request(xsegbd.xseg, xreq, xsegbd_dev->targetlen, datalen));
 		BUG_ON(xreq->bufferlen - xsegbd_dev->targetlen < datalen);
-		BUG_ON(xseg_prep_request(xreq, xsegbd_dev->targetlen, datalen));
 
 		target = XSEG_TAKE_PTR(xreq->target, xsegbd.xseg->segment);
 		strncpy(target, xsegbd_dev->target, xsegbd_dev->targetlen);
@@ -423,7 +423,6 @@ int update_dev_sectors_from_request(	struct xsegbd_device *xsegbd_dev,
 static int xsegbd_get_size(struct xsegbd_device *xsegbd_dev)
 {
 	struct xseg_request *xreq;
-	struct xseg_port *port;
 	char *target;
 	uint64_t datalen;
 	xqindex blkreq_idx;
@@ -436,8 +435,8 @@ static int xsegbd_get_size(struct xsegbd_device *xsegbd_dev)
 		goto out;
 
 	datalen = sizeof(uint64_t);
+	BUG_ON(xseg_prep_request(xsegbd.xseg, xreq, xsegbd_dev->targetlen, datalen));
 	BUG_ON(xreq->bufferlen - xsegbd_dev->targetlen < datalen);
-	BUG_ON(xseg_prep_request(xreq, xsegbd_dev->targetlen, datalen));
 
 	init_completion(&comp);
 	blkreq_idx = xq_pop_head(&blk_queue_pending, 1);
@@ -455,8 +454,12 @@ static int xsegbd_get_size(struct xsegbd_device *xsegbd_dev)
 
 	xreq->op = X_INFO;
 
-	port = &xsegbd.xseg->ports[xsegbd_dev->src_portno];
-	port->waitcue = (uint64_t)(long)xsegbd_dev;
+	/* waiting is not needed.
+	 * but it should be better to use xseg_prepare_wait
+	 * and the xseg_segdev kernel driver, would be a no op
+	 */
+//	port = &xsegbd.xseg->ports[xsegbd_dev->src_portno];
+//	port->waitcue = (uint64_t)(long)xsegbd_dev;
 
 	BUG_ON(xseg_submit(xsegbd.xseg, xsegbd_dev->dst_portno, xreq) == NoSerial);
 	WARN_ON(xseg_signal(xsegbd.xseg, xsegbd_dev->dst_portno) < 0);
