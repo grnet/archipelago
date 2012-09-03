@@ -4,10 +4,33 @@
 //#include "domain.h"
 //#include <stdio.h>
 
+
+#define SMALL_LIMIT 5	// small allocations are considered < 1 << (alignment_unit + SMALL_LIMIT)
+#define MEDIUM_LIMIT 10	// medium allocations are considered < 1 << (alignment_unit + MEDIUM_LIMIT)
+
+#define MEDIUM_AL_UNIT (SMALL_LIMIT - 3) //This ensures that the space that is allocated
+					 //beyond the requested bytes is less than 12.5 % of requested space
+#define LARGE_AL_UNIT (MEDIUM_AL_UNIT - 3) 
+
+/*
+ * Heap allocation sizes:
+ * 0 - SMALL_LIMIT -> bytes round up to (1 << alignment_unit)
+ * SMALL_LIMIT - MEDIUM_LIMIT -> bytes round up to (1 << (alignment_unit+ MEDIUM_AL_UNIT))
+ * MEDIUM_LIMIT - ... -> bytes round up to ( 1 << (alignment_unit + LARGE_AL_UNIT) )
+ */
+
 //aligned alloc bytes with header size
 static inline uint64_t __get_alloc_bytes(struct xheap *xheap, uint64_t bytes)
 {
-	return __align(bytes + sizeof(struct xheap_header), xheap->alignment_unit);
+	if (bytes < 1<<(xheap->alignment_unit + SMALL_LIMIT))
+		return __align(bytes + sizeof(struct xheap_header), 
+				xheap->alignment_unit);
+	else if (bytes < 1<<(xheap->alignment_unit + MEDIUM_LIMIT))
+		return __align(bytes + sizeof(struct xheap_header),
+				xheap->alignment_unit + MEDIUM_AL_UNIT);
+	else
+		return __align(bytes + sizeof(struct xheap_header), 
+				xheap->alignment_unit + LARGE_AL_UNIT);
 }
 
 static inline struct xheap_header* __get_header(void *ptr)
@@ -15,19 +38,54 @@ static inline struct xheap_header* __get_header(void *ptr)
 	return (struct xheap_header *) ((unsigned long)ptr - sizeof(struct xheap_header));
 }
 
-#define __ALLOC 1
-#define __FREE 2
-
+/*
 static inline int __get_index(struct xheap *heap, uint64_t bytes, int type)
 {
+	int r;
 	uint32_t alignment_unit = heap->alignment_unit;
 	bytes = __get_alloc_bytes(heap, bytes) - sizeof(struct xheap_header);
-	if (bytes < (1<<alignment_unit) * 32)
-		return bytes / (1 << alignment_unit);
-	if (type = __ALLOC)
-		return (32 + sizeof(bytes)*8 - __builtin_clzl(bytes) +1);
-	else 
-		return (32 + sizeof(bytes)*8 - __builtin_clzl(bytes));
+
+	if (bytes < ((1<<alignment_unit) * 32))
+		r = bytes / (1 << alignment_unit);
+	else if (bytes < (1 << (alignment_unit +2)) * 256) {
+		r = 32;
+		r -= (((1<<alignment_unit) * 32)/(1 << (alignment_unit +2)));	
+		XSEGLOG("%u, %u, r %d\n",((1<<alignment_unit) * 32), (1 << (alignment_unit +2)), r);
+		r += bytes/(1 << (alignment_unit + 2));
+	}
+	else {
+		r = 32+256;
+		r -= ((1<<alignment_unit * 32)/(1 << (alignment_unit +2)));	
+		r -= ((1<<(alignment_unit+2) * 256)/(1 << (alignment_unit +6)));
+		r += bytes/(1 << (alignment_unit + 6));
+	}
+	return r;
+}
+*/
+
+static inline int __get_index(struct xheap *heap, uint64_t bytes)
+{
+	int r;
+	uint32_t alignment_unit = heap->alignment_unit;
+	bytes = __get_alloc_bytes(heap, bytes) - sizeof(struct xheap_header);
+
+	if (bytes < (1<<alignment_unit + SMALL_LIMIT))
+		r = bytes >> alignment_unit;
+	else if (bytes < 1 << (alignment_unit + MEDIUM_LIMIT)) {
+		r = 1 << SMALL_LIMIT;
+		//r -= (1 << (alignment_unit+SMALL_LIMIT)) / (1 << (alignment_unit + MEDIUM_AL_UNIT));
+		r -= 1 << (SMALL_LIMIT - MEDIUM_AL_UNIT);
+		//XSEGLOG("%u, %u, r %d\n",((1<<alignment_unit) * 32), (1 << (alignment_unit +2)), r);
+		r += bytes >> (alignment_unit + MEDIUM_AL_UNIT);
+	}
+	else {
+		//r = 32 + 256;
+		r = 1 << SMALL_LIMIT + 1 << MEDIUM_LIMIT;
+		r -= 1 << (SMALL_LIMIT - MEDIUM_AL_UNIT);
+		r -= 1 << (MEDIUM_LIMIT - (LARGE_AL_UNIT - MEDIUM_AL_UNIT));
+		r += bytes >> (alignment_unit + MEDIUM_AL_UNIT);
+	}
+	return r;
 }
 
 uint64_t xheap_get_chunk_size(void *ptr)
@@ -42,7 +100,7 @@ uint64_t xheap_get_chunk_size(void *ptr)
 void* xheap_allocate(struct xheap *heap, uint64_t bytes)
 {
 	struct xheap_header *h;
-	int r = __get_index(heap, bytes, __ALLOC);
+	int r = __get_index(heap, bytes);
 	void *mem = XPTR(&heap->mem), *addr = NULL;
 	xptr *free_list = (xptr *) mem;
 	xptr head, next;
@@ -59,6 +117,7 @@ void* xheap_allocate(struct xheap *heap, uint64_t bytes)
 	}
 	next = *(xptr *)(((unsigned long) mem) + head);
 	free_list[r] = next;
+//	XSEGLOG("alloced %llu bytes from list %d\n", bytes, r);
 //	printf("popped %llu out of list. list is now %llu\n", head, next);
 	addr = (void *) (((unsigned long)mem) + head);
 	goto out;
@@ -107,10 +166,11 @@ void xheap_free(void *ptr)
 	void *mem = XPTR(&heap->mem);
 	uint64_t size = xheap_get_chunk_size(ptr);
 	xptr *free_list = (xptr *) mem;
-	int r = __get_index(heap, size, __FREE);
+	int r = __get_index(heap, size);
 	//printf("size: %llu, r: %d\n", size, r);
 	__add_in_free_list(heap, &free_list[r], ptr);
 //	printf("freed %lx (size: %llu)\n", ptr, __get_header(ptr)->size);
+//	XSEGLOG("freed %llu bytes to list %d\n", size, r);
 	return;
 }
 
@@ -128,7 +188,7 @@ int xheap_init(struct xheap *heap, uint64_t size, uint32_t alignment_unit, void 
 	heap->alignment_unit = alignment_unit;
 	XPTRSET(&heap->mem, mem);
 	
-	r = __get_index(heap, size, __ALLOC);
+	r = __get_index(heap, size);
 	
 	/* minimum alignment unit required */
 	if (heap_page < sizeof(struct xheap_header))

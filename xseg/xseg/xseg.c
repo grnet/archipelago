@@ -786,9 +786,6 @@ struct xseg_port *xseg_alloc_port(struct xseg *xseg, uint32_t flags, uint64_t nr
 	if (!port)
 		return NULL;
 	
-	//TODO since max number of requests is not fixed
-	//	maybe we should make xqs expand when necessary
-
 	//alloc free queue
 	q = __alloc_queue(xseg, nr_reqs);
 	if (!q)
@@ -810,10 +807,13 @@ struct xseg_port *xseg_alloc_port(struct xseg *xseg, uint32_t flags, uint64_t nr
 	xlock_release(&port->fq_lock);
 	xlock_release(&port->rq_lock);
 	xlock_release(&port->pq_lock);
+	xlock_release(&port->port_lock);
 	port->owner = 0; //should be Noone;
 	port->waitcue = 0;
 	port->portno = 0; // should be Noport;
 	port->peer_type = 0; //FIXME what  here ??
+	port->alloc_reqs = 0;
+	port->max_alloc_reqs = 512; //FIXME 
 	return port;
 
 err_reply:
@@ -852,7 +852,7 @@ void* xseg_alloc_buffer(struct xseg *xseg, uint64_t size)
 {
 	struct xheap *heap = xseg->heap;
 	void *mem = xheap_allocate(heap, size);
-	if (xheap_get_chunk_size(mem) < size) {
+	if (mem && xheap_get_chunk_size(mem) < size) {
 		XSEGLOG("Buffer size %llu instead of %llu\n", 
 				xheap_get_chunk_size(mem), size);
 		xheap_free(mem);
@@ -952,7 +952,7 @@ struct xseg_request *xseg_get_request(struct xseg *xseg, uint32_t portno)
 	//X_ALLOC
 	//X_LOCAL_ONLY (Maybe we want this as default, to give a hint to a peer
 	//		how many requests it can have flying)
-	struct xseg_request *req;
+	struct xseg_request *req = NULL;
 	struct xseg_port *port;
 	struct xq *q;
 	xqindex xqi;
@@ -971,9 +971,16 @@ struct xseg_request *xseg_get_request(struct xseg *xseg, uint32_t portno)
 	}
 
 	//else try to allocate from global heap
-	req = xobj_get_obj(xseg->request_h, X_ALLOC);
+	xlock_acquire(&port->port_lock, portno);
+	if (port->alloc_reqs < port->max_alloc_reqs) {
+		req = xobj_get_obj(xseg->request_h, X_ALLOC);
+		if (req)
+			port->alloc_reqs++;
+	}
+	xlock_release(&port->port_lock);
 	if (!req)
 		return NULL;
+
 done:
 	req->portno = portno;
 
@@ -995,10 +1002,10 @@ int xseg_put_request (  struct xseg *xseg,
 {
 	xqindex xqi = XPTR_MAKE(xreq, xseg->segment);
 	struct xq *q;
+	int flag = 0;
 	struct xseg_port *port = xseg_get_port(xseg, portno);
 	if (!port) 
 		return -1;
-	q = XPTR_TAKE(port->free_queue, xseg->segment);
 
 	if (xreq->buffer){
 		void *ptr = XPTR_TAKE(xreq->buffer, xseg->segment);
@@ -1016,11 +1023,22 @@ int xseg_put_request (  struct xseg *xseg,
 		__unlock_segment(xseg);
 	}
 
+
+	xlock_acquire(&port->port_lock, portno);
+	if (port->alloc_reqs >= port->max_alloc_reqs) {
+		port->alloc_reqs--;
+		flag = 1;
+	}
+	xlock_release(&port->port_lock);
+	if (flag)
+		goto free_req;
+
 	//try to put it in free_queue of the port
+	q = XPTR_TAKE(port->free_queue, xseg->segment);
 	xqi = xq_append_head(q, xqi, portno);
 	if (xqi != Noneidx)
 		return 0;
-
+free_req:
 	//else return it to segment
 	xobj_put_obj(xseg->request_h, (void *) xreq);
 	return 0;

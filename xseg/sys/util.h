@@ -12,7 +12,7 @@ typedef uint64_t xpointer;
 
 /* type to be used as absolute pointer
  * this should be the same as xqindex
- * and must fit into a ptr type
+ * and must fit into a pointer type
  */
 typedef uint64_t xptr; 
 
