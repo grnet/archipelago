@@ -646,6 +646,7 @@ int cmd_rndread(long loops, int32_t seed, uint32_t targetlen, uint32_t chunksize
 			submitted->op = X_READ;
 			srl = xseg_submit(xseg, dstport, submitted);
 			if (srl == Noneidx) {
+				printf("foo\n");
 				xseg_put_request(xseg, submitted->portno, submitted);
 			} else {
 				seed = random();
@@ -791,10 +792,11 @@ int cmd_report(uint32_t portno)
 	rq = xseg_get_queue(xseg, port, request_queue);
 	pq = xseg_get_queue(xseg, port, reply_queue);
 	fprintf(stderr, "port %u:\n"
+		"   requests: %llu/%llu\n"
 		"       free_queue [%p] count : %u\n"
 		"    request_queue [%p] count : %u\n"
 		"      reply_queue [%p] count : %u\n",
-		portno,
+		portno, port->alloc_reqs, port->max_alloc_reqs,
 		(void *)fq, xq_count(fq),
 		(void *)rq, xq_count(rq),
 		(void *)pq, xq_count(pq));

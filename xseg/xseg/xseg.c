@@ -1002,7 +1002,6 @@ int xseg_put_request (  struct xseg *xseg,
 {
 	xqindex xqi = XPTR_MAKE(xreq, xseg->segment);
 	struct xq *q;
-	int flag = 0;
 	struct xseg_port *port = xseg_get_port(xseg, portno);
 	if (!port) 
 		return -1;
@@ -1024,15 +1023,6 @@ int xseg_put_request (  struct xseg *xseg,
 	}
 
 
-	xlock_acquire(&port->port_lock, portno);
-	if (port->alloc_reqs >= port->max_alloc_reqs) {
-		port->alloc_reqs--;
-		flag = 1;
-	}
-	xlock_release(&port->port_lock);
-	if (flag)
-		goto free_req;
-
 	//try to put it in free_queue of the port
 	q = XPTR_TAKE(port->free_queue, xseg->segment);
 	xqi = xq_append_head(q, xqi, portno);
@@ -1041,6 +1031,9 @@ int xseg_put_request (  struct xseg *xseg,
 free_req:
 	//else return it to segment
 	xobj_put_obj(xseg->request_h, (void *) xreq);
+	xlock_acquire(&port->port_lock, portno);
+	port->alloc_reqs--;
+	xlock_release(&port->port_lock);
 	return 0;
 }
 
@@ -1098,7 +1091,7 @@ xserial xseg_submit (	struct xseg *xseg, uint32_t portno,
 	if (serial == Noneidx) {
 		//TODO make it flag controlled
 		/* double up queue size */
-		newq = __alloc_queue(xseg, xq_count(q)*2);
+		newq = __alloc_queue(xseg, xq_size(q)*2);
 		if (!newq)
 			goto out_rel;
 		r = __xq_resize(q, newq);
@@ -1176,7 +1169,7 @@ xserial xseg_respond (  struct xseg *xseg, uint32_t portno,
 	q = XPTR_TAKE(port->reply_queue, xseg->segment);
 	serial = __xq_append_tail(q, xqi);
 	if (serial == Noneidx) {
-		newq = __alloc_queue(xseg, xq_count(q)*2);
+		newq = __alloc_queue(xseg, xq_size(q)*2);
 		if (!newq)
 			goto out_rel;
 		r = __xq_resize(q, newq);
