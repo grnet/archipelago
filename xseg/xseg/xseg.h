@@ -23,11 +23,17 @@
 #include <xtypes/xhash.h>
 
 typedef uint64_t xserial;
+typedef uint32_t xport;
 
 #define NoSerial ((xserial)-1)
+#define NoPort ((xport) -1)
 
 #ifndef XSEG_DEF_REQS
 #define XSEG_DEF_REQS 256
+#endif
+
+#ifndef MAX_PATH_LEN
+#define MAX_PATH_LEN 32
 #endif
 
 /* Peers and Segments
@@ -180,7 +186,12 @@ struct xseg_request {
 	uint32_t op;
 	uint32_t state;
 	uint32_t flags;
-	uint32_t portno;
+	xport src_portno;
+	xport src_transit_portno;
+	xport dst_portno;
+	xport dst_transit_portno;
+	struct xq path;
+	xqindex path_bufs[MAX_PATH_LEN];
 	/* pad */
 	xptr buffer;
 	uint64_t bufferlen;
@@ -219,6 +230,7 @@ struct xseg {
 	struct xobject_h *request_h;
 	struct xobject_h *port_h;
 	xptr *ports;
+	xport *src_gw, *dst_gw;
 
 	struct xseg_shared *shared;
 	struct xseg_private *priv;

@@ -419,6 +419,7 @@ static long initialize_segment(struct xseg *xseg, struct xseg_config *cfg)
 	struct xobject_h *obj_h;
 	int r;
 	xptr *ports;
+	xport *gw;
 
 
 	if (page_size < XSEG_MIN_PAGE_SIZE)
@@ -484,6 +485,25 @@ static long initialize_segment(struct xseg *xseg, struct xseg_config *cfg)
 		ports[i]=0;
 	}
 	xseg->ports = (xptr *) XPTR_MAKE(mem, segment);
+
+	//allocate {src,dst} gws
+	mem = xheap_allocate(heap, sizeof(xport) * cfg->nr_ports);
+	if (!mem)
+		return -1;
+	gw = mem;
+	for (i = 0; i < cfg->nr_ports; i++) {
+		gw[i] = i;
+	}
+	xseg->src_gw = (xport *) XPTR_MAKE(mem, segment);
+
+	mem = xheap_allocate(heap, sizeof(xport) * cfg->nr_ports);
+	if (!mem)
+		return -1;
+	gw = mem;
+	for (i = 0; i < cfg->nr_ports; i++) {
+		gw[i] = i;
+	}
+	xseg->dst_gw = (xport *) XPTR_MAKE(mem, segment);
 	
 	//allocate xseg_shared memory
 	mem = xheap_allocate(heap, sizeof(struct xseg_shared));
@@ -692,6 +712,8 @@ struct xseg *xseg_join(	char *segtypename,
 	xseg->request_h = XPTR_TAKE(__xseg->request_h, __xseg);
 	xseg->port_h = XPTR_TAKE(__xseg->port_h, __xseg);
 	xseg->ports = XPTR_TAKE(__xseg->ports, __xseg);
+	xseg->src_gw = XPTR_TAKE(__xseg->src_gw, __xseg);
+	xseg->dst_gw = XPTR_TAKE(__xseg->dst_gw, __xseg);
 	xseg->heap = XPTR_TAKE(__xseg->heap, __xseg);
 	xseg->object_handlers = XPTR_TAKE(__xseg->object_handlers, __xseg);
 	xseg->shared = XPTR_TAKE(__xseg->shared, __xseg);
@@ -946,6 +968,23 @@ int xseg_free_requests(struct xseg *xseg, uint32_t portno, int nr)
 	return i;
 }
 
+int xseg_prep_ports (struct xseg *xseg, struct xseg_request *xreq, 
+			uint32_t src_portno, uint32_t dst_portno)
+{
+	if (!__validate_port(xseg, src_portno))
+		return -1;
+
+	if (!__validate_port(xseg, dst_portno))
+		return -1;
+
+	xreq->src_portno = src_portno;
+	xreq->src_transit_portno = src_portno;
+	xreq->dst_portno = dst_portno;
+	xreq->dst_transit_portno = dst_portno;
+
+	return 0;
+}
+
 struct xseg_request *xseg_get_request(struct xseg *xseg, uint32_t portno)
 {
 	//TODO add flags option 
@@ -982,13 +1021,16 @@ struct xseg_request *xseg_get_request(struct xseg *xseg, uint32_t portno)
 		return NULL;
 
 done:
-	req->portno = portno;
 
 	req->target = 0;
 	req->data = 0;
 	req->datalen = 0;
 	req->targetlen = 0;
-	
+	if (xseg_prep_ports(xseg, req, src_portno, dst_portno) < 0) {
+		xseg_put_request(xseg, src_portno, req);
+		return NULL;
+	}
+	req->state = 0;
 	req->elapsed = 0;
 	req->timestamp.tv_sec = 0;
 	req->timestamp.tv_usec = 0;
@@ -1010,10 +1052,18 @@ int xseg_put_request (  struct xseg *xseg,
 		void *ptr = XPTR_TAKE(xreq->buffer, xseg->segment);
 		xseg_free_buffer(xseg, ptr);
 	}
+	/* empty path */
+	while (__xq_pop_head(&xreq->path) != Noneidx)
+		;
 	xreq->target = 0;
 	xreq->data = 0;
 	xreq->datalen = 0;
 	xreq->targetlen = 0;
+	xreq->state = 0;
+	xreq->src_portno = NoPort;
+	xreq->dst_portno = NoPort;
+	xreq->src_transit_portno = NoPort;
+	xreq->dst_transit_portno = NoPort;	
 	
 	if (xreq->elapsed != 0) {
 		__lock_segment(xseg);
@@ -1077,13 +1127,41 @@ xserial xseg_submit (	struct xseg *xseg, uint32_t portno,
 	xserial serial = NoSerial;
 	xqindex xqi, r;
 	struct xq *q, *newq;
-	struct xseg_port *port = xseg_get_port(xseg, portno);
+	xport next, cur;
+	struct xseg_port *port;
+
+	/* discover next and current ports */
+	if (!__validate_port(xseg, xreq->src_transit_portno))
+		return serial;
+	next = xseg->src_gw[xreq->src_transit_portno];
+	if (next != xreq->src_portno) {
+		cur = xreq->src_transit_portno;
+		goto submit;
+	}
+	
+	if (!__validate_port(xseg, xreq->dst_transit_portno))
+		return serial;
+	next = xseg->dst_gw[xreq->dst_transit_portno];
+	if (xreq->dst_transit_portno == xreq->dst_portno)
+		cur = xreq->src_transit_portno; 
+	else 
+		cur = xreq->dst_transit_portno;
+
+
+submit:
+	port = xseg_get_port(xseg, next);
 	if (!port)
 		goto out;
 
 	__update_timestamp(xreq);
 	
 	xqi = XPTR_MAKE(xreq, xseg->segment);
+
+	/* add current port to path */
+	serial = __xq_append_head(&xreq->path, cur);
+	if (serial == Noneidx){
+		return serial;
+	}
 
 	xlock_acquire(&port->rq_lock, portno);
 	q = XPTR_TAKE(port->request_queue, xseg->segment);
@@ -1104,6 +1182,8 @@ xserial xseg_submit (	struct xseg *xseg, uint32_t portno,
 
 out_rel:
 	xlock_release(&port->rq_lock);
+	if (serial == Noneidx)
+		__xq_pop_head(&xreq->path);
 out:
 	return serial;
 	
@@ -1112,12 +1192,13 @@ out:
 struct xseg_request *xseg_receive(struct xseg *xseg, uint32_t portno)
 {
 	xqindex xqi;
+	xserial serial = NoSerial;
 	struct xq *q;
 	struct xseg_request *req;
 	struct xseg_port *port = xseg_get_port(xseg, portno);
 	if (!port)
 		return NULL;
-
+retry:
 	xlock_acquire(&port->pq_lock, portno);
 	q = XPTR_TAKE(port->reply_queue, xseg->segment);
 	xqi = __xq_pop_head(q);
@@ -1128,6 +1209,13 @@ struct xseg_request *xseg_receive(struct xseg *xseg, uint32_t portno)
 
 	req = XPTR_TAKE(xqi, xseg->segment);
 	__update_timestamp(req);
+	serial = __xq_pop_head(&xreq->path);
+	if (serial == Noneidx){
+                /* this should never happen */
+		XSEGLOG("pop head of path queue returned Noneidx\n");
+                goto retry;
+        }
+
 
 	return req;
 }
@@ -1148,8 +1236,14 @@ struct xseg_request *xseg_accept(struct xseg *xseg, uint32_t portno)
 		return NULL;
 
 	req = XPTR_TAKE(xqi, xseg->segment);
-	return req;
 
+	if (xseg->src_gw[xreq->src_transit_portno] == portno)
+		xreq->src_transit_portno = portno;
+	else
+		xreq->dst_transit_portno = portno;
+
+
+	return req;
 }
 
 xserial xseg_respond (  struct xseg *xseg, uint32_t portno,
@@ -1158,10 +1252,16 @@ xserial xseg_respond (  struct xseg *xseg, uint32_t portno,
 	xserial serial = NoSerial;
 	xqindex xqi, r;
 	struct xq *q, *newq;
-	struct xseg_port *port = xseg_get_port(xseg, portno);
+	struct xseg_port *port;
+
+	serial = __xq_peek_head(&xreq->path);
+	if (serial == Noneidx)
+		return serial;
+	portno = (xport) serial;
+	
+	port = xseg_get_port(xseg, portno);
 	if (!port)
 		goto out;
-
 	
 	xqi = XPTR_MAKE(xreq, xseg->segment);
 	
@@ -1185,6 +1285,42 @@ out_rel:
 out:
 	return serial;
 	
+}
+
+xport xseg_set_srcgw(struct xseg *xseg, xport portno, xport srcgw)
+{
+	if (!__validate_port(xseg, portno))
+		return NoPort;
+	xseg->src_gw[portno] = srcgw;
+	return srcgw;
+}
+
+xport xseg_getandset_srcgw(struct xseg *xseg, xport portno, xport srcgw)
+{
+	xport prev_portno;
+	do {
+		prev_portno = xseg->src_gw[portno];
+		xseg->src_gw[srcgw] = prev_portno;
+	}while(!(__sync_bool_compare_and_swap(&xseg->src_gw[portno], prev_portno, srcgw)));
+	return prev_portno; 
+}
+
+xport xseg_set_dstgw(struct xseg *xseg, xport portno, xport dstgw)
+{
+	if (!__validate_port(xseg, portno))
+		return NoPort;
+	xseg->dst_gw[portno] = dstgw;
+	return dstgw;
+}
+
+xport xseg_getandset_dstgw(struct xseg *xseg, xport portno, xport dstgw)
+{
+	xport prev_portno;
+	do {
+		prev_portno = xseg->dst_gw[portno];
+		xseg->dst_gw[dstgw] = prev_portno;
+	}while(!(__sync_bool_compare_and_swap(&xseg->dst_gw[portno], prev_portno, dstgw)));
+	return prev_portno;
 }
 
 
@@ -1234,6 +1370,8 @@ out:
 	__unlock_segment(xseg);
 	return port;
 }
+
+
 
 
 int xseg_initialize(void)
