@@ -30,6 +30,9 @@ int xobj_handler_init(struct xobject_h *obj_h, void *container,
 	obj_h->allocated = XPTR_MAKE(xhash, container);
 	obj_h->list = 0;
 	obj_h->flags = 0;
+	obj_h->nr_free = 0;
+	obj_h->nr_allocated = 0;
+	obj_h->allocated_space = 0;
 	obj_h->heap = XPTR_MAKE(heap, container);
 	XPTRSET(&obj_h->container, container);
 	xlock_release(&obj_h->lock);
@@ -44,71 +47,75 @@ int xobj_alloc_obj(struct xobject_h * obj_h, uint64_t nr)
 	struct xobject *obj = NULL;
 
 	uint64_t used, bytes = nr * obj_h->obj_size;
-	xptr objptr;
+	xptr ptr, objptr;
 	xhash_t *allocated = XPTR_TAKE(obj_h->allocated, container);
 	int r;
 	
 	void *mem = xheap_allocate(heap, bytes);
-
 	if (!mem)
 		return -1;
 
 	bytes = xheap_get_chunk_size(mem);
-//	printf("memory: %lu\n", XPTR_MAKE(mem, container));
 	used = 0;
 	while (used + obj_h->obj_size < bytes) {
-//		printf("obj_size: %llu, used: %llu, bytes: %llu\n", obj_h->obj_size, used, bytes);
 		objptr = XPTR_MAKE(((unsigned long) mem) + used, container);
-//		printf("objptr: %lu\n", objptr);
 		obj = XPTR_TAKE(objptr, container);
 		used += obj_h->obj_size;
 		obj->magic = obj_h->magic;
 		obj->size = obj_h->obj_size;
 		obj->next = XPTR_MAKE(((unsigned long) mem) + used, container); //point to the next obj
-//		printf("foo: %lx\n", &obj->next);
-		
-
-retry:
-		r = xhash_insert(allocated, objptr, objptr); //keep track of allocated objects
-		//ugly
-		if (r == -XHASH_ERESIZE) {
-			ul_t sizeshift = grow_size_shift(allocated);
-//			printf("new sizeshift: %lu\n", sizeshift);
-			uint64_t size;
-			xhash_t *new;
-			size = xhash_get_alloc_size(sizeshift); 
-//			printf("new size: %lu\n", size);
-//			printf("%llu\n", xheap_get_chunk_size(allocated));
-			new = xheap_allocate(heap, size);
-//			printf("requested %llu, got %llu\n", size, xheap_get_chunk_size(new));
-			if (!new) {
-				xheap_free(mem);
-				return -1;
-			}
-			xhash_resize(allocated, sizeshift, new);
-			xheap_free(allocated);
-			allocated = new;
-			obj_h->allocated = XPTR_MAKE(allocated, container);
-			goto retry;
-		}
 	}
 	if (!obj)
-		return -1;
-	objptr = obj_h->list;
-	obj->next = objptr; 
-	obj_h->list = XPTR_MAKE((unsigned long) mem, container);
+		goto err;
+		
+	/* keep track of allocated objects. 
+	 * Since the whole allocated space is split up into objects,
+	 * we can calculate allocated objects from the allocated heap
+	 * space and object size.
+	 */
+	ptr = XPTR_MAKE(mem, container);
+	r = xhash_insert(allocated, ptr, ptr);
+	//ugly
+	if (r == -XHASH_ERESIZE) {
+		ul_t sizeshift = grow_size_shift(allocated);
+		uint64_t size;
+		xhash_t *new;
+		size = xhash_get_alloc_size(sizeshift); 
+		new = xheap_allocate(heap, size);
+		if (!new) 
+			goto err;
+		xhash_resize(allocated, sizeshift, new);
+		xheap_free(allocated);
+		allocated = new;
+		obj_h->allocated = XPTR_MAKE(allocated, container);
+		r = xhash_insert(allocated, ptr, ptr);
+	}
+	if (r < 0)
+		goto err;
+	
+	obj_h->allocated_space += bytes;
+	obj_h->nr_free += bytes/obj_h->obj_size;
+	obj_h->nr_allocated += bytes/obj_h->obj_size;
+	obj->next = obj_h->list;
+	obj_h->list = ptr;
 	return 0;
-}
 
+err:
+	xheap_free(mem);
+	return -1;
+
+}
 void xobj_put_obj(struct xobject_h * obj_h, void *ptr)
 {
 	struct xobject *obj = (struct xobject *) ptr;
 	void *container = XPTR(&obj_h->container);
 	xptr list, objptr = XPTR_MAKE(obj, container);
+
 	xlock_acquire(&obj_h->lock, 1);
 	list = obj_h->list;
 	obj->next = list;
 	obj_h->list = objptr;
+	obj_h->nr_free++;
 	xlock_release(&obj_h->lock);
 }
 
@@ -128,6 +135,7 @@ retry:
 	obj = XPTR_TAKE(list, container);
 	objptr = obj->next;
 	obj_h->list = objptr;
+	obj_h->nr_free--;
 	goto out;
 
 alloc:

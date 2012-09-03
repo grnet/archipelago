@@ -139,7 +139,9 @@ int basic_test()
 			c, sizeof(struct foo), c*sizeof(struct foo));
 	printf("Total time: %lu us\n", us);
 	unsigned long tpa =  (unsigned long) ((us*1000) / allocations);
-	printf("Time per allocation: %lu ns\n\n", tpa);
+	printf("Time per allocation: %lu ns\n", tpa);
+	unsigned long aps =  (unsigned long) ((allocations * 1000000)/us);
+	printf("Allocations per second: %lu\n\n", aps);
 	return 0;
 }
 

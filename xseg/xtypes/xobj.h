@@ -19,14 +19,17 @@ struct xobject {
 };
 
 struct xobject_h {
+	struct xlock lock;
 	uint32_t magic;
 	uint64_t obj_size;
 	uint32_t flags;
 	XPTR_TYPE(void) container;
 	xptr heap;
 	xptr allocated;
+	uint64_t nr_allocated;
+	uint64_t allocated_space;
 	xptr list;
-	struct xlock lock;
+	uint64_t nr_free;
 };
 
 void *xobj_get_obj(struct xobject_h * obj_h, uint32_t flags);
