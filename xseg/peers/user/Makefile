@@ -5,7 +5,8 @@ include $(XSEG_HOME)/base.mk
 default: all
 
 #all: filed xseg sosd vlmcd mapperd
-all: filed xseg vlmcd mapperd
+#all: filed xseg vlmcd mapperd
+all: filed xseg
 
 
 filed: filed.c $(BASE)/xseg/xseg.h

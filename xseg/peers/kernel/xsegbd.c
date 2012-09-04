@@ -282,7 +282,8 @@ static void xsegbd_dev_release(struct device *dev)
 	 */
 //	xseg_cancel_wait(xseg, xsegbd_dev->src_portno);
 
-	if (xseg_free_requests(xsegbd.xseg, xsegbd_dev->src_portno, xsegbd_dev->nr_requests) != 0)
+	if (xseg_free_requests(xsegbd.xseg, 
+			xsegbd_dev->src_portno, xsegbd_dev->nr_requests) != 0)
 		XSEGLOG("Error trying to free requests!\n");
 
 	WARN_ON(nr_pending < xsegbd_dev->nr_requests);
@@ -343,9 +344,11 @@ static void xseg_request_fn(struct request_queue *rq)
 	xqindex blkreq_idx;
 	char *target;
 	uint64_t datalen;
+	xport p;
 
 	for (;;) {
-		xreq = xseg_get_request(xsegbd.xseg, xsegbd_dev->src_portno);
+		xreq = xseg_get_request(xsegbd.xseg, xsegbd_dev->src_portno, 
+				xsegbd_dev->dst_portno, X_ALLOC);
 		if (!xreq)
 			break;
 
@@ -360,10 +363,11 @@ static void xseg_request_fn(struct request_queue *rq)
 
 
 		datalen = blk_rq_bytes(blkreq);
-		BUG_ON(xseg_prep_request(xsegbd.xseg, xreq, xsegbd_dev->targetlen, datalen));
+		BUG_ON(xseg_prep_request(xsegbd.xseg, xreq, 
+					xsegbd_dev->targetlen, datalen));
 		BUG_ON(xreq->bufferlen - xsegbd_dev->targetlen < datalen);
 
-		target = XSEG_TAKE_PTR(xreq->target, xsegbd.xseg->segment);
+		target = xseg_get_target(xsegbd.xseg, xreq);
 		strncpy(target, xsegbd_dev->target, xsegbd_dev->targetlen);
 		blkreq_idx = xq_pop_head(&blk_queue_pending, 1);
 		BUG_ON(blkreq_idx == Noneidx);
@@ -396,12 +400,13 @@ static void xseg_request_fn(struct request_queue *rq)
 			xreq->op = X_READ;
 		}
 
-		BUG_ON(xseg_submit(xsegbd.xseg, xsegbd_dev->dst_portno, xreq) == NoSerial);
+		BUG_ON((p = xseg_submit(xsegbd.xseg, xreq, 
+					xsegbd_dev->src_portno, X_ALLOC)) == NoPort);
+		WARN_ON(xseg_signal(xsegbd_dev->xsegbd->xseg, p) < 0);
 	}
-
-	WARN_ON(xseg_signal(xsegbd_dev->xsegbd->xseg, xsegbd_dev->dst_portno) < 0);
 	if (xreq)
-		BUG_ON(xseg_put_request(xsegbd_dev->xsegbd->xseg, xsegbd_dev->src_portno, xreq) == NoSerial);
+		BUG_ON(xseg_put_request(xsegbd_dev->xsegbd->xseg, xreq, 
+					xsegbd_dev->src_portno) == NoSerial);
 }
 
 int update_dev_sectors_from_request(	struct xsegbd_device *xsegbd_dev,
@@ -428,9 +433,11 @@ static int xsegbd_get_size(struct xsegbd_device *xsegbd_dev)
 	xqindex blkreq_idx;
 	struct pending *pending;
 	struct completion comp;
+	xport p;
 	int ret = -EBUSY;
 
-	xreq = xseg_get_request(xsegbd.xseg, xsegbd_dev->src_portno);
+	xreq = xseg_get_request(xsegbd.xseg, xsegbd_dev->src_portno,
+			xsegbd_dev->dst_portno, X_ALLOC);
 	if (!xreq)
 		goto out;
 
@@ -447,7 +454,7 @@ static int xsegbd_get_size(struct xsegbd_device *xsegbd_dev)
 	pending->comp = &comp;
 	xreq->priv = (uint64_t)blkreq_idx;
 
-	target = XSEG_TAKE_PTR(xreq->target, xsegbd.xseg->segment);
+	target = xseg_get_target(xsegbd.xseg, xreq);
 	strncpy(target, xsegbd_dev->target, xsegbd_dev->targetlen);
 	xreq->size = datalen;
 	xreq->offset = 0;
@@ -461,15 +468,16 @@ static int xsegbd_get_size(struct xsegbd_device *xsegbd_dev)
 //	port = &xsegbd.xseg->ports[xsegbd_dev->src_portno];
 //	port->waitcue = (uint64_t)(long)xsegbd_dev;
 
-	BUG_ON(xseg_submit(xsegbd.xseg, xsegbd_dev->dst_portno, xreq) == NoSerial);
-	WARN_ON(xseg_signal(xsegbd.xseg, xsegbd_dev->dst_portno) < 0);
+	BUG_ON((p = xseg_submit(xsegbd.xseg, xreq, 
+					xsegbd_dev->src_portno, X_ALLOC)) == NoPort);
+	WARN_ON(xseg_signal(xsegbd.xseg, p) < 0);
 
 	wait_for_completion_interruptible(&comp);
 	XSEGLOG("Woken up after wait_for_completion_interruptible()\n");
 	ret = update_dev_sectors_from_request(xsegbd_dev, xreq);
 	XSEGLOG("get_size: sectors = %ld\n", (long)xsegbd_dev->sectors);
 out:
-	BUG_ON(xseg_put_request(xsegbd.xseg, xsegbd_dev->src_portno, xreq) == NoSerial);
+	BUG_ON(xseg_put_request(xsegbd.xseg, xreq, xsegbd_dev->src_portno) == NoSerial);
 	return ret;
 }
 
@@ -534,7 +542,7 @@ static void xseg_callback(struct xseg *xseg, uint32_t portno)
 blk_end:
 		blk_end_request_all(blkreq, err);
 		xq_append_head(&blk_queue_pending, blkreq_idx, 1);
-		BUG_ON(xseg_put_request(xseg, xreq->portno, xreq) == NoSerial);
+		BUG_ON(xseg_put_request(xseg, xreq, xsegbd_dev->src_portno) == NoSerial);
 	}
 
 	if (xsegbd_dev) {
