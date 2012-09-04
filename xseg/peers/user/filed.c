@@ -134,24 +134,26 @@ static inline void free_io(struct store *store, struct io *io)
 static void complete(struct store *store, struct io *io)
 {
 	struct xseg_request *req = io->req;
+	xport p;
 	req->state |= XS_SERVED;
 	if (verbose)
 		log_io("complete", io);
-	while (xseg_respond(store->xseg, req->portno, req) == Noneidx)
+	while ((p = xseg_respond(store->xseg, req, store->portno, X_ALLOC)) == NoPort)
 		;
-	xseg_signal(store->xseg, req->portno);
+	xseg_signal(store->xseg, p);
 	__sync_fetch_and_sub(&store->fdcache[io->fdcacheidx].ref, 1);
 }
 
 static void fail(struct store *store, struct io *io)
 {
 	struct xseg_request *req = io->req;
+	xport p;
 	req->state |= XS_FAILED;
 	if (verbose)
 		log_io("fail", io);
-	while (xseg_respond(store->xseg, req->portno, req) == Noneidx)
+	while ((p = xseg_respond(store->xseg, req, store->portno, X_ALLOC)) == NoPort)
 		;
-	xseg_signal(store->xseg, req->portno);
+	xseg_signal(store->xseg, p);
 	if (io->fdcacheidx >= 0) {
 		__sync_fetch_and_sub(&store->fdcache[io->fdcacheidx].ref, 1);
 	}

@@ -193,11 +193,11 @@ int cmd_info(char *target)
 	uint32_t targetlen = strlen(target);
 	size_t size = sizeof(uint64_t);
 	int r;
-	xserial srl;
+	xport p;
 	struct xseg_request *req;
 	char *req_target;
 
-	req = xseg_get_request(xseg, srcport);
+	req = xseg_get_request(xseg, srcport, dstport, X_ALLOC);
 	if (!req) {
 		fprintf(stderr, "No request!\n");
 		return -1;
@@ -207,7 +207,7 @@ int cmd_info(char *target)
 	if (r < 0) {
 		fprintf(stderr, "Cannot prepare request! (%lu, %lu)\n",
 			(unsigned long) targetlen, (unsigned long) size);
-		xseg_put_request(xseg, srcport, req);
+		xseg_put_request(xseg, req, srcport);
 		return -1;
 	}
 
@@ -217,11 +217,11 @@ int cmd_info(char *target)
 	req->size = size;
 	req->op = X_INFO;
 
-	srl = xseg_submit(xseg, dstport, req);
-	if (srl == Noneidx)
+	p = xseg_submit(xseg, req, srcport, X_ALLOC);
+	if (p == NoPort)
 		return -1;
 
-	xseg_signal(xseg, dstport);
+	xseg_signal(xseg, p);
 
 	return 0;
 }
@@ -230,9 +230,9 @@ int cmd_read(char *target, uint64_t offset, uint64_t size)
 {
 	uint32_t targetlen = strlen(target);
 	int r;
-	xserial srl;
+	xport p;
 	char *req_target;
-	struct xseg_request *req = xseg_get_request(xseg, srcport);
+	struct xseg_request *req = xseg_get_request(xseg, srcport, dstport, X_ALLOC);
 	printf("%x\n", req);
 	if (!req) {
 		fprintf(stderr, "No request\n");
@@ -243,7 +243,7 @@ int cmd_read(char *target, uint64_t offset, uint64_t size)
 	if (r < 0) {
 		fprintf(stderr, "Cannot prepare request! (%lu, %llu)\n",
 			(unsigned long)targetlen, (unsigned long long)size);
-		xseg_put_request(xseg, srcport, req);
+		xseg_put_request(xseg, req, srcport);
 		return -1;
 	}
 
@@ -253,11 +253,11 @@ int cmd_read(char *target, uint64_t offset, uint64_t size)
 	req->size = size;
 	req->op = X_READ;
 	report_request(req);
-	srl = xseg_submit(xseg, dstport, req);
-	if (srl == Noneidx)
+	p = xseg_submit(xseg, req, srcport, X_ALLOC);
+	if (p == NoPort)
 		return -1;
 
-	xseg_signal(xseg, dstport);
+	xseg_signal(xseg, p);
 	return 0;
 }
 
@@ -265,7 +265,7 @@ int cmd_write(char *target, uint64_t offset)
 {
 	char *buf = NULL;
 	int r;
-	xserial srl;
+	xport p;
 	uint64_t size = 0;
 	char *req_target, *req_data;
 	uint32_t targetlen = strlen(target);
@@ -277,7 +277,7 @@ int cmd_write(char *target, uint64_t offset)
 		return -1;
 	}
 
-	req = xseg_get_request(xseg, srcport);
+	req = xseg_get_request(xseg, srcport, dstport, X_ALLOC);
 	if (!req) {
 		fprintf(stderr, "No request\n");
 		return -1;
@@ -287,7 +287,7 @@ int cmd_write(char *target, uint64_t offset)
 	if (r < 0) {
 		fprintf(stderr, "Cannot prepare request! (%lu, %llu)\n",
 			(unsigned long)targetlen, (unsigned long long)size);
-		xseg_put_request(xseg, srcport, req);
+		xseg_put_request(xseg, req, srcport);
 		return -1;
 	}
 
@@ -300,8 +300,8 @@ int cmd_write(char *target, uint64_t offset)
 	req->size = size;
 	req->op = X_WRITE;
 
-	srl = xseg_submit(xseg, dstport, req);
-	if (srl == Noneidx) {
+	p = xseg_submit(xseg, req, srcport, X_ALLOC);
+	if (p == NoPort) {
 		fprintf(stderr, "Cannot submit\n");
 		return -1;
 	}
@@ -428,30 +428,31 @@ int cmd_bridge(uint32_t portno1, uint32_t portno2, char *logfile, char *how)
 		for (;;) {
 			active = 0;
 
+			//FIXME
 			req = xseg_accept(xseg, portno1);
 			if (req) {
-				xseg_submit(xseg, portno2, req);
+				xseg_submit(xseg, req, portno2, X_ALLOC);
 				log_req(logfd, portno1, portno2, LOG_ACCEPT, method, req);
 				active += 1;
 			}
 
 			req = xseg_accept(xseg, portno2);
 			if (req) {
-				xseg_submit(xseg, portno1, req);
+				xseg_submit(xseg, req, portno1, X_ALLOC);
 				log_req(logfd, portno2, portno1, LOG_ACCEPT, method, req);
 				active += 1;
 			}
 
 			req = xseg_receive(xseg, portno1);
 			if (req) {
-				xseg_respond(xseg, portno2, req);
+				xseg_respond(xseg, req, portno2, X_ALLOC);
 				log_req(logfd, portno1, portno2, LOG_RECEIVE, method, req);
 				active += 1;
 			}
 
 			req = xseg_receive(xseg, portno2);
 			if (req) {
-				xseg_respond(xseg, portno1, req);
+				xseg_respond(xseg, req, portno1, X_ALLOC);
 				log_req(logfd, portno2, portno1, LOG_RECEIVE, method, req);
 				active += 1;
 			}
@@ -506,20 +507,20 @@ int cmd_rndwrite(long loops, int32_t seed, uint32_t targetlen, uint32_t chunksiz
 	long nr_submitted = 0, nr_received = 0, nr_failed = 0;
 	int reported = 0, r;
 	uint64_t offset;
-	xserial srl;
+	xport port;
 	char *req_data, *req_target;
 	seed = random();
 
 	for (;;) {
 		xseg_prepare_wait(xseg, srcport);
 		if (nr_submitted < loops &&
-		    (submitted = xseg_get_request(xseg, srcport))) {
+		    (submitted = xseg_get_request(xseg, srcport, dstport, X_ALLOC))) {
 			xseg_cancel_wait(xseg, srcport);
 			r = xseg_prep_request(xseg, submitted, targetlen, chunksize);
 			if (r < 0) {
 				fprintf(stderr, "Cannot prepare request! (%u, %u)\n",
 					targetlen, chunksize);
-				xseg_put_request(xseg, submitted->portno, submitted);
+				xseg_put_request(xseg, submitted, srcport);
 				return -1;
 			}
 			
@@ -539,13 +540,13 @@ int cmd_rndwrite(long loops, int32_t seed, uint32_t targetlen, uint32_t chunksiz
 			submitted->op = X_WRITE;
 			submitted->flags |= XF_NOSYNC;
 
-			srl = xseg_submit(xseg, dstport, submitted);
-			if (srl == Noneidx) {
-				xseg_put_request(xseg, submitted->portno, submitted);
+			port =  xseg_submit(xseg, submitted, srcport, X_ALLOC);
+			if (port == NoPort) {
+				xseg_put_request(xseg, submitted, srcport);
 			} else {
 				seed = random();
 				nr_submitted += 1;
-				xseg_signal(xseg, dstport);
+				xseg_signal(xseg, port);
 			}
 		}
 
@@ -557,8 +558,8 @@ int cmd_rndwrite(long loops, int32_t seed, uint32_t targetlen, uint32_t chunksiz
 				nr_failed += 1;
 				report_request(received);
 			}
-			if (xseg_put_request(xseg, received->portno, received))
-				fprintf(stderr, "Cannot put request at port %u\n", received->portno);
+			if (xseg_put_request(xseg, received, srcport))
+				fprintf(stderr, "Cannot put request at port %u\n", received->src_portno);
 		}
 
 		if (!submitted && !received)
@@ -615,7 +616,7 @@ int cmd_rndread(long loops, int32_t seed, uint32_t targetlen, uint32_t chunksize
 	long nr_submitted = 0, nr_received = 0, nr_failed = 0, nr_mismatch = 0;
 	int reported = 0, r;
 	uint64_t offset;
-	xserial srl;
+	xport port;
 	char *req_data, *req_target;
 
 	seed = random();
@@ -623,13 +624,13 @@ int cmd_rndread(long loops, int32_t seed, uint32_t targetlen, uint32_t chunksize
 		submitted = NULL;
 		xseg_prepare_wait(xseg, srcport);
 		if (nr_submitted < loops &&
-		    (submitted = xseg_get_request(xseg, srcport))) {
+		    (submitted = xseg_get_request(xseg, srcport, dstport, X_ALLOC))) {
 			xseg_cancel_wait(xseg, srcport);
 			r = xseg_prep_request(xseg, submitted, targetlen, chunksize);
 			if (r < 0) {
 				fprintf(stderr, "Cannot prepare request! (%u, %u)\n",
 					targetlen, chunksize);
-				xseg_put_request(xseg, submitted->portno, submitted);
+				xseg_put_request(xseg, submitted, srcport);
 				return -1;
 			}
 
@@ -644,14 +645,13 @@ int cmd_rndread(long loops, int32_t seed, uint32_t targetlen, uint32_t chunksize
 			submitted->offset = offset;
 			submitted->size = chunksize;
 			submitted->op = X_READ;
-			srl = xseg_submit(xseg, dstport, submitted);
-			if (srl == Noneidx) {
-				printf("foo\n");
-				xseg_put_request(xseg, submitted->portno, submitted);
+			port = xseg_submit(xseg, submitted, srcport, X_ALLOC);
+			if (port == NoPort) {
+				xseg_put_request(xseg, submitted, srcport);
 			} else {
 				seed = random();
 				nr_submitted += 1;
-				xseg_signal(xseg, dstport);
+				xseg_signal(xseg, port);
 			}
 		}
 
@@ -670,8 +670,8 @@ int cmd_rndread(long loops, int32_t seed, uint32_t targetlen, uint32_t chunksize
 				nr_mismatch += 1;
 			}
 
-			if (xseg_put_request(xseg, received->portno, received))
-				fprintf(stderr, "Cannot put request at port %u\n", received->portno);
+			if (xseg_put_request(xseg, received, srcport))
+				fprintf(stderr, "Cannot put request at port %u\n", received->src_portno);
 		}
 
 		if (!submitted && !received)
@@ -703,7 +703,7 @@ int cmd_submit_reqs(long loops, long concurrent_reqs, int op)
 	uint64_t offset;
 	uint32_t targetlen = 10, chunksize = 4096;
 	struct timeval tv1, tv2;
-	xserial srl;
+	xport p;
 	char *req_data, *req_target;
 
 	xseg_bind_port(xseg, srcport);
@@ -713,16 +713,17 @@ int cmd_submit_reqs(long loops, long concurrent_reqs, int op)
 		submitted = NULL;
 		xseg_prepare_wait(xseg, srcport);
 		if (nr_submitted < loops &&  nr_flying < concurrent_reqs &&
-		    (submitted = xseg_get_request(xseg, srcport))) {
+		    (submitted = xseg_get_request(xseg, srcport, dstport, X_ALLOC))) {
 			xseg_cancel_wait(xseg, srcport);
 			r = xseg_prep_request(xseg, submitted, targetlen, chunksize);
 			if (r < 0) {
 				fprintf(stderr, "Cannot prepare request! (%u, %u)\n",
 					targetlen, chunksize);
-				xseg_put_request(xseg, submitted->portno, submitted);
+				xseg_put_request(xseg, submitted, srcport);
 				return -1;
 			}
-
+			
+			//FIXME
 			++nr_flying;
 			nr_submitted += 1;
 			reported = 0;
@@ -742,10 +743,11 @@ int cmd_submit_reqs(long loops, long concurrent_reqs, int op)
 				mkchunk(req_data, submitted->datalen, req_target, submitted->targetlen, submitted->offset);
 			}
 
-			srl = xseg_submit(xseg, dstport, submitted);
-			(void)srl;
-			if (xseg_signal(xseg, dstport) < 0)
-				perror("Cannot signal peer");
+			p = xseg_submit(xseg, submitted, srcport, X_ALLOC);
+			if ( p != NoPort){
+				if (xseg_signal(xseg, p) < 0)
+					perror("Cannot signal peer");
+			}
 		}
 		received = xseg_receive(xseg, srcport);
 		if (received) {
@@ -760,8 +762,8 @@ int cmd_submit_reqs(long loops, long concurrent_reqs, int op)
 				//report_request(received);
 			}
 
-			if (xseg_put_request(xseg, received->portno, received))
-				fprintf(stderr, "Cannot put request at port %u\n", received->portno);
+			if (xseg_put_request(xseg, received, srcport))
+				fprintf(stderr, "Cannot put request at port %u\n", received->src_portno);
 		}
 
 		if (!submitted && !received)
@@ -792,11 +794,12 @@ int cmd_report(uint32_t portno)
 	rq = xseg_get_queue(xseg, port, request_queue);
 	pq = xseg_get_queue(xseg, port, reply_queue);
 	fprintf(stderr, "port %u:\n"
-		"   requests: %llu/%llu\n"
+		"   requests: %llu/%llu  src gw: %lu  dst gw: %lu\n"
 		"       free_queue [%p] count : %u\n"
 		"    request_queue [%p] count : %u\n"
 		"      reply_queue [%p] count : %u\n",
 		portno, port->alloc_reqs, port->max_alloc_reqs,
+		xseg->src_gw[portno], xseg->dst_gw[portno],
 		(void *)fq, xq_count(fq),
 		(void *)rq, xq_count(rq),
 		(void *)pq, xq_count(pq));
@@ -872,8 +875,8 @@ int cmd_put_requests(void)
 		req = xseg_accept(xseg, dstport);
 		if (!req)
 			break;
-		if (xseg_put_request(xseg, req->portno, req))
-			fprintf(stderr, "Cannot put request at port %u\n", req->portno);
+		if (xseg_put_request(xseg, req, srcport))
+			fprintf(stderr, "Cannot put request at port %u\n", req->src_portno);
 	}
 
 	return 0;
@@ -885,6 +888,7 @@ int cmd_finish(unsigned long nr, int fail)
 	char *buf = malloc(sizeof(char) * 8128);
 	char *req_target, *req_data;
 	xseg_bind_port(xseg, srcport);
+	xport p;
 
 	for (; nr--;) {
 		xseg_prepare_wait(xseg, srcport);
@@ -907,8 +911,8 @@ int cmd_finish(unsigned long nr, int fail)
 				req->serviced = req->size;
 			}
 
-			xseg_respond(xseg, dstport, req);
-			xseg_signal(xseg, dstport);
+			p = xseg_respond(xseg, req, srcport, X_ALLOC);
+			xseg_signal(xseg, p);
 			continue;
 		}
 		++nr;
@@ -948,8 +952,8 @@ void handle_reply(struct xseg_request *req)
 	}
 
 put:
-	if (xseg_put_request(xseg, req->portno, req))
-		fprintf(stderr, "Cannot put reply at port %u\n", req->portno);
+	if (xseg_put_request(xseg, req, srcport))
+		fprintf(stderr, "Cannot put reply at port %u\n", req->src_portno);
 }
 
 int cmd_wait(uint32_t nr)
@@ -998,7 +1002,7 @@ int cmd_put_replies(void)
 
 		//fwrite(req->buffer, 1, req->bufferlen, stdout);
 
-		if (xseg_put_request(xseg, req->portno, req))
+		if (xseg_put_request(xseg, req, srcport))
 			fprintf(stderr, "Cannot put reply\n");
 	}
 

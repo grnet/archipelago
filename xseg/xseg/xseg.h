@@ -302,11 +302,12 @@ struct xseg {
 
 struct xseg_request *  xseg_get_request     ( struct xseg         * xseg,
                                               xport                 src_portno,
-					      xport                 dst_portno);
+					      xport                 dst_portno,
+					      uint32_t              flags     );
 
                 int    xseg_put_request     ( struct xseg         * xseg,
-                                              uint32_t              portno,
-                                              struct xseg_request * xreq      );
+                                              struct xseg_request * xreq,
+                                              xport                 portno    );
 
                 int    xseg_prep_request    ( struct xseg	  * xseg,
 					      struct xseg_request * xreq,
@@ -315,22 +316,24 @@ struct xseg_request *  xseg_get_request     ( struct xseg         * xseg,
 /*                    \___________________/                       \_________/ */
 /*                     ___________________                         _________  */
 /*                    /                   \                       /         \ */
-            xserial    xseg_submit          ( struct xseg         * xseg,
-                                              uint32_t              portno,
-                                              struct xseg_request * xreq      );
+              xport    xseg_submit          ( struct xseg         * xseg,
+                                              struct xseg_request * xreq,      
+                                              xport                 portno,
+					      uint32_t              flags     );
 
 struct xseg_request *  xseg_receive         ( struct xseg         * xseg,
-                                              uint32_t              portno    );
+                                              xport                 portno    );
 /*                    \___________________/                       \_________/ */
 /*                     ___________________                         _________  */
 /*                    /                   \                       /         \ */
 
 struct xseg_request *  xseg_accept          ( struct xseg         * xseg,
-                                              uint32_t              portno    );
+                                              xport                 portno    );
 
-            xserial    xseg_respond         ( struct xseg         * xseg,
-                                              uint32_t              portno,
-                                              struct xseg_request * xreq      );
+              xport    xseg_respond         ( struct xseg         * xseg,
+                                              struct xseg_request * xreq,
+                                              xport                 portno,
+                                              uint32_t              flags     );
 /*                    \___________________/                       \_________/ */
 /*                     ___________________                         _________  */
 /*                    /                   \                       /         \ */
@@ -374,5 +377,10 @@ static inline char* xseg_get_data(struct xseg* xseg, struct xseg_request *req)
 
 #endif
 
-int xseg_set_req_data(struct xseg *xseg, struct xseg_request *xreq, void *data);
-int xseg_get_req_data(struct xseg *xseg, struct xseg_request *xreq, void **data);
+xport xseg_set_srcgw		(struct xseg *xseg, xport portno, xport srcgw);
+xport xseg_getandset_srcgw	(struct xseg *xseg, xport portno, xport srcgw);
+xport xseg_set_dstgw		(struct xseg *xseg, xport portno, xport dstgw);
+xport xseg_getandset_dstgw	(struct xseg *xseg, xport portno, xport dstgw);
+
+int xseg_set_req_data (struct xseg *xseg, struct xseg_request *xreq, void *data);
+int xseg_get_req_data (struct xseg *xseg, struct xseg_request *xreq, void **data);
