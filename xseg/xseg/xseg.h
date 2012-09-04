@@ -213,6 +213,7 @@ struct xseg_private {
 	struct xseg_peer **peer_types;
 	uint32_t max_peer_types;
 	void (*wakeup)(struct xseg *xseg, uint32_t portno);
+	xhash_t *req_data;
 };
 
 struct xseg_counters {
@@ -300,7 +301,8 @@ struct xseg {
                                               int                   nr        );
 
 struct xseg_request *  xseg_get_request     ( struct xseg         * xseg,
-                                              uint32_t              portno    );
+                                              xport                 src_portno,
+					      xport                 dst_portno);
 
                 int    xseg_put_request     ( struct xseg         * xseg,
                                               uint32_t              portno,
@@ -367,7 +369,10 @@ static inline char* xseg_get_data(struct xseg* xseg, struct xseg_request *req)
 	return (char *) XPTR_TAKE(req->data, xseg->segment);
 }
 
-#define xseg_get_queue(__xseg, __port, queue) \
-	((struct xq *) XPTR_TAKE(__port->queue, __xseg->segment))
+#define xseg_get_queue(__xseg, __port, __queue) \
+	((struct xq *) XPTR_TAKE(__port->__queue, __xseg->segment))
 
 #endif
+
+int xseg_set_req_data(struct xseg *xseg, struct xseg_request *xreq, void *data);
+int xseg_get_req_data(struct xseg *xseg, struct xseg_request *xreq, void **data);

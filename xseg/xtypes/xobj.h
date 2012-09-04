@@ -6,8 +6,6 @@
 #include <xtypes/xheap.h>
 #include <xtypes/domain.h>
 
-#define X_ALLOC ((uint32_t) (1 << 0))
-
 struct xobject_header {
 	XPTR_TYPE(struct xseg_object_handler) obj_h;
 };

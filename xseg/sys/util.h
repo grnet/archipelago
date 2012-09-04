@@ -8,6 +8,10 @@
 #define XSEGLOG(...) (xseg_snprintf(__xseg_errbuf, 4096, FMTARG("%s: ", __func__, ## __VA_ARGS__, "")), \
                     __xseg_errbuf[4095] = 0, __xseg_log(__xseg_errbuf))
 
+/* general purpose xflags */
+#define X_ALLOC ((uint32_t) (1 << 0))
+
+
 typedef uint64_t xpointer;
 
 /* type to be used as absolute pointer

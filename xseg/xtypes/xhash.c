@@ -429,7 +429,7 @@ int xhash_freql_update(struct xhash *xhash, ul_t key, ul_t val)
     return 0;
 }
 
-int
+xhash_t *
 xhash_resize(xhash_t *xhash, ul_t new_size_shift, xhash_t *new)
 {
     ul_t i;
@@ -438,6 +438,9 @@ xhash_resize(xhash_t *xhash, ul_t new_size_shift, xhash_t *new)
         new = xhash_new__(new_size_shift, xhash->minsize_shift, true);
     else
         xhash_init__(new, new_size_shift, xhash->minsize_shift, true);
+
+    if (!new)
+	    return NULL;
         
     //fprintf(stderr, "resizing: (%lu,%lu,%lu)\n", xhash->size_shift, xhash->used, xhash->dummies);
     for (i = 0; i < xhash_size(xhash); i++) {
@@ -449,7 +452,7 @@ xhash_resize(xhash_t *xhash, ul_t new_size_shift, xhash_t *new)
 
     if (!f)
         xtypes_free(xhash);
-    return 0;
+    return new;
 }
 
 /*

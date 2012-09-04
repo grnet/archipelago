@@ -92,7 +92,7 @@ xhash_t *xhash_new(ul_t minsize_shift);
 void xhash_free(xhash_t *xhash); // pairs with _new()
 void xhash_init(struct xhash *xhash, ul_t minsize_shift);
 
-int xhash_resize(xhash_t *xhash, ul_t new_size_shift, xhash_t *newxhash);
+xhash_t * xhash_resize(xhash_t *xhash, ul_t new_size_shift, xhash_t *newxhash);
 int xhash_insert(xhash_t *xhash, ul_t key, ul_t val);
 int xhash_update(xhash_t *xhash, ul_t key, ul_t val);
 int xhash_freql_update(xhash_t *xhash, ul_t key, ul_t val);
