@@ -841,6 +841,9 @@ struct xseg_port *xseg_alloc_port(struct xseg *xseg, uint32_t flags, uint64_t nr
 	port->peer_type = 0; //FIXME what  here ??
 	port->alloc_reqs = 0;
 	port->max_alloc_reqs = 512; //FIXME 
+	xpool_init(&port->waiters, MAX_WAITERS, &port->bufs);
+
+
 	return port;
 
 err_reply:
@@ -1438,6 +1441,9 @@ struct xseg_port *xseg_bind_port(struct xseg *xseg, uint32_t req)
 	}
 out:
 	__unlock_segment(xseg);
+	if (port) {
+		xpool_clear(&port->waiters, port->portno);
+	}
 	return port;
 }
 

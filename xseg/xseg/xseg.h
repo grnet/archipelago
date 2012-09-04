@@ -21,6 +21,7 @@
 #include <xtypes/xq.h>
 #include <xtypes/xobj.h>
 #include <xtypes/xhash.h>
+#include <xtypes/xpool.h>
 
 typedef uint64_t xserial;
 typedef uint32_t xport;
@@ -34,6 +35,10 @@ typedef uint32_t xport;
 
 #ifndef MAX_PATH_LEN
 #define MAX_PATH_LEN 32
+#endif
+
+#ifndef MAX_WAITERS
+#define MAX_WAITERS 32
 #endif
 
 /* Peers and Segments
@@ -125,12 +130,14 @@ struct xseg_port {
 	xptr request_queue;
 	xptr reply_queue;
 	uint64_t owner;
-	volatile uint64_t waitcue;
 	uint64_t peer_type;
 	uint32_t portno;
 	uint64_t max_alloc_reqs;
 	uint64_t alloc_reqs;
 	struct xlock port_lock;
+	volatile uint64_t waitcue;
+	struct xpool waiters;
+	struct xpool_node bufs[MAX_WAITERS];
 };
 
 struct xseg_request;

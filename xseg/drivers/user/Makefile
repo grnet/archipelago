@@ -2,7 +2,7 @@
 
 include $(XSEG_HOME)/base.mk
 
-DRIVERS=xseg_posix xseg_segdev
+DRIVERS=xseg_posix xseg_segdev xseg_pthread
 DRVOBJS=$(DRIVERS:=.o)
 DRVSOS=$(DRIVERS:=.so)
 
@@ -24,6 +24,12 @@ xseg_segdev.o: xseg_segdev.c $(BASE)/xseg/xseg.h
 
 xseg_segdev.so: xseg_segdev.o $(BASE)/sys/user/xseg_user.o
 	$(CC) -shared -o $@ $< $(BASE)/sys/user/xseg_user.o 
+
+xseg_pthread.o: xseg_pthread.c $(BASE)/xseg/xseg.h
+	$(CC) $(CFLAGS) $(INC) -fPIC -c -o $@ $<
+
+xseg_pthread.so: xseg_pthread.o $(BASE)/sys/user/xseg_user.o
+	$(CC) -shared -lpthread -o $@ $< $(BASE)/sys/user/xseg_user.o 
 
 .PHONY: lib
 lib:
