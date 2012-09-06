@@ -79,7 +79,7 @@ function load_all {
 # @param $2		xseg port
 
 function spawn_filed {
-	"${XSEG_HOME}/peers/user/filed" "$1" -p "$2" -g "${SPEC}" -n ${NR_OPS} -v &> "${XSEG_LOGS}/filed-${HOSTNAME}" &
+	"${XSEG_HOME}/peers/user/filed" "$1" -p "$2" -g "${SPEC}" -n ${NR_OPS} -v > "${XSEG_LOGS}/filed-${HOSTNAME}" 2>&1 &
 }
 
 # map_volume - Map a volume to an xsegbd device

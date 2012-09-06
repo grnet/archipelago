@@ -366,7 +366,6 @@ static void xseg_request_fn(struct request_queue *rq)
 			__blk_end_request_all(blkreq, 0);
 		}
 
-
 		datalen = blk_rq_bytes(blkreq);
 		BUG_ON(xseg_prep_request(xsegbd_dev->xseg, xreq, 
 					xsegbd_dev->targetlen, datalen));
@@ -379,7 +378,6 @@ static void xseg_request_fn(struct request_queue *rq)
 		pending->dev = xsegbd_dev;
 		pending->request = blkreq;
 		pending->comp = NULL;
-		xreq->priv = (uint64_t)blkreq_idx;
 		xreq->size = datalen;
 		xreq->offset = blk_rq_pos(blkreq) << 9;
 		/*
@@ -396,9 +394,14 @@ static void xseg_request_fn(struct request_queue *rq)
 		if (blkreq->cmd_flags & REQ_FUA)
 			xreq->flags |= XF_FUA;
 
+		XSEGLOG("xreq: %lx size: %llu offset: %llu, blkreq_idx: %llu", 
+				xreq, xreq->size, xreq->offset, blkreq_idx);
+
 		if (rq_data_dir(blkreq)) {
 			/* unlock for data transfers? */
 			blk_to_xseg(xsegbd_dev->xseg, xreq, blkreq);
+			XSEGLOG("xreq: %lx size: %llu offset: %llu, blkreq_idx: %llu completed blk_to_xseg", 
+				xreq, xreq->size, xreq->offset, blkreq_idx);
 			xreq->op = X_WRITE;
 		} else {
 			xreq->op = X_READ;
@@ -410,9 +413,13 @@ static void xseg_request_fn(struct request_queue *rq)
 		r = xseg_set_req_data(xsegbd_dev->xseg, xreq, (void *) blkreq_idx);
 		spin_unlock(&xsegbd_dev->reqdatalock);
 		BUG_ON(r < 0);
+		XSEGLOG("xreq: %lx size: %llu offset: %llu, blkreq_idx: %llu set req data", 
+				xreq, xreq->size, xreq->offset, blkreq_idx);
 
 		BUG_ON((p = xseg_submit(xsegbd_dev->xseg, xreq, 
 					xsegbd_dev->src_portno, X_ALLOC)) == NoPort);
+		XSEGLOG("xreq: %lx size: %llu offset: %llu, blkreq_idx: %llu submitted", 
+				xreq, xreq->size, xreq->offset, blkreq_idx);
 		WARN_ON(xseg_signal(xsegbd_dev->xsegbd->xseg, p) < 0);
 	}
 	if (xreq)
@@ -580,12 +587,15 @@ static void xseg_callback(struct xseg *xseg, xport portno)
 			goto blk_end;
 
 		/* unlock for data transfer? */
-		if (!rq_data_dir(blkreq))
+		if (!rq_data_dir(blkreq)){
 			xseg_to_blk(xsegbd_dev->xseg, xreq, blkreq);
+			XSEGLOG("for req: %lx, completed xseg_to_blk", xreq);
+		}	
 
 		err = 0;
 blk_end:
 		blk_end_request_all(blkreq, err);
+		XSEGLOG("for req: %lx, completed", xreq);
 		xq_append_head(&xsegbd_dev->blk_queue_pending, blkreq_idx, 1);
 		BUG_ON(xseg_put_request(xsegbd_dev->xseg, xreq, xsegbd_dev->src_portno) < 0);
 	}

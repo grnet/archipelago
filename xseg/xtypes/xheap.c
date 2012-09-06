@@ -9,7 +9,7 @@
 //This (the -3) ensures that the space that is allocated
 //beyond the requested bytes is less than 12.5 % of requested space
 #define MEDIUM_AL_UNIT (SMALL_LIMIT - 3) 
-#define LARGE_AL_UNIT (MEDIUM_AL_UNIT - 3) 
+#define LARGE_AL_UNIT (MEDIUM_LIMIT - 3) 
 
 /*
  * Heap allocation sizes:
@@ -45,18 +45,18 @@ static inline int __get_index(struct xheap *heap, uint64_t bytes)
 
 	if (bytes < (1<<(alignment_unit + SMALL_LIMIT)))
 		r = bytes >> alignment_unit;
-	else if (bytes < 1 << (alignment_unit + MEDIUM_LIMIT)) {
-		r = 1 << SMALL_LIMIT;
+	else if (bytes < (1 << (alignment_unit + MEDIUM_LIMIT))) {
+		r = (1 << SMALL_LIMIT);
 		//r -= (1 << (alignment_unit+SMALL_LIMIT)) / (1 << (alignment_unit + MEDIUM_AL_UNIT));
-		r -= 1 << (SMALL_LIMIT - MEDIUM_AL_UNIT);
+		r -= (1 << (SMALL_LIMIT - MEDIUM_AL_UNIT));
 		//XSEGLOG("%u, %u, r %d\n",((1<<alignment_unit) * 32), (1 << (alignment_unit +2)), r);
-		r += bytes >> (alignment_unit + MEDIUM_AL_UNIT);
+		r += (bytes >> (alignment_unit + MEDIUM_AL_UNIT));
 	}
 	else {
 		r = (1 << SMALL_LIMIT) + (1 << MEDIUM_LIMIT);
 		r -= 1 << (SMALL_LIMIT - MEDIUM_AL_UNIT);
 		r -= 1 << (MEDIUM_LIMIT - (LARGE_AL_UNIT - MEDIUM_AL_UNIT));
-		r += bytes >> (alignment_unit + MEDIUM_AL_UNIT);
+		r += bytes >> (alignment_unit + LARGE_AL_UNIT);
 	}
 	return r;
 }
@@ -74,6 +74,7 @@ void* xheap_allocate(struct xheap *heap, uint64_t bytes)
 	void *mem = XPTR(&heap->mem), *addr = NULL;
 	xptr *free_list = (xptr *) mem;
 	xptr head, next;
+	uint64_t req_bytes = bytes;
 
 	xlock_acquire(&heap->lock, 1);
 
@@ -109,6 +110,17 @@ out:
 	xlock_release(&heap->lock);
 //	printf("alloced: %lx (size: %llu) (xptr: %llu)\n", addr, __get_header(addr)->size,
 //			addr-mem);
+	if (addr && xheap_get_chunk_size(addr) < req_bytes){
+		XSEGLOG("requested %llu bytes but heap returned %llu", 
+				req_bytes, xheap_get_chunk_size(addr));
+		addr = NULL;
+	}
+	if (addr && xheap_get_chunk_size(addr) != (__get_alloc_bytes(heap, req_bytes) - 
+					sizeof(struct xheap_header))) {
+		XSEGLOG("allocated chunk size %llu, but it should be %llu (req_bytes %llu)",
+			xheap_get_chunk_size(addr), __get_alloc_bytes(heap, req_bytes), req_bytes);
+		addr = NULL;
+	}
 	return addr;
 }
 
