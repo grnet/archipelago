@@ -930,10 +930,10 @@ int xseg_signal(struct xseg *xseg, uint32_t portno)
 	return type->peer_ops.signal(xseg, portno);
 }
 
-//FIXME wrong types (int vs unsigned long)
+//is integer i enough here?
 int xseg_alloc_requests(struct xseg *xseg, uint32_t portno, uint32_t nr)
 {
-	unsigned long i = 0;
+	int i = 0;
 	xqindex xqi;
 	struct xq *q;
 	struct xseg_request *req;
@@ -957,7 +957,7 @@ int xseg_alloc_requests(struct xseg *xseg, uint32_t portno, uint32_t nr)
 
 int xseg_free_requests(struct xseg *xseg, uint32_t portno, int nr)
 {
-	unsigned long i = 0;
+	int i = 0;
 	xqindex xqi;
 	struct xq *q;
 	struct xseg_request *req;

@@ -11,6 +11,14 @@
 #include <xseg/xseg.h>
 #include <xtypes/xq.h>
 
+struct xsegbd_device;
+
+struct xsegbd_pending {
+	struct request *request;
+	struct completion *comp;
+	struct xsegbd_device *dev;
+};
+
 struct xsegbd {
 	char name[XSEGBD_SEGMENT_NAMELEN];
 	struct xseg_config config;
@@ -18,7 +26,9 @@ struct xsegbd {
 };
 
 struct xsegbd_device {
-	spinlock_t lock;
+	struct xseg *xseg;
+	spinlock_t rqlock;
+	spinlock_t reqdatalock;
 	struct request_queue *blk_queue;
 	struct gendisk *gd;
 	int id;
@@ -28,8 +38,7 @@ struct xsegbd_device {
 	uint32_t src_portno, dst_portno, nr_requests;
 	struct xq blk_queue_pending;
 	struct xsegbd *xsegbd;
-	char *_blk_queue_mem;
-	struct request **blk_req_pending;
+	struct xsegbd_pending *blk_req_pending;
 	struct device dev;
 	struct list_head node;
 	char target[XSEGBD_TARGET_NAMELEN + 1];

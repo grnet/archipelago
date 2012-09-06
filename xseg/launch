@@ -25,7 +25,7 @@ function parse_config {
 	[ -z "${XSEG_HOME}" ] && XSEG_HOME="/root/archip/xseg"
 	[ -z "${MODULES_DIR}" ] && MODULES_DIR="${XSEG_HOME}/lib/kernel"
 	#type:name:nr_ports:nr_requests:request_size:extra_size:page_shift
-	[ -z "${SPEC}" ] && SPEC="segdev:xsegbd:16:512:32:1024:12"
+	[ -z "${SPEC}" ] && SPEC="segdev:xsegbd:16:1024:12"
 	[ -z "${REQS}" ] && REQS=512
 	[ -z "${PORTS}" ] && PORTS=16
 	[ -z "${IMAGES}" ] && IMAGES="/srv/archip/images"
@@ -47,6 +47,7 @@ function unload_all {
 	unload_module "xsegbd"
 	rm "${CHRDEV_NAME}" || true
 	unload_module "xseg_segdev"
+	unload_module "xseg_pthread"
 	unload_module "xseg_posix"
 	unload_module "segdev"
 	unload_module "xseg"
@@ -65,6 +66,7 @@ function load_all {
 	load_module "xseg"
 	load_module "segdev"
 	load_module "xseg_posix"
+	load_module "xseg_pthread"
 	load_module "xseg_segdev"
 	mk_chardev
         "${XSEG_HOME}/peers/user/xseg" "${SPEC}" create
