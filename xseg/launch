@@ -25,7 +25,7 @@ function parse_config {
 	[ -z "${XSEG_HOME}" ] && XSEG_HOME="/root/archip/xseg"
 	[ -z "${MODULES_DIR}" ] && MODULES_DIR="${XSEG_HOME}/lib/kernel"
 	#type:name:nr_ports:nr_requests:request_size:extra_size:page_shift
-	[ -z "${SPEC}" ] && SPEC="segdev:xsegbd:16:1024:12"
+	[ -z "${SPEC}" ] && SPEC="segdev:xsegbd:4:1024:12"
 	[ -z "${REQS}" ] && REQS=512
 	[ -z "${PORTS}" ] && PORTS=16
 	[ -z "${IMAGES}" ] && IMAGES="/srv/archip/images"
@@ -79,7 +79,7 @@ function load_all {
 # @param $2		xseg port
 
 function spawn_filed {
-	"${XSEG_HOME}/peers/user/filed" "$1" -p "$2" -g "${SPEC}" -n ${NR_OPS} &> "${XSEG_LOGS}/filed-${HOSTNAME}" &
+	"${XSEG_HOME}/peers/user/filed" "$1" -p "$2" -g "${SPEC}" -n ${NR_OPS} -v &> "${XSEG_LOGS}/filed-${HOSTNAME}" &
 }
 
 # map_volume - Map a volume to an xsegbd device
@@ -144,12 +144,12 @@ filed)
 		mk_chardev
 		load_all
 		spawn_filed ${IMAGES} 1
-		map_volume xsegvol 0 1
+#		map_volume xsegvol 0 1
 		;;
 	stop)
 		pkill -f peers/user/filed
 		sleep 0.5
-		unmap_device 0
+#		unmap_device 0
 		rm ${CHRDEV_NAME}
 		unload_all
 		;;

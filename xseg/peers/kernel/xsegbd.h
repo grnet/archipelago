@@ -35,7 +35,8 @@ struct xsegbd_device {
 	int major;
 	sector_t sectors;
 	uint64_t segsize;
-	uint32_t src_portno, dst_portno, nr_requests;
+	xport src_portno, dst_portno;
+	uint32_t  nr_requests;
 	struct xq blk_queue_pending;
 	struct xsegbd *xsegbd;
 	struct xsegbd_pending *blk_req_pending;

@@ -71,6 +71,8 @@ static long segdev_allocate(const char *name, uint64_t size)
 		}
 	}
 
+	XSEGLOG("creating segment of size %llu\n", size);
+
 	if (ioctl(fd, SEGDEV_IOC_CREATESEG, size)) {
 		XSEGLOG("Failed to create segment");
 		closedev();

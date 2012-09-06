@@ -448,6 +448,7 @@ static int xsegbd_get_size(struct xsegbd_device *xsegbd_dev)
 	struct xsegbd_pending *pending;
 	struct completion comp;
 	xport p;
+	void *data;
 	int ret = -EBUSY, r;
 	xreq = xseg_get_request(xsegbd_dev->xseg, xsegbd_dev->src_portno,
 			xsegbd_dev->dst_portno, X_ALLOC);
@@ -474,6 +475,7 @@ static int xsegbd_get_size(struct xsegbd_device *xsegbd_dev)
 	spin_unlock(&xsegbd_dev->reqdatalock);
 	if (r < 0)
 		goto out_queue;
+	XSEGLOG("for req: %lx, set data %llu (lx: %lx)", xreq, blkreq_idx, (void *) blkreq_idx);
 
 	target = xseg_get_target(xsegbd_dev->xseg, xreq);
 	strncpy(target, xsegbd_dev->target, xsegbd_dev->targetlen);
@@ -488,8 +490,12 @@ static int xsegbd_get_size(struct xsegbd_device *xsegbd_dev)
 	 */
 
 	xseg_prepare_wait(xsegbd_dev->xseg, xsegbd_dev->src_portno);
-	BUG_ON((p = xseg_submit(xsegbd_dev->xseg, xreq, 
-					xsegbd_dev->src_portno, X_ALLOC)) == NoPort);
+	p = xseg_submit(xsegbd_dev->xseg, xreq, 
+				xsegbd_dev->src_portno, X_ALLOC);
+	BUG_ON(p == NoPort);
+	if ( p == NoPort) {
+		goto out_data;
+	}
 	WARN_ON(xseg_signal(xsegbd_dev->xseg, p) < 0);
 
 	wait_for_completion_interruptible(&comp);
@@ -500,6 +506,10 @@ out:
 	BUG_ON(xseg_put_request(xsegbd_dev->xseg, xreq, xsegbd_dev->src_portno) < 0);
 	return ret;
 
+out_data:
+	spin_lock(&xsegbd_dev->reqdatalock);
+	r = xseg_get_req_data(xsegbd_dev->xseg, xreq, &data);
+	spin_unlock(&xsegbd_dev->reqdatalock);
 out_queue:
 	xq_append_head(&xsegbd_dev->blk_queue_pending, blkreq_idx, 1);
 	
@@ -531,6 +541,7 @@ static void xseg_callback(struct xseg *xseg, xport portno)
 		spin_lock(&xsegbd_dev->reqdatalock);
 		err = xseg_get_req_data(xsegbd_dev->xseg, xreq, &data); 
 		spin_unlock(&xsegbd_dev->reqdatalock);
+		XSEGLOG("for req: %lx, got data %llu (lx %lx)", xreq, (xqindex) data, data);
 		if (err < 0) {
 			WARN_ON(2);
 			//maybe put request?

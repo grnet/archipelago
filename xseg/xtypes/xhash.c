@@ -280,7 +280,7 @@ shrink_check(xhash_t *xhash)
     ul_t size_shift = xhash->size_shift;
     ul_t size = (ul_t)1<<size_shift;
     ul_t u = xhash->used;
-    return (4*u < size && size_shift >= xhash->minsize_shift) ? true : false;
+    return (4*u < size && size_shift > xhash->minsize_shift) ? true : false;
 }
 
 

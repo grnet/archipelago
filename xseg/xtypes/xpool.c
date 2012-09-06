@@ -1,7 +1,4 @@
 #include <xtypes/xpool.h>
-//#include <xpool.h>
-//#include <xseg/xseg.h>
-
 
 static inline int __validate_idx(struct xpool *xp, xpool_index idx) 
 {
@@ -314,3 +311,9 @@ xpool_index xpool_set_idx(struct xpool *xp, xpool_index idx, xpool_data data, ui
 	xlock_release(&xp->lock);
 	return ret;
 }
+
+
+#ifdef __KERNEL__
+#include <linux/module.h>
+#include <xtypes/xpool_exports.h>
+#endif

@@ -22,6 +22,7 @@
 #include <xseg/xseg.h>
 #include <sys/kernel/segdev.h>
 #include <sys/util.h>
+#include <xtypes/xpool.h>
 
 MODULE_DESCRIPTION("xseg_pthread");
 MODULE_AUTHOR("XSEG");

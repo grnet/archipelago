@@ -3,7 +3,6 @@
 
 #include <sys/util.h>
 #include <xtypes/xlock.h>
-//#include <xseg/xseg.h>
 
 typedef uint64_t xpool_index;
 typedef uint64_t xpool_data;

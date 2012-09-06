@@ -794,7 +794,7 @@ int cmd_report(uint32_t portno)
 	rq = xseg_get_queue(xseg, port, request_queue);
 	pq = xseg_get_queue(xseg, port, reply_queue);
 	fprintf(stderr, "port %u:\n"
-		"   requests: %llu/%llu  src gw: %lu  dst gw: %lu\n"
+		"   requests: %llu/%llu  src gw: %u  dst gw: %u\n"
 		"       free_queue [%p] count : %u\n"
 		"    request_queue [%p] count : %u\n"
 		"      reply_queue [%p] count : %u\n",

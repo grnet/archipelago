@@ -551,6 +551,7 @@ int xseg_create(struct xseg_config *cfg)
 
 	xops = &type->ops;
 	cfg->name[XSEG_NAMESIZE-1] = 0;
+	XSEGLOG("creating segment of size %llu\n", size);
 	r = xops->allocate(cfg->name, size);
 	if (r) {
 		XSEGLOG("cannot allocate segment!\n");
@@ -1148,16 +1149,20 @@ xport xseg_submit (struct xseg *xseg, struct xseg_request *xreq,
 	struct xseg_port *port;
 
 	/* discover next and current ports */
-	if (!__validate_port(xseg, xreq->src_transit_portno))
+	if (!__validate_port(xseg, xreq->src_transit_portno)){
+		XSEGLOG("couldn't validate src_transit_portno");
 		return NoPort;
+	}
 	next = xseg->src_gw[xreq->src_transit_portno];
 	if (next != xreq->src_portno) {
 		cur = xreq->src_transit_portno;
 		goto submit;
 	}
 	
-	if (!__validate_port(xseg, xreq->dst_transit_portno))
+	if (!__validate_port(xseg, xreq->dst_transit_portno)){
+		XSEGLOG("couldn't validate dst_transit_portno");
 		return NoPort;
+	}
 	next = xseg->dst_gw[xreq->dst_transit_portno];
 	if (xreq->dst_transit_portno == xreq->dst_portno)
 		cur = xreq->src_transit_portno; 
@@ -1167,8 +1172,10 @@ xport xseg_submit (struct xseg *xseg, struct xseg_request *xreq,
 
 submit:
 	port = xseg_get_port(xseg, next);
-	if (!port)
-		goto out;
+	if (!port){
+		XSEGLOG("couldnt get port (next :%u)", next);
+		return NoPort;
+	}
 
 	__update_timestamp(xreq);
 	
@@ -1177,6 +1184,7 @@ submit:
 	/* add current port to path */
 	serial = __xq_append_head(&xreq->path, cur);
 	if (serial == Noneidx){
+		XSEGLOG("couldn't append path head");
 		return NoPort;
 	}
 
@@ -1185,6 +1193,7 @@ submit:
 	serial = __xq_append_tail(q, xqi);
 	if (flags & X_ALLOC && serial == Noneidx) {
 		/* double up queue size */
+		XSEGLOG("trying to double up queue");
 		newq = __alloc_queue(xseg, xq_size(q)*2);
 		if (!newq)
 			goto out_rel;
@@ -1200,8 +1209,11 @@ submit:
 
 out_rel:
 	xlock_release(&port->rq_lock);
-	if (serial == Noneidx)
+	if (serial == Noneidx){
+		XSEGLOG("couldn't append request to queue");
 		__xq_pop_head(&xreq->path);
+		next = NoPort;
+	}
 out:
 	return next;
 	
@@ -1364,23 +1376,26 @@ int xseg_set_req_data(struct xseg *xseg, struct xseg_request *xreq, void *data)
 
 int xseg_get_req_data(struct xseg *xseg, struct xseg_request *xreq, void **data)
 {
-	int r;
+	int r1, r;
 	ul_t val;
 	xhash_t *req_data = xseg->priv->req_data;
-	r = xhash_lookup(req_data, (ul_t) xreq, &val);
+	r1 = xhash_lookup(req_data, (ul_t) xreq, &val);
 	*data = (void *) val;
-	if (r >= 0) {
+	XSEGLOG("xhash_lookup returned r: %d", r1);
+	if (r1 >= 0) {
 		// delete or update to NULL ?
 		r = xhash_delete(req_data, (ul_t) xreq);
+		XSEGLOG("xhash_delete returned r: %d", r);
 		if (r == -XHASH_ERESIZE) {
 			req_data = xhash_resize(req_data, shrink_size_shift(req_data), NULL);
 			if (req_data){
 				xseg->priv->req_data = req_data;
 				r = xhash_delete(req_data, (ul_t) xreq);
+				XSEGLOG("xhash_delete2 returned r: %d", r);
 			}
 		}
 	}
-	return r;
+	return r1;
 }
 
 /*

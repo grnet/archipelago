@@ -43,7 +43,7 @@ static inline int __get_index(struct xheap *heap, uint64_t bytes)
 	uint32_t alignment_unit = heap->alignment_unit;
 	bytes = __get_alloc_bytes(heap, bytes) - sizeof(struct xheap_header);
 
-	if (bytes < (1<<alignment_unit + SMALL_LIMIT))
+	if (bytes < (1<<(alignment_unit + SMALL_LIMIT)))
 		r = bytes >> alignment_unit;
 	else if (bytes < 1 << (alignment_unit + MEDIUM_LIMIT)) {
 		r = 1 << SMALL_LIMIT;
@@ -53,7 +53,7 @@ static inline int __get_index(struct xheap *heap, uint64_t bytes)
 		r += bytes >> (alignment_unit + MEDIUM_AL_UNIT);
 	}
 	else {
-		r = 1 << SMALL_LIMIT + 1 << MEDIUM_LIMIT;
+		r = (1 << SMALL_LIMIT) + (1 << MEDIUM_LIMIT);
 		r -= 1 << (SMALL_LIMIT - MEDIUM_AL_UNIT);
 		r -= 1 << (MEDIUM_LIMIT - (LARGE_AL_UNIT - MEDIUM_AL_UNIT));
 		r += bytes >> (alignment_unit + MEDIUM_AL_UNIT);

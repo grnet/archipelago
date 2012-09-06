@@ -21,7 +21,7 @@
 #include <linux/vmalloc.h>
 #include <linux/spinlock.h>
 #include <linux/wait.h>
-
+#include <sys/util.h>
 #include "segdev.h"
 
 static struct segdev segdev;
@@ -39,6 +39,7 @@ int segdev_create_segment(struct segdev *dev, u64 segsize, char reserved)
 
 	/* vmalloc can handle large sizes */
 	ret = -ENOMEM;
+	XSEGLOG("creating segment of size %llu\n", segsize);
 	segment = vmalloc(segsize);
 	if (!segment)
 		goto out_unlock;
