@@ -1040,6 +1040,8 @@ struct xseg_request *xseg_get_request(struct xseg *xseg, xport src_portno,
 
 done:
 
+	req->buffer = 0;
+	req->bufferlen = 0;
 	req->target = 0;
 	req->data = 0;
 	req->datalen = 0;
@@ -1074,6 +1076,8 @@ int xseg_put_request (struct xseg *xseg, struct xseg_request *xreq,
 	/* empty path */
 	xq_init_empty(&xreq->path, MAX_PATH_LEN, xreq->path_bufs); 
 	
+	xreq->buffer = 0;
+	xreq->bufferlen = 0;
 	xreq->target = 0;
 	xreq->data = 0;
 	xreq->datalen = 0;
@@ -1109,7 +1113,10 @@ int xseg_prep_request ( struct xseg* xseg, struct xseg_request *req,
 			uint32_t targetlen, uint64_t datalen )
 {
 	uint64_t bufferlen = targetlen + datalen;
-	void *buf = xseg_alloc_buffer(xseg, bufferlen);
+	void *buf;
+	req->buffer = 0;
+	req->bufferlen = 0;
+	buf = xseg_alloc_buffer(xseg, bufferlen);
 	if (!buf)
 		return -1;
 	req->bufferlen = xheap_get_chunk_size(buf);
@@ -1376,22 +1383,20 @@ int xseg_set_req_data(struct xseg *xseg, struct xseg_request *xreq, void *data)
 
 int xseg_get_req_data(struct xseg *xseg, struct xseg_request *xreq, void **data)
 {
+	//FIXME
 	int r1, r;
 	ul_t val;
 	xhash_t *req_data = xseg->priv->req_data;
 	r1 = xhash_lookup(req_data, (ul_t) xreq, &val);
 	*data = (void *) val;
-	XSEGLOG("xhash_lookup returned r: %d", r1);
 	if (r1 >= 0) {
 		// delete or update to NULL ?
 		r = xhash_delete(req_data, (ul_t) xreq);
-		XSEGLOG("xhash_delete returned r: %d", r);
 		if (r == -XHASH_ERESIZE) {
 			req_data = xhash_resize(req_data, shrink_size_shift(req_data), NULL);
 			if (req_data){
 				xseg->priv->req_data = req_data;
 				r = xhash_delete(req_data, (ul_t) xreq);
-				XSEGLOG("xhash_delete2 returned r: %d", r);
 			}
 		}
 	}
