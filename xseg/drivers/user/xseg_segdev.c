@@ -175,7 +175,13 @@ static int segdev_wait_signal(struct xseg *xseg, uint32_t timeout)
 
 static int segdev_signal(struct xseg *xseg, uint32_t portno)
 {
-	return write(opendev(), &portno, sizeof(portno));
+	struct xseg_port *port = xseg_get_port(xseg, portno);
+	if (!port)
+		return -1;
+	if (!port->waitcue)
+		return 0;
+	else
+		return write(opendev(), &portno, sizeof(portno));
 }
 
 static void *segdev_malloc(uint64_t size)
