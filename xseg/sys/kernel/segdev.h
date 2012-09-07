@@ -15,7 +15,7 @@
 
 #define SEGDEV_READY		1
 #define SEGDEV_RESERVED		2
-#define SEGDEV_BUFSIZE		1024
+#define SEGDEV_BUFSIZE		512
 
 struct segdev {
 	int minor;
@@ -23,7 +23,7 @@ struct segdev {
 	char *segment;
 	struct cdev cdev;
 	unsigned long flags;
-	void (*callback)(struct segdev *dev);
+	void (*callback)(struct segdev *dev, uint32_t portno);
 	void *priv;
 
 	spinlock_t lock;

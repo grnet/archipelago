@@ -28,7 +28,6 @@ struct xsegbd {
 struct xsegbd_device {
 	struct xseg *xseg;
 	spinlock_t rqlock;
-	spinlock_t reqdatalock;
 	struct request_queue *blk_queue;
 	struct gendisk *gd;
 	int id;

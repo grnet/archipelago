@@ -145,24 +145,30 @@ out:
 	segdev_put(segdev);
 }
 
-static void segdev_callback(struct segdev *dev)
+static void segdev_callback(struct segdev *dev, xport portno)
 {
 	struct xseg *xseg;
 	struct segpriv *priv = dev->priv;
 	struct xseg_private *xpriv;
-	uint32_t portno;
+	struct xseg_port *port;
 	if (priv->segno >= nr_xsegments)
 		return;
+
+	/* temporarily disabling this 
 
 	if (dev->buffer_index != sizeof(uint32_t)) {
 		WARN_ON(1);
 		return;
 	}
+	*/
 
 	xseg = xsegments[priv->segno];
 	xpriv = xseg->priv;
+	port = xseg_get_port(xseg, portno);
+	if (!port || !port->waitcue)
+		return;
+	
 	if (xpriv->wakeup) {
-		portno = *(uint32_t *)dev->buffer;
 		xpriv->wakeup(xseg, portno);
 	}
 }
@@ -219,12 +225,22 @@ static void segdev_signal_quit(void)
 
 static int segdev_prepare_wait(struct xseg *xseg, uint32_t portno)
 {
-	return -1;
+	struct xseg_port *port = xseg_get_port(xseg, portno);
+	if (!port)
+		return -1;
+	/* true/false value */
+	port->waitcue = 1;
+	return 0;
 }
 
 static int segdev_cancel_wait(struct xseg *xseg, uint32_t portno)
 {
-	return -1;
+	struct xseg_port *port = xseg_get_port(xseg, portno);
+	if (!port)
+		return -1;
+	/* true/false value */
+	port->waitcue = 0;
+	return -0;
 }
 
 static int segdev_wait_signal(struct xseg *xseg, uint32_t timeout)

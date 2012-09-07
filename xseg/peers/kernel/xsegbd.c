@@ -427,10 +427,9 @@ static void xseg_request_fn(struct request_queue *rq)
 
 		//maybe put this in loop start, and on break, 
 		//just do xseg_get_req_data
-		spin_lock(&xsegbd_dev->reqdatalock);
-		r = xseg_set_req_data(xsegbd_dev->xseg, xreq, (void *) blkreq_idx);
-		spin_unlock(&xsegbd_dev->reqdatalock);
-		BUG_ON(r < 0);
+		//r = xseg_set_req_data(xsegbd_dev->xseg, xreq, (void *) blkreq_idx);
+		//BUG_ON(r < 0);
+		xreq->priv = (void *) blkreq_idx;
 		//XSEGLOG("xreq: %lx size: %llu offset: %llu, blkreq_idx: %llu set req data", 
 		//		xreq, xreq->size, xreq->offset, blkreq_idx);
 
@@ -502,11 +501,10 @@ static int xsegbd_get_size(struct xsegbd_device *xsegbd_dev)
 	pending->comp = &comp;
 
 	
-	spin_lock(&xsegbd_dev->reqdatalock);
-	r = xseg_set_req_data(xsegbd_dev->xseg, xreq, (void *) blkreq_idx);
-	spin_unlock(&xsegbd_dev->reqdatalock);
-	if (r < 0)
-		goto out_queue;
+//	r = xseg_set_req_data(xsegbd_dev->xseg, xreq, (void *) blkreq_idx);
+//	if (r < 0)
+//		goto out_queue;
+	xreq->priv = (void *) blkreq_idx;
 	//XSEGLOG("for req: %lx, set data %llu (lx: %lx)", xreq, blkreq_idx, (void *) blkreq_idx);
 
 	target = xseg_get_target(xsegbd_dev->xseg, xreq);
@@ -526,7 +524,8 @@ static int xsegbd_get_size(struct xsegbd_device *xsegbd_dev)
 				xsegbd_dev->src_portno, X_ALLOC);
 	BUG_ON(p == NoPort);
 	if ( p == NoPort) {
-		goto out_data;
+		//goto out_data;
+		goto out_queue;
 	}
 	WARN_ON(xseg_signal(xsegbd_dev->xseg, p) < 0);
 
@@ -538,10 +537,8 @@ out:
 	BUG_ON(xseg_put_request(xsegbd_dev->xseg, xreq, xsegbd_dev->src_portno) < 0);
 	return ret;
 
-out_data:
-	spin_lock(&xsegbd_dev->reqdatalock);
-	r = xseg_get_req_data(xsegbd_dev->xseg, xreq, &data);
-	spin_unlock(&xsegbd_dev->reqdatalock);
+//out_data:
+//	r = xseg_get_req_data(xsegbd_dev->xseg, xreq, &data);
 out_queue:
 	xq_append_head(&xsegbd_dev->blk_queue_pending, blkreq_idx, 1);
 	
@@ -566,21 +563,22 @@ static void xseg_callback(struct xseg *xseg, xport portno)
 	}
 
 	for (;;) {
+		xseg_prepare_wait(xsegbd_dev->xseg, xsegbd_dev->src_portno);
 		xreq = xseg_receive(xsegbd_dev->xseg, portno);
 		if (!xreq)
 			break;
 
-		spin_lock(&xsegbd_dev->reqdatalock);
-		err = xseg_get_req_data(xsegbd_dev->xseg, xreq, &data); 
-		spin_unlock(&xsegbd_dev->reqdatalock);
-		//XSEGLOG("for req: %lx, got data %llu (lx %lx)", xreq, (xqindex) data, data);
-		if (err < 0) {
-			WARN_ON(1);
-			//maybe put request?
-			continue;
-		}
+		xseg_cancel_wait(xsegbd_dev->xseg, xsegbd_dev->src_portno);
 
-		blkreq_idx = (xqindex) data;
+//		err = xseg_get_req_data(xsegbd_dev->xseg, xreq, &data); 
+		//XSEGLOG("for req: %lx, got data %llu (lx %lx)", xreq, (xqindex) data, data);
+//		if (err < 0) {
+//			WARN_ON(1);
+			//maybe put request?
+//			continue;
+//		}
+		
+		blkreq_idx = (xqindex) xreq->priv;
 		if (blkreq_idx >= xsegbd_dev->nr_requests) {
 			WARN_ON(1);
 			//maybe put request?
@@ -825,7 +823,6 @@ static ssize_t xsegbd_add(struct bus_type *bus, const char *buf, size_t count)
 		goto out;
 
 	spin_lock_init(&xsegbd_dev->rqlock);
-	spin_lock_init(&xsegbd_dev->reqdatalock);
 	INIT_LIST_HEAD(&xsegbd_dev->node);
 
 	/* parse cmd */
@@ -901,6 +898,7 @@ static ssize_t xsegbd_add(struct bus_type *bus, const char *buf, size_t count)
 	if (ret)
 		goto out_xseg;
 
+	xseg_prepare_wait(xsegbd_dev->xseg, xseg_portno(xsegbd_dev->xseg, port));
 	return count;
 
 out_xseg:

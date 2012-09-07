@@ -701,6 +701,7 @@ struct xseg *xseg_join(	char *segtypename,
 	priv->req_data = xhash_new(3); //FIXME should be relative to XSEG_DEF_REQS
 	if (!priv->req_data)
 		goto err_priv;
+	xlock_release(&priv->reqdatalock);
 
 	xseg->max_peer_types = __xseg->max_peer_types;
 
@@ -1369,7 +1370,11 @@ xport xseg_getandset_dstgw(struct xseg *xseg, xport portno, xport dstgw)
 int xseg_set_req_data(struct xseg *xseg, struct xseg_request *xreq, void *data)
 {
 	int r;
-	xhash_t *req_data = xseg->priv->req_data;
+	xhash_t *req_data;
+	
+	xlock_acquire(&xseg->priv->reqdatalock, 1);
+
+	req_data = xseg->priv->req_data;
 	r = xhash_insert(req_data, (ul_t) xreq, (ul_t) data);
 	if (r == -XHASH_ERESIZE) {
 		req_data = xhash_resize(req_data, grow_size_shift(req_data), NULL);
@@ -1378,19 +1383,25 @@ int xseg_set_req_data(struct xseg *xseg, struct xseg_request *xreq, void *data)
 			r = xhash_insert(req_data, (ul_t) xreq, (ul_t) data);
 		}
 	}
+
+	xlock_release(&xseg->priv->reqdatalock);
 	return r;
 }
 
 int xseg_get_req_data(struct xseg *xseg, struct xseg_request *xreq, void **data)
 {
-	//FIXME
-	int r1, r;
+	int r;
 	ul_t val;
-	xhash_t *req_data = xseg->priv->req_data;
-	r1 = xhash_lookup(req_data, (ul_t) xreq, &val);
+	xhash_t *req_data;
+	
+	xlock_acquire(&xseg->priv->reqdatalock, 1);
+
+	req_data = xseg->priv->req_data;
+	//maybe we need a xhash_delete with lookup...
+	//maybe we also need a delete that doesn't shrink xhash
+	r = xhash_lookup(req_data, (ul_t) xreq, &val);
 	*data = (void *) val;
-	if (r1 >= 0) {
-		// delete or update to NULL ?
+	if (r >= 0) {
 		r = xhash_delete(req_data, (ul_t) xreq);
 		if (r == -XHASH_ERESIZE) {
 			req_data = xhash_resize(req_data, shrink_size_shift(req_data), NULL);
@@ -1400,7 +1411,9 @@ int xseg_get_req_data(struct xseg *xseg, struct xseg_request *xreq, void **data)
 			}
 		}
 	}
-	return r1;
+
+	xlock_release(&xseg->priv->reqdatalock);
+	return r;
 }
 
 /*

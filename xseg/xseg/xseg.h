@@ -221,6 +221,7 @@ struct xseg_private {
 	uint32_t max_peer_types;
 	void (*wakeup)(struct xseg *xseg, uint32_t portno);
 	xhash_t *req_data;
+	struct xlock reqdatalock;
 };
 
 struct xseg_counters {

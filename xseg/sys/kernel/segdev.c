@@ -214,6 +214,8 @@ static ssize_t segdev_write(struct file *file, const char __user *buf,
 {
 	struct segdev_file *vf = file->private_data;
 	struct segdev *dev = segdev_get(vf->minor);
+	char buffer[SEGDEV_BUFSIZE];
+	uint32_t portno;
 	int ret = -ENODEV;
 	if (!dev)
 		goto out;
@@ -221,15 +223,18 @@ static ssize_t segdev_write(struct file *file, const char __user *buf,
 	if (count > SEGDEV_BUFSIZE)
 		count = SEGDEV_BUFSIZE;
 
-	ret = copy_from_user(dev->buffer, buf, count);
+	ret = copy_from_user(buffer, buf, count);
 	if (ret < 0)
 		goto out;
 
-	dev->buffer_index = count - ret;
+	if((count - ret) != sizeof(uint32_t))
+		goto out;
+
+	portno = *(uint32_t *)buffer;
 
 	ret = 0;
 	if (dev->callback)
-		dev->callback(dev);
+		dev->callback(dev, portno);
 	else
 		ret = -ENOSYS;
 

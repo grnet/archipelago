@@ -144,12 +144,13 @@ filed)
 		mk_chardev
 		load_all
 		spawn_filed ${IMAGES} 1
-#		map_volume xsegvol 0 1
+		sleep 1
+		map_volume xsegvol 0 1
 		;;
 	stop)
 		pkill -f peers/user/filed
 		sleep 0.5
-#		unmap_device 0
+		unmap_device 0
 		rm ${CHRDEV_NAME}
 		unload_all
 		;;
