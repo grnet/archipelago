@@ -391,3 +391,5 @@ xport xseg_getandset_dstgw	(struct xseg *xseg, xport portno, xport dstgw);
 
 int xseg_set_req_data (struct xseg *xseg, struct xseg_request *xreq, void *data);
 int xseg_get_req_data (struct xseg *xseg, struct xseg_request *xreq, void **data);
+
+int xseg_init_signal(struct xseg *xseg, xport portno);

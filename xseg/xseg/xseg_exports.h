@@ -29,3 +29,4 @@ EXPORT_SYMBOL(xseg_signal);
 EXPORT_SYMBOL(xseg_get_port);
 EXPORT_SYMBOL(xseg_set_req_data);
 EXPORT_SYMBOL(xseg_get_req_data);
+EXPORT_SYMBOL(xseg_init_signal);

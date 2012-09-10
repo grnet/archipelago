@@ -917,7 +917,7 @@ int xseg_wait_signal(struct xseg *xseg, uint32_t usec_timeout)
 	return xseg->priv->peer_type.peer_ops.wait_signal(xseg, usec_timeout);
 }
 
-int xseg_signal(struct xseg *xseg, uint32_t portno)
+int xseg_signal(struct xseg *xseg, xport portno)
 {
 	struct xseg_peer *type;
 	struct xseg_port *port = xseg_get_port(xseg, portno);
@@ -929,6 +929,20 @@ int xseg_signal(struct xseg *xseg, uint32_t portno)
 		return -1;
 
 	return type->peer_ops.signal(xseg, portno);
+}
+
+int xseg_init_signal(struct xseg *xseg, xport portno)
+{
+	struct xseg_peer *type;
+	struct xseg_port *port = xseg_get_port(xseg, portno);
+	if (!port)
+		return -1;
+	
+	type = __get_peer_type(xseg, port->peer_type);
+	if (!type)
+		return -1;
+
+	return type->peer_ops.signal_init();
 }
 
 //is integer i enough here?
@@ -1365,7 +1379,6 @@ xport xseg_getandset_dstgw(struct xseg *xseg, xport portno, xport dstgw)
 	return prev_portno;
 }
 
-/* not thread safe. if needed, a separate lock should be used outside xseg */
 int xseg_set_req_data(struct xseg *xseg, struct xseg_request *xreq, void *data)
 {
 	int r;

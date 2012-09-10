@@ -6,7 +6,7 @@ default: all
 
 #all: filed xseg sosd vlmcd mapperd
 #all: filed xseg vlmcd mapperd
-all: filed xseg
+all: filed xseg mt-sosd dummy
 
 
 filed: filed.c $(BASE)/xseg/xseg.h
@@ -24,5 +24,11 @@ sosd: sosd.c $(BASE)/xseg/xseg.h $(BASE)/util_libs/user/sos/sos.h
 xseg: xseg-tool.c $(BASE)/xseg/xseg.h
 	$(CC) $(CFLAGS) -o $@ $< $(INC) -L$(LIB) -lxseg
 
+mt-sosd: mt-sosd.c mpeer.c mpeer.h
+	$(CC) $(CFLAGS) -o $@ $< mpeer.c $(INC) -L$(LIB) -lxseg -lrados -lpthread
+
+dummy: dummy.c mpeer.c mpeer.h
+	$(CC) $(CFLAGS) -o $@ $< mpeer.c $(INC) -L$(LIB) -lxseg -lpthread
+
 clean:
-	rm -f filed xseg sosd vlmcd mapperd
+	rm -f filed xseg sosd vlmcd mapperd mt-sosd dummy
