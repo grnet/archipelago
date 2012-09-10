@@ -178,6 +178,7 @@ static int segdev_signal(struct xseg *xseg, uint32_t portno)
 	struct xseg_port *port = xseg_get_port(xseg, portno);
 	if (!port)
 		return -1;
+
 	if (!port->waitcue)
 		return 0;
 	else

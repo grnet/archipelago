@@ -219,7 +219,7 @@ struct xseg_private {
 	struct xseg_peer peer_type;
 	struct xseg_peer **peer_types;
 	uint32_t max_peer_types;
-	void (*wakeup)(struct xseg *xseg, uint32_t portno);
+	void (*wakeup)(uint32_t portno);
 	xhash_t *req_data;
 	struct xlock reqdatalock;
 };
@@ -293,8 +293,7 @@ struct xseg {
                                               char                * segname,
                                               char                * peertype,
                                               void               (* wakeup    )
-                                             (struct xseg         * xseg,
-                                              uint32_t              portno   ));
+                                             (uint32_t              portno   ));
 
                void    xseg_leave           ( struct xseg         * xseg      );
 /*                    \___________________/                       \_________/ */

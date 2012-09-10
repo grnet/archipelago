@@ -23,7 +23,7 @@ struct segdev {
 	char *segment;
 	struct cdev cdev;
 	unsigned long flags;
-	void (*callback)(struct segdev *dev, uint32_t portno);
+	void (*callback)(struct segdev *segdev, uint32_t portno);
 	void *priv;
 
 	spinlock_t lock;

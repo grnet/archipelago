@@ -214,23 +214,20 @@ static ssize_t segdev_write(struct file *file, const char __user *buf,
 {
 	struct segdev_file *vf = file->private_data;
 	struct segdev *dev = segdev_get(vf->minor);
-	char buffer[SEGDEV_BUFSIZE];
 	uint32_t portno;
 	int ret = -ENODEV;
 	if (!dev)
 		goto out;
 
-	if (count > SEGDEV_BUFSIZE)
-		count = SEGDEV_BUFSIZE;
+	if (count != sizeof(uint32_t))
+		goto out;
 
-	ret = copy_from_user(buffer, buf, count);
+	ret = copy_from_user(&portno, buf, sizeof(uint32_t));
 	if (ret < 0)
 		goto out;
 
 	if((count - ret) != sizeof(uint32_t))
 		goto out;
-
-	portno = *(uint32_t *)buffer;
 
 	ret = 0;
 	if (dev->callback)

@@ -634,8 +634,7 @@ struct xseg *xseg_join(	char *segtypename,
 			char *segname,
 			char *peertypename,
 			void (*wakeup)
-			(	struct xseg *xseg,
-				uint32_t portno		))
+			(	uint32_t portno		))
 {
 	struct xseg *xseg, *__xseg;
 	uint64_t size;

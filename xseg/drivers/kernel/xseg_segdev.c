@@ -154,14 +154,6 @@ static void segdev_callback(struct segdev *dev, xport portno)
 	if (priv->segno >= nr_xsegments)
 		return;
 
-	/* temporarily disabling this 
-
-	if (dev->buffer_index != sizeof(uint32_t)) {
-		WARN_ON(1);
-		return;
-	}
-	*/
-
 	xseg = xsegments[priv->segno];
 	xpriv = xseg->priv;
 	port = xseg_get_port(xseg, portno);
@@ -169,7 +161,7 @@ static void segdev_callback(struct segdev *dev, xport portno)
 		return;
 	
 	if (xpriv->wakeup) {
-		xpriv->wakeup(xseg, portno);
+		xpriv->wakeup(portno);
 	}
 }
 
