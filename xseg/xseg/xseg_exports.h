@@ -30,3 +30,7 @@ EXPORT_SYMBOL(xseg_get_port);
 EXPORT_SYMBOL(xseg_set_req_data);
 EXPORT_SYMBOL(xseg_get_req_data);
 EXPORT_SYMBOL(xseg_init_signal);
+EXPORT_SYMBOL(xseg_set_srcgw);
+EXPORT_SYMBOL(xseg_set_dstgw);
+EXPORT_SYMBOL(xseg_getandset_srcgw);
+EXPORT_SYMBOL(xseg_getandset_dstgw);

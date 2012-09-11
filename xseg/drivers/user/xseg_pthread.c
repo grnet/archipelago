@@ -99,7 +99,7 @@ static void handler(int signum)
 }
 
 static sigset_t savedset, set;
-static pthread_key_t key;
+static pthread_key_t pid_key, xpidx_key;
 static pthread_once_t once_init = PTHREAD_ONCE_INIT;
 static pthread_once_t once_quit = PTHREAD_ONCE_INIT;
 static int isInit;
@@ -123,7 +123,13 @@ static void signal_init(void)
 		return;
 	}
 	
-	r = pthread_key_create(&key, NULL);
+	r = pthread_key_create(&pid_key, NULL);
+	if (r < 0) {
+		isInit = 0;
+		return;
+	}
+	
+	r = pthread_key_create(&xpidx_key, NULL);
 	if (r < 0) {
 		isInit = 0;
 		return;
@@ -134,7 +140,8 @@ static void signal_init(void)
 
 static void signal_quit(void) 
 {
-	pthread_key_delete(key);
+	pthread_key_delete(pid_key);
+	pthread_key_delete(xpidx_key);
 	signal(SIGIO, SIG_DFL);
 	pthread_sigmask(SIG_SETMASK, &savedset, NULL);
 	isInit = 0;
@@ -164,7 +171,7 @@ static int pthread_signal_init(void)
 		return -1;
 	pid = syscall(SYS_gettid);
 	INT_TO_POINTER(tmp, pid);
-	r = pthread_setspecific(key, tmp);
+	r = pthread_setspecific(pid_key, tmp);
 	return r;
 }
 
@@ -178,16 +185,20 @@ static int pthread_prepare_wait(struct xseg *xseg, uint32_t portno)
 {
 	void * tmp;
 	pid_t pid;
+	xpool_index r;
 	struct xseg_port *port = xseg_get_port(xseg, portno);
 	if (!port) 
 		return -1;
 
-	tmp = pthread_getspecific(key);
+	tmp = pthread_getspecific(pid_key);
 	POINTER_TO_INT(pid, tmp);
 	if (!pid)
 		return -1;
 
-	xpool_add(&port->waiters, (xpool_index) pid, portno); 
+	r = xpool_add(&port->waiters, (xpool_index) pid, portno); 
+	if (r == NoIndex)
+		return -1;
+	pthread_setspecific(xpidx_key, r);
 	return 0;
 }
 
@@ -196,16 +207,22 @@ static int pthread_cancel_wait(struct xseg *xseg, uint32_t portno)
 	void * tmp;
 	pid_t pid;
 	xpool_data data;
+	xpool_index xpidx, r;
 	struct xseg_port *port = xseg_get_port(xseg, portno);
 	if (!port) 
 		return -1;
 	
-	tmp = pthread_getspecific(key);
+	tmp = pthread_getspecific(pid_key);
 	POINTER_TO_INT(pid, tmp);
 	if (!pid)
 		return -1;
 
-	xpool_remove(&port->waiters, (xpool_index) pid, &data, portno);
+	xpidx = (xpool_index) pthread_getspecific(xpidx_key);
+
+	r = xpool_remove(&port->waiters, xpidx, &data, portno);
+	if (r == NoIndex)
+		return -1;
+	
 	return 0;
 }
 
@@ -218,9 +235,6 @@ static int pthread_wait_signal(struct xseg *xseg, uint32_t usec_timeout)
 	ts.tv_sec = usec_timeout / 1000000;
 	ts.tv_nsec = 1000 * (usec_timeout - ts.tv_sec * 1000000);
 
-	/* FIXME: Now that pthread signaling is fixed, we could get rid of the timeout
-	 * and use a NULL timespec linux-specific)
-	 */
 	r = sigtimedwait(&set, &siginfo, &ts);
 	if (r < 0)
 		return r;

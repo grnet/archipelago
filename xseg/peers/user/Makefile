@@ -6,7 +6,7 @@ default: all
 
 #all: filed xseg sosd vlmcd mapperd
 #all: filed xseg vlmcd mapperd
-all: filed xseg mt-sosd dummy
+all: filed xseg mt-sosd dummy monitor
 
 
 filed: filed.c $(BASE)/xseg/xseg.h
@@ -30,5 +30,8 @@ mt-sosd: mt-sosd.c mpeer.c mpeer.h
 dummy: dummy.c mpeer.c mpeer.h
 	$(CC) $(CFLAGS) -o $@ $< mpeer.c $(INC) -L$(LIB) -lxseg -lpthread
 
+monitor: monitor.c mpeer.c mpeer.h
+	$(CC) $(CFLAGS) -o $@ $< mpeer.c $(INC) -L$(LIB) -lxseg -lpthread
+
 clean:
-	rm -f filed xseg sosd vlmcd mapperd mt-sosd dummy
+	rm -f filed xseg sosd vlmcd mapperd mt-sosd dummy monitor

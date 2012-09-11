@@ -315,9 +315,11 @@ static void* thread_loop(void *arg)
 					//printf("received req id: %u\n", received - xseg->requests);
 					//print_req(peer->xseg, received);
 					r =  xseg_get_req_data(xseg, received, (void **) &pr);
-					if (r < 0 || !pr)
+					if (r < 0 || !pr){
 						//FIXME what to do here ?
+						LOG(0, "Received request with no pr data\n");
 						xseg_respond(peer->xseg, received, peer->portno, X_ALLOC);
+					}
 					//fail(peer, received);
 					//assert pr->req == received;
 					xseg_cancel_wait(xseg, portno);
