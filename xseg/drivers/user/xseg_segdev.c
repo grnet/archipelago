@@ -148,12 +148,22 @@ static struct xseg_type xseg_segdev = {
 	"segdev"
 };
 
-static int segdev_signal_init(void)
+static int segdev_local_signal_init(void)
+{
+	return -1;
+}
+
+static void segdev_local_signal_quit(void)
+{
+	return;
+}
+
+static int segdev_remote_signal_init(void)
 {
 	return 0;
 }
 
-static void segdev_signal_quit(void)
+static void segdev_remote_signal_quit(void)
 {
 	return;
 }
@@ -200,8 +210,10 @@ static void segdev_mfree(void *mem) { }
 static struct xseg_peer xseg_peer_segdev = {
 	/* xseg signal operations */
 	{
-		.signal_init = segdev_signal_init,
-		.signal_quit = segdev_signal_quit,
+		.local_signal_init  = segdev_local_signal_init,
+		.local_signal_quit  = segdev_local_signal_quit,
+		.remote_signal_init = segdev_remote_signal_init,
+		.remote_signal_quit = segdev_remote_signal_quit,
 		.prepare_wait = segdev_prepare_wait,
 		.cancel_wait = segdev_cancel_wait,
 		.wait_signal = segdev_wait_signal,

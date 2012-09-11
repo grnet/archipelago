@@ -177,7 +177,17 @@ static struct xseg_type xseg_segdev = {
 	"segdev"
 };
 
-static int segdev_signal_init(void)
+static int segdev_remote_signal_init(void)
+{
+	return 0;
+}
+
+static void segdev_remote_signal_quit(void)
+{
+	return;
+}
+
+static int segdev_local_signal_init(void)
 {
 	struct segdev *segdev = segdev_get(0);
 	struct segpriv *segpriv;
@@ -203,7 +213,7 @@ out:
 	return r;
 }
 
-static void segdev_signal_quit(void)
+static void segdev_local_signal_quit(void)
 {
 	struct segdev *segdev = segdev_get(0);
 	int r = IS_ERR(segdev) ? PTR_ERR(segdev) : 0;
@@ -248,8 +258,10 @@ static int segdev_signal(struct xseg *xseg, uint32_t portno)
 static struct xseg_peer xseg_peer_segdev = {
 	/* xseg signal operations */
 	{
-		.signal_init = segdev_signal_init,
-		.signal_quit = segdev_signal_quit,
+		.local_signal_init  = segdev_local_signal_init,
+		.local_signal_quit  = segdev_local_signal_quit,
+		.remote_signal_init = segdev_remote_signal_init,
+		.remote_signal_quit = segdev_remote_signal_quit,
 		.cancel_wait = segdev_cancel_wait,
 		.prepare_wait = segdev_prepare_wait,
 		.wait_signal = segdev_wait_signal,
@@ -280,7 +292,14 @@ static int segdev_init(void)
 	if (r)
 		goto err1;
 
+	r = segdev_local_signal_init();
+	if (r)
+		goto err2;
+
 	return 0;
+
+err2:
+	segdev_local_signal_quit();
 err1:
 	xseg_unregister_type(xseg_segdev.name);
 err0:
@@ -296,6 +315,7 @@ static int segdev_quit(void)
 	clear_bit(SEGDEV_RESERVED, &segdev->flags);
 	segdev_put(segdev);
 
+	segdev_local_signal_quit();
 	xseg_unregister_peer(xseg_peer_segdev.name);
 	xseg_unregister_type(xseg_segdev.name);
 

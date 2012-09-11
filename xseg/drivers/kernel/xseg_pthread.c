@@ -28,12 +28,22 @@ MODULE_DESCRIPTION("xseg_pthread");
 MODULE_AUTHOR("XSEG");
 MODULE_LICENSE("GPL");
 
-static int pthread_signal_init(void)
+static int pthread_remote_signal_init(void)
 {
 	return 0;
 }
 
-static void pthread_signal_quit(void)
+static void pthread_remote_signal_quit(void)
+{
+	return;
+}
+
+static int pthread_local_signal_init(void)
+{
+	return -1;
+}
+
+static void pthread_local_signal_quit(void)
 {
 	return;
 }
@@ -99,8 +109,11 @@ static void pthread_mfree(void *mem) { }
 static struct xseg_peer xseg_peer_pthread = {
 	/* xseg signal operations */
 	{
-		.signal_init = pthread_signal_init,
-		.signal_quit = pthread_signal_quit,
+		.local_signal_init  = pthread_local_signal_init,
+		.local_signal_quit  = pthread_local_signal_quit,
+		.remote_signal_init = pthread_remote_signal_init,
+		.remote_signal_quit = pthread_remote_signal_quit,
+		.prepare_wait	    = pthread_prepare_wait,
 		.cancel_wait = pthread_cancel_wait,
 		.prepare_wait = pthread_prepare_wait,
 		.wait_signal = pthread_wait_signal,

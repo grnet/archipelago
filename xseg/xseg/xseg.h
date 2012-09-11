@@ -96,8 +96,10 @@ struct xseg_type {
 };
 
 struct xseg_peer_operations {
-	int   (*signal_init)(void);
-	void  (*signal_quit)(void);
+	int   (*local_signal_init)(void);
+	void  (*local_signal_quit)(void);
+	int   (*remote_signal_init)(void);
+	void  (*remote_signal_quit)(void);
 	int   (*signal_join)(struct xseg *xseg);
 	int   (*signal_leave)(struct xseg *xseg);
 	int   (*prepare_wait)(struct xseg *xseg, uint32_t portno);
@@ -392,4 +394,5 @@ xport xseg_getandset_dstgw	(struct xseg *xseg, xport portno, xport dstgw);
 int xseg_set_req_data (struct xseg *xseg, struct xseg_request *xreq, void *data);
 int xseg_get_req_data (struct xseg *xseg, struct xseg_request *xreq, void **data);
 
-int xseg_init_signal(struct xseg *xseg, xport portno);
+int xseg_init_local_signal(struct xseg *xseg, xport portno);
+void xseg_quit_local_signal(struct xseg *xseg, xport portno);

@@ -100,7 +100,7 @@ static void handler(int signum)
 static sigset_t savedset, set;
 static pid_t pid;
 
-static int posix_signal_init(void)
+static int posix_local_signal_init(void)
 {
 	void (*h)(int);
 	int r;
@@ -119,11 +119,21 @@ static int posix_signal_init(void)
 	return 0;
 }
 
-static void posix_signal_quit(void)
+static void posix_local_signal_quit(void)
 {
 	pid = 0;
 	signal(SIGIO, SIG_DFL);
 	sigprocmask(SIG_SETMASK, &savedset, NULL);
+}
+
+static int posix_remote_signal_init(void)
+{
+	return 0;
+}
+
+static void posix_remote_signal_quit(void)
+{
+	return;
 }
 
 static int posix_prepare_wait(struct xseg *xseg, uint32_t portno)
@@ -207,15 +217,17 @@ static struct xseg_type xseg_posix = {
 static struct xseg_peer xseg_peer_posix = {
 	/* xseg_peer_operations */
 	{
-		.signal_init	= posix_signal_init,
-		.signal_quit	= posix_signal_quit,
-		.prepare_wait	= posix_prepare_wait,
-		.cancel_wait	= posix_cancel_wait,
-		.wait_signal	= posix_wait_signal,
-		.signal		= posix_signal,
-		.malloc		= posix_malloc,
-		.realloc	= posix_realloc,
-		.mfree		= posix_mfree,
+		.local_signal_init  = posix_local_signal_init,
+		.local_signal_quit  = posix_local_signal_quit,
+		.remote_signal_init = posix_remote_signal_init,
+		.remote_signal_quit = posix_remote_signal_quit,
+		.prepare_wait	    = posix_prepare_wait,
+		.cancel_wait	    = posix_cancel_wait,
+		.wait_signal	    = posix_wait_signal,
+		.signal		    = posix_signal,
+		.malloc		    = posix_malloc,
+		.realloc 	    = posix_realloc,
+		.mfree		    = posix_mfree,
 	},
 	/* name */
 	"posix"

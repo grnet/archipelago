@@ -625,6 +625,11 @@ malloc_fail:
 	printf("filed on port %u/%u\n",
 		store->portno, store->xseg->config.nr_ports);
 
+	if (xseg_init_local_signal(store->xseg, store->portno) < 0){
+		printf("cannot int local signals\n");
+		return -1;
+	}
+
 	for (i = 0; i < nr_ops; i++) {
 		pthread_cond_init(&store->fdcache[i].cond, NULL);
 		store->fdcache[i].flags = READY;

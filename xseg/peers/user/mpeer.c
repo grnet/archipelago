@@ -275,7 +275,7 @@ static void* thread_loop(void *arg)
 	printf("thread %u\n",  (unsigned int) (t- peer->thread));
 
 	LOG(0, "Thread %u has tid %u.\n", (unsigned int) (t- peer->thread), pid);
-	xseg_init_signal(xseg, portno);
+	xseg_init_local_signal(xseg, portno);
 	for (;;) {
 		if (t->func) {
 			LOG(5, "Thread %u executes function\n", (unsigned int) (t- peer->thread));

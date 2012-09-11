@@ -27,12 +27,22 @@ MODULE_DESCRIPTION("xseg_posix");
 MODULE_AUTHOR("XSEG");
 MODULE_LICENSE("GPL");
 
-static int posix_signal_init(void)
+static int posix_remote_signal_init(void)
 {
 	return 0;
 }
 
-static void posix_signal_quit(void)
+static void posix_remote_signal_quit(void)
+{
+	return;
+}
+
+static int posix_local_signal_init(void)
+{
+	return -1;
+}
+
+static void posix_local_signal_quit(void)
 {
 	return;
 }
@@ -97,8 +107,11 @@ static void posix_mfree(void *mem) { }
 static struct xseg_peer xseg_peer_posix = {
 	/* xseg signal operations */
 	{
-		.signal_init = posix_signal_init,
-		.signal_quit = posix_signal_quit,
+		.local_signal_init  = posix_local_signal_init,
+		.local_signal_quit  = posix_local_signal_quit,
+		.remote_signal_init = posix_remote_signal_init,
+		.remote_signal_quit = posix_remote_signal_quit,
+		.prepare_wait	    = posix_prepare_wait,
 		.cancel_wait = posix_cancel_wait,
 		.prepare_wait = posix_prepare_wait,
 		.wait_signal = posix_wait_signal,

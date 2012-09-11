@@ -268,7 +268,7 @@ int xseg_register_peer(struct xseg_peer *peer_type)
 		goto out;
 	}
 
-	if (peer_type->peer_ops.signal_init()) {
+	if (peer_type->peer_ops.remote_signal_init()) {
 		XSEGLOG("peer type '%s': signal initialization failed\n",
 			peer_type->name);
 		r -= 1;
@@ -300,7 +300,7 @@ int xseg_unregister_peer(const char *name)
 	__nr_peer_types -= 1;
 	__peer_types[i] = __peer_types[__nr_peer_types];
 	__peer_types[__nr_peer_types] = NULL;
-	driver->peer_ops.signal_quit();
+	driver->peer_ops.remote_signal_quit();
 	r = 0;
 out:
 	__unlock_domain();
@@ -931,7 +931,7 @@ int xseg_signal(struct xseg *xseg, xport portno)
 	return type->peer_ops.signal(xseg, portno);
 }
 
-int xseg_init_signal(struct xseg *xseg, xport portno)
+int xseg_init_local_signal(struct xseg *xseg, xport portno)
 {
 	struct xseg_peer *type;
 	struct xseg_port *port = xseg_get_port(xseg, portno);
@@ -942,7 +942,21 @@ int xseg_init_signal(struct xseg *xseg, xport portno)
 	if (!type)
 		return -1;
 
-	return type->peer_ops.signal_init();
+	return type->peer_ops.local_signal_init();
+}
+
+void xseg_quit_local_signal(struct xseg *xseg, xport portno)
+{
+	struct xseg_peer *type;
+	struct xseg_port *port = xseg_get_port(xseg, portno);
+	if (!port)
+		return;
+	
+	type = __get_peer_type(xseg, port->peer_type);
+	if (!type)
+		return;
+
+	type->peer_ops.local_signal_quit();
 }
 
 //is integer i enough here?
@@ -960,8 +974,10 @@ int xseg_alloc_requests(struct xseg *xseg, uint32_t portno, uint32_t nr)
 	while ((req = xobj_get_obj(xseg->request_h, X_ALLOC)) != NULL && i < nr) {
 		xqi = XPTR_MAKE(req, xseg->segment);
 		xqi = xq_append_tail(q, xqi, portno);
-		if (xqi == Noneidx)
+		if (xqi == Noneidx) {
+			xobj_put_obj(xseg->request_h, req);
 			break;
+		}
 		i++;
 	}
 

@@ -59,6 +59,15 @@ uint64_t reqs;
  * ./xseg-tool random 100000 | cut -d' ' -f2- | sort | uniq -d -c |wc -l
  */
 
+xport sport = NoPort;
+static void init_local_signal() 
+{
+	if (xseg && sport != srcport){
+		xseg_init_local_signal(xseg, srcport);
+		sport = srcport;
+	}
+}
+
 void mkname_heavy(char *name, uint32_t namelen, uint32_t seed)
 {
 	int i;
@@ -510,6 +519,7 @@ int cmd_rndwrite(long loops, int32_t seed, uint32_t targetlen, uint32_t chunksiz
 	xport port;
 	char *req_data, *req_target;
 	seed = random();
+	init_local_signal();
 
 	for (;;) {
 		xseg_prepare_wait(xseg, srcport);
@@ -618,6 +628,7 @@ int cmd_rndread(long loops, int32_t seed, uint32_t targetlen, uint32_t chunksize
 	uint64_t offset;
 	xport port;
 	char *req_data, *req_target;
+	init_local_signal();
 
 	seed = random();
 	for (;;) {

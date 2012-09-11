@@ -17,6 +17,9 @@
 #define ERRSIZE 512
 char errbuf[ERRSIZE];
 
+static void *pthread_malloc(uint64_t size);
+static void pthread_mfree(void *mem);
+
 static long pthread_allocate(const char *name, uint64_t size)
 {
 	int fd, r;
@@ -98,30 +101,15 @@ static void handler(int signum)
 	counter ++;
 }
 
-static sigset_t savedset, set;
 static pthread_key_t pid_key, xpidx_key;
+static pthread_key_t mask_key, act_key;
 static pthread_once_t once_init = PTHREAD_ONCE_INIT;
 static pthread_once_t once_quit = PTHREAD_ONCE_INIT;
 static int isInit;
 
-static void signal_init(void) 
+static void keys_init(void) 
 {
-	void (*h)(int);
 	int r;
-	h = signal(SIGIO, handler);
-	if (h == SIG_ERR){
-		isInit = 0;
-		return;
-	}
-
-	sigemptyset(&set);
-	sigaddset(&set, SIGIO);
-
-	r = pthread_sigmask(SIG_BLOCK, &set, &savedset);
-	if (r < 0) {
-		isInit = 0;
-		return;
-	}
 	
 	r = pthread_key_create(&pid_key, NULL);
 	if (r < 0) {
@@ -134,18 +122,19 @@ static void signal_init(void)
 		isInit = 0;
 		return;
 	}
+	r = pthread_key_create(&mask_key, NULL);
+	if (r < 0) {
+		isInit = 0;
+		return;
+	}
+	
+	r = pthread_key_create(&act_key, NULL);
+	if (r < 0) {
+		isInit = 0;
+		return;
+	}
 	isInit = 1;
 	once_quit = PTHREAD_ONCE_INIT;
-}
-
-static void signal_quit(void) 
-{
-	pthread_key_delete(pid_key);
-	pthread_key_delete(xpidx_key);
-	signal(SIGIO, SIG_DFL);
-	pthread_sigmask(SIG_SETMASK, &savedset, NULL);
-	isInit = 0;
-	once_init = PTHREAD_ONCE_INIT;
 }
 
 #define INT_TO_POINTER(__myptr, __myint) \
@@ -161,24 +150,94 @@ static void signal_quit(void)
 	} while (0)
 
 /* must be called by each thread */
-static int pthread_signal_init(void)
+static int pthread_local_signal_init(void)
 {
 	int r;
 	pid_t pid;
 	void *tmp;
-	pthread_once(&once_init, signal_init);
+	sigset_t *savedset, *set;
+	struct sigaction *act, *old_act;
+
+	savedset = pthread_malloc(sizeof(sigset_t));
+	if (!savedset)
+		goto err1;
+	set = pthread_malloc(sizeof(sigset_t));
+	if (!set)
+		goto err2;
+
+	act = pthread_malloc(sizeof(struct sigaction));
+	if (!act)
+		goto err3;
+	old_act = pthread_malloc(sizeof(struct sigaction));
+	if (!old_act)
+		goto err4;
+
+	pthread_once(&once_init, keys_init);
 	if (!isInit)
-		return -1;
+		goto err5;
+
+	sigemptyset(set);
+	act->sa_handler = handler;
+	act->sa_mask = *set;
+	act->sa_flags = 0;
+	if(sigaction(SIGIO, act, old_act) < 0)
+		goto err5;
+
+	
+	sigaddset(set, SIGIO);
+
+	r = pthread_sigmask(SIG_BLOCK, set, savedset);
+	if (r < 0) 
+		goto err6;
+
+
 	pid = syscall(SYS_gettid);
 	INT_TO_POINTER(tmp, pid);
-	r = pthread_setspecific(pid_key, tmp);
-	return r;
+	if (!pthread_setspecific(pid_key, tmp) ||
+			pthread_setspecific(mask_key, savedset) ||
+			pthread_setspecific(act_key, old_act))
+		goto err7;
+
+	return 0;
+
+err7:
+	pthread_sigmask(SIG_BLOCK, savedset, NULL);
+err6:
+	sigaction(SIGIO, old_act, NULL);
+err5:
+	pthread_mfree(old_act);
+err4:
+	pthread_mfree(act);
+err3:
+	pthread_mfree(set);
+err2:
+	pthread_mfree(savedset);
+err1:
+	return -1;
 }
 
 /* can be called by each thread */
-static void pthread_signal_quit(void)
+static void pthread_local_signal_quit(void)
 {
-	pthread_once(&once_quit, signal_quit);
+	sigset_t *savedset;
+	struct sigaction *old_act;
+
+	savedset = pthread_getspecific(act_key);
+	old_act = pthread_getspecific(mask_key);
+	if (old_act)
+		sigaction(SIGIO, old_act, NULL);
+	if (savedset)
+		pthread_sigmask(SIG_SETMASK, savedset, NULL);
+}
+
+static int pthread_remote_signal_init(void)
+{
+	return 0;
+}
+
+static void pthread_remote_signal_quit(void)
+{
+	return;
 }
 
 static int pthread_prepare_wait(struct xseg *xseg, uint32_t portno)
@@ -198,7 +257,7 @@ static int pthread_prepare_wait(struct xseg *xseg, uint32_t portno)
 	r = xpool_add(&port->waiters, (xpool_index) pid, portno); 
 	if (r == NoIndex)
 		return -1;
-	pthread_setspecific(xpidx_key, r);
+	pthread_setspecific(xpidx_key, (void *)r);
 	return 0;
 }
 
@@ -231,6 +290,9 @@ static int pthread_wait_signal(struct xseg *xseg, uint32_t usec_timeout)
 	int r;
 	siginfo_t siginfo;
 	struct timespec ts;
+	sigset_t set;
+	sigemptyset(&set);
+	sigaddset(&set, SIGIO);
 
 	ts.tv_sec = usec_timeout / 1000000;
 	ts.tv_nsec = 1000 * (usec_timeout - ts.tv_sec * 1000000);
@@ -293,8 +355,10 @@ static struct xseg_type xseg_pthread = {
 static struct xseg_peer xseg_peer_pthread = {
 	/* xseg_peer_operations */
 	{
-		.signal_init	= pthread_signal_init,
-		.signal_quit	= pthread_signal_quit,
+		.local_signal_init  = pthread_local_signal_init,
+		.local_signal_quit  = pthread_local_signal_quit,
+		.remote_signal_init = pthread_remote_signal_init,
+		.remote_signal_quit = pthread_remote_signal_quit,
 		.prepare_wait	= pthread_prepare_wait,
 		.cancel_wait	= pthread_cancel_wait,
 		.wait_signal	= pthread_wait_signal,
