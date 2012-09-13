@@ -197,22 +197,25 @@ void pending(struct peerd *peer, struct peer_req *pr)
 	        pr->req->state = XS_PENDING;
 }
 
-static void handle_accepted(struct peerd *peer, struct peer_req *pr)
+static void handle_accepted(struct peerd *peer, struct peer_req *pr, 
+				struct xseg_request *req)
 {
-	struct xseg_request *req = pr->req;
+	struct xseg_request *xreq = pr->req;
+	//assert xreq == req;
 	LOG(4, "Handle accepted \n");
-	req->serviced = 0;
-	req->state = XS_ACCEPTED;
+	xreq->serviced = 0;
+	xreq->state = XS_ACCEPTED;
 	pr->retval = 0;
-	dispatch(peer, pr);
+	dispatch(peer, pr, req);
 }
 
-static void handle_received(struct peerd *peer, struct peer_req *pr)
+static void handle_received(struct peerd *peer, struct peer_req *pr,
+				struct xseg_request *req)
 {
 	//struct xseg_request *req = pr->req;
 	//assert req->state != XS_ACCEPTED;
 	LOG(4, "Handle received \n");
-	dispatch(peer, pr);
+	dispatch(peer, pr, req);
 
 }
 struct timeval sub_start, sub_end, sub_accum = {0, 0};
@@ -301,7 +304,7 @@ static void* thread_loop(void *arg)
 						pr->req = accepted;
 						xseg_cancel_wait(xseg, portno);
 						wake_up_next_thread(peer);
-						handle_accepted(peer, pr);
+						handle_accepted(peer, pr, accepted);
 						loops = threshold;
 					}
 					else {
@@ -324,7 +327,7 @@ static void* thread_loop(void *arg)
 					//assert pr->req == received;
 					xseg_cancel_wait(xseg, portno);
 					wake_up_next_thread(peer);
-					handle_received(peer, pr);
+					handle_received(peer, pr, received);
 					loops = threshold;
 				}
 //			}

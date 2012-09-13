@@ -12,7 +12,7 @@ int custom_peer_init(struct peerd *peer, int argc, const char *argv[])
 	return 0;
 }
 
-int dispatch(struct peerd *peer, struct peer_req *pr)
+int dispatch(struct peerd *peer, struct peer_req *pr, struct xseg_request *req)
 {
 	if (canDefer(peer))
 		defer_request(peer, pr);

@@ -148,6 +148,8 @@ static int mapperd_loop(struct mapperd *mapperd)
 	struct xseg_request *xreq;
 	struct xseg *xseg = mapperd->xseg;
 	uint32_t mportno = mapperd->mportno;
+	char *target, buf[MAX_FILENAME_SIZE];
+	xport p;
 
 	always_assert(xseg);
 
@@ -164,24 +166,36 @@ static int mapperd_loop(struct mapperd *mapperd)
  			 * the reply and the target name fits in the map reply.
  			 */
 			size_t s = sizeof(struct xseg_reply_map) +
-				sizeof(struct xseg_reply_map_scatterlist);
-			always_assert(xreq->datalen >= s);
-			always_assert(xreq->targetlen <= XSEG_MAX_TARGETLEN);
+				2 * sizeof(struct xseg_reply_map_scatterlist);
+			target = xseg_get_target(xseg, xreq);
+			strncpy(buf, target, xreq->targetlen);
+			xseg_resize_request(xseg, xreq, xreq->targetlen, s);
+			target = xseg_get_target(xseg, xreq);
+			strncpy(target, buf, xreq->targetlen);
 
-			struct xseg_reply_map *mreply = (void *)xreq->data;
-			mreply->cnt = 1;
+			struct xseg_reply_map *mreply = (void *)xseg_get_data(xseg, xreq);
+			mreply->cnt = 2;
 			mreply->segs[0].offset = xreq->offset;
-			mreply->segs[0].size = xreq->size;
+			mreply->segs[0].size = xreq->size/2;
 			/* FIXME: strlcpy() would work nicely here */
-			strncpy(mreply->segs[0].target, xreq->target, xreq->targetlen);
-			mreply->segs[0].target[xreq->targetlen] = '\0';
+			strncpy(mreply->segs[0].target, target, xreq->targetlen);
+			mreply->segs[0].target[xreq->targetlen] = '_';
+			mreply->segs[0].target[xreq->targetlen + 1] = '1';
+			mreply->segs[0].target[xreq->targetlen + 2] = '\0';
+			
+			mreply->segs[1].offset = xreq->offset;
+			mreply->segs[1].size = xreq->size/2;
+			/* FIXME: strlcpy() would work nicely here */
+			strncpy(mreply->segs[1].target, target, xreq->targetlen);
+			mreply->segs[1].target[xreq->targetlen] = '_';
+			mreply->segs[1].target[xreq->targetlen + 1] = '2';
+			mreply->segs[1].target[xreq->targetlen + 2] = '\0';
 
 			/* Respond to the initiator, signal the source port */
 //			perr(PI, 0, "completed io");
 			xreq->state |= XS_SERVED;
-			ret = xseg_respond(xseg, xreq->portno, xreq);
-			always_assert(ret != NoSerial);
-			ret = xseg_signal(xseg, xreq->portno);
+			p = xseg_respond(xseg, xreq, mportno, X_ALLOC);
+			ret = xseg_signal(xseg, p);
 //			always_assert(ret == 1);
 		} else {
 			/*
@@ -228,7 +242,7 @@ static int mapperd_init(struct mapperd *mapperd)
 	}
 
 	mapperd->mportno = xseg_portno(mapperd->xseg, mapperd->mport);
-	
+	xseg_init_local_signal(mapperd->xseg, mapperd->mportno);
 	perr(PI, 0, "mapperd on port %u of %u",
 		mapperd->mportno, mapperd->xseg->config.nr_ports);
 

@@ -35,3 +35,4 @@ EXPORT_SYMBOL(xseg_getandset_srcgw);
 EXPORT_SYMBOL(xseg_getandset_dstgw);
 EXPORT_SYMBOL(xseg_init_local_signal);
 EXPORT_SYMBOL(xseg_quit_local_signal);
+EXPORT_SYMBOL(xseg_resize_request);

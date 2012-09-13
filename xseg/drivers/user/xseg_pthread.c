@@ -216,7 +216,7 @@ err1:
 	return -1;
 }
 
-/* can be called by each thread */
+/* should be called by each thread which had initialized signals */
 static void pthread_local_signal_quit(void)
 {
 	sigset_t *savedset;

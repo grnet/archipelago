@@ -396,3 +396,7 @@ int xseg_get_req_data (struct xseg *xseg, struct xseg_request *xreq, void **data
 
 int xseg_init_local_signal(struct xseg *xseg, xport portno);
 void xseg_quit_local_signal(struct xseg *xseg, xport portno);
+
+int xseg_resize_request (struct xseg *xseg, struct xseg_request *req,
+			uint32_t new_targetlen, uint64_t new_datalen);
+

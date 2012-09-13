@@ -1,4 +1,3 @@
-
 /* main mpeer structs */
 struct peer_req {
 	struct peerd *peer;
@@ -46,6 +45,6 @@ int custom_peer_init(struct peerd *peer, int argc, const char *argv[]);
 /* dispatch function that cannot block
  * defers blocking calls to helper threads
  */
-int dispatch(struct peerd *peer, struct peer_req *pr);
+int dispatch(struct peerd *peer, struct peer_req *pr, struct xseg_request *xseg);
 
 void usage();

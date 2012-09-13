@@ -1159,6 +1159,18 @@ int xseg_prep_request ( struct xseg* xseg, struct xseg_request *req,
 	return 0;
 }
 
+int xseg_resize_request (struct xseg *xseg, struct xseg_request *req,
+			uint32_t new_targetlen, uint64_t new_datalen)
+{
+	if (req->buffer){
+		void *ptr = XPTR_TAKE(req->buffer, xseg->segment);
+		xseg_free_buffer(xseg, ptr);
+	}
+	req->buffer = 0;
+	req->bufferlen = 0;
+	return xseg_prep_request(xseg, req, new_targetlen, new_datalen);
+}
+
 static void __update_timestamp(struct xseg_request *xreq)
 {
 	struct timeval tv;

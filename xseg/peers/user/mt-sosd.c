@@ -25,7 +25,7 @@ void rados_ack_cb(rados_completion_t c, void *arg)
 	int ret = rados_aio_get_return_value(c);
 	pr->retval = ret;
 	rados_aio_release(c);
-	dispatch(peer, pr);
+	dispatch(peer, pr, pr->req);
 }
 
 void rados_commit_cb(rados_completion_t c, void *arg)
@@ -35,7 +35,7 @@ void rados_commit_cb(rados_completion_t c, void *arg)
 	int ret = rados_aio_get_return_value(c);
 	pr->retval = ret;
 	rados_aio_release(c);
-	dispatch(peer, pr);
+	dispatch(peer, pr, pr->req);
 }
 
 int do_aio_read(struct peerd *peer, struct peer_req *pr)
@@ -302,7 +302,7 @@ int custom_arg_parse(int argc, const char *argv[])
 	return 0;
 }
 
-int dispatch(struct peerd *peer, struct peer_req *pr)
+int dispatch(struct peerd *peer, struct peer_req *pr, struct xseg_request *req)
 {
 	struct rados_io *rio = (struct rados_io *) (pr->priv);
 	char *target = xseg_get_target(peer->xseg, pr->req);
