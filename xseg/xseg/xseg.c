@@ -697,7 +697,7 @@ struct xseg *xseg_join(	char *segtypename,
 	priv->segment_type = *segtype;
 	priv->peer_type = *peertype;
 	priv->wakeup = wakeup;
-	priv->req_data = xhash_new(3); //FIXME should be relative to XSEG_DEF_REQS
+	priv->req_data = xhash_new(3, INTEGER); //FIXME should be relative to XSEG_DEF_REQS
 	if (!priv->req_data)
 		goto err_priv;
 	xlock_release(&priv->reqdatalock);
@@ -1415,12 +1415,12 @@ int xseg_set_req_data(struct xseg *xseg, struct xseg_request *xreq, void *data)
 	xlock_acquire(&xseg->priv->reqdatalock, 1);
 
 	req_data = xseg->priv->req_data;
-	r = xhash_insert(req_data, (ul_t) xreq, (ul_t) data);
+	r = xhash_insert(req_data, (xhashidx) xreq, (xhashidx) data);
 	if (r == -XHASH_ERESIZE) {
-		req_data = xhash_resize(req_data, grow_size_shift(req_data), NULL);
+		req_data = xhash_resize(req_data, xhash_grow_size_shift(req_data), NULL);
 		if (req_data) {
 			xseg->priv->req_data = req_data;
-			r = xhash_insert(req_data, (ul_t) xreq, (ul_t) data);
+			r = xhash_insert(req_data, (xhashidx) xreq, (xhashidx) data);
 		}
 	}
 
@@ -1431,7 +1431,7 @@ int xseg_set_req_data(struct xseg *xseg, struct xseg_request *xreq, void *data)
 int xseg_get_req_data(struct xseg *xseg, struct xseg_request *xreq, void **data)
 {
 	int r;
-	ul_t val;
+	xhashidx val;
 	xhash_t *req_data;
 	
 	xlock_acquire(&xseg->priv->reqdatalock, 1);
@@ -1439,15 +1439,15 @@ int xseg_get_req_data(struct xseg *xseg, struct xseg_request *xreq, void **data)
 	req_data = xseg->priv->req_data;
 	//maybe we need a xhash_delete with lookup...
 	//maybe we also need a delete that doesn't shrink xhash
-	r = xhash_lookup(req_data, (ul_t) xreq, &val);
+	r = xhash_lookup(req_data, (xhashidx) xreq, &val);
 	*data = (void *) val;
 	if (r >= 0) {
-		r = xhash_delete(req_data, (ul_t) xreq);
+		r = xhash_delete(req_data, (xhashidx) xreq);
 		if (r == -XHASH_ERESIZE) {
-			req_data = xhash_resize(req_data, shrink_size_shift(req_data), NULL);
+			req_data = xhash_resize(req_data, xhash_shrink_size_shift(req_data), NULL);
 			if (req_data){
 				xseg->priv->req_data = req_data;
-				r = xhash_delete(req_data, (ul_t) xreq);
+				r = xhash_delete(req_data, (xhashidx) xreq);
 			}
 		}
 	}

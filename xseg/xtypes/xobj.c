@@ -26,7 +26,7 @@ int xobj_handler_init(struct xobject_h *obj_h, void *container,
 	 */
 	//bytes = xheap_get_chunk_size(xhash);
 	
-	xhash_init(xhash, 3);
+	xhash_init(xhash, 3, INTEGER);
 	obj_h->allocated = XPTR_MAKE(xhash, container);
 	obj_h->list = 0;
 	obj_h->flags = 0;
@@ -77,7 +77,7 @@ int xobj_alloc_obj(struct xobject_h * obj_h, uint64_t nr)
 	r = xhash_insert(allocated, ptr, ptr);
 	//ugly
 	if (r == -XHASH_ERESIZE) {
-		ul_t sizeshift = grow_size_shift(allocated);
+		xhashidx sizeshift = xhash_grow_size_shift(allocated);
 		uint64_t size;
 		xhash_t *new;
 		size = xhash_get_alloc_size(sizeshift); 

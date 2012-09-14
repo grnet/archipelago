@@ -15,9 +15,68 @@
  */
 
 typedef uint64_t xhashidx;
+#define Noxhashidx ((xhashidx) -1)
 
 #define XHASH_ERESIZE 1
 #define XHASH_EEXIST 2
+
+enum xhash_type {
+	INTEGER = 0,	/* signed/unsigned integers, pointers, etc */
+	STRING = 1	/* NULL terminated strings */
+	//OBJECT = 2, to be used later with objects
+};
+#define NR_XHASH_TYPES 2
+
+static inline xhashidx hash_int(xhashidx key)
+{
+	return key;
+}
+
+static inline int cmp_int(xhashidx key1, xhashidx key2)
+{
+	return (key1 == key2);
+}
+
+static inline xhashidx hash_string(xhashidx key) 
+{
+	//assume a valind NULL terminated string
+	
+	//function to access key if in container
+	char *string = (char *) key;
+	unsigned int i, len = strlen(string);
+	xhashidx hv = string[0] << 7;
+	for (i = 1; i <= len; i++) {
+		hv = (hv * 1000003) ^ string[i];
+	}
+	if (hv == Noxhashidx)
+		hv = Noxhashidx -1;
+
+	return hv; 
+}
+
+static inline int cmp_string(xhashidx key1, xhashidx key2)
+{
+	char *string1 = (char *) key1;
+	char *string2 = (char *) key2;
+
+	return (!strcmp(string1, string2));
+}
+
+typedef int (*xhash_cmp_fun_t)(xhashidx key1, xhashidx key2);
+typedef xhashidx (*xhash_hash_fun_t)(xhashidx key);
+
+struct types_functions {
+//	int (*cmp_fun)(xhashidx key1, xhashidx key2);
+//	xhashidx (*hash_fun)(xhashidx key);
+	xhash_cmp_fun_t cmp_fun;
+	xhash_hash_fun_t hash_fun;
+};
+
+static struct types_functions types_fun[] = {
+	{ .cmp_fun = cmp_int, .hash_fun = hash_int },
+	{ .cmp_fun = cmp_string, .hash_fun = hash_string }
+};
+
 
 struct xhash {
     xhashidx size_shift;
@@ -25,6 +84,7 @@ struct xhash {
     xhashidx used;
     xhashidx dummies;
     xhashidx defval;
+    enum xhash_type type;
 #ifdef PHASH_STATS
     xhashidx inserts;
     xhashidx deletes;
@@ -88,9 +148,9 @@ xhashidx xhash_grow_size_shift(xhash_t *xhash);
 xhashidx xhash_shrink_size_shift(xhash_t *xhash);
 ssize_t xhash_get_alloc_size(xhashidx size_shift);
 
-xhash_t *xhash_new(xhashidx minsize_shift);
+xhash_t *xhash_new(xhashidx minsize_shift, enum xhash_type type);
 void xhash_free(xhash_t *xhash); // pairs with _new()
-void xhash_init(struct xhash *xhash, xhashidx minsize_shift);
+void xhash_init(struct xhash *xhash, xhashidx minsize_shift, enum xhash_type type);
 
 xhash_t * xhash_resize(xhash_t *xhash, xhashidx new_size_shift, xhash_t *newxhash);
 int xhash_insert(xhash_t *xhash, xhashidx key, xhashidx val);

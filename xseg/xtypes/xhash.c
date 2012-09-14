@@ -130,7 +130,8 @@ assert_kv(xhashidx k, xhashidx v)
 */
 
 void
-xhash_init__(xhash_t *xhash, xhashidx size_shift, xhashidx minsize_shift, bool vals)
+xhash_init__(xhash_t *xhash, xhashidx size_shift, xhashidx minsize_shift, 
+		enum xhash_type type, bool vals)
 {
     xhashidx nr_items = 1UL << size_shift;
     xhashidx *kvs = (xhashidx *) ((char *) xhash + sizeof(struct xhash));
@@ -157,6 +158,7 @@ out:
     xhash->dummies = xhash->used = 0;
     xhash->size_shift = size_shift;
     xhash->minsize_shift = minsize_shift;
+    xhash->type = type;
 
     ZEROSTAT(xhash->inserts);
     ZEROSTAT(xhash->deletes);
@@ -175,7 +177,9 @@ get_alloc_size(xhashidx size_shift, bool vals)
 
 
 xhash_t *
-xhash_new__(xhashidx size_shift, xhashidx minsize_shift, bool vals) {
+xhash_new__(xhashidx size_shift, xhashidx minsize_shift, 
+		enum xhash_type type, bool vals) 
+{
     struct xhash *xhash;
     xhash = xtypes_malloc(get_alloc_size(size_shift, vals));
     if (!xhash) {
@@ -183,7 +187,7 @@ xhash_new__(xhashidx size_shift, xhashidx minsize_shift, bool vals) {
 	return NULL;
     }
 
-    xhash_init__(xhash, size_shift, minsize_shift, vals);
+    xhash_init__(xhash, size_shift, minsize_shift, type, vals);
     
     return xhash;
 }
@@ -192,15 +196,17 @@ xhash_new__(xhashidx size_shift, xhashidx minsize_shift, bool vals) {
 xhash_t *
 xhash_resize__(struct xhash *xhash, xhashidx new_size_shift, bool vals)
 {
-    return xhash_new__(new_size_shift, xhash->minsize_shift, vals);
+    return xhash_new__(new_size_shift, xhash->minsize_shift, xhash->type, vals);
 }
 
 int
 xhash_delete__(xhash_t *xhash, xhashidx key, bool vals)
 {
+    xhash_cmp_fun_t cmp_fun = types_fun[xhash->type].cmp_fun;
+    xhash_hash_fun_t hash_fun = types_fun[xhash->type].hash_fun; 
     xhashidx perturb = key;
     xhashidx mask = xhash_size(xhash)-1;
-    xhashidx idx = key & mask;
+    xhashidx idx = hash_fun(key) & mask;
     xhashidx *kvs = xhash_kvs(xhash);
 
     for (;;) {
@@ -208,7 +214,7 @@ xhash_delete__(xhash_t *xhash, xhashidx key, bool vals)
             return -2;
         }
 
-        if ( !item_dummy(xhash, idx, vals) && kvs[idx] == key){
+        if ( !item_dummy(xhash, idx, vals) && cmp_fun(kvs[idx],key)){
             INCSTAT(xhash->deletes);
             set_dummy_item(xhash, idx, vals);
             xhash->dummies++;
@@ -283,9 +289,9 @@ xhash_get_alloc_size(xhashidx size_shift)
 }
 
 xhash_t *
-xhash_new(xhashidx minsize_shift)
+xhash_new(xhashidx minsize_shift, enum xhash_type type)
 {
-    return xhash_new__(minsize_shift, minsize_shift, true);
+    return xhash_new__(minsize_shift, minsize_shift, type, true);
 }
 
 void xhash_free(struct xhash *xhash)
@@ -293,9 +299,9 @@ void xhash_free(struct xhash *xhash)
     xtypes_free(xhash);
 }
 
-void xhash_init(struct xhash *xhash, xhashidx minsize_shift)
+void xhash_init(struct xhash *xhash, xhashidx minsize_shift, enum xhash_type type)
 {
-	xhash_init__(xhash, minsize_shift, minsize_shift, true);
+	xhash_init__(xhash, minsize_shift, minsize_shift, type, true);
 }
 
 /*
@@ -325,11 +331,13 @@ xhash_grow_check(xhash_t *xhash)
 
 #define PHASH_UPDATE(xhash, key, val, vals_flag)      \
 {                                                     \
-    xhashidx size = 1UL<<(xhash->size_shift);             \
-    xhashidx perturb = key;                               \
-    xhashidx mask = size-1;                               \
-    xhashidx idx = key & mask;                            \
-    xhashidx *kvs = xhash_kvs(xhash);                      \
+    xhash_cmp_fun_t cmp_fun = types_fun[xhash->type].cmp_fun;         \
+    xhash_hash_fun_t hash_fun = types_fun[xhash->type].hash_fun;       \
+    xhashidx size = 1UL<<(xhash->size_shift);         \
+    xhashidx perturb = key;                           \
+    xhashidx mask = size-1;                           \
+    xhashidx idx = hash_fun(key) & mask;              \
+    xhashidx *kvs = xhash_kvs(xhash);                 \
                                                       \
     INCSTAT(xhash->inserts);                          \
     for (;;) {                                        \
@@ -337,7 +345,7 @@ xhash_grow_check(xhash_t *xhash)
              PHUPD_SET__(xhash, idx, key, val);       \
              break;                                   \
         }                                             \
-        if (kvs[idx] == key){                  \
+        if (cmp_fun(kvs[idx], key)){                  \
             PHUPD_UPDATE__(xhash, idx, key, val);     \
             break;                                    \
         }                                             \
@@ -418,9 +426,9 @@ xhash_resize(xhash_t *xhash, xhashidx new_size_shift, xhash_t *new)
     xhashidx i;
     int f = !!new;
     if (!f)
-        new = xhash_new__(new_size_shift, xhash->minsize_shift, true);
+        new = xhash_new__(new_size_shift, xhash->minsize_shift, xhash->type, true);
     else
-        xhash_init__(new, new_size_shift, xhash->minsize_shift, true);
+        xhash_init__(new, new_size_shift, xhash->minsize_shift, xhash->type, true);
 
     if (!new)
 	    return NULL;
@@ -464,11 +472,13 @@ int xhash_delete(struct xhash *xhash, xhashidx key)
 
 int xhash_lookup__(xhash_t *xhash, xhashidx key, xhashidx *idx_ret, bool vals)
 {
+    xhash_cmp_fun_t cmp_fun = types_fun[xhash->type].cmp_fun;
+    xhash_hash_fun_t hash_fun = types_fun[xhash->type].hash_fun; 
     xhashidx size_shift = xhash->size_shift;
     xhashidx size = (xhashidx)1<<size_shift;
     xhashidx perturb = key;
     xhashidx mask = size-1;
-    xhashidx idx = key & mask;
+    xhashidx idx = hash_fun(key) & mask;
     xhashidx *kvs = xhash_kvs(xhash);
 
     INCSTAT(xhash->lookups);
@@ -476,7 +486,7 @@ int xhash_lookup__(xhash_t *xhash, xhashidx key, xhashidx *idx_ret, bool vals)
         if ( item_unused(xhash, idx, vals) )
             return -XHASH_EEXIST;
 
-        if ( !item_dummy(xhash, idx, vals) && kvs[idx] == key){
+        if ( !item_dummy(xhash, idx, vals) && cmp_fun(kvs[idx],key)){
             *idx_ret = idx;
             return 0;
         }
@@ -498,6 +508,7 @@ int xhash_lookup(struct xhash *xhash, xhashidx key, xhashidx *val)
     return ret;
 }
 
+//FIXME iteration broken
 void
 xhash_iter_init(xhash_t *xhash, xhash_iter_t *pi)
 {
@@ -577,7 +588,7 @@ int main(int argc, char **argv)
     xhashidx key, val;
     int ret;
 
-    ph = xhash_new(2);
+    ph = xhash_new(2, INTEGER);
 
     for (;;){
         s = fgets(buf, BUFLEN-1, stdin);
