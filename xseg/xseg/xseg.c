@@ -1162,6 +1162,9 @@ int xseg_prep_request ( struct xseg* xseg, struct xseg_request *req,
 int xseg_resize_request (struct xseg *xseg, struct xseg_request *req,
 			uint32_t new_targetlen, uint64_t new_datalen)
 {
+	if (req->bufferlen >= new_datalen + new_targetlen)
+		return 0;
+
 	if (req->buffer){
 		void *ptr = XPTR_TAKE(req->buffer, xseg->segment);
 		xseg_free_buffer(xseg, ptr);
