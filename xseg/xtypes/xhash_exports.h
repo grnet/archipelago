@@ -1,0 +1,13 @@
+EXPORT_SYMBOL(xhash_grow_size_shift);
+EXPORT_SYMBOL(xhash_shrink_size_shift);
+EXPORT_SYMBOL(xhash_get_alloc_size);
+EXPORT_SYMBOL(xhash_new);
+EXPORT_SYMBOL(xhash_free);
+EXPORT_SYMBOL(xhash_init);
+EXPORT_SYMBOL(xhash_resize);
+EXPORT_SYMBOL(xhash_insert);
+EXPORT_SYMBOL(xhash_update);
+EXPORT_SYMBOL(xhash_freql_update);
+EXPORT_SYMBOL(xhash_delete);
+EXPORT_SYMBOL(xhash_lookup);
+EXPORT_SYMBOL(xhash_print);

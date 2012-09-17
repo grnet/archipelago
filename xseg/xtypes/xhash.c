@@ -867,4 +867,10 @@ int main(int argc, char **argv)
 #endif
 
 #endif //if 0
+
+#ifdef __KERNEL__
+#include <linux/module.h>
+#include <xtypes/xhash_exports.h>
+#endif
+
 // vim:expandtab:tabstop=8:shiftwidth=4:softtabstop=4

@@ -1,3 +1,4 @@
+#include <stddef.h>
 /* main mpeer structs */
 struct peer_req {
 	struct peerd *peer;
@@ -34,6 +35,11 @@ void free_peer_req(struct peerd *peer, struct peer_req *pr);
 int thread_execute(struct peerd *peer, void (*func)(void *arg), void *arg);
 void get_submits_stats();
 void get_responds_stats();
+
+static inline struct peerd * __get_peerd(void * custom_peerd)
+{
+	return (struct peerd *) ((unsigned long) custom_peerd  - offsetof(struct peerd, priv));
+}
 
 /********************************
  *   mandatory peer functions   *
