@@ -9,6 +9,8 @@
 #include <xtypes/xlock.h>
 #include <xtypes/xhash.h>
 #include <xseg/protocol.h>
+#include <sys/stat.h>
+#include <fcntl.h>
 
 #define PENDING 1;
 
@@ -17,14 +19,14 @@
 
 #define block_size (1<<20)
 #define objectsize_in_map (1 + XSEG_MAX_TARGET_LEN) //(transparency byte + max object len)
-#define mapheader_size (SHA256_DIGEST_SIZE + (sizeof(uint64_t)) + XSEG_MAX_TARGET_LEN) //volume size + max volume len
+#define mapheader_size (SHA256_DIGEST_SIZE + (sizeof(uint64_t)) ) //magic + volume size 
 
 #define MF_OBJECT_EXIST		(1 << 0)
 #define MF_OBJECT_COPYING	(1 << 1)
 
 char *magic_string = "This a magic string. Please hash me";
-char magic_sha256[SHA256_DIGEST_SIZE];
-char zero_block[SHA256_DIGEST_SIZE * 2]; 
+unsigned char magic_sha256[SHA256_DIGEST_SIZE];
+char zero_block[SHA256_DIGEST_SIZE * 2 + 1]; 
 
 struct map_node {
 	struct xlock lock;
@@ -74,14 +76,15 @@ static inline struct mapper_io * __get_mapper_io(struct peer_req *pr)
 static struct map * __find_map(struct mapperd *mapper, char *target, uint32_t targetlen)
 {
 	int r;
-	struct map *m;
+	struct map *m = NULL;
 	char buf[XSEG_MAX_TARGET_LEN+1];
 	//assert targetlen <= XSEG_MAX_TARGET_LEN
 	strncpy(buf, target, targetlen);
 	buf[targetlen] = 0;
 	r = xhash_lookup(mapper->hashmaps, (xhashidx) buf, (xhashidx *) &m);
-	if (!r)
+	if (r < 0)
 		return NULL;
+	print_map(m);
 	return m;
 }
 
@@ -101,8 +104,10 @@ static int insert_map(struct mapperd *mapper, struct map *map)
 	int r = -1;
 	
 	xlock_acquire(&mapper->maps_lock, 1);
-	if (__find_map(mapper, map->volume, map->volumelen))
+	if (__find_map(mapper, map->volume, map->volumelen)){
+		printf("map found in insert map\n");
 		goto out;
+	}
 	
 	r = xhash_insert(mapper->hashmaps, (xhashidx) map->volume, (xhashidx) map);
 	if (r == -XHASH_ERESIZE) {
@@ -140,13 +145,15 @@ out:
 }
 
 /* async map load */
-static int load_map(struct mapperd *mapper, struct peer_req *pr, char *target, uint32_t targetlen)
+static int load_map(struct peerd *peer, struct peer_req *pr, char *target, uint32_t targetlen)
 {
 	int r;
 	xport p;
 	struct xseg_request *req;
-	struct peerd *peer = __get_peerd(mapper); 
+	struct mapperd *mapper = __get_mapperd(peer);
+	//struct peerd *peer = __get_peerd(mapper); 
 	void *dummy;
+	printf("Loading map\n");
 
 	struct map *m = find_map(mapper, target, targetlen);
 	if (!m) {
@@ -154,14 +161,15 @@ static int load_map(struct mapperd *mapper, struct peer_req *pr, char *target, u
 		if (!m)
 			goto out_err;
 		m->size = -1;
-		m->volumelen = -1;
-		memset(m->volume, 0, XSEG_MAX_TARGET_LEN + 1);
+		strncpy(m->volume, target, targetlen);
+		m->volume[XSEG_MAX_TARGET_LEN] = 0;
+		m->volumelen = targetlen;
 		m->flags = MF_MAP_LOADING;
 		xqindex *qidx = xq_alloc_empty(&m->pending, peer->nr_ops);
 		if (!qidx) {
 			goto out_map;
 		}
-		m->objects = xhash_new(3, STRING); //FIXME err_check;
+		m->objects = xhash_new(3, INTEGER); //FIXME err_check;
 		__xq_append_tail(&m->pending, (xqindex) pr);
 		xlock_release(&m->lock);
 	} else {
@@ -177,6 +185,7 @@ static int load_map(struct mapperd *mapper, struct peer_req *pr, char *target, u
 			goto out_err;
 		goto map_exists;
 	}
+	printf("Loading map: preparing req\n");
 
 	req = xseg_get_request(peer->xseg, peer->portno, mapper->bportno, X_ALLOC);
 	if (!req)
@@ -201,6 +210,7 @@ static int load_map(struct mapperd *mapper, struct peer_req *pr, char *target, u
 		goto out_unset;
 	r = xseg_signal(peer->xseg, p);
 	
+	printf("Loading map: request issued\n");
 	return 0;
 
 out_unset:
@@ -239,23 +249,28 @@ map_exists:
 
 
 #define MAP_LOADING 1
-static int find_or_load_map(struct mapperd *mapper, struct peer_req *pr, 
+static int find_or_load_map(struct peer* peer, struct peer_req *pr, 
 				char *target, uint32_t targetlen, struct map **m)
 {
+	struct mapperd *mapper = __get_mapperd(peer);
 	int r;
+	printf("find map or load\n");
 	*m = find_map(mapper, target, targetlen);
 	if (*m) {
+		printf("map found\n");
 		xlock_acquire(&((*m)->lock), 1);
 		if ((*m)->flags & MF_MAP_LOADING) {
 			__xq_append_tail(&(*m)->pending, (xqindex) pr);
 			xlock_release(&((*m)->lock));
+			printf("Map loading\n");
 			return MAP_LOADING;
 		} else {
+			printf("Map returned\n");
 			xlock_release(&((*m)->lock));
 			return 0;
 		}
 	}
-	r = load_map(mapper, pr, target, targetlen);
+	r = load_map(peer, pr, target, targetlen);
 	if (r < 0)
 		return -1; //error
 	return MAP_LOADING;	
@@ -267,7 +282,7 @@ struct map_node *find_object(struct map *map, uint64_t obj_index)
 {
 	struct map_node *mn;
 	int r = xhash_lookup(map->objects, obj_index, (xhashidx *) &mn);
-	if (!r)
+	if (r < 0)
 		return NULL;
 	return mn;
 }
@@ -337,13 +352,10 @@ out_err:
 static inline void mapheader_to_map(struct map *m, char *buf)
 {
 	uint64_t pos = 0;
-	memcpy(buf + pos, SHA256_DIGEST_SIZE, magic_sha256);
+	memcpy(buf + pos, magic_sha256, SHA256_DIGEST_SIZE);
 	pos += SHA256_DIGEST_SIZE;
 	memcpy(buf + pos, &m->size, sizeof(m->size));
 	pos += sizeof(m->size);
-	memcpy(buf + pos, m->volume, m->volumelen);
-	pos += m->volumelen;
-	memset(buf + pos, 0, XSEG_MAX_TARGET_LEN - m->volumelen);
 }
 
 static int map_write(struct peerd *peer, struct peer_req* pr, struct map *map)
@@ -438,18 +450,19 @@ static int copyup_object(struct peerd *peer, struct map_node *mn, struct peer_re
 	xport p;
 	struct sha256_ctx sha256ctx;
 	uint32_t newtargetlen;
-	char new_target[XSEG_MAX_TARGET_LEN], buf[SHA256_DIGEST_SIZE];	//assert sha256_digest_size(32) <= MAXTARGETLEN
-	char new_object[XSEG_MAX_TARGET_LEN + 1];
+	char new_target[XSEG_MAX_TARGET_LEN]; 
+	unsigned char buf[SHA256_DIGEST_SIZE];	//assert sha256_digest_size(32) <= MAXTARGETLEN 
+	char new_object[XSEG_MAX_TARGET_LEN + 20]; //20 is an arbitrary padding
 	strncpy(new_object, mn->object, mn->objectlen);
-	sprintf(new_object + mn->objectlen, "%u", mn->objectidx);
+	sprintf(new_object + mn->objectlen, "%u", mn->objectidx); //sprintf adds null termination
 
 
 	/* calculate new object name */
 	sha256_init_ctx(&sha256ctx);
-	sha256_process_bytes(new_object, mn->objectlen + 1, &sha256ctx);
+	sha256_process_bytes(new_object, strlen(new_object), &sha256ctx);
 	sha256_finish_ctx(&sha256ctx, buf);
 	for (i = 0; i < SHA256_DIGEST_SIZE; ++i)
-		sprintf (new_target + i, "%02x", buf[i]);
+		sprintf (new_target + 2*i, "%02x", buf[i]);
 	newtargetlen = SHA256_DIGEST_SIZE;
 
 
@@ -530,7 +543,7 @@ static int read_map (struct peerd *peer, struct map *map, char *buf)
 	struct map_node *map_node;
 	if (type) {
 		pos = SHA256_DIGEST_SIZE;
-		map->size = *(uint64_t *) buf;
+		map->size = *(uint64_t *) (buf + pos);
 		pos += sizeof(uint64_t);
 		nr_objs = map->size / block_size;
 		if (map->size % block_size)
@@ -584,7 +597,7 @@ static int handle_mapread(struct peerd *peer, struct peer_req *pr,
 	if (req->state & XS_FAILED)
 		goto out_fail;
 
-	char *data = data;
+	char *data = xseg_get_data(peer->xseg, req);
 	r = read_map(peer, map, data);
 	if (r < 0)
 		goto out_err;
@@ -627,17 +640,20 @@ static int handle_clone(struct peerd *peer, struct peer_req *pr,
 	struct mapperd *mapper = __get_mapperd(peer);
 	struct mapper_io *mio = __get_mapper_io(pr);
 	(void) mio;
+	printf("handle clone 1\n");
 	struct xseg_request_clone *xclone = (struct xseg_request_clone *) xseg_get_data(peer->xseg, pr->req);
 	if (!xclone) {
 		goto out_err;
 	}
+	printf("handle clone 2\n");
 	struct map *map;
-	int r = find_or_load_map(mapper, pr, xclone->target, strlen(xclone->target), &map);
+	int r = find_or_load_map(peer, pr, xclone->target, strlen(xclone->target), &map);
 	if (r < 0)
 		goto out_err;
 	else if (r == MAP_LOADING)
 		return 0;
 
+	printf("handle clone 3\n");
 	//alloc and init struct map
 	struct map *clonemap = malloc(sizeof(struct map));
 	if (!clonemap) {
@@ -653,8 +669,9 @@ static int handle_clone(struct peerd *peer, struct peer_req *pr,
 	xlock_release(&clonemap->lock);
 	clonemap->size = xclone->size;
 	clonemap->flags = 0;
-	strncpy(clonemap->volume, xclone->target, strlen(xclone->target));
-	clonemap->volumelen = strlen(xclone->target);
+	char *target = xseg_get_target(peer->xseg, pr->req);
+	strncpy(clonemap->volume, target, pr->req->targetlen);
+	clonemap->volumelen = pr->req->targetlen;
 	clonemap->volume[clonemap->volumelen] = 0; //NULL TERMINATE
 
 	//alloc and init map_nodes
@@ -676,10 +693,13 @@ static int handle_clone(struct peerd *peer, struct peer_req *pr,
 			goto out_free_all;
 	}
 	//insert map
+	printf("handle clone 4\n");
 	r = insert_map(mapper, clonemap);
 	if ( r < 0) {
+		printf("handle clone 6\n");
 		goto out_free_all;
 	}
+	printf("handle clone 5\n");
 
 	complete(peer, pr);
 	return 0;
@@ -812,7 +832,7 @@ static int handle_mapr(struct peerd *peer, struct peer_req *pr,
 	//get_map
 	char *target = xseg_get_target(peer->xseg, pr->req);
 	struct map *map;
-	int r = find_or_load_map(mapper, pr, target, pr->req->targetlen, &map);
+	int r = find_or_load_map(peer, pr, target, pr->req->targetlen, &map);
 	if (r < 0) {
 		fail(peer, pr);
 		return -1;
@@ -897,7 +917,7 @@ static int handle_mapw(struct peerd *peer, struct peer_req *pr,
 
 	char *target = xseg_get_target(peer->xseg, pr->req);
 	struct map *map;
-	int r = find_or_load_map(mapper, pr, target, pr->req->targetlen, &map);
+	int r = find_or_load_map(peer, pr, target, pr->req->targetlen, &map);
 	if (r < 0) {
 		fail(peer, pr);
 		return -1;
@@ -932,8 +952,9 @@ static int handle_info(struct peerd *peer, struct peer_req *pr,
 	char *target = xseg_get_target(peer->xseg, pr->req);
 	if (!target)
 		return -1;
+	printf("Handle info\n");
 	struct map *map;
-	int r = find_or_load_map(mapper, pr, target, pr->req->targetlen, &map);
+	int r = find_or_load_map(peer, pr, target, pr->req->targetlen, &map);
 	if (r < 0) {
 		fail(peer, pr);
 		return -1;
@@ -963,6 +984,7 @@ int dispatch(struct peerd *peer, struct peer_req *pr, struct xseg_request *req)
 	(void) mio;
 
 	if (req->op == X_READ) {
+		/* catch map reads requests here */
 		handle_mapread(peer, pr, req);
 		return 0;
 	}
@@ -983,18 +1005,21 @@ int dispatch(struct peerd *peer, struct peer_req *pr, struct xseg_request *req)
 int custom_peer_init(struct peerd *peer, int argc, const char *argv[])
 {
 	int i;
-	char *buf;
+	unsigned char buf[SHA256_DIGEST_SIZE];
+	char *zero;
 	struct sha256_ctx sha256ctx;
 	sha256_init_ctx(&sha256ctx);
 	sha256_process_bytes(magic_string, strlen(magic_string), &sha256ctx);
 	sha256_finish_ctx(&sha256ctx, magic_sha256);
 
-	buf = calloc(1, block_size);
+	zero = malloc(block_size);
+	memset(zero, 0, block_size);
 	sha256_init_ctx(&sha256ctx);
-	sha256_process_bytes(buf, block_size, &sha256ctx);
+	sha256_process_bytes(zero, block_size, &sha256ctx);
 	sha256_finish_ctx(&sha256ctx, buf);
 	for (i = 0; i < SHA256_DIGEST_SIZE; ++i)
-		sprintf (zero_block + i, "%02x", buf[i]);
+		sprintf(zero_block + 2*i, "%02x", buf[i]);
+	printf("%s \n", zero_block);
 
 	struct mapperd *mapper = malloc(sizeof(struct mapperd));
 	xlock_release(&mapper->maps_lock);
@@ -1018,6 +1043,103 @@ int custom_peer_init(struct peerd *peer, int argc, const char *argv[])
 		}
 	}
 
+	test_map(peer);
 
 	return 0;
 }
+
+void print_obj(struct map_node *mn)
+{
+	printf("[%llu]object name: %s[%u] exists: %c\n", mn->objectidx, mn->object, mn->objectlen, 
+			(mn->flags & MF_OBJECT_EXIST) ? 'y' : 'n');
+}
+
+void print_map(struct map *m)
+{
+	uint64_t nr_objs = m->size/block_size;
+	if (m->size % block_size)
+		nr_objs++;
+	printf("Volume name: %s[%u], size: %llu, nr_objs: %llu\n", 
+			m->volume, m->volumelen, m->size, nr_objs);
+	uint64_t i;
+	struct map_node *mn;
+	if (nr_objs > 1000000)
+		return;
+	for (i = 0; i < nr_objs; i++) {
+		mn = find_object(m, i);
+		if (!mn)
+			continue;
+		print_obj(mn);
+	}
+}
+
+void test_map(struct peerd *peer)
+{
+	int i,j, ret;
+	struct sha256_ctx sha256ctx;
+	unsigned char buf[SHA256_DIGEST_SIZE];
+	char buf_new[XSEG_MAX_TARGET_LEN + 20];
+	struct map *m = malloc(sizeof(struct map));
+	strncpy(m->volume, "012345678901234567890123456789ab012345678901234567890123456789ab", XSEG_MAX_TARGET_LEN + 1);
+	m->volume[XSEG_MAX_TARGET_LEN] = 0;
+	strncpy(buf_new, m->volume, XSEG_MAX_TARGET_LEN);
+	buf_new[XSEG_MAX_TARGET_LEN + 19] = 0;
+	m->volumelen = XSEG_MAX_TARGET_LEN;
+	m->size = 100*block_size;
+	m->objects = xhash_new(3, INTEGER);
+	struct map_node *map_node = calloc(100, sizeof(struct map_node));
+	for (i = 0; i < 100; i++) {
+		sprintf(buf_new +XSEG_MAX_TARGET_LEN, "%u", i);
+		sha256_init_ctx(&sha256ctx);
+		sha256_process_bytes(buf_new, strlen(buf_new), &sha256ctx);
+		sha256_finish_ctx(&sha256ctx, buf);
+		for (j = 0; j < SHA256_DIGEST_SIZE; j++) {
+			sprintf(map_node[i].object + 2*j, "%02x", buf[j]);
+		}
+		map_node[i].objectidx = i;
+		map_node[i].objectlen = XSEG_MAX_TARGET_LEN;
+		map_node[i].flags = MF_OBJECT_EXIST;
+		ret = insert_object(m, &map_node[i]);
+	}
+
+	char *data = malloc(block_size);
+	mapheader_to_map(m, data);
+	uint64_t pos = mapheader_size;
+
+	for (i = 0; i < 100; i++) {
+		map_node = find_object(m, i);
+		if (!map_node){
+			printf("no object node %d \n", i);
+			exit(1);
+		}
+		object_to_map(data+pos, map_node);
+		pos += objectsize_in_map;
+	}
+//	print_map(m);
+
+	struct map *m2 = malloc(sizeof(struct map));
+	strncpy(m2->volume, "012345678901234567890123456789ab012345678901234567890123456789ab", XSEG_MAX_TARGET_LEN +1);
+	m->volume[XSEG_MAX_TARGET_LEN] = 0;
+	m->volumelen = XSEG_MAX_TARGET_LEN;
+
+	m2->objects = xhash_new(3, INTEGER);
+	ret = read_map(peer, m2, data);
+//	print_map(m2);
+
+	int fd = open(m->volume, O_CREAT|O_WRONLY);
+	ssize_t r, sum = 0;
+	while (sum < block_size) {
+		r = write(fd, data + sum, block_size -sum);
+		if (r < 0){
+			perror("write");
+			printf("write error\n");
+			exit(1);
+		} 
+		sum += r;
+	}
+	close(fd);
+	map_node = find_object(m, 0);
+	free(map_node);
+	free(m);
+}
+
