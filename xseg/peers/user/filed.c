@@ -12,6 +12,9 @@
 #include <limits.h>
 #include <xseg/xseg.h>
 #include <pthread.h>
+#include <xseg/protocol.h>
+#include <sys/sendfile.h>
+
 
 #define MAX_PATH_SIZE 255
 #define MAX_FILENAME_SIZE 255
@@ -423,6 +426,49 @@ static void handle_info(struct store *store, struct io *io)
 	complete(store, io);
 }
 
+static void handle_copy(struct store *store, struct io *io)
+{
+        struct xseg_request *req = io->req;
+        struct xseg_request_copy *xcopy = (struct xseg_request_copy *) xseg_get_data(store->xseg, req);
+        struct stat st;
+        int n, src, dst;
+	char *target = xseg_get_target(store->xseg, req);
+
+        dst = dir_open(store, io, target, req->targetlen, 1);
+        if (dst < 0) {
+                fprintf(stderr, "fail in dst\n");
+                fail(store, io);
+                return;
+        }
+
+	src = openat(store->dirfd, xcopy->target, O_RDWR);	
+        if (src < 0) {
+                fprintf(stderr, "fail in src\n");
+                fail(store, io);
+                return;
+        }
+
+        fstat(src, &st);
+        n = sendfile(dst, src, 0, st.st_size);
+        if (n != st.st_size) {
+                fprintf(stderr, "fail in copy\n");
+                fail(store, io);
+                goto out;
+        }
+
+        if (n < 0) {
+                fprintf(stderr, "fail in cp\n");
+                fail(store, io);
+                goto out;
+        }
+
+        complete(store, io);
+
+out:
+        close(src);
+}
+
+
 static void dispatch(struct store *store, struct io *io)
 {
 	if (verbose)
@@ -434,6 +480,8 @@ static void dispatch(struct store *store, struct io *io)
 		handle_read_write(store, io); break;
 	case X_INFO:
 		handle_info(store, io); break;
+	case X_COPY:
+		handle_copy(store, io); break;
 	case X_SYNC:
 	default:
 		handle_unknown(store, io);

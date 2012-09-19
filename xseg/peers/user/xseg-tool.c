@@ -314,6 +314,7 @@ int cmd_write(char *target, uint64_t offset)
 		fprintf(stderr, "Cannot submit\n");
 		return -1;
 	}
+	xseg_signal(xseg, p);
 
 	return 0;
 }
@@ -985,6 +986,9 @@ void handle_reply(struct xseg_request *req)
 		break;
 
 	case X_WRITE:
+		fprintf(stdout, "wrote: ");
+		fwrite(req_data, 1, req->datalen, stdout);
+		break;
 	case X_SYNC:
 	case X_DELETE:
 	case X_TRUNCATE:
@@ -1009,6 +1013,7 @@ int cmd_wait(uint32_t nr)
 {
 	struct xseg_request *req;
 	long ret;
+	init_local_signal(); 
 
 	for (;;) {
 		req = xseg_receive(xseg, srcport);

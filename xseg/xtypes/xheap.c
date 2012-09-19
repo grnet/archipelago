@@ -103,6 +103,7 @@ alloc:
 //	printf("after heap->cur: %llu\n", heap->cur);
 	h = (struct xheap_header *) (((unsigned long) mem) + heap->cur);
 	h->size = bytes - sizeof(struct xheap_header);
+	h->magic = 0xdeadbeaf;
 	XPTRSET(&h->heap, heap);
 	heap->cur += bytes;
 
@@ -145,6 +146,9 @@ void xheap_free(void *ptr)
 {
 	struct xheap_header *h = __get_header(ptr);
 	struct xheap *heap = XPTR(&h->heap);
+	if (h->magic != 0xdeadbeaf) {
+		XSEGLOG("for ptr: %lx, magic %lx != 0xdeadbeaf", ptr, h->magic);
+	}
 	void *mem = XPTR(&heap->mem);
 	uint64_t size = xheap_get_chunk_size(ptr);
 	xptr *free_list = (xptr *) mem;

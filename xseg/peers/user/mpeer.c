@@ -442,7 +442,6 @@ malloc_fail:
 		peer->peer_reqs[i].priv = NULL;
 	}
 	peer->interactive_func = NULL;
-	peerd_start_threads(peer);
 	return peer;
 }
 
@@ -508,6 +507,8 @@ int main(int argc, const char *argv[])
 	//TODO err check
 	peer = peerd_init(nr_ops, spec, portno, nr_threads, defer_portno);
 	r = custom_peer_init(peer, argc, argv);
-//	peerd_start_threads(peer);
+	if (r < 0)
+		return -1;
+	peerd_start_threads(peer);
 	return peerd_loop(peer);
 }

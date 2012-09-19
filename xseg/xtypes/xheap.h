@@ -5,6 +5,7 @@
 #include <xtypes/xlock.h>
 
 struct xheap_header {
+	uint64_t magic;
 	XPTR_TYPE(struct xheap) heap;
 	uint64_t size;
 };
