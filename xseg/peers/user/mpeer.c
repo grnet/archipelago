@@ -204,7 +204,7 @@ static void handle_accepted(struct peerd *peer, struct peer_req *pr,
 	//assert xreq == req;
 	LOG(4, "Handle accepted \n");
 	xreq->serviced = 0;
-	xreq->state = XS_ACCEPTED;
+	//xreq->state = XS_ACCEPTED;
 	pr->retval = 0;
 	dispatch(peer, pr, req);
 }

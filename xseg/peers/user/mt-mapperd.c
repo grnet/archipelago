@@ -23,10 +23,20 @@
 
 #define MF_OBJECT_EXIST		(1 << 0)
 #define MF_OBJECT_COPYING	(1 << 1)
+#define MF_OBJECT_WRITING	(1 << 2)
+
+#define MF_OBJECT_NOT_READY	(MF_OBJECT_COPYING | MF_OBJECT_WRITING)
 
 char *magic_string = "This a magic string. Please hash me";
 unsigned char magic_sha256[SHA256_DIGEST_SIZE];	/* sha256 hash value of magic string */
 char zero_block[SHA256_DIGEST_SIZE * 2 + 1]; 	/* hexlified sha256 hash value of a block full of zeros */
+
+//internal mapper states
+enum mapper_state {
+	ACCEPTED = 0,
+	WRITING = 1,
+	COPYING = 2
+};
 
 struct map_node {
 	uint32_t flags;
@@ -34,10 +44,14 @@ struct map_node {
 	uint32_t objectlen;
 	char object[XSEG_MAX_TARGET_LEN + 1]; 	/* NULL terminated string */
 	struct xq pending; 			/* pending peer_reqs on this object */
+	struct map *map;
 };
 
 #define MF_MAP_LOADING		(1 << 0)
 #define MF_MAP_DESTROYED	(1 << 1)
+#define MF_MAP_WRITING		(1 << 2)
+
+#define MF_MAP_NOT_READY	(MF_MAP_LOADING|MF_MAP_WRITING)
 
 struct map {
 	uint32_t flags;
@@ -56,7 +70,9 @@ struct mapperd {
 struct mapper_io {
 	volatile uint32_t copyups;	/* nr of copyups pending, issued by this mapper io */
 	xhash_t *copyups_nodes;		/* hash map (xseg_request) --> (corresponding map_node of copied up object)*/
+	struct map_node *copyup_node;
 	int err;			/* error flag */
+	enum mapper_state state;
 };
 
 /*
@@ -86,10 +102,10 @@ static uint32_t calc_nr_obj(struct xseg_request *req)
 	unsigned int r = 1;
 	uint64_t rem_size = req->size;
 	uint64_t obj_offset = req->offset & (block_size -1); //modulo
-	uint64_t obj_size =  (rem_size > block_size) ? block_size - obj_offset : rem_size;
+	uint64_t obj_size =  (rem_size + obj_offset > block_size) ? block_size - obj_offset : rem_size;
 	rem_size -= obj_size;
 	while (rem_size > 0) {
-		obj_size = (rem_size - block_size > 0) ? block_size : rem_size;
+		obj_size = (rem_size > block_size) ? block_size : rem_size;
 		rem_size -= obj_size;
 		r++;
 	}
@@ -248,7 +264,7 @@ map_exists:
 		__xq_append_tail(&m->pending, (xqindex) pr);
 	}
 	else {
-	 	dispatch(peer, pr, pr->req);
+	 	my_dispatch(peer, pr, pr->req);
 	}
 	return 0;
 }
@@ -263,11 +279,14 @@ static int find_or_load_map(struct peerd *peer, struct peer_req *pr,
 	*m = find_map(mapper, target, targetlen);
 	if (*m) {
 		//printf("map found\n");
-		if ((*m)->flags & MF_MAP_LOADING) {
+		if ((*m)->flags & MF_MAP_NOT_READY) {
 			__xq_append_tail(&(*m)->pending, (xqindex) pr);
 			//printf("Map loading\n");
 			return MF_PENDING;
-		} else {
+		//} else if ((*m)->flags & MF_MAP_DESTROYED){
+		//	return -1;
+		// 
+		}else {
 			//printf("Map returned\n");
 			return 0;
 		}
@@ -350,7 +369,8 @@ static inline void mapheader_to_map(struct map *m, char *buf)
 }
 
 
-static int object_write(struct peerd *peer, struct peer_req *pr, struct map_node *mn)
+static int object_write(struct peerd *peer, struct peer_req *pr, 
+				struct map *map, struct map_node *mn)
 {
 	void *dummy;
 	struct mapperd *mapper = __get_mapperd(peer);
@@ -362,7 +382,7 @@ static int object_write(struct peerd *peer, struct peer_req *pr, struct map_node
 	if (r < 0)
 		goto out_put;
 	char *target = xseg_get_target(peer->xseg, req);
-	strncpy(target, mn->object, mn->objectlen);
+	strncpy(target, map->volume, map->volumelen);
 	req->size = objectsize_in_map;
 	req->offset = mapheader_size + mn->objectidx * objectsize_in_map;
 	req->op = X_WRITE;
@@ -401,16 +421,23 @@ static int map_write(struct peerd *peer, struct peer_req* pr, struct map *map)
 					mapheader_size + max_objidx * objectsize_in_map);
 	if (r < 0)
 		goto out_put;
+	char *target = xseg_get_target(peer->xseg, req);
+	strncpy(target, map->volume, req->targetlen);
 	char *data = xseg_get_data(peer->xseg, req);
 	mapheader_to_map(map, data);
 	pos = mapheader_size;
+	req->op = X_WRITE;
+	req->size = req->datalen;
+	req->offset = 0;
 
 	if (map->size % block_size)
 		max_objidx++;
 	for (i = 0; i < max_objidx; i++) {
 		mn = find_object(map, i);
-		if (!mn)
+		if (!mn){
+			printf("mapwrite couldnt find object\n");
 			goto out_put;
+		}
 		object_to_map(data+pos, mn);
 		pos += objectsize_in_map;
 	}
@@ -421,6 +448,7 @@ static int map_write(struct peerd *peer, struct peer_req* pr, struct map *map)
 	if (p == NoPort)
 		goto out_unset;
 	r = xseg_signal(peer->xseg, p);
+	map->flags |= MF_MAP_WRITING;
 	return MF_PENDING;
 
 out_unset:
@@ -458,6 +486,7 @@ static int read_map (struct peerd *peer, struct map *map, char *buf)
 			return -1;
 
 		for (i = 0; i < nr_objs; i++) {
+			map_node[i].map = map;
 			map_node[i].objectidx = i;
 			xqindex *qidx = xq_alloc_empty(&map_node[i].pending, peer->nr_ops); //FIXME error check
 			map_to_object(&map_node[i], buf + pos);
@@ -474,6 +503,7 @@ static int read_map (struct peerd *peer, struct map *map, char *buf)
 			if (!memcmp(buf+pos, nulls, SHA256_DIGEST_SIZE))
 				break;
 			map_node[i].objectidx = i;
+			map_node[i].map = map;
 			xqindex *qidx = xq_alloc_empty(&map_node[i].pending, peer->nr_ops); //FIXME error check
 			pithosmap_to_object(&map_node[i], buf + pos);
 			pos += SHA256_DIGEST_SIZE; 
@@ -493,6 +523,7 @@ static int read_map (struct peerd *peer, struct map *map, char *buf)
 static int __set_copyup_node(struct mapper_io *mio, struct xseg_request *req, struct map_node *mn)
 {
 	int r = 0;
+	/*
 	if (mn){
 		r = xhash_insert(mio->copyups_nodes, (xhashidx) req, (xhashidx) mn);
 		if (r == -XHASH_ERESIZE) {
@@ -516,16 +547,21 @@ static int __set_copyup_node(struct mapper_io *mio, struct xseg_request *req, st
 		}
 	}
 out:
+	*/
+	mio->copyup_node = mn;
 	return r;
 }
 
 static struct map_node * __get_copyup_node(struct mapper_io *mio, struct xseg_request *req)
 {
+	/*
 	struct map_node *mn;
 	int r = xhash_lookup(mio->copyups_nodes, (xhashidx) req, (xhashidx *) &mn);
 	if (r < 0)
 		return NULL;
 	return mn;
+	*/
+	return mio->copyup_node;
 }
 
 static int copyup_object(struct peerd *peer, struct map_node *mn, struct peer_req *pr)
@@ -583,6 +619,7 @@ static int copyup_object(struct peerd *peer, struct map_node *mn, struct peer_re
 		goto out_unset;
 	}
 	xseg_signal(peer->xseg, p);
+	mio->copyups++;
 
 	r = 0;
 out:
@@ -625,7 +662,7 @@ static int handle_mapread(struct peerd *peer, struct peer_req *pr,
 	map->flags &= ~MF_MAP_LOADING;
 	while((idx = __xq_pop_head(&map->pending)) != Noneidx){
 		struct peer_req *preq = (struct peer_req *) idx;
-		dispatch(peer, preq, preq->req);
+		my_dispatch(peer, preq, preq->req);
 	}
 	return 0;
 
@@ -637,6 +674,49 @@ out_fail:
 		fail(peer, preq);
 	}
 	remove_map(mapper, map);
+	//FIXME not freeing up all objects + object hash
+	free(map);
+	return 0;
+
+out_err:
+	xseg_put_request(peer->xseg, req, peer->portno);
+	return -1;
+}
+
+static int handle_mapwrite(struct peerd *peer, struct peer_req *pr,
+				struct xseg_request *req)
+{
+	int r;
+	xqindex idx;
+	struct mapperd *mapper = __get_mapperd(peer);
+	//assert req->op = X_WRITE;
+	char *target = xseg_get_target(peer->xseg, req);
+	struct map *map = find_map(mapper, target, req->targetlen);
+	if (!map)
+		goto out_err;
+	//assert map->flags & MF_MAP_WRITING
+
+	if (req->state & XS_FAILED)
+		goto out_fail;
+	
+	xseg_put_request(peer->xseg, req, peer->portno);
+	map->flags &= ~MF_MAP_WRITING;
+	while((idx = __xq_pop_head(&map->pending)) != Noneidx){
+		struct peer_req *preq = (struct peer_req *) idx;
+		my_dispatch(peer, preq, preq->req);
+	}
+	return 0;
+
+
+out_fail:
+	xseg_put_request(peer->xseg, req, peer->portno);
+	map->flags &= ~MF_MAP_WRITING;
+	while((idx = __xq_pop_head(&map->pending)) != Noneidx){
+		struct peer_req *preq = (struct peer_req *) idx;
+		fail(peer, preq);
+	}
+	remove_map(mapper, map);
+	//FIXME not freeing up all objects + object hash
 	free(map);
 	return 0;
 
@@ -651,18 +731,40 @@ static int handle_clone(struct peerd *peer, struct peer_req *pr,
 	struct mapperd *mapper = __get_mapperd(peer);
 	struct mapper_io *mio = __get_mapper_io(pr);
 	(void) mio;
+	int r;
+	if (pr->req->op != X_CLONE) {
+		//wtf??
+		printf("unknown op\n");
+		fail(peer, pr);
+		return 0;
+	}
+
+	if (req->op == X_WRITE){
+			//assert state = WRITING;
+			r = handle_mapwrite(peer, pr ,req);
+			if (r < 0)
+				fail(peer, pr);
+			return 0;
+	}
+
+	if (mio->state == WRITING) {
+		complete(peer, pr);
+		return 0;
+	}
+
 	struct xseg_request_clone *xclone = (struct xseg_request_clone *) xseg_get_data(peer->xseg, pr->req);
 	if (!xclone) {
 		goto out_err;
 	}
 	struct map *map;
-	int r = find_or_load_map(peer, pr, xclone->target, strlen(xclone->target), &map);
+	r = find_or_load_map(peer, pr, xclone->target, strlen(xclone->target), &map);
 	if (r < 0)
 		goto out_err;
 	else if (r == MF_PENDING)
 		return 0;
 	
 	if (map->flags & MF_MAP_DESTROYED) {
+		printf("Map destroyed\n");
 		fail(peer, pr);
 		return 0;
 	}
@@ -705,6 +807,7 @@ static int handle_clone(struct peerd *peer, struct peer_req *pr,
 		map_nodes[i].object[map_nodes[i].objectlen] = 0; //NULL terminate
 		map_nodes[i].flags = 0;
 		map_nodes[i].objectidx = i;
+		map_nodes[i].map = clonemap;
 		xq_alloc_empty(&map_nodes[i].pending, peer->nr_ops);
 		r = insert_object(clonemap, &map_nodes[i]);
 		if (r < 0)
@@ -715,10 +818,26 @@ static int handle_clone(struct peerd *peer, struct peer_req *pr,
 	if ( r < 0) {
 		goto out_free_all;
 	}
-
-	complete(peer, pr);
+	r = map_write(peer, pr, clonemap);
+	if (r < 0){
+		printf("map_write failed\n");
+		goto out_remove;
+	}
+	else if (r == MF_PENDING) {
+		//maybe move this to map_write
+		__xq_append_tail(&clonemap->pending, (xqindex) pr);
+		mio->state = WRITING;
+		return 0;
+	} else {
+		//unknown state
+		printf("map write returned unknwon state. failing\n");
+		goto out_remove;
+	}
+	
 	return 0;
 
+out_remove:
+	remove_map(mapper, clonemap);
 out_free_all:
 	//FIXME not freeing allocated queues of map_nodes
 	free(map_nodes);
@@ -729,6 +848,7 @@ out_err_objhash:
 out_err_clonemap:
 	free(clonemap);
 out_err:
+	printf("foo123\n");
 	fail(peer, pr);
 	return -1;
 }
@@ -760,13 +880,13 @@ static int req2objs(struct peerd *peer, struct peer_req *pr,
 	uint64_t rem_size = pr->req->size;
 	uint64_t obj_index = pr->req->offset / block_size;
 	uint64_t obj_offset = pr->req->offset & (block_size -1); //modulo
-	uint64_t obj_size =  (rem_size > block_size) ? block_size - obj_offset : rem_size;
+	uint64_t obj_size =  (obj_offset + rem_size > block_size) ? block_size - obj_offset : rem_size;
 	struct map_node * mn = find_object(map, obj_index);
 	if (!mn) {
 		printf("coudn't find obj_index\n");
 		goto out_err;
 	}
-	if (write && mn->flags & MF_OBJECT_COPYING) 
+	if (write && (mn->flags & MF_OBJECT_NOT_READY)) 
 		goto out_object_copying;
 	if (write && !(mn->flags & MF_OBJECT_EXIST)) {
 		//calc new_target, copy up object
@@ -788,14 +908,14 @@ static int req2objs(struct peerd *peer, struct peer_req *pr,
 		idx++;
 		obj_index++;
 		obj_offset = 0;
-		obj_size = (rem_size - block_size > 0) ? block_size : rem_size;
+		obj_size = (rem_size >  block_size) ? block_size : rem_size;
 		rem_size -= obj_size;
 		mn = find_object(map, obj_index);
 		if (!mn) {
-			printf("coudn't find obj_index\n");
+			printf("coudn't find obj_index %llu\n", obj_index);
 			goto out_err;
 		}
-		if (write && mn->flags & MF_OBJECT_COPYING) 
+		if (write && (mn->flags & MF_OBJECT_NOT_READY)) 
 			goto out_object_copying;
 		if (write && !(mn->flags & MF_OBJECT_EXIST)) {
 			//calc new_target, copy up object
@@ -817,6 +937,7 @@ static int req2objs(struct peerd *peer, struct peer_req *pr,
 
 out_object_copying:
 	//printf("r2o mn: %lx\n", mn);
+	//printf("volume %s pending on %s\n", map->volume, mn->object);
 	if(__xq_append_tail(&mn->pending, (xqindex) pr) == Noneidx)
 		printf("couldn't append pr to tail\n");
 	return MF_PENDING;
@@ -868,42 +989,102 @@ static int handle_copyup(struct peerd *peer, struct peer_req *pr,
 	(void) mapper;
 	struct mapper_io *mio = __get_mapper_io(pr);
 	int r = 0;
-	//printf("handle copyup reply\n");
-	if (req->state & XS_FAILED && !(req->state & XS_SERVED)) {
-		//printf("copy up failed\n");
-		mio->err = 1;
-		r = 1;
-	}
+	xqindex idx;
 	struct map_node *mn = __get_copyup_node(mio, req);
-	if (!mn){
-		//printf("copy up mn not found\n");
-		mio->err =1; //BUG
-	}
-	else {
-		//printf("mn: %lx\n", mn);
-		mn->flags &= ~MF_OBJECT_COPYING;
-		if (!r) {
-			mn->flags |= MF_OBJECT_EXIST;
-			char *target = xseg_get_target(peer->xseg, req);
-			strncpy(mn->object, target, req->targetlen);
-		}
-	}
-	__set_copyup_node(mio, req, NULL);
+	if (!mn)
+		goto out_err;
+	
+	mn->flags &= ~MF_OBJECT_COPYING;
+	if (req->state & XS_FAILED && !(req->state & XS_SERVED))
+		goto out_fail;
+	struct map *map = mn->map;
+	if (!map)
+		goto out_fail;
+	
+	/* construct a tmp map_node for writing purposes */
+	struct map_node newmn = *mn;
+	newmn.flags = MF_OBJECT_EXIST;
+	char *target = xseg_get_target(peer->xseg, req);
+	strncpy(newmn.object, target, req->targetlen);
+	newmn.object[req->targetlen] = 0;
+	newmn.objectlen = req->targetlen;
+	r = object_write(peer, pr, map, &newmn);
+	printf("writing object %s\n", mn->object); 
+	if (r != MF_PENDING)
+		goto out_fail;
+	mn->flags |= MF_OBJECT_WRITING;
 	xseg_put_request(peer->xseg, req, peer->portno);
-
-	mio->copyups--;
-	if (mn) {
-		//handle peer_requests waiting on copy up
-		xqindex idx;
-		//printf("foo\n");
-		while ((idx = __xq_pop_head(&mn->pending)) != Noneidx){
-			//printf("dispatching pending\n");
-			struct peer_req * preq = (struct peer_req *) idx;
-			dispatch(peer, preq, preq->req);
-		}
-	}
-
 	return 0;
+
+out_fail:
+	xseg_put_request(peer->xseg, req, peer->portno);
+	printf("handle copy up out fail \n");
+	int asdfr = *(int *) 0;
+	__set_copyup_node(mio, req, NULL);
+	while ((idx = __xq_pop_head(&mn->pending)) != Noneidx){
+		struct peer_req * preq = (struct peer_req *) idx;
+		fail(peer, preq);
+	}
+out_err:
+	printf("handle copy up out err\n");
+	return -1;
+}
+
+static int handle_objectwrite(struct peerd *peer, struct peer_req *pr,
+				struct xseg_request *req)
+{
+	int r;
+	xqindex idx;
+	struct mapperd *mapper = __get_mapperd(peer);
+	struct mapper_io *mio = __get_mapper_io(pr);
+	//assert req->op = X_WRITE;
+	char *target = xseg_get_target(peer->xseg, req);
+	//printf("handle object write replyi\n");
+	struct map_node *mn = __get_copyup_node(mio, req);
+	if (!mn)
+		goto out_err;
+	
+	__set_copyup_node(mio, req, NULL);
+	
+	//assert mn->flags & MF_OBJECT_WRITING
+	mn->flags &= ~MF_OBJECT_WRITING;
+	if (req->state & XS_FAILED)
+		goto out_fail;
+
+	struct map_node tmp;
+	char *data = xseg_get_data(peer->xseg, req);
+	map_to_object(&tmp, data);
+	mn->flags |= MF_OBJECT_EXIST;
+	if (mn->flags != MF_OBJECT_EXIST){
+		printf("wrong mn flags\n");
+		return *(int *) 0;
+	}
+	printf("completed copy up of %s to %s\n", mn->object, tmp.object);
+	int asdf = *(int *) 0;
+	//assert mn->flags & MF_OBJECT_EXIST
+	strncpy(mn->object, tmp.object, tmp.objectlen);
+	mn->object[tmp.objectlen] = 0;
+	mn->objectlen = tmp.objectlen;
+	
+	while ((idx = __xq_pop_head(&mn->pending)) != Noneidx){
+		struct peer_req * preq = (struct peer_req *) idx;
+		my_dispatch(peer, preq, preq->req);
+	}
+	return 0;
+
+out_fail:
+	printf("object write out fail\n");
+	xseg_put_request(peer->xseg, req, peer->portno);
+	while((idx = __xq_pop_head(&mn->pending)) != Noneidx){
+		struct peer_req *preq = (struct peer_req *) idx;
+		fail(peer, preq);
+	}
+	return 0;
+
+out_err:
+	printf("handle owrite failed\n");
+	xseg_put_request(peer->xseg, req, peer->portno);
+	return -1;
 }
 
 static int handle_mapw(struct peerd *peer, struct peer_req *pr, 
@@ -913,8 +1094,23 @@ static int handle_mapw(struct peerd *peer, struct peer_req *pr,
 	struct mapper_io *mio = __get_mapper_io(pr);
 	(void) mio;
 	/* handle copy up replies separately */
-	if (req->op == X_COPY)
-		return handle_copyup(peer, pr, req);
+	if (req->op == X_COPY){
+		if (handle_copyup(peer, pr, req) < 0){
+			fail(peer, pr);
+			return -1;
+		} else {
+			return 0;
+		}
+	}
+	else if(req->op == X_WRITE){
+		/* handle replies of object write operations */
+		if (handle_objectwrite(peer, pr, req) < 0) {
+			fail(peer, pr);
+			return -1;
+		} else {
+			return 0;
+		}
+	}
 
 	char *target = xseg_get_target(peer->xseg, pr->req);
 	struct map *map;
@@ -931,14 +1127,8 @@ static int handle_mapw(struct peerd *peer, struct peer_req *pr,
 		fail(peer, pr);
 		return 0;
 	}
-	if (mio->err) {
-		//printf("mapw failed\n");
-		fail(peer, pr);
-		return 0;
-	}
 	//printf("handle mapw\n");
 
-	mio->err = 0;
 	r = req2objs(peer, pr, map, 1);
 	if (r < 0){
 		printf("req2obj returned r < 0 for req %lx\n", pr->req);
@@ -1013,7 +1203,7 @@ static int handle_destroy(struct peerd *peer, struct peer_req *pr,
 	return 0;
 }
 
-int dispatch(struct peerd *peer, struct peer_req *pr, struct xseg_request *req)
+int my_dispatch(struct peerd *peer, struct peer_req *pr, struct xseg_request *req)
 {
 	struct mapperd *mapper = __get_mapperd(peer);
 	(void) mapper;
@@ -1036,6 +1226,19 @@ int dispatch(struct peerd *peer, struct peer_req *pr, struct xseg_request *req)
 		case X_DELETE: handle_destroy(peer, pr, req); break;
 		default: break;
 	}
+	return 0;
+}
+
+int dispatch(struct peerd *peer, struct peer_req *pr, struct xseg_request *req)
+{
+	struct mapperd *mapper = __get_mapperd(peer);
+	(void) mapper;
+	struct mapper_io *mio = __get_mapper_io(pr);
+	(void) mio;
+
+	if (pr->req == req)
+		mio->state = ACCEPTED;
+	my_dispatch(peer, pr ,req);
 	return 0;
 }
 
