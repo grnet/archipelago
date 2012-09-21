@@ -326,6 +326,36 @@ int cmd_truncate(char *target, uint64_t offset)
 
 int cmd_delete(char *target)
 {
+        uint32_t targetlen = strlen(target);
+        int r;
+        struct xseg_request *req;
+	init_local_signal();
+        xseg_bind_port(xseg, srcport);
+
+        req = xseg_get_request(xseg, srcport, dstport, X_ALLOC);
+        if (!req) {
+                fprintf(stderr, "No request!\n");
+                return -1;
+        }
+
+        r = xseg_prep_request(xseg, req, targetlen, 0);
+        if (r < 0) {
+                fprintf(stderr, "Cannot prepare request! (%lu, %lu)\n",
+                        (unsigned long) targetlen, (unsigned long) req->bufferlen - targetlen);
+                xseg_put_request(xseg, req, srcport);
+                return -1;
+        }
+
+	char *reqtarget = xseg_get_target(xseg, req);
+        strncpy(reqtarget, target, targetlen);
+        req->op = X_DELETE;
+
+        xport p = xseg_submit(xseg, req, srcport, X_ALLOC);
+        if (p == NoPort)
+                return -1;
+
+        xseg_signal(xseg, p);
+
 	return 0;
 }
 

@@ -7,6 +7,8 @@ export NONINTERACTIVE=1
 source envsetup
 export NONINTERACTIVE=${NI_SAVED}
 
+set +e
+
 function pretty_print {
 	echo "======================="
 	echo "$1"
@@ -25,19 +27,24 @@ function parse_config {
 	[ -z "${XSEG_HOME}" ] && XSEG_HOME="/root/archip/xseg"
 	[ -z "${MODULES_DIR}" ] && MODULES_DIR="${XSEG_HOME}/lib/kernel"
 	#type:name:nr_ports:nr_requests:request_size:extra_size:page_shift
-	[ -z "${SPEC}" ] && SPEC="segdev:xsegbd:4:1024:12"
+	[ -z "${SPEC}" ] && SPEC="segdev:xsegbd:16:1024:12"
 	[ -z "${REQS}" ] && REQS=512
 	[ -z "${PORTS}" ] && PORTS=16
-	[ -z "${IMAGES}" ] && IMAGES="/srv/archip/images"
-	[ -z "${XSEG_LOGS}" ] && BLOCKD_LOGS="/srv/archip/logs"
+	[ -z "${IMAGES}" ] && IMAGES="/home/user/archip/xseg/peers/user/foo"
+	[ -z "${PITHOS}" ] && PITHOS="/srv/pithos/data/blocks"
+	[ -z "${XSEG_LOGS}" ] && XSEG_LOGS="/home/user/archip/logs"
 	[ -z "${DEVICE_PREFIX}" ] && DEVICE_PREFIX="/dev/xsegbd"
 	[ -z "${XSEGBD_SYSFS}" ] && XSEGBD_SYSFS="/sys/bus/xsegbd"
-	[ -z "${CHRDEV_NAME}" ] && CHRDEV_NAME=/dev/`cat /proc/devices | grep segdev | awk '{print $2}'`
+	[ -z "${CHRDEV_NAME}" ] && CHRDEV_NAME="/dev/`cat /proc/devices | grep segdev | awk '{print $2}'`"
 	[ "${CHRDEV_NAME}" = "/dev/" ] && CHRDEV_NAME="/dev/segdev"
 	[ -z "${CHRDEV_MAJOR}" ] && CHRDEV_MAJOR=`cat /proc/devices | grep segdev | awk '{print $1}'`
 	[ -z "${CHRDEV_MAJOR}" ] && CHRDEV_MAJOR=60
 	[ -z "${NR_OPS}" ] && NR_OPS=16
+	[ -z "${BPORT}" ] && BPORT=0
+	[ -z "${VPORT}" ] && VPORT=2
+	[ -z "${MPORT}" ] && MPORT=1
 }
+
 
 function unload_module {
 	rmmod "$1"
@@ -47,8 +54,8 @@ function unload_all {
 	unload_module "xsegbd"
 	rm "${CHRDEV_NAME}" || true
 	unload_module "xseg_segdev"
-	unload_module "xseg_pthread"
 	unload_module "xseg_posix"
+	unload_module "xseg_pthread"
 	unload_module "segdev"
 	unload_module "xseg"
 }
@@ -69,17 +76,57 @@ function load_all {
 	load_module "xseg_pthread"
 	load_module "xseg_segdev"
 	mk_chardev
-        "${XSEG_HOME}/peers/user/xseg" "${SPEC}" create
+    "${XSEG_HOME}/peers/user/xseg" "${SPEC}" create || true
 	load_module "xsegbd" "spec=$SPEC"
 }
 
-# spawn_filed - Spawn a filed instance
-#
-# @param $1		root directory	
-# @param $2		xseg port
+function create_segment {
+	"${XSEG_HOME}/peer/users/xseg" "${SPEC}" create
+}
+
+function destroy_segment {
+	"${XSEG_TOOL}" "${SPEC}" destroy
+}
+
+function alloc_requests {
+	"${XSEG_TOOL}" "${SPEC}" $1 alloc_requests $2
+}
+
+function free_requests {
+	"${XSEG_TOOL}" "${SPEC}" $1 free_requests $2
+}
 
 function spawn_filed {
-	"${XSEG_HOME}/peers/user/filed" "$1" -p "$2" -g "${SPEC}" -n ${NR_OPS} -v > "${XSEG_LOGS}/filed-${HOSTNAME}" 2>&1 &
+	pgrep -f "peers/user/filed" || \
+	"${XSEG_HOME}/peers/user/filed" "$IMAGES" -p "$BPORT" -g "${SPEC}" -n \
+	${NR_OPS}  &> "${XSEG_LOGS}/filed-${HOSTNAME}" &
+}
+
+function spawn_pfiled {
+	pgrep -f "peers/user/pfiled" || \
+	"${XSEG_HOME}/peers/user/pfiled" -p "$BPORT" -g "${SPEC}" -n \
+	${NR_OPS} "${PITHOS}" "${IMAGES}" &> "${XSEG_LOGS}/pfiled-${HOSTNAME}" &
+}
+
+function spawn_vlmcd {
+	pgrep -f "peers/user/mt-vlmcd" || \
+	"${XSEG_HOME}/peers/user/mt-vlmcd" -t 1 -p "$VPORT" -bp "$BPORT" -mp "$MPORT" -g \
+	"${SPEC}" -n ${NR_OPS} &> "${XSEG_LOGS}/vlmcd-${HOSTNAME}" &
+#	alloc_requests "$VPORT:0" 128
+}
+
+function spawn_mapperdc {
+	pgrep -f "mt-mapperd" || \
+	"${XSEG_HOME}/peers/user/mt-mapperd" -t 1 -p "$MPORT" -bp "$BPORT"  -g "${SPEC}" \
+	&> "${XSEG_LOGS}/mapperd-${HOSTNAME}" &
+#	alloc_requests "$MPORT:0" 128
+}
+
+function spawn_mapperd {
+	pgrep -f "mapperd.py" || \
+	"${XSEG_HOME}/peers/user/mapperd.py" -p "$MPORT" -b "$BPORT" -g "${SPEC}" \
+	&> "${XSEG_LOGS}/mapperd-${HOSTNAME}" &
+#	alloc_requests "$MPORT:0" 128
 }
 
 # map_volume - Map a volume to an xsegbd device
@@ -107,10 +154,12 @@ if [ -n "$NONINTERACTIVE" ]; then
 fi
 
 parse_config
+XSEG_TOOL="${XSEG_HOME}/peers/user/xseg"
 
 case $1 in
 list)
 	echo "filed [start|stop]"
+	echo "map [start|stap]"
 	echo " "
 	echo "insmod"
 	echo "rmmod"
@@ -131,27 +180,90 @@ config)
 	echo "REQS=${REQS}"
 	echo "PORTS=${PORTS}"
 	echo "IMAGES=${IMAGES}"
+	echo "PITHOS=${PITHOS}"
 	echo "XSEG_LOGS=${XSEG_LOGS}"
 	echo "DEVICE_PREFIX=${DEVICE_PREFIX}"
 	echo "XSEGBD_SYSFS=${XSEGBD_SYSFS}"
 	echo "CHRDEV_NAME=${CHRDEV_NAME}"
 	echo "CHRDEV_MAJOR=${CHRDEV_MAJOR}"
 	echo "NR_OPS=${NR_OPS}"
+	echo "BPORT=${BPORT}"
+	echo "VPORT=${VPORT}"
+	echo "MPORT=${MPORT}"
 	;;
 filed)
 	case $2 in
 	start)
-		mk_chardev
 		load_all
-		spawn_filed ${IMAGES} 1
-		sleep 1
+		spawn_filed
 		map_volume xsegvol 0 1
 		;;
 	stop)
 		pkill -f peers/user/filed
 		sleep 0.5
 		unmap_device 0
-		rm ${CHRDEV_NAME}
+		unload_all
+		;;
+	esac
+	;;
+map)
+	case $2 in
+	start)
+		load_all
+		sleep 0.5
+		spawn_pfiled
+		spawn_mapperd
+		spawn_vlmcd
+		;;
+	stop)
+		pkill -f peers/user/mt-vlmcd || true
+#		free_requests "$VPORT:0" 128 || true
+		pkill -f peers/user/mt-mapperd || true
+#		free_requests "$MPORT:0" 128 || true
+		pkill -f peers/user/pfiled || true
+		sleep 0.5
+		unload_all
+		;;
+	*)
+		help
+		;;
+	esac
+	;;
+nomodules)
+	case $2 in
+	start)
+		spawn_filed
+		spawn_mapperd
+		spawn_vlmcd
+		;;
+	stop)
+		pkill -f peers/user/mt-vlmcd || true
+#		free_requests "$VPORT:0" 128 || true
+		pkill -f peers/user/mt-mapperd || true
+#		free_requests "$MPORT:0" 128 || true
+		pkill -f peers/user/filed || true
+		;;
+	*)
+		help
+		;;
+	esac
+	;;
+one)
+	case $2 in
+	start)
+		load_all
+		sleep 0.5
+		spawn_filed
+		spawn_mapperdc
+		spawn_vlmcd
+		;;
+	stop)
+		pkill -f peers/user/mt-vlmcd || true
+#		free_requests "$VPORT:0" 128 || true
+		pkill -f peers/user/mt-mapperd || true
+#		free_requests "$MPORT:0" 128 || true
+		pkill -f peers/user/filed || true
+		sleep 0.5
 		unload_all
 		;;
 	*)
@@ -163,4 +275,3 @@ filed)
 	help
 	;;
 esac
-

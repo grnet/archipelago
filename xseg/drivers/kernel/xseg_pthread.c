@@ -77,9 +77,11 @@ static int pthread_signal(struct xseg *xseg, uint32_t portno)
 	rcu_read_lock();
 	/* XXX Security: xseg peers can kill anyone */
 	idx = xpool_peek(&port->waiters, &data, portno); //FIXME portno is not the caller but the callee
-	if (idx == NoIndex)
+	if (idx == NoIndex){
 		/* no waiters */
+		ret = 0;
 		goto out;
+	}
 
 	pid = find_vpid((pid_t) data);
 	if (!pid)

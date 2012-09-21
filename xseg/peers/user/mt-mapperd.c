@@ -5,14 +5,19 @@
 #include <xseg/xseg.h>
 #include <mpeer.h>
 #include <time.h>
-#include <sys/sha256.h>
 #include <xtypes/xlock.h>
 #include <xtypes/xhash.h>
 #include <xseg/protocol.h>
 #include <sys/stat.h>
 #include <fcntl.h>
+#include <gcrypt.h>
+#include <errno.h>
+
+GCRY_THREAD_OPTION_PTHREAD_IMPL;
 
 #define MF_PENDING 1
+
+#define SHA256_DIGEST_SIZE 32
 
 /* hex representation of sha256 value takes up double the sha256 size */
 #define XSEG_MAX_TARGET_LEN (SHA256_DIGEST_SIZE << 1)
@@ -576,7 +581,8 @@ static int copyup_object(struct peerd *peer, struct map_node *mn, struct peer_re
 	void *dummy;
 	int r = -1, i;
 	xport p;
-	struct sha256_ctx sha256ctx;
+
+	//struct sha256_ctx sha256ctx;
 	uint32_t newtargetlen;
 	char new_target[XSEG_MAX_TARGET_LEN + 1]; 
 	unsigned char buf[SHA256_DIGEST_SIZE];	//assert sha256_digest_size(32) <= MAXTARGETLEN 
@@ -587,9 +593,10 @@ static int copyup_object(struct peerd *peer, struct map_node *mn, struct peer_re
 
 
 	/* calculate new object name */
-	sha256_init_ctx(&sha256ctx);
-	sha256_process_bytes(new_object, strlen(new_object), &sha256ctx);
-	sha256_finish_ctx(&sha256ctx, buf);
+	//sha256_init_ctx(&sha256ctx);
+	//sha256_process_bytes(new_object, strlen(new_object), &sha256ctx);
+	//sha256_finish_ctx(&sha256ctx, buf);
+	gcry_md_hash_buffer(GCRY_MD_SHA256, buf, new_object, strlen(new_object));
 	for (i = 0; i < SHA256_DIGEST_SIZE; ++i)
 		sprintf (new_target + 2*i, "%02x", buf[i]);
 	newtargetlen = SHA256_DIGEST_SIZE  * 2;
@@ -888,7 +895,8 @@ static int req2objs(struct peerd *peer, struct peer_req *pr,
 	uint64_t obj_size =  (obj_offset + rem_size > block_size) ? block_size - obj_offset : rem_size;
 	struct map_node * mn = find_object(map, obj_index);
 	if (!mn) {
-		printf("coudn't find obj_index\n");
+		fprintf(stderr,"coudn't find obj_index %llu\n", obj_index);
+		fprintf(stderr,"pr->req->offset: %llu, block_size %u\n", pr->req->offset, block_size);
 		goto out_err;
 	}
 	if (write && (mn->flags & MF_OBJECT_NOT_READY)) 
@@ -917,7 +925,7 @@ static int req2objs(struct peerd *peer, struct peer_req *pr,
 		rem_size -= obj_size;
 		mn = find_object(map, obj_index);
 		if (!mn) {
-			printf("coudn't find obj_index %llu\n", obj_index);
+			fprintf(stderr,"2coudn't find obj_index %llu\n", obj_index);
 			goto out_err;
 		}
 		if (write && (mn->flags & MF_OBJECT_NOT_READY)) 
@@ -1068,6 +1076,7 @@ static int handle_objectwrite(struct peerd *peer, struct peer_req *pr,
 	strncpy(mn->object, tmp.object, tmp.objectlen);
 	mn->object[tmp.objectlen] = 0;
 	mn->objectlen = tmp.objectlen;
+	xseg_put_request(peer->xseg, req, peer->portno);
 	
 	while ((idx = __xq_pop_head(&mn->pending)) != Noneidx){
 		struct peer_req * preq = (struct peer_req *) idx;
@@ -1482,22 +1491,38 @@ int custom_peer_init(struct peerd *peer, int argc, const char *argv[])
 	int i;
 	unsigned char buf[SHA256_DIGEST_SIZE];
 	char *zero;
-	struct sha256_ctx sha256ctx;
+
+	gcry_control (GCRYCTL_SET_THREAD_CBS, &gcry_threads_pthread);
+
+       	/* Version check should be the very first call because it
+          makes sure that important subsystems are intialized. */
+       	gcry_check_version (NULL);
+     
+       	/* Disable secure memory.  */
+       	gcry_control (GCRYCTL_DISABLE_SECMEM, 0);
+     
+       	/* Tell Libgcrypt that initialization has completed. */
+       	gcry_control (GCRYCTL_INITIALIZATION_FINISHED, 0);
+
+	//struct sha256_ctx sha256ctx;
 	/* calculate out magic sha hash value */
-	sha256_init_ctx(&sha256ctx);
-	sha256_process_bytes(magic_string, strlen(magic_string), &sha256ctx);
-	sha256_finish_ctx(&sha256ctx, magic_sha256);
+	//sha256_init_ctx(&sha256ctx);
+	//sha256_process_bytes(magic_string, strlen(magic_string), &sha256ctx);
+	//sha256_finish_ctx(&sha256ctx, magic_sha256);
+	gcry_md_hash_buffer(GCRY_MD_SHA256, magic_sha256, magic_string, strlen(magic_string));
 
 	/* calculate zero block */
 	//FIXME check hash value
 	zero = malloc(block_size);
 	memset(zero, 0, block_size);
-	sha256_init_ctx(&sha256ctx);
-	sha256_process_bytes(zero, block_size, &sha256ctx);
-	sha256_finish_ctx(&sha256ctx, buf);
+	//sha256_init_ctx(&sha256ctx);
+	//sha256_process_bytes(zero, block_size, &sha256ctx);
+	//sha256_finish_ctx(&sha256ctx, buf);
+	gcry_md_hash_buffer(GCRY_MD_SHA256, buf, zero, block_size);
 	for (i = 0; i < SHA256_DIGEST_SIZE; ++i)
 		sprintf(zero_block + 2*i, "%02x", buf[i]);
 	printf("%s \n", zero_block);
+	free(zero);
 
 	//FIXME error checks
 	struct mapperd *mapper = malloc(sizeof(struct mapperd));
@@ -1530,7 +1555,7 @@ int custom_peer_init(struct peerd *peer, int argc, const char *argv[])
 		}
 	}
 
-	//test_map(peer);
+	test_map(peer);
 
 	return 0;
 }
@@ -1565,7 +1590,7 @@ void print_map(struct map *m)
 void test_map(struct peerd *peer)
 {
 	int i,j, ret;
-	struct sha256_ctx sha256ctx;
+	//struct sha256_ctx sha256ctx;
 	unsigned char buf[SHA256_DIGEST_SIZE];
 	char buf_new[XSEG_MAX_TARGET_LEN + 20];
 	struct map *m = malloc(sizeof(struct map));
@@ -1579,9 +1604,11 @@ void test_map(struct peerd *peer)
 	struct map_node *map_node = calloc(100, sizeof(struct map_node));
 	for (i = 0; i < 100; i++) {
 		sprintf(buf_new +XSEG_MAX_TARGET_LEN, "%u", i);
-		sha256_init_ctx(&sha256ctx);
-		sha256_process_bytes(buf_new, strlen(buf_new), &sha256ctx);
-		sha256_finish_ctx(&sha256ctx, buf);
+		//sha256_init_ctx(&sha256ctx);
+		//sha256_process_bytes(buf_new, strlen(buf_new), &sha256ctx);
+		//sha256_finish_ctx(&sha256ctx, buf);
+		gcry_md_hash_buffer(GCRY_MD_SHA256, buf, buf_new, strlen(buf_new));
+		
 		for (j = 0; j < SHA256_DIGEST_SIZE; j++) {
 			sprintf(map_node[i].object + 2*j, "%02x", buf[j]);
 		}
@@ -1615,7 +1642,7 @@ void test_map(struct peerd *peer)
 	ret = read_map(peer, m2, data);
 //	print_map(m2);
 
-	int fd = open(m->volume, O_CREAT|O_WRONLY);
+	int fd = open(m->volume, O_CREAT|O_WRONLY, S_IRUSR|S_IWUSR|S_IRGRP|S_IWGRP|S_IROTH);
 	ssize_t r, sum = 0;
 	while (sum < block_size) {
 		r = write(fd, data + sum, block_size -sum);

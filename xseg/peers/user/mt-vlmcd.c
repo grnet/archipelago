@@ -62,6 +62,15 @@ static int handle_accepted(struct peerd *peer, struct peer_req *pr,
 	char *target, *mtarget;
 	void *dummy;
 
+	if (pr->req->op == X_WRITE && !req->size && (pr->req->flags & (XF_FLUSH|XF_FUA))){
+		//hanlde flush requests here, so we don't mess with mapper
+		//because of the -1 offset
+		fprintf(stderr, "completing flush request\n");
+		pr->req->serviced = pr->req->size;
+		__set_vio_state(vio, CONCLUDED);
+		complete(peer, pr);
+		return 0;		
+	}
 	vio->err = 0; //reset error state
 	vio->mreq = xseg_get_request(peer->xseg, peer->portno, 
 					vlmc->mportno, X_ALLOC);
@@ -133,7 +142,7 @@ static int handle_mapping(struct peerd *peer, struct peer_req *pr,
 	}
 	/* FIXME shouldn's XS_FAILED be sufficient ?? */
 	if (vio->mreq->state & XS_FAILED && !(vio->mreq->state & XS_SERVED)){
-		printf("req %lx (op: %d) failed\n", vio->mreq, vio->mreq->op);
+		fprintf(stderr, "req %lx (op: %d) failed\n", vio->mreq, vio->mreq->op);
 		xseg_put_request(peer->xseg, vio->mreq, peer->portno);
 		vio->mreq = NULL;
 		__set_vio_state(vio, CONCLUDED);
@@ -245,6 +254,7 @@ static int handle_serving(struct peerd *peer, struct peer_req *pr,
 	struct xseg_request *breq = req;
 
 	if (breq->state & XS_FAILED && !(breq->state & XS_SERVED)) {
+		fprintf(stderr, "req %lx (op: %d) failed at offset \n", req, req->op, req->offset);
 		vio->err = 1;
 	} else {
 		//assert breq->serviced == breq->size

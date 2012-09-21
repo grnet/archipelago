@@ -443,9 +443,19 @@ static void handle_copy(struct store *store, struct io *io)
 
 	src = openat(store->dirfd, xcopy->target, O_RDWR);	
         if (src < 0) {
-                fprintf(stderr, "fail in src\n");
-                fail(store, io);
-                return;
+		if (errno == ENOENT){
+			src = openat(store->dirfd, xcopy->target, 
+					O_RDWR | O_CREAT, 0600);
+			if (src < 0 ) {
+				fprintf(stderr, "fail in src\n");
+				fail(store, io);
+				return;
+			}	
+		} else {
+			fprintf(stderr, "fail in src\n");
+			fail(store, io);
+			return;
+		}
         }
 
         fstat(src, &st);
