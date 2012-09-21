@@ -438,7 +438,6 @@ static void handle_copy(struct store *store, struct io *io)
         if (dst < 0) {
                 fprintf(stderr, "fail in dst\n");
                 fail(store, io);
-		free(buf);
                 return;
         }
 
@@ -446,7 +445,6 @@ static void handle_copy(struct store *store, struct io *io)
         if (src < 0) {
                 fprintf(stderr, "fail in src\n");
                 fail(store, io);
-		free(buf);
                 return;
         }
 
@@ -467,7 +465,6 @@ static void handle_copy(struct store *store, struct io *io)
         complete(store, io);
 
 out:
-	free(buf);
         close(src);
 }
 
@@ -495,7 +492,7 @@ static void handle_delete(struct store *store, struct io *io)
 	buf[req->targetlen] = 0;
 	unlinkat(store->dirfd, buf, 0);
 
-	complete(pfiled, io);
+	complete(store, io);
 
 	return;
 }

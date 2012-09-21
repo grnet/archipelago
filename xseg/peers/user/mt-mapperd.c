@@ -24,8 +24,9 @@
 #define MF_OBJECT_EXIST		(1 << 0)
 #define MF_OBJECT_COPYING	(1 << 1)
 #define MF_OBJECT_WRITING	(1 << 2)
+#define MF_OBJECT_DELETING	(1 << 3)
 
-#define MF_OBJECT_NOT_READY	(MF_OBJECT_COPYING | MF_OBJECT_WRITING)
+#define MF_OBJECT_NOT_READY	(MF_OBJECT_COPYING|MF_OBJECT_WRITING|MF_OBJECT_DELETING)
 
 char *magic_string = "This a magic string. Please hash me";
 unsigned char magic_sha256[SHA256_DIGEST_SIZE];	/* sha256 hash value of magic string */
@@ -35,7 +36,8 @@ char zero_block[SHA256_DIGEST_SIZE * 2 + 1]; 	/* hexlified sha256 hash value of 
 enum mapper_state {
 	ACCEPTED = 0,
 	WRITING = 1,
-	COPYING = 2
+	COPYING = 2,
+	DELETING = 3
 };
 
 struct map_node {
@@ -50,8 +52,9 @@ struct map_node {
 #define MF_MAP_LOADING		(1 << 0)
 #define MF_MAP_DESTROYED	(1 << 1)
 #define MF_MAP_WRITING		(1 << 2)
+#define MF_MAP_DELETING		(1 << 3)
 
-#define MF_MAP_NOT_READY	(MF_MAP_LOADING|MF_MAP_WRITING)
+#define MF_MAP_NOT_READY	(MF_MAP_LOADING|MF_MAP_WRITING|MF_MAP_DELETING)
 
 struct map {
 	uint32_t flags;
@@ -72,9 +75,11 @@ struct mapper_io {
 	xhash_t *copyups_nodes;		/* hash map (xseg_request) --> (corresponding map_node of copied up object)*/
 	struct map_node *copyup_node;
 	int err;			/* error flag */
+	uint64_t delobj;
 	enum mapper_state state;
 };
 
+static int my_dispatch(struct peerd *peer, struct peer_req *pr, struct xseg_request *req);
 /*
  * Helper functions
  */
@@ -1019,12 +1024,12 @@ static int handle_copyup(struct peerd *peer, struct peer_req *pr,
 out_fail:
 	xseg_put_request(peer->xseg, req, peer->portno);
 	printf("handle copy up out fail \n");
-	int asdfr = *(int *) 0;
 	__set_copyup_node(mio, req, NULL);
 	while ((idx = __xq_pop_head(&mn->pending)) != Noneidx){
 		struct peer_req * preq = (struct peer_req *) idx;
 		fail(peer, preq);
 	}
+
 out_err:
 	printf("handle copy up out err\n");
 	return -1;
@@ -1059,8 +1064,6 @@ static int handle_objectwrite(struct peerd *peer, struct peer_req *pr,
 		printf("wrong mn flags\n");
 		return *(int *) 0;
 	}
-	printf("completed copy up of %s to %s\n", mn->object, tmp.object);
-	int asdf = *(int *) 0;
 	//assert mn->flags & MF_OBJECT_EXIST
 	strncpy(mn->object, tmp.object, tmp.objectlen);
 	mn->object[tmp.objectlen] = 0;
@@ -1180,30 +1183,262 @@ static int handle_info(struct peerd *peer, struct peer_req *pr,
 	return 0;
 }
 
+static int delete_object(struct peerd *peer, struct peer_req *pr,
+				struct map_node *mn)
+{
+	void *dummy;
+	struct mapperd *mapper = __get_mapperd(peer);
+	struct mapper_io *mio = __get_mapper_io(pr);
+
+	if (xq_count(&mn->pending) != 0) {
+		mio->delobj = mn->objectidx;
+		__xq_append_tail(&mn->pending, (xqindex) pr);
+		return MF_PENDING;
+	}
+
+	struct xseg_request *req = xseg_get_request(peer->xseg, peer->portno, 
+							mapper->bportno, X_ALLOC);
+	if (!req)
+		goto out_err;
+	int r = xseg_prep_request(peer->xseg, req, mn->objectlen, 0);
+	if (r < 0)
+		goto out_put;
+	char *target = xseg_get_target(peer->xseg, req);
+	strncpy(target, mn->object, req->targetlen);
+	req->op = X_DELETE;
+	req->size = req->datalen;
+	req->offset = 0;
+
+	r = xseg_set_req_data(peer->xseg, req, pr);
+	if (r < 0)
+		goto out_put;
+	__set_copyup_node(mio, req, mn);
+	xport p = xseg_submit(peer->xseg, req, peer->portno, X_ALLOC);
+	if (p == NoPort)
+		goto out_unset;
+	r = xseg_signal(peer->xseg, p);
+	mn->flags |= MF_OBJECT_DELETING;
+	return MF_PENDING;
+
+out_unset:
+	xseg_get_req_data(peer->xseg, req, &dummy);
+out_put:
+	xseg_put_request(peer->xseg, req, peer->portno);
+out_err:
+	return -1;
+}
+static int handle_object_delete(struct peerd *peer, struct peer_req *pr, 
+				 struct map_node *mn, int err)
+{
+	struct mapperd *mapper = __get_mapperd(peer);
+	struct mapper_io *mio = __get_mapper_io(pr);
+	uint64_t idx;
+	struct map *map = mn->map;
+	//if object deletion failed, map deletion must continue
+	//and report OK, since map block has been deleted succesfully
+	//so, no check for err
+	
+	//free map_node_resources
+	map->flags &= ~MF_OBJECT_DELETING;
+	xq_free(&mn->pending);
+	//find next object
+	idx = mn->objectidx;
+	//remove_object(map, idx);
+	idx++;
+	mn = find_object(map, idx);
+	while (!mn && idx < calc_map_obj(map)) {
+		idx++;
+		mn = find_object(map, idx);
+	}
+	if (mn) {
+		//delete next object or complete;
+		delete_object(peer, pr, mn);
+	} else {
+		map->flags &= ~MF_MAP_DELETING;
+		map->flags |= MF_MAP_DESTROYED;
+		//make all pending requests on map to fail
+		while ((idx = __xq_pop_head(&map->pending)) != Noneidx){
+			struct peer_req * preq = (struct peer_req *) idx;
+			my_dispatch(peer, preq, preq->req);
+		}
+		//free map resources;
+		remove_map(mapper, map);
+		mn = find_object(map, 0);
+		free(mn);
+		xq_free(&map->pending);
+		free(map);
+	}
+	return 0;
+}
+
+static int delete_map(struct peerd *peer, struct peer_req *pr,
+			struct map *map)
+{
+	void *dummy;
+	struct mapperd *mapper = __get_mapperd(peer);
+	struct mapper_io *mio = __get_mapper_io(pr);
+	struct xseg_request *req = xseg_get_request(peer->xseg, peer->portno, 
+							mapper->bportno, X_ALLOC);
+	if (!req)
+		goto out_err;
+	int r = xseg_prep_request(peer->xseg, req, map->volumelen, 0);
+	if (r < 0)
+		goto out_put;
+	char *target = xseg_get_target(peer->xseg, req);
+	strncpy(target, map->volume, req->targetlen);
+	req->op = X_DELETE;
+	req->size = req->datalen;
+	req->offset = 0;
+
+	r = xseg_set_req_data(peer->xseg, req, pr);
+	if (r < 0)
+		goto out_put;
+	__set_copyup_node(mio, req, NULL);
+	xport p = xseg_submit(peer->xseg, req, peer->portno, X_ALLOC);
+	if (p == NoPort)
+		goto out_unset;
+	r = xseg_signal(peer->xseg, p);
+	map->flags |= MF_MAP_DELETING;
+	return MF_PENDING;
+
+out_unset:
+	xseg_get_req_data(peer->xseg, req, &dummy);
+out_put:
+	xseg_put_request(peer->xseg, req, peer->portno);
+out_err:
+	return -1;
+}
+
+static int handle_map_delete(struct peerd *peer, struct peer_req *pr, 
+				struct map *map, int err)
+{
+	struct mapperd *mapper = __get_mapperd(peer);
+	struct mapper_io *mio = __get_mapper_io(pr);
+	xqindex idx;
+	if (err) {
+		map->flags &= ~MF_MAP_DELETING;
+		//dispatch all pending
+		while ((idx = __xq_pop_head(&map->pending)) != Noneidx){
+			struct peer_req * preq = (struct peer_req *) idx;
+			my_dispatch(peer, preq, preq->req);
+		}
+	} else {
+		//delete all objects
+		struct map_node *mn = find_object(map, 0);
+		if (!mn) {
+			//this should never happen
+			map->flags &= ~MF_MAP_DELETING;
+			map->flags |= MF_MAP_DESTROYED;
+			//make all pending requests on map to fail
+			while ((idx = __xq_pop_head(&map->pending)) != Noneidx){
+				struct peer_req * preq = (struct peer_req *) idx;
+				my_dispatch(peer, preq, preq->req);
+			}
+			//free map resources;
+			remove_map(mapper, map);
+			mn = find_object(map, 0);
+			free(mn);
+			xq_free(&map->pending);
+			free(map);
+			return 0;
+		}
+		delete_object(peer, pr, mn);
+	}
+	return 0;
+}
+
+static int handle_delete(struct peerd *peer, struct peer_req *pr, 
+				struct xseg_request *req)
+{
+	struct mapperd *mapper = __get_mapperd(peer);
+	struct mapper_io *mio = __get_mapper_io(pr);
+	struct map_node *mn;
+	struct map *map;
+	int err = 0;
+	if (req->state & XS_FAILED && !(req->state &XS_SERVED)) 
+		err = 1;
+	
+	mn = __get_copyup_node(mio, req);
+	__set_copyup_node(mio, req, NULL);
+	char *target = xseg_get_target(peer->xseg, req);
+	if (!mn) {
+		//map block delete
+		map = find_map(mapper, target, req->targetlen);
+		if (!map) {
+			xseg_put_request(peer->xseg, req, peer->portno);
+			return -1;
+		}
+		handle_map_delete(peer, pr, map, err);
+	} else {
+		//object delete
+		map = mn->map;
+		if (!map) {
+			xseg_put_request(peer->xseg, req, peer->portno);
+			return -1;
+		}
+		handle_object_delete(peer, pr, mn, err);
+	}
+	xseg_put_request(peer->xseg, req, peer->portno);
+	return 0;
+}
+
 static int handle_destroy(struct peerd *peer, struct peer_req *pr, 
 				struct xseg_request *req)
 {
-	/*
+	struct mapperd *mapper = __get_mapperd(peer);
+	struct mapper_io *mio = __get_mapper_io(pr);
+	int r;
+
+	if (req->op == X_DELETE) {
+		//assert mio->state == DELETING
+		r = handle_delete(peer, pr, req);
+		if (r < 0) {
+			fail(peer, pr);
+			return -1;
+		} else {
+			return 0;
+		}
+	}
+
 	struct map *map;
-	int r = find_or_load_map(peer, pr, target, pr->req->targetlen, &map);
+	char *target = xseg_get_target(peer->xseg, pr->req);
+	r = find_or_load_map(peer, pr, target, pr->req->targetlen, &map);
 	if (r < 0) {
 		fail(peer, pr);
 		return -1;
 	}
 	else if (r == MF_PENDING)
 		return 0;
-	map->flags |= MF_MAP_DESTROYED;
-	*/
+	if (map->flags & MF_MAP_DESTROYED) {
+		if (mio->state == DELETING)
+			complete(peer, pr);
+		else
+			fail(peer, pr);
+		return 0;
+	}
+	if (mio->state == DELETING) {
+		//continue deleteing map objects;
+		struct map_node *mn = find_object(map, mio->delobj);
+		if (!mn) {
+			complete(peer, pr);
+			return 0;
+		}
+		delete_object(peer, pr, mn);
+	}
 	//delete map block
-	//do not delete all objects
-	//remove_map(mapper, map);
-	//free(map, map_nodes, all allocated resources);
-	//complete(peer, pr);
+	r = delete_map(peer, pr, map);
+	if (r < 0) {
+		fail(peer, pr);
+		return -1;
+	} else if (r == MF_PENDING) {
+		mio->state = DELETING;
+	}
+	//unreachable
 	fail(peer, pr);
 	return 0;
 }
 
-int my_dispatch(struct peerd *peer, struct peer_req *pr, struct xseg_request *req)
+static int my_dispatch(struct peerd *peer, struct peer_req *pr, struct xseg_request *req)
 {
 	struct mapperd *mapper = __get_mapperd(peer);
 	(void) mapper;
