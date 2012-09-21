@@ -107,7 +107,7 @@ static int handle_accepted(struct peerd *peer, struct peer_req *pr,
 	r = xseg_signal(peer->xseg, p);
 	if (r < 0) {
 		/* since submission is successful, just print a warning message */
-		//XSEGLOG("couldnt signal port %u", p);
+		fprintf(stderr, "couldnt signal port %u", p);
 	}
 
 	return 0;
@@ -297,10 +297,10 @@ int dispatch(struct peerd *peer, struct peer_req *pr, struct xseg_request *req)
 			handle_serving(peer, pr, req);
 			break;
 		case CONCLUDED:
-			//XSEGLOG("invalid state. dispatch called for concluded");
+			fprintf(stderr, "invalid state. dispatch called for concluded\n");
 			break;
 		default:
-			//XSEGLOG("wtf dude? invalid state");
+			fprintf(stderr, "wtf dude? invalid state\n");
 			break;
 	}
 	xlock_release(&vio->lock);

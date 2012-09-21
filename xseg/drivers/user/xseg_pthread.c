@@ -315,7 +315,7 @@ static int pthread_signal(struct xseg *xseg, uint32_t portno)
 
 	idx = xpool_peek(&port->waiters, &data, portno); //FIXME portno is not the caller but the callee
 	if (idx == NoIndex) 
-		return -1;
+		return 0;
 
 	pid_t cue = (pid_t) data;
 	if (!cue)
