@@ -438,6 +438,7 @@ static void handle_copy(struct store *store, struct io *io)
         if (dst < 0) {
                 fprintf(stderr, "fail in dst\n");
                 fail(store, io);
+		free(buf);
                 return;
         }
 
@@ -445,6 +446,7 @@ static void handle_copy(struct store *store, struct io *io)
         if (src < 0) {
                 fprintf(stderr, "fail in src\n");
                 fail(store, io);
+		free(buf);
                 return;
         }
 
@@ -465,9 +467,38 @@ static void handle_copy(struct store *store, struct io *io)
         complete(store, io);
 
 out:
+	free(buf);
         close(src);
 }
 
+static void handle_delete(struct store *store, struct io *io)
+{
+	struct xseg_request *req = io->req;
+	int fd;
+	char *target = xseg_get_target(store->xseg, req);
+	
+	fd = dir_open(store, io, target, req->targetlen, 0);
+	if (fd < 0) {
+		fprintf(stderr, "fail in dir_open\n");
+		fail(store, io);
+		return;
+	}
+
+	/* 'invalidate' cache entry */
+	if (io->fdcacheidx >= 0) {
+		store->fdcache[io->fdcacheidx].fd = -1;
+	}
+
+	close(fd);
+	char buf[MAX_FILENAME_SIZE + 1];
+	strncpy(buf, target, req->targetlen);
+	buf[req->targetlen] = 0;
+	unlinkat(store->dirfd, buf, 0);
+
+	complete(pfiled, io);
+
+	return;
+}
 
 static void dispatch(struct store *store, struct io *io)
 {
@@ -480,6 +511,8 @@ static void dispatch(struct store *store, struct io *io)
 		handle_read_write(store, io); break;
 	case X_INFO:
 		handle_info(store, io); break;
+	case X_DELETE:
+		handle_delete(store, io); break;
 	case X_COPY:
 		handle_copy(store, io); break;
 	case X_SYNC:
