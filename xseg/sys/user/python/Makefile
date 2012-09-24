@@ -13,8 +13,9 @@ $(BASE)/sys/user/libxseg.so:
 	make -C $(BASE)/sys/user libxseg.so
 
 xseg.xml: $(BASE)/xseg/xseg.h $(BASE)/xtypes/xq.h $(BASE)/xtypes/xlock.h \
- $(BASE)/xtypes/xpool.h $(BASE)/xtypes/xhash.h \
- $(BASE)/sys/domain.h $(BASE)/sys/util.h $(BASE)/sys/user/_sysutil.h $(BASE)/xseg/protocol.h
+	$(BASE)/xtypes/xpool.h $(BASE)/xtypes/xhash.h \
+	$(BASE)/xtypes/xheap.h $(BASE)/xtypes/xobj.h \
+	$(BASE)/sys/domain.h $(BASE)/sys/util.h $(BASE)/sys/user/_sysutil.h $(BASE)/xseg/protocol.h
 	$(H2XML) -c $(INC) -o $@ $(BASE)/xseg/xseg.h
 
 xprotocol.xml: 

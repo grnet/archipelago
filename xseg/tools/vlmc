@@ -1,0 +1,197 @@
+#!/usr/bin/env python
+#
+# vlmc tool
+
+import os, sys, subprocess, argparse
+
+def vlmc_create(args):
+    name = args.name[0]
+    size = args.size << 20
+    snap = args.snap
+
+    if size == None and snap == None:
+        print >> sys.stderr, "At least one of the size/snap args must be provided"
+        sys.exit(-1)
+
+    cmd = ["/root/archip_rest/xseg/peers/user/vlmc-xseg", "%s" % SPEC, "create", "--name", "%s" % name]
+    if snap != None:
+            cmd.extend("--snap", "%s" % snap)
+    if size != None:
+            cmd.extend("--size", "%s" % size)
+    cmd.extend("-mp", "%s" % MPORT)
+    cmd.extend("-p", "%s" % VTOOL)
+
+    result = utils.RunCmd(cmd)
+    if result.failed:
+            sys.stderr.write("vlmc creation failed\n")
+            sys.exit(-1)
+    
+
+def vlmc_snapshot(args):
+    # snapshot
+    return
+
+def vlmc_list(args):
+    # list
+    return
+
+def vlmc_remove(args):
+    name = args.name[0]
+    cmd = ["/root/archip_rest/xseg/peers/user/vlmc-xseg", "%s" % SPEC, "remove", "--name", "%s" % name]
+    cmd.extend("-mp", "%s" % MPORT)
+    cmd.extend("-p", "%s" % VTOOL)
+    result = utils.RunCmd(cmd)
+    if result.failed:
+            sys.stderr.write("vlmc creation failed\n")
+            sys.exit(-1)
+
+
+def xsegbd_loaded():
+    try:
+        os.stat("/sys/bus/xsegbd")
+    except Exception, reason:
+        print >> sys.stderr, reason
+        sys.exit(-1)
+
+def vlmc_map(args):
+    xsegbd_loaded()
+    name = args.name[0]
+    prev = 2
+    try:
+        result = [int(open(XSEGBD_SYSFS + "devices/" + f + "/srcport").read().strip()) for f in os.listdir(XSEGBD_SYSFS + "devices/")]
+        result.sort()
+
+        for p in result:
+            if p - prev > 1:
+               break
+            else:
+               prev = p
+
+        port = prev + 1
+        fd = os.open(XSEGBD_SYSFS + "add", os.O_WRONLY)
+        os.write(fd, "%s %d:%d:%d" % (name, port, VPORT, REQS))
+        os.close(fd)
+    except Exception, reason:
+        print >> sys.stderr, reason
+        sys.exit(-1)
+
+def vlmc_unmap(args):
+    xsegbd_loaded()
+    device = args.name[0]
+    try:
+        for f in os.listdir(XSEGBD_SYSFS + "devices/"):
+            d_id = open(XSEGBD_SYSFS + "devices/" + f + "/id").read().strip()
+            name = open(XSEGBD_SYSFS + "devices/"+ f + "/target").read().strip()
+            if device == DEVICE_PREFIX + d_id:
+                fd = os.open(XSEGBD_SYSFS + "remove", os.O_WRONLY)
+                os.write(fd, d_id)
+                os.close(fd)
+
+                sys.exit(0)
+        print >> sys.stderr, "Device %s doesn't exist" % device
+        sys.exit(-1)
+    except Exception, reason:
+        print >> sys.stderr, reason
+        sys.exit(-1)
+
+def vlmc_showmapped(args):
+    xsegbd_loaded()
+    print "id\tpool\timage\tsnap\tdevice"
+    try:
+        for f in os.listdir(XSEGBD_SYSFS + "devices/"):
+            d_id = open(XSEGBD_SYSFS + "devices/" + f + "/id").read().strip()
+            target = open(XSEGBD_SYSFS + "devices/"+ f + "/target").read().strip()
+
+            print "%s\t%s\t%s\t%s\t%s" % (d_id, '-', target, '-', DEVICE_PREFIX +
+            d_id)
+    except Exception, reason:
+        print >> sys.stderr, reason
+        sys.exit(-1)
+
+# FIXME:
+def vlmc_resize(args):
+    xsegbd_loaded()
+
+    name = args.name[0]
+    size = args.size[0]
+
+    try:
+
+        for f in os.listdir(XSEGBD_SYSFS + "devices/"):
+            d_id = open(XSEGBD_SYSFS + "devices/" + f + "/id").read().strip()
+            d_name = open(XSEGBD_SYSFS + "devices/"+ f + "/name").read().strip()
+            if name == d_name:
+                fd = os.open(XSEGBD_SYSFS + "devices/" +  d_id +"/refresh", os.O_WRONLY)
+                os.write(fd, "1")
+                os.close(fd)
+
+        sys.exit(0)
+    except Exception, reason:
+        print >> sys.stderr, reason
+        sys.exit(-1)
+
+def loadrc(rc):
+    #FIXME
+    try:
+        if rc == None:
+            execfile(os.path.expanduser("~/.xsegrc"), globals())
+        else:
+            execfile(rc, globals())
+    except:
+        pass
+
+if __name__ == "__main__":
+    # parse arguments and discpatch to the correct func
+    parser = argparse.ArgumentParser(description='vlmc tool')
+    parser.add_argument('-c', '--config', type=str, nargs='?', help='config file')
+    subparsers = parser.add_subparsers()
+
+    create_parser = subparsers.add_parser('create', help='Create volume')
+    #group = create_parser.add_mutually_exclusive_group(required=True)
+    create_parser.add_argument('-s', '--size', type=int, nargs='?', help='requested size in MB for create')
+    create_parser.add_argument('--snap', type=str, nargs='?', help='create from snapshot')
+    create_parser.add_argument('-p', '--pool', type=str, nargs='?', help='for backwards compatiblity with rbd')
+    create_parser.add_argument('name', type=str, nargs=1, help='volume/device name')
+    create_parser.set_defaults(func=vlmc_create)
+
+    remove_parser = subparsers.add_parser('remove', help='Delete volume')
+    remove_parser.add_argument('name', type=str, nargs=1, help='volume/device name')
+    remove_parser.set_defaults(func=vlmc_remove)
+    remove_parser.add_argument('-p', '--pool', type=str, nargs='?', help='for backwards compatiblity with rbd')
+
+    rm_parser = subparsers.add_parser('rm', help='Delete volume')
+    rm_parser.add_argument('name', type=str, nargs=1, help='volume/device name')
+    rm_parser.set_defaults(func=vlmc_remove)
+    rm_parser.add_argument('-p', '--pool', type=str, nargs='?', help='for backwards compatiblity with rbd')
+
+    map_parser = subparsers.add_parser('map', help='Map volume')
+    map_parser.add_argument('name', type=str, nargs=1, help='volume/device name')
+    map_parser.set_defaults(func=vlmc_map)
+    map_parser.add_argument('-p', '--pool', type=str, nargs='?', help='for backwards compatiblity with rbd')
+
+    unmap_parser = subparsers.add_parser('unmap', help='Unmap volume')
+    unmap_parser.add_argument('name', type=str, nargs=1, help='volume/device name')
+    unmap_parser.set_defaults(func=vlmc_unmap)
+    unmap_parser.add_argument('-p', '--pool', type=str, nargs='?', help='for backwards compatiblity with rbd')
+
+    showmapped_parser = subparsers.add_parser('showmapped', help='Show mapped volumes')
+    showmapped_parser.set_defaults(func=vlmc_showmapped)
+    showmapped_parser.add_argument('-p', '--pool', type=str, nargs='?', help='for backwards compatiblity with rbd')
+
+    list_parser = subparsers.add_parser('list', help='List volumes')
+    list_parser.set_defaults(func=vlmc_list)
+    list_parser.add_argument('-p', '--pool', type=str, nargs='?', help='for backwards compatiblity with rbd')
+
+    ls_parser = subparsers.add_parser('ls', help='List volumes')
+    ls_parser.set_defaults(func=vlmc_list)
+    ls_parser.add_argument('-p', '--pool', type=str, nargs='?', help='for backwards compatiblity with rbd')
+
+    resize_parser = subparsers.add_parser('resize', help='Resize volume')
+    resize_parser.add_argument('-s', '--size', type=int, nargs=1, help='requested size in MB for resize')
+    resize_parser.add_argument('name', type=str, nargs=1, help='volume/device name')
+    resize_parser.set_defaults(func=vlmc_resize)
+    resize_parser.add_argument('-p', '--pool', type=str, nargs='?', help='for backwards compatiblity with rbd')
+
+    args = parser.parse_args()
+    loadrc(args.config)
+    args.func(args)
