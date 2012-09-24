@@ -13,7 +13,7 @@ def vlmc_create(args):
         print >> sys.stderr, "At least one of the size/snap args must be provided"
         sys.exit(-1)
 
-    cmd = ["/root/archip_rest/xseg/peers/user/vlmc-xseg", "%s" % SPEC, "create", "--name", "%s" % name]
+    cmd = ["/root/archip_test/xseg/peers/user/vlmc-xseg", "%s" % SPEC, "create", "--name", "%s" % name]
     if snap != None:
             cmd.extend("--snap", "%s" % snap)
     if size != None:
@@ -37,7 +37,7 @@ def vlmc_list(args):
 
 def vlmc_remove(args):
     name = args.name[0]
-    cmd = ["/root/archip_rest/xseg/peers/user/vlmc-xseg", "%s" % SPEC, "remove", "--name", "%s" % name]
+    cmd = ["/root/archip_test/xseg/peers/user/vlmc-xseg", "%s" % SPEC, "remove", "--name", "%s" % name]
     cmd.extend("-mp", "%s" % MPORT)
     cmd.extend("-p", "%s" % VTOOL)
     result = utils.RunCmd(cmd)
