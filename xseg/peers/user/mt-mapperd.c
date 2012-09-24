@@ -1242,6 +1242,7 @@ static int handle_object_delete(struct peerd *peer, struct peer_req *pr,
 	struct mapper_io *mio = __get_mapper_io(pr);
 	uint64_t idx;
 	struct map *map = mn->map;
+	int r;
 	//if object deletion failed, map deletion must continue
 	//and report OK, since map block has been deleted succesfully
 	//so, no check for err
@@ -1260,8 +1261,12 @@ static int handle_object_delete(struct peerd *peer, struct peer_req *pr,
 	}
 	if (mn) {
 		//delete next object or complete;
-		delete_object(peer, pr, mn);
+		r = delete_object(peer, pr, mn);
+		if (r < 0) {
+			goto del_completed;
+		}
 	} else {
+del_completed:
 		map->flags &= ~MF_MAP_DELETING;
 		map->flags |= MF_MAP_DESTROYED;
 		//make all pending requests on map to fail
@@ -1344,13 +1349,21 @@ static int handle_map_delete(struct peerd *peer, struct peer_req *pr,
 			}
 			//free map resources;
 			remove_map(mapper, map);
-			mn = find_object(map, 0);
-			free(mn);
+			//mn = find_object(map, 0);
+			//free(mn);
 			xq_free(&map->pending);
 			free(map);
 			return 0;
 		}
-		delete_object(peer, pr, mn);
+		r = delete_object(peer, pr, mn);
+		if (r < 0) {
+			map->flags &= ~MF_MAP_DELETING;
+			//dispatch all pending
+			while ((idx = __xq_pop_head(&map->pending)) != Noneidx){
+				struct peer_req * preq = (struct peer_req *) idx;
+				my_dispatch(peer, preq, preq->req);
+			}
+		}
 	}
 	return 0;
 }
@@ -1397,10 +1410,11 @@ static int handle_destroy(struct peerd *peer, struct peer_req *pr,
 	struct mapper_io *mio = __get_mapper_io(pr);
 	int r;
 
-	if (req->op == X_DELETE) {
+	if (pr->req != req && req->op == X_DELETE) {
 		//assert mio->state == DELETING
 		r = handle_delete(peer, pr, req);
 		if (r < 0) {
+			fprintf(stderr, "handle delete error\n");
 			fail(peer, pr);
 			return -1;
 		} else {
@@ -1412,6 +1426,7 @@ static int handle_destroy(struct peerd *peer, struct peer_req *pr,
 	char *target = xseg_get_target(peer->xseg, pr->req);
 	r = find_or_load_map(peer, pr, target, pr->req->targetlen, &map);
 	if (r < 0) {
+		fprintf(stderr, "couldn't find or load map\n");
 		fail(peer, pr);
 		return -1;
 	}
@@ -1420,28 +1435,37 @@ static int handle_destroy(struct peerd *peer, struct peer_req *pr,
 	if (map->flags & MF_MAP_DESTROYED) {
 		if (mio->state == DELETING)
 			complete(peer, pr);
-		else
+		else{
+			fprintf(stderr, "map destroyed\n");
 			fail(peer, pr);
+		}
 		return 0;
 	}
 	if (mio->state == DELETING) {
-		//continue deleteing map objects;
+		//continue deleting map objects;
 		struct map_node *mn = find_object(map, mio->delobj);
 		if (!mn) {
 			complete(peer, pr);
 			return 0;
 		}
-		delete_object(peer, pr, mn);
+		r = delete_object(peer, pr, mn);
+		if (r < 0) {
+			complete(peer, pr);
+		}
+		return 0;
 	}
 	//delete map block
 	r = delete_map(peer, pr, map);
 	if (r < 0) {
+		fprintf(stderr, "map delete error\n");
 		fail(peer, pr);
 		return -1;
 	} else if (r == MF_PENDING) {
 		mio->state = DELETING;
+		return 0;
 	}
 	//unreachable
+	fprintf(stderr, "destroy unreachable\n");
 	fail(peer, pr);
 	return 0;
 }
