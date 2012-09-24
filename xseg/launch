@@ -195,13 +195,15 @@ filed)
 	case $2 in
 	start)
 		load_all
+		sleep 0.5
 		spawn_filed
-		map_volume xsegvol 0 1
+		sleep 0.5
+		map_volume xsegvol 3 0
 		;;
 	stop)
 		pkill -f peers/user/filed
 		sleep 0.5
-		unmap_device 0
+		unmap_device 3
 		unload_all
 		;;
 	esac

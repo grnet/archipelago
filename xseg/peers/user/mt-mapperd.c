@@ -445,7 +445,7 @@ static int map_write(struct peerd *peer, struct peer_req* pr, struct map *map)
 	for (i = 0; i < max_objidx; i++) {
 		mn = find_object(map, i);
 		if (!mn){
-			printf("mapwrite couldnt find object\n");
+			fprintf(stderr, "mapwrite couldnt find object\n");
 			goto out_put;
 		}
 		object_to_map(data+pos, mn);
@@ -746,7 +746,7 @@ static int handle_clone(struct peerd *peer, struct peer_req *pr,
 	int r;
 	if (pr->req->op != X_CLONE) {
 		//wtf??
-		printf("unknown op\n");
+		fprintf(stderr, "clone: unknown op\n");
 		fail(peer, pr);
 		return 0;
 	}
@@ -832,7 +832,7 @@ static int handle_clone(struct peerd *peer, struct peer_req *pr,
 	}
 	r = map_write(peer, pr, clonemap);
 	if (r < 0){
-		printf("map_write failed\n");
+		fprintf(stderr, "map_write failed\n");
 		goto out_remove;
 	}
 	else if (r == MF_PENDING) {
@@ -842,7 +842,7 @@ static int handle_clone(struct peerd *peer, struct peer_req *pr,
 		return 0;
 	} else {
 		//unknown state
-		printf("map write returned unknwon state. failing\n");
+		fprintf(stderr, "map write returned unknwon state. failing\n");
 		goto out_remove;
 	}
 	
@@ -860,7 +860,7 @@ out_err_objhash:
 out_err_clonemap:
 	free(clonemap);
 out_err:
-	printf("foo123\n");
+	fprintf(stderr, "foo123\n");
 	fail(peer, pr);
 	return -1;
 }
@@ -878,7 +878,7 @@ static int req2objs(struct peerd *peer, struct peer_req *pr,
 	strncpy(buf, target, pr->req->targetlen);
 	int r = xseg_resize_request(peer->xseg, pr->req, pr->req->targetlen, size);
 	if (r < 0) {
-		printf("couldn't resize req\n");
+		fprintf(stderr, "couldn't resize req\n");
 		return -1;
 	}
 	target = xseg_get_target(peer->xseg, pr->req);
@@ -905,7 +905,7 @@ static int req2objs(struct peerd *peer, struct peer_req *pr,
 		//calc new_target, copy up object
 		r = copyup_object(peer, mn, pr);
 		if (r < 0) {
-			printf("err_copy\n");
+			fprintf(stderr, "err_copy\n");
 			goto out_err_copy;
 		}
 		mn->flags |= MF_OBJECT_COPYING;
@@ -934,7 +934,7 @@ static int req2objs(struct peerd *peer, struct peer_req *pr,
 			//calc new_target, copy up object
 			r = copyup_object(peer, mn, pr);
 			if (r < 0) {
-				printf("err_copy\n");
+				fprintf(stderr, "err_copy\n");
 				goto out_err_copy;
 			}
 			mn->flags |= MF_OBJECT_COPYING;
@@ -952,7 +952,7 @@ out_object_copying:
 	//printf("r2o mn: %lx\n", mn);
 	//printf("volume %s pending on %s\n", map->volume, mn->object);
 	if(__xq_append_tail(&mn->pending, (xqindex) pr) == Noneidx)
-		printf("couldn't append pr to tail\n");
+		fprintf(stderr, "couldn't append pr to tail\n");
 	return MF_PENDING;
 
 out_err_copy:
@@ -1022,7 +1022,6 @@ static int handle_copyup(struct peerd *peer, struct peer_req *pr,
 	newmn.object[req->targetlen] = 0;
 	newmn.objectlen = req->targetlen;
 	r = object_write(peer, pr, map, &newmn);
-	printf("writing object %s\n", mn->object); 
 	if (r != MF_PENDING)
 		goto out_fail;
 	mn->flags |= MF_OBJECT_WRITING;
@@ -1031,7 +1030,7 @@ static int handle_copyup(struct peerd *peer, struct peer_req *pr,
 
 out_fail:
 	xseg_put_request(peer->xseg, req, peer->portno);
-	printf("handle copy up out fail \n");
+	fprintf(stderr, "handle copy up out fail \n");
 	__set_copyup_node(mio, req, NULL);
 	while ((idx = __xq_pop_head(&mn->pending)) != Noneidx){
 		struct peer_req * preq = (struct peer_req *) idx;
@@ -1039,7 +1038,7 @@ out_fail:
 	}
 
 out_err:
-	printf("handle copy up out err\n");
+	fprintf(stderr, "handle copy up out err\n");
 	return -1;
 }
 
@@ -1069,7 +1068,7 @@ static int handle_objectwrite(struct peerd *peer, struct peer_req *pr,
 	map_to_object(&tmp, data);
 	mn->flags |= MF_OBJECT_EXIST;
 	if (mn->flags != MF_OBJECT_EXIST){
-		printf("wrong mn flags\n");
+		fprintf(stderr, "wrong mn flags\n");
 		return *(int *) 0;
 	}
 	//assert mn->flags & MF_OBJECT_EXIST
@@ -1085,7 +1084,7 @@ static int handle_objectwrite(struct peerd *peer, struct peer_req *pr,
 	return 0;
 
 out_fail:
-	printf("object write out fail\n");
+	fprintf(stderr, "object write out fail\n");
 	xseg_put_request(peer->xseg, req, peer->portno);
 	while((idx = __xq_pop_head(&mn->pending)) != Noneidx){
 		struct peer_req *preq = (struct peer_req *) idx;
@@ -1094,7 +1093,7 @@ out_fail:
 	return 0;
 
 out_err:
-	printf("handle owrite failed\n");
+	fprintf(stderr, "handle owrite failed\n");
 	xseg_put_request(peer->xseg, req, peer->portno);
 	return -1;
 }
@@ -1143,7 +1142,7 @@ static int handle_mapw(struct peerd *peer, struct peer_req *pr,
 
 	r = req2objs(peer, pr, map, 1);
 	if (r < 0){
-		printf("req2obj returned r < 0 for req %lx\n", pr->req);
+		fprintf(stderr, "req2obj returned r < 0 for req %lx\n", pr->req);
 		fail(peer, pr);
 	}
 	if (r == 0)
@@ -1468,7 +1467,7 @@ static int my_dispatch(struct peerd *peer, struct peer_req *pr, struct xseg_requ
 //		case X_SNAPSHOT: handle_snap(peer, pr, req); break;
 		case X_INFO: handle_info(peer, pr, req); break;
 		case X_DELETE: handle_destroy(peer, pr, req); break;
-		default: break;
+		default: fprintf(stderr, "mydispatch: unknown up\n"); break;
 	}
 	return 0;
 }
