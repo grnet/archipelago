@@ -26,12 +26,13 @@ function parse_config {
 	[ -z "${HOSTNAME}" ] && HOSTNAME=`hostname`
 	[ -z "${XSEG_HOME}" ] && XSEG_HOME="/root/archip/xseg"
 	[ -z "${MODULES_DIR}" ] && MODULES_DIR="${XSEG_HOME}/lib/kernel"
-	#type:name:nr_ports:nr_requests:request_size:extra_size:page_shift
 	[ -z "${SPEC}" ] && SPEC="segdev:xsegbd:16:1024:12"
 	[ -z "${REQS}" ] && REQS=512
 	[ -z "${PORTS}" ] && PORTS=16
 	[ -z "${IMAGES}" ] && IMAGES="/home/user/archip/xseg/peers/user/foo"
+	[ -z "${MAPS}" ] && IMAGES="/home/user/archip/xseg/peers/user/foo"
 	[ -z "${PITHOS}" ] && PITHOS="/srv/pithos/data/blocks"
+	[ -z "${PITHOSMAPS}" ] && PITHOS="/srv/pithos/data/maps"
 	[ -z "${XSEG_LOGS}" ] && XSEG_LOGS="/home/user/archip/logs"
 	[ -z "${DEVICE_PREFIX}" ] && DEVICE_PREFIX="/dev/xsegbd"
 	[ -z "${XSEGBD_SYSFS}" ] && XSEGBD_SYSFS="/sys/bus/xsegbd"
@@ -43,6 +44,8 @@ function parse_config {
 	[ -z "${BPORT}" ] && BPORT=0
 	[ -z "${VPORT}" ] && VPORT=2
 	[ -z "${MPORT}" ] && MPORT=1
+	[ -z "${MBPORT}" ] && MBPORT=3
+	[ -z "${VTOOL}" ] && VTOOL=15
 }
 
 
@@ -107,6 +110,10 @@ function spawn_pfiled {
 	"${XSEG_HOME}/peers/user/pfiled" -p "$BPORT" -g "${SPEC}" -n \
 	${NR_OPS} "${PITHOS}" "${IMAGES}" &> "${XSEG_LOGS}/pfiled-${HOSTNAME}" &
 }
+function spawn_pfiledm {
+	pgrep -f "peers/user/pfiled" || \
+	"${XSEG_HOME}/peers/user/pfiled" -p "$MBPORT" -g "${SPEC}" -n \
+	${NR_OPS} "${PITHOSMAPS}" "${MAPS}" &> "${XSEG_LOGS}/pfiledm-${HOSTNAME}" &
 
 function spawn_vlmcd {
 	pgrep -f "peers/user/mt-vlmcd" || \
@@ -265,6 +272,30 @@ one)
 		pkill -f peers/user/mt-mapperd || true
 #		free_requests "$MPORT:0" 128 || true
 		pkill -f peers/user/filed || true
+		sleep 0.5
+		unload_all
+		;;
+	*)
+		help
+		;;
+	esac
+	;;
+doublemap)
+	case $2 in
+	start)
+		load_all
+		sleep 0.5
+		spawn_pfiled
+		spawn_pfiledm
+		spawn_mapperd
+		spawn_vlmcd
+		;;
+	stop)
+		pkill -f peers/user/mt-vlmcd || true
+#		free_requests "$VPORT:0" 128 || true
+		pkill -f peers/user/mt-mapperd || true
+#		free_requests "$MPORT:0" 128 || true
+		pkill -f peers/user/pfiled || true
 		sleep 0.5
 		unload_all
 		;;

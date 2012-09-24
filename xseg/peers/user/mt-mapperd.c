@@ -71,7 +71,8 @@ struct map {
 };
 
 struct mapperd {
-	xport bportno;
+	xport bportno;		/* blocker that accesses data */
+	xport mbportno;		/* blocker that accesses maps */
 	xhash_t *hashmaps; // hash_function(target) --> struct map
 };
 
@@ -223,7 +224,7 @@ static int load_map(struct peerd *peer, struct peer_req *pr, char *target, uint3
 	
 	//printf("Loading map: preparing req\n");
 
-	req = xseg_get_request(peer->xseg, peer->portno, mapper->bportno, X_ALLOC);
+	req = xseg_get_request(peer->xseg, peer->portno, mapper->mbportno, X_ALLOC);
 	if (!req)
 		goto out_fail;
 
@@ -387,7 +388,7 @@ static int object_write(struct peerd *peer, struct peer_req *pr,
 	void *dummy;
 	struct mapperd *mapper = __get_mapperd(peer);
 	struct xseg_request *req = xseg_get_request(peer->xseg, peer->portno,
-							mapper->bportno, X_ALLOC);
+							mapper->mbportno, X_ALLOC);
 	if (!req)
 		goto out_err;
 	int r = xseg_prep_request(peer->xseg, req, mn->objectlen, objectsize_in_map);
@@ -426,7 +427,7 @@ static int map_write(struct peerd *peer, struct peer_req* pr, struct map *map)
 	struct map_node *mn;
 	uint64_t i, pos, max_objidx = calc_map_obj(map);
 	struct xseg_request *req = xseg_get_request(peer->xseg, peer->portno, 
-							mapper->bportno, X_ALLOC);
+							mapper->mbportno, X_ALLOC);
 	if (!req)
 		goto out_err;
 	int r = xseg_prep_request(peer->xseg, req, map->volumelen, 
@@ -1300,7 +1301,7 @@ static int delete_map(struct peerd *peer, struct peer_req *pr,
 	struct mapperd *mapper = __get_mapperd(peer);
 	struct mapper_io *mio = __get_mapper_io(pr);
 	struct xseg_request *req = xseg_get_request(peer->xseg, peer->portno, 
-							mapper->bportno, X_ALLOC);
+							mapper->mbportno, X_ALLOC);
 	if (!req)
 		goto out_err;
 	int r = xseg_prep_request(peer->xseg, req, map->volumelen, 0);
@@ -1573,6 +1574,11 @@ int custom_peer_init(struct peerd *peer, int argc, const char *argv[])
 	for (i = 0; i < argc; i++) {
 		if (!strcmp(argv[i], "-bp") && (i+1) < argc){
 			mapper->bportno = atoi(argv[i+1]);
+			i += 1;
+			continue;
+		}
+		if (!strcmp(argv[i], "-mbp") && (i+1) < argc){
+			mapper->mbportno = atoi(argv[i+1]);
 			i += 1;
 			continue;
 		}
