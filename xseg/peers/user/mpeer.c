@@ -75,9 +75,9 @@ void log_pr(char *msg, struct peer_req *pr)
 	req_target = xseg_get_target(xseg, pr->req);
 	req_data = xseg_get_data(xseg, pr->req);
 	/* null terminate name in case of req->target is less than 63 characters,
-	 *          * and next character after name (aka first byte of next buffer) is not
-	 *                   * null
-	 *                            */
+	 * and next character after name (aka first byte of next buffer) is not
+	 * null
+	 */
 	unsigned int end = (pr->req->targetlen> 63) ? 63 : pr->req->targetlen;
 	if (verbose) {
 		strncpy(target, req_target, end);

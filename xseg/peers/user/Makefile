@@ -6,7 +6,7 @@ default: all
 
 #all: filed xseg sosd vlmcd mapperd
 #all: filed xseg vlmcd mapperd
-all: filed xseg mt-sosd dummy mt-vlmcd mapperd mt-mapperd pfiled
+all: filed xseg mt-sosd dummy mt-vlmcd mapperd mt-mapperd pfiled monitor
 
 
 filed: filed.c $(BASE)/xseg/xseg.h
