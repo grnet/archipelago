@@ -136,7 +136,6 @@ static struct map * find_map(struct mapperd *mapper, char *target, uint32_t targ
 	//assert targetlen <= XSEG_MAX_TARGET_LEN
 	strncpy(buf, target, targetlen);
 	buf[targetlen] = 0;
-	fprintf(stderr, "%s\n", buf);
 	r = xhash_lookup(mapper->hashmaps, (xhashidx) buf, (xhashidx *) &m);
 	if (r < 0)
 		return NULL;
@@ -153,7 +152,6 @@ static int insert_map(struct mapperd *mapper, struct map *map)
 		goto out;
 	}
 	
-	fprintf(stderr, "%s\n", map->volume);
 	r = xhash_insert(mapper->hashmaps, (xhashidx) map->volume, (xhashidx) map);
 	if (r == -XHASH_ERESIZE) {
 		xhashidx shift = xhash_grow_size_shift(map->objects);

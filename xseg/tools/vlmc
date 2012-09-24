@@ -58,7 +58,7 @@ def xsegbd_loaded():
 def vlmc_map(args):
     xsegbd_loaded()
     name = args.name[0]
-    prev = 2
+    prev = 3
     try:
         result = [int(open(XSEGBD_SYSFS + "devices/" + f + "/srcport").read().strip()) for f in os.listdir(XSEGBD_SYSFS + "devices/")]
         result.sort()
