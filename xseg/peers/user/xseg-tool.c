@@ -189,11 +189,11 @@ out:
 
 void report_request(struct xseg_request *req)
 {
-	uint32_t max = req->datalen;
-	char *data = xseg_get_data(xseg, req);
-	if (max > 128)
-		max = 128;
-	data[max-1] = 0;
+	//uint32_t max = req->datalen;
+	//char *data = xseg_get_data(xseg, req);
+	//if (max > 128)
+	//	max = 128;
+	//data[max-1] = 0;
 	fprintf(stderr, "request %llu state %u\n", (unsigned long long)req->serial, req->state);
 }
 
@@ -351,8 +351,11 @@ int cmd_delete(char *target)
         req->op = X_DELETE;
 
         xport p = xseg_submit(xseg, req, srcport, X_ALLOC);
-        if (p == NoPort)
+        if (p == NoPort){
+		fprintf(stderr, "Couldn't submit request\n");
+                xseg_put_request(xseg, req, srcport);
                 return -1;
+	}
 
         xseg_signal(xseg, p);
 
@@ -1005,6 +1008,7 @@ int cmd_finish(unsigned long nr, int fail)
 void handle_reply(struct xseg_request *req)
 {
 	char *req_data = xseg_get_data(xseg, req);
+	char *req_target = xseg_get_target(xseg, req);
 	if (!(req->state & XS_SERVED)) {
 		report_request(req);
 		goto put;
@@ -1021,6 +1025,8 @@ void handle_reply(struct xseg_request *req)
 		break;
 	case X_SYNC:
 	case X_DELETE:
+		fprintf(stderr, "deleted %s\n", req_target);
+		break;
 	case X_TRUNCATE:
 	case X_COMMIT:
 	case X_CLONE:

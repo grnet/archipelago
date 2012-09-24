@@ -63,13 +63,9 @@ int dispatch(struct peerd *peer, struct peer_req *pr, struct xseg_request *xreq)
 		log_pr("completing", pr);
 		complete_forwarded(peer, pr);
 	}
-	else if (req->state == XS_ACCEPTED){
+	else {
 		log_pr("forwarding", pr);
 		forward(peer,pr);
-	}
-	else {
-		printf("unexpected state\n");
-		fail(peer, pr);
 	}
 	return 0;
 }
