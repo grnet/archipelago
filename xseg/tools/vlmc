@@ -3,6 +3,7 @@
 # vlmc tool
 
 import os, sys, subprocess, argparse
+from subprocess import call, check_call
 
 def vlmc_create(args):
     name = args.name[0]
@@ -13,16 +14,17 @@ def vlmc_create(args):
         print >> sys.stderr, "At least one of the size/snap args must be provided"
         sys.exit(-1)
 
-    cmd = ["/root/archip_test/xseg/peers/user/vlmc-xseg", "%s" % SPEC, "create", "--name", "%s" % name]
+    cmd = [XSEG_HOME + "/peers/user/vlmc-xseg", "%s" % SPEC, "create", "--name", "%s" % name]
     if snap != None:
-            cmd.extend("--snap", "%s" % snap)
+            cmd.extend(["--snap", "%s" % snap])
     if size != None:
-            cmd.extend("--size", "%s" % size)
-    cmd.extend("-mp", "%s" % MPORT)
-    cmd.extend("-p", "%s" % VTOOL)
+            cmd.extend(["--size", "%s" % size])
+    cmd.extend(["-mp", "%s" % MPORT])
+    cmd.extend(["-p", "%s" % VTOOL])
 
-    result = utils.RunCmd(cmd)
-    if result.failed:
+    try:
+        check_call(cmd, stderr=subprocess.STDOUT, shell=False);
+    except Exception:
             sys.stderr.write("vlmc creation failed\n")
             sys.exit(-1)
     
@@ -37,9 +39,9 @@ def vlmc_list(args):
 
 def vlmc_remove(args):
     name = args.name[0]
-    cmd = ["/root/archip_test/xseg/peers/user/vlmc-xseg", "%s" % SPEC, "remove", "--name", "%s" % name]
-    cmd.extend("-mp", "%s" % MPORT)
-    cmd.extend("-p", "%s" % VTOOL)
+    cmd = [XSEG_HOME + "/peers/user/vlmc-xseg", "%s" % SPEC, "remove", "--name", "%s" % name]
+    cmd.extend(["-mp", "%s" % MPORT])
+    cmd.extend(["-p", "%s" % VTOOL])
     result = utils.RunCmd(cmd)
     if result.failed:
             sys.stderr.write("vlmc creation failed\n")

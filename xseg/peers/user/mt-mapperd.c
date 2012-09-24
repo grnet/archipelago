@@ -135,6 +135,7 @@ static struct map * find_map(struct mapperd *mapper, char *target, uint32_t targ
 	//assert targetlen <= XSEG_MAX_TARGET_LEN
 	strncpy(buf, target, targetlen);
 	buf[targetlen] = 0;
+	fprintf(stderr, "%s\n", buf);
 	r = xhash_lookup(mapper->hashmaps, (xhashidx) buf, (xhashidx *) &m);
 	if (r < 0)
 		return NULL;
@@ -151,6 +152,7 @@ static int insert_map(struct mapperd *mapper, struct map *map)
 		goto out;
 	}
 	
+	fprintf(stderr, "%s\n", map->volume);
 	r = xhash_insert(mapper->hashmaps, (xhashidx) map->volume, (xhashidx) map);
 	if (r == -XHASH_ERESIZE) {
 		xhashidx shift = xhash_grow_size_shift(map->objects);
@@ -704,12 +706,16 @@ static int handle_mapwrite(struct peerd *peer, struct peer_req *pr,
 	//assert req->op = X_WRITE;
 	char *target = xseg_get_target(peer->xseg, req);
 	struct map *map = find_map(mapper, target, req->targetlen);
-	if (!map)
+	if (!map) {
+		fprintf(stderr, "couldn't find map\n");
 		goto out_err;
+	}
 	//assert map->flags & MF_MAP_WRITING
 
-	if (req->state & XS_FAILED)
+	if (req->state & XS_FAILED){
+		fprintf(stderr, "write request failed\n");
 		goto out_fail;
+	}
 	
 	xseg_put_request(peer->xseg, req, peer->portno);
 	map->flags &= ~MF_MAP_WRITING;
@@ -733,6 +739,7 @@ out_fail:
 	return 0;
 
 out_err:
+	fprintf(stderr, "asdfasdf\n");
 	xseg_put_request(peer->xseg, req, peer->portno);
 	return -1;
 }
@@ -754,8 +761,10 @@ static int handle_clone(struct peerd *peer, struct peer_req *pr,
 	if (req->op == X_WRITE){
 			//assert state = WRITING;
 			r = handle_mapwrite(peer, pr ,req);
-			if (r < 0)
+			if (r < 0){
+				fprintf(stderr, "handle mapwrite returned error\n");
 				fail(peer, pr);
+			}
 			return 0;
 	}
 
@@ -793,7 +802,7 @@ static int handle_clone(struct peerd *peer, struct peer_req *pr,
 	xqindex *qidx = xq_alloc_empty(&clonemap->pending, peer->nr_ops);
 	if (!qidx)
 		goto out_err_objhash;
-	clonemap->size = xclone->size;
+	clonemap->size = xclone->size; //assert xlone->size > map->size
 	clonemap->flags = 0;
 	char *target = xseg_get_target(peer->xseg, pr->req);
 	strncpy(clonemap->volume, target, pr->req->targetlen);
@@ -1328,6 +1337,7 @@ static int handle_map_delete(struct peerd *peer, struct peer_req *pr,
 	struct mapperd *mapper = __get_mapperd(peer);
 	struct mapper_io *mio = __get_mapper_io(pr);
 	xqindex idx;
+	int r;
 	if (err) {
 		map->flags &= ~MF_MAP_DELETING;
 		//dispatch all pending
@@ -1585,7 +1595,7 @@ int custom_peer_init(struct peerd *peer, int argc, const char *argv[])
 
 void print_obj(struct map_node *mn)
 {
-	printf("[%llu]object name: %s[%u] exists: %c\n", mn->objectidx, mn->object, mn->objectlen, 
+	fprintf(stderr, "[%llu]object name: %s[%u] exists: %c\n", mn->objectidx, mn->object, mn->objectlen, 
 			(mn->flags & MF_OBJECT_EXIST) ? 'y' : 'n');
 }
 
@@ -1594,7 +1604,7 @@ void print_map(struct map *m)
 	uint64_t nr_objs = m->size/block_size;
 	if (m->size % block_size)
 		nr_objs++;
-	printf("Volume name: %s[%u], size: %llu, nr_objs: %llu\n", 
+	fprintf(stderr, "Volume name: %s[%u], size: %llu, nr_objs: %llu\n", 
 			m->volume, m->volumelen, m->size, nr_objs);
 	uint64_t i;
 	struct map_node *mn;

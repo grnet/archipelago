@@ -20,29 +20,27 @@ int safe_strlen(char *s)
 		return -1;
 
 	for (i = 0; i < MAX_ARG_LEN; i++) {
-		if (!s)
-			break;
+		if (!*s) 
+			return i;
 		s++;
 	}
-	if (i == MAX_ARG_LEN)
-		return -1;
-	
-	return i;
+	return -1;
 }
 
 int validate_alphanumeric(char *s)
 {
 	int i;
 	int len = safe_strlen(s);
-	if (len < 0)
-		return -1;
+	if (len < 0){
+		return 0;
+	}
 
 	for (i = 0; i < len; i++) {
-		if (!isalnum(s))
-			return -1;
+		if (!isalnum(*s))
+			return 0;
 		s++;
 	}
-	return 0;
+	return 1;
 }
 
 int validate_numeric(char *s)
@@ -50,14 +48,14 @@ int validate_numeric(char *s)
 	int i;
 	int len = safe_strlen(s);
 	if (len < 0)
-		return -1;
+		return 0;
 
 	for (i = 0; i < len; i++) {
-		if (!isdigit(s))
-			return -1;
+		if (!isdigit(*s))
+			return 0;
 		s++;
 	}
-	return 0;
+	return 1;
 }
 
 char *spec = "segdev:xsegbd:16:1024:12";
@@ -124,6 +122,8 @@ int vlmc_create(char *name, uint64_t size, char *snap)
 		xseg_put_request(xseg, req, srcport);
 		return -1;
 	}
+	char *target = xseg_get_target(xseg, req);
+	strncpy(target, name, targetlen);
 	struct xseg_request_clone *xclone = (struct xseg_request_clone *) xseg_get_data(xseg, req);
 	if (snaplen < 0)
 		memset(xclone->target, 0, XSEG_MAX_TARGETLEN);
@@ -327,6 +327,7 @@ int main(int argc, const char *argv[])
 				err_in_arg(i, argv[i]);
 			} else {
 				name = argv[i+1];
+				i++;
 			}
 		} else {
 			err_in_arg(i, argv[i]);
@@ -363,7 +364,7 @@ int main(int argc, const char *argv[])
 	else if (!strcmp(argv[2], "resize"))
 		ret = vlmc_resize(name, size);
 	else
-		fprintf(stderr, "Unknown action (%s)\n", argv[2]);
+		fprintf(stderr, "unknown action (%s)\n", argv[2]);
 
 	return ret;
 }

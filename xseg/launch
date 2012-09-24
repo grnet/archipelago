@@ -117,8 +117,8 @@ function spawn_vlmcd {
 
 function spawn_mapperdc {
 	pgrep -f "mt-mapperd" || \
-	"${XSEG_HOME}/peers/user/mt-mapperd" -t 1 -p "$MPORT" -bp "$BPORT"  -g "${SPEC}" \
-	&> "${XSEG_LOGS}/mapperd-${HOSTNAME}" &
+	"${XSEG_HOME}/peers/user/mt-mapperd" -t 1 -p "$MPORT" -bp "$BPORT"  -g "${SPEC}"\
+	&> "${XSEG_LOGS}/mapperd-${HOSTNAME}" & 
 #	alloc_requests "$MPORT:0" 128
 }
 
@@ -254,10 +254,10 @@ one)
 	case $2 in
 	start)
 		load_all
-		sleep 0.5
-		spawn_filed
+		sleep 1
+		spawn_filed 
 		spawn_mapperdc
-		spawn_vlmcd
+		spawn_vlmcd 
 		;;
 	stop)
 		pkill -f peers/user/mt-vlmcd || true
