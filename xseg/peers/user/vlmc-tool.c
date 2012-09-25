@@ -36,7 +36,7 @@ int validate_alphanumeric(char *s)
 	}
 
 	for (i = 0; i < len; i++) {
-		if (!isalnum(*s))
+		if (!isalnum(*s)&&*s!='-'&&*s!='.')
 			return 0;
 		s++;
 	}

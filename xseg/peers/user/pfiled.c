@@ -781,6 +781,11 @@ static int pfiled_init(struct pfiled *pfiled)
 	perr(PI, 0, "filed on port %u/%u\n",
 		pfiled->portno, pfiled->xseg->config.nr_ports);
 
+	if (xseg_init_local_signal(pfiled->xseg, pfiled->portno) < 0){
+		printf("cannot int local signals\n");
+		return -1;
+	}
+
 	for (i = 0; i < pfiled->nr_ops; i++) {
 		pthread_cond_init(&pfiled->fdcache[i].cond, NULL);
 		pfiled->fdcache[i].flags = READY;

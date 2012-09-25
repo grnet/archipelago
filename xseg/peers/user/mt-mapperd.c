@@ -22,7 +22,7 @@ GCRY_THREAD_OPTION_PTHREAD_IMPL;
 /* hex representation of sha256 value takes up double the sha256 size */
 #define XSEG_MAX_TARGET_LEN (SHA256_DIGEST_SIZE << 1)
 
-#define block_size (1<<20)
+#define block_size (1<<22)
 #define objectsize_in_map (1 + XSEG_MAX_TARGET_LEN) /* transparency byte + max object len */
 #define mapheader_size (SHA256_DIGEST_SIZE + (sizeof(uint64_t)) ) /* magic hash value  + volume size */
 
@@ -339,17 +339,17 @@ static int insert_object(struct map *map, struct map_node *mn)
 /*
  * map read/write functions 
  */
-static inline void pithosmap_to_object(struct map_node *mn, char *buf)
+static inline void pithosmap_to_object(struct map_node *mn, unsigned char *buf)
 {
 	int i;
 	//hexlify sha256 value
 	for (i = 0; i < SHA256_DIGEST_SIZE; i++) {
-		sprintf(mn->object, "%02x", buf[i]);
+		sprintf(mn->object+2*i, "%02x", buf[i]);
 	}
 
 	mn->object[XSEG_MAX_TARGET_LEN] = 0;
 	mn->objectlen = strlen(mn->object);
-	mn->flags = 0;
+	mn->flags = MF_OBJECT_EXIST;
 }
 
 static inline void map_to_object(struct map_node *mn, char *buf)
@@ -788,7 +788,7 @@ static int handle_clone(struct peerd *peer, struct peer_req *pr,
 		fail(peer, pr);
 		return 0;
 	}
-
+	print_map(map);
 	//alloc and init struct map
 	struct map *clonemap = malloc(sizeof(struct map));
 	if (!clonemap) {
@@ -834,6 +834,7 @@ static int handle_clone(struct peerd *peer, struct peer_req *pr,
 			goto out_free_all;
 	}
 	//insert map
+	print_map(clonemap);
 	r = insert_map(mapper, clonemap);
 	if ( r < 0) {
 		goto out_free_all;
