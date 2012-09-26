@@ -5,6 +5,7 @@
 #include <linux/time.h>
 
 #include <sys/domain.h>
+#include <sys/util.h>
 #include <xtypes/domain.h>
 #include <xseg/domain.h>
 
@@ -74,13 +75,7 @@ static void __exit xsegmod_exit(void)
 	return;
 }
 
-struct log_ctx {
-	void *logfile;
-	char *peer_name;
-	unsigned int log_level; 
-};
-
-int kernel_init_logctx(struct log_ctx *lc, char *peer_name, unsigned int log_level, char *logfile)
+int kernel_init_logctx(struct log_ctx *lc, char *peer_name, enum log_level log_level, char *logfile)
 {
 	lc->peer_name = peer_name;
 	lc->log_level = log_level;
@@ -88,13 +83,14 @@ int kernel_init_logctx(struct log_ctx *lc, char *peer_name, unsigned int log_lev
 	return 0;
 }
 int (*init_logctx)(struct log_ctx *lc, char *peer_name, enum log_level log_level, char *logfile) = kernel_init_logctx;
+EXPORT_SYMBOL(init_logctx);
 
 void __xseg_log2(struct log_ctx *lc, unsigned int level, char *fmt, ...)
 {
 	va_list ap;
 	struct timeval t;
 	struct tm broken;
-	char timebuf[1024], buffer[4096];
+	char buffer[4096];
 	char *buf = buffer;
 	char *type = NULL, *pn = NULL;
 
@@ -124,6 +120,7 @@ void __xseg_log2(struct log_ctx *lc, unsigned int level, char *fmt, ...)
 
 	return;
 }
+EXPORT_SYMBOL(__xseg_log2);
 
 module_init(xsegmod_init);
 module_exit(xsegmod_exit);

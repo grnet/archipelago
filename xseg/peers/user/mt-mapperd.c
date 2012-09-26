@@ -1371,6 +1371,10 @@ static int delete_object(struct peerd *peer, struct peer_req *pr,
 	struct mapperd *mapper = __get_mapperd(peer);
 	struct mapper_io *mio = __get_mapper_io(pr);
 
+	if (!(mn->flags && MF_OBJECT_EXIST)){
+		//cant delete not existing object
+
+	}
 	if (xq_count(&mn->pending) != 0) {
 		mio->delobj = mn->objectidx;
 		__xq_append_tail(&mn->pending, (xqindex) pr); //FIXME err check

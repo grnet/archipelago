@@ -6,4 +6,10 @@
 #include <linux/slab.h>
 #include <linux/time.h>
 
+struct log_ctx {
+	void *logfile;
+	char *peer_name;
+	unsigned int log_level; 
+};
+
 #endif
