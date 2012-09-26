@@ -460,10 +460,11 @@ int main(int argc, char *argv[])
 	uint32_t nr_threads = 16 ;
 	unsigned int debug_level = 0;
 	uint32_t defer_portno = NoPort;
-	
+	char *logfile = NULL;
+
 	//capture here -g spec, -n nr_ops, -p portno, -t nr_threads -v verbose level
 	// -dp xseg_portno to defer blocking requests
-	//maybe -l log file ?
+	// -l log file ?
 	//TODO print messages on arg parsing error
 	
 	for (i = 1; i < argc; i++) {
@@ -499,9 +500,14 @@ int main(int argc, char *argv[])
 			i += 1;
 			continue;
 		}
+		if (!strcmp(argv[i], "-l") && i + 1 < argc ) {
+			logfile = argv[i+1];
+			i += 1;
+			continue;
+		}
 
 	}
-	init_logctx(&lc, argv[0], debug_level, NULL);
+	init_logctx(&lc, argv[0], debug_level, logfile);
 	XSEGLOG2(&lc, D, "Main thread has tid %ld.\n", syscall(SYS_gettid));
 	
 	//TODO perform argument sanity checks
