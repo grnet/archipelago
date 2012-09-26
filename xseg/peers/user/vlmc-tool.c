@@ -129,7 +129,6 @@ int vlmc_create(char *name, uint64_t size, char *snap)
 		memset(xclone->target, 0, XSEG_MAX_TARGETLEN);
 	else {
 		strncpy(xclone->target, snap, snaplen);
-		xclone->target[snaplen] = 0;
 	}
 	xclone->size = size;
 	req->offset = 0;
