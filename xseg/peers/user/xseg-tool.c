@@ -381,6 +381,7 @@ int cmd_clone(char *src, char *dst)
 {
 
         uint32_t targetlen = strlen(dst);
+	uint32_t parentlen = strlen(src);
         struct xseg_request *req;
         struct xseg_request_clone *xclone;
 	xseg_bind_port(xseg, srcport);
@@ -402,8 +403,9 @@ int cmd_clone(char *src, char *dst)
 
 	strncpy(target, dst, targetlen);
         xclone = (struct xseg_request_clone *) data;
-        strncpy(xclone->target, src, 128);
-        xclone->size = 400 * (1 << 20);
+        strncpy(xclone->target, src, parentlen);
+	xclone->targetlen = parentlen;
+        xclone->size = -1;
         req->offset = 0;
         req->size = sizeof(struct xseg_request_clone);
         req->op = X_CLONE;

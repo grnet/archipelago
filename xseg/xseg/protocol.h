@@ -12,7 +12,15 @@ struct xseg_reply_info {
 	uint64_t size;
 };
 
+#ifndef XSEG_MAX_TARGETLEN
 #define XSEG_MAX_TARGETLEN 256
+#endif
+
+#if (XSEG_MAX_TARGETLEN < 64)
+#pragma message("XSEG_MAX_TARGETLEN should be at least 64!")
+#undef XSEG_MAX_TARGETLEN
+#define XSEG_MAX_TARGETLEN 64
+#endif
 
 struct xseg_reply_map_scatterlist {
 	char target[XSEG_MAX_TARGETLEN];
