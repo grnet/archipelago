@@ -74,6 +74,57 @@ static void __exit xsegmod_exit(void)
 	return;
 }
 
+struct log_ctx {
+	void *logfile;
+	char *peer_name;
+	unsigned int log_level; 
+};
+
+int kernel_init_logctx(struct log_ctx *lc, char *peer_name, unsigned int log_level, char *logfile)
+{
+	lc->peer_name = peer_name;
+	lc->log_level = log_level;
+	lc->logfile = NULL;
+	return 0;
+}
+int (*init_logctx)(struct log_ctx *lc, char *peer_name, enum log_level log_level, char *logfile) = kernel_init_logctx;
+
+void __xseg_log2(struct log_ctx *lc, unsigned int level, char *fmt, ...)
+{
+	va_list ap;
+	struct timeval t;
+	struct tm broken;
+	char timebuf[1024], buffer[4096];
+	char *buf = buffer;
+	char *type = NULL, *pn = NULL;
+
+	va_start(ap, fmt);
+	switch (level) {
+		case E: type = "XSEG[EE]"; break;
+		case W: type = "XSEG[WW]"; break;
+		case I: type = "XSEG[II]"; break;
+		case D: type = "XSEG[DD]"; break;
+		default: type = "XSEG[UNKNONW]"; break;
+	}
+	pn = lc->peer_name;
+	if (!pn)
+		pn = "Invalid peer name";
+
+	do_gettimeofday(&t);
+	time_to_tm(t.tv_sec, 0, &broken);	
+	
+	buf += sprintf(buf, "%s: %s: ", type, lc->peer_name);
+	buf += sprintf(buf, "%d:%d:%d:%ld\n\t", broken.tm_hour, broken.tm_min, 
+                         broken.tm_sec, t.tv_usec);
+	buf += vsprintf(buf, fmt, ap);
+	buf += sprintf(buf, "\n");
+
+	(void)printk(KERN_INFO "%s\n", buffer);
+	va_end(ap);
+
+	return;
+}
+
 module_init(xsegmod_init);
 module_exit(xsegmod_exit);
 

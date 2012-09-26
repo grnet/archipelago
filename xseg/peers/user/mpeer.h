@@ -46,7 +46,7 @@ static inline struct peerd * __get_peerd(void * custom_peerd)
  ********************************/
 
 /* peer main function */
-int custom_peer_init(struct peerd *peer, int argc, const char *argv[]);
+int custom_peer_init(struct peerd *peer, int argc, char *argv[]);
 
 /* dispatch function that cannot block
  * defers blocking calls to helper threads

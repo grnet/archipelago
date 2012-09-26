@@ -23,10 +23,6 @@ struct monitor_io {
 static int forward(struct peerd *peer, struct peer_req *pr)
 {
 	int r;
-	struct monitord *monitor = (struct monitord *) peer->priv;
-	struct xseg *xseg = peer->xseg;
-	struct xseg_request *req = pr->req;
-	struct monitor_io *mio = (struct monitor_io *) pr->priv;
 	r = submit_peer_req(peer, pr);
 	if (r < 0) {
 		printf("couldn't forward request");
@@ -37,10 +33,7 @@ static int forward(struct peerd *peer, struct peer_req *pr)
 
 static int complete_forwarded(struct peerd *peer, struct peer_req *pr)
 {
-	int r;
-	struct xseg *xseg = peer->xseg;
 	struct xseg_request *req = pr->req;
-	struct monitor_io *mio = (struct monitor_io *) pr->priv;
 
 	// assert mio->src_portno != NoPort
 	if (req->state & XS_SERVED)
@@ -57,8 +50,6 @@ static int complete_forwarded(struct peerd *peer, struct peer_req *pr)
 int dispatch(struct peerd *peer, struct peer_req *pr, struct xseg_request *xreq)
 {
 	struct xseg_request *req = pr->req;
-	struct xseg_io *xio = (struct xseg_io*) pr->priv;
-	struct timeval end;
 	if (req->state & (XS_SERVED | XS_FAILED)){
 		log_pr("completing", pr);
 		complete_forwarded(peer, pr);
@@ -70,21 +61,42 @@ int dispatch(struct peerd *peer, struct peer_req *pr, struct xseg_request *xreq)
 	return 0;
 }
 
+int mpause(struct peerd *peer)
+{
+	struct xseg *xseg = peer->xseg;
+	struct xseg_port *port = xseg_get_port(xseg, peer->portno);
+	if (!port)
+		return -1;
+	
+	xlock_acquire(&port->rq_lock, peer->portno);
+	xlock_acquire(&port->pq_lock, peer->portno);
+	return 0;
+}
+
+int munpause(struct peerd *peer)
+{
+	struct xseg *xseg = peer->xseg;
+	struct xseg_port *port = xseg_get_port(xseg, peer->portno);
+	if (!port)
+		return -1;
+	
+	xlock_release(&port->rq_lock);
+	xlock_release(&port->pq_lock);
+	return 0;
+}
+
 struct peerd *main_peer;
 
-void main_loop(void *arg)
+void main_loop(void)
 {
-	int i, ret;
+	int ret;
 	struct peerd * peer = main_peer;
-	struct xsegd *xsegd = (struct xsegd *) peer->priv;
 	char buf[INPUT_BUF_SIZE];
-	char token[MAX_NR_ARGS];
-	char *bufp, *tok, *nl;
+	char *nl;
 
 	unsigned int portno = NoPort, dstgw, srcgw;
 
 	for (;;){
-		bufp = buf;
 		printf("waitin next line\n");
 		if (fgets(buf, INPUT_BUF_SIZE, stdin)) {
 			nl = strchr(buf, '\n');
@@ -134,12 +146,11 @@ void main_loop(void *arg)
 	}
 }
 
-int custom_peer_init(struct peerd *peer, int argc, const char *argv[])
+int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 {
 	int i;
 	struct monitor_io *mio;
 	struct monitord *monitor;
-	struct main_arg *marg;
 
 	monitor = malloc(sizeof(struct monitord));
 	if (!monitor)
@@ -167,29 +178,5 @@ int custom_peer_init(struct peerd *peer, int argc, const char *argv[])
 
 	peer->interactive_func = main_loop;
 
-	return 0;
-}
-
-int mpause(struct peerd *peer)
-{
-	struct xseg *xseg = peer->xseg;
-	struct xseg_port *port = xseg_get_port(xseg, peer->portno);
-	if (!port)
-		return -1;
-	
-	xlock_acquire(&port->rq_lock, peer->portno);
-	xlock_acquire(&port->pq_lock, peer->portno);
-	return 0;
-}
-
-int munpause(struct peerd *peer)
-{
-	struct xseg *xseg = peer->xseg;
-	struct xseg_port *port = xseg_get_port(xseg, peer->portno);
-	if (!port)
-		return -1;
-	
-	xlock_release(&port->rq_lock);
-	xlock_release(&port->pq_lock);
 	return 0;
 }

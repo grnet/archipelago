@@ -36,3 +36,10 @@ EXPORT_SYMBOL(xseg_getandset_dstgw);
 EXPORT_SYMBOL(xseg_init_local_signal);
 EXPORT_SYMBOL(xseg_quit_local_signal);
 EXPORT_SYMBOL(xseg_resize_request);
+
+
+EXPORT_SYMBOL(xseg_snprintf);
+EXPORT_SYMBOL(__xseg_errbuf);
+EXPORT_SYMBOL(__xseg_log);
+EXPORT_SYMBOL(init_logctx);
+EXPORT_SYMBOL(__xseg_log2);

@@ -20,6 +20,7 @@
 
 
 unsigned int verbose = 0;
+struct log_ctx lc;
 
 struct thread {
 	struct peerd *peer;
@@ -156,7 +157,7 @@ uint64_t responds = 0;
 void get_responds_stats(){
 		printf("Time waiting respond %lu.%06lu sec for %llu times.\n",
 				//(unsigned int)(t - peer->thread),
-				resp_accum.tv_sec, resp_accum.tv_usec, responds);
+				resp_accum.tv_sec, resp_accum.tv_usec, (long long unsigned int) responds);
 }
 
 //FIXME error check
@@ -164,7 +165,7 @@ void fail(struct peerd *peer, struct peer_req *pr)
 {
 	struct xseg_request *req = pr->req;
 	uint32_t p;
-	LOG(5, "failing req %u\n", (unsigned int) (pr - peer->peer_reqs));
+	XSEGLOG2(&lc, D, "failing req %u", (unsigned int) (pr - peer->peer_reqs));
 	req->state |= XS_FAILED;
 	//xseg_set_req_data(peer->xseg, pr->req, NULL);
 	p = xseg_respond(peer->xseg, req, peer->portno, X_ALLOC);
@@ -202,7 +203,7 @@ static void handle_accepted(struct peerd *peer, struct peer_req *pr,
 {
 	struct xseg_request *xreq = pr->req;
 	//assert xreq == req;
-	LOG(4, "Handle accepted \n");
+	XSEGLOG2(&lc, D, "Handle accepted");
 	xreq->serviced = 0;
 	//xreq->state = XS_ACCEPTED;
 	pr->retval = 0;
@@ -214,7 +215,7 @@ static void handle_received(struct peerd *peer, struct peer_req *pr,
 {
 	//struct xseg_request *req = pr->req;
 	//assert req->state != XS_ACCEPTED;
-	LOG(4, "Handle received \n");
+	XSEGLOG2(&lc, D, "Handle received \n");
 	dispatch(peer, pr, req);
 
 }
@@ -223,7 +224,7 @@ uint64_t submits = 0;
 void get_submits_stats(){
 		printf("Time waiting submit %lu.%06lu sec for %llu times.\n",
 				//(unsigned int)(t - peer->thread),
-				sub_accum.tv_sec, sub_accum.tv_usec, submits);
+				sub_accum.tv_sec, sub_accum.tv_usec, (long long unsigned int) submits);
 }
 
 int submit_peer_req(struct peerd *peer, struct peer_req *pr)
@@ -232,7 +233,7 @@ int submit_peer_req(struct peerd *peer, struct peer_req *pr)
 	struct xseg_request *req = pr->req;
 	// assert req->portno == peer->portno ?
 	//TODO small function with error checking
-	LOG (5, "submitting peer req %u\n", (unsigned int)(pr - peer->peer_reqs));
+	XSEGLOG2 (&lc, D, "submitting peer req %u\n", (unsigned int)(pr - peer->peer_reqs));
 	ret = xseg_set_req_data(peer->xseg, req, (void *)(pr));
 	if (ret < 0)
 		return -1;
@@ -275,13 +276,13 @@ static void* thread_loop(void *arg)
 	struct xseg_request *accepted, *received;
 	int r;
 		
-	printf("thread %u\n",  (unsigned int) (t- peer->thread));
+	XSEGLOG2(&lc, D, "thread %u\n",  (unsigned int) (t- peer->thread));
 
-	LOG(0, "Thread %u has tid %u.\n", (unsigned int) (t- peer->thread), pid);
+	XSEGLOG2(&lc, I, "Thread %u has tid %u.\n", (unsigned int) (t- peer->thread), pid);
 	xseg_init_local_signal(xseg, portno);
 	for (;;) {
 		if (t->func) {
-			LOG(5, "Thread %u executes function\n", (unsigned int) (t- peer->thread));
+			XSEGLOG2(&lc, D, "Thread %u executes function\n", (unsigned int) (t- peer->thread));
 			xseg_cancel_wait(xseg, portno);
 			t->func(t->arg);
 			t->func = NULL;
@@ -299,7 +300,7 @@ static void* thread_loop(void *arg)
 				pr = alloc_peer_req(peer);
 				if (pr) {
 					accepted = xseg_accept(xseg, peer->portno);
-					LOG(5, "Thread %u accepted\n", (unsigned int) (t- peer->thread));
+					XSEGLOG2(&lc, D, "Thread %u accepted\n", (unsigned int) (t- peer->thread));
 					if (accepted) {
 						pr->req = accepted;
 						xseg_cancel_wait(xseg, portno);
@@ -320,8 +321,9 @@ static void* thread_loop(void *arg)
 					r =  xseg_get_req_data(xseg, received, (void **) &pr);
 					if (r < 0 || !pr){
 						//FIXME what to do here ?
-						LOG(0, "Received request with no pr data\n");
+						XSEGLOG2(&lc, W, "Received request with no pr data\n");
 						xseg_respond(peer->xseg, received, peer->portno, X_ALLOC);
+						//if fails, put req
 					}
 					//fail(peer, received);
 					//assert pr->req == received;
@@ -332,10 +334,10 @@ static void* thread_loop(void *arg)
 				}
 //			}
 		}
-		LOG(1, "Thread %u goes to sleep\n", (unsigned int) (t- peer->thread));
+		XSEGLOG2(&lc, I, "Thread %u goes to sleep\n", (unsigned int) (t- peer->thread));
 		xseg_wait_signal(xseg, 10000000UL);
 		xseg_cancel_wait(xseg, portno);
-		LOG(1, "Thread %u woke up\n", (unsigned int) (t- peer->thread));
+		XSEGLOG2(&lc, I, "Thread %u woke up\n", (unsigned int) (t- peer->thread));
 	}
 	return NULL;
 }
@@ -446,7 +448,7 @@ malloc_fail:
 }
 
 
-int main(int argc, const char *argv[])
+int main(int argc, char *argv[])
 {
 	struct peerd *peer = NULL;
 	//parse args
@@ -463,7 +465,6 @@ int main(int argc, const char *argv[])
 	// -dp xseg_portno to defer blocking requests
 	//maybe -l log file ?
 	//TODO print messages on arg parsing error
-	LOG(5, "Main thread has tid %ld.\n", syscall(SYS_gettid));
 	
 	for (i = 1; i < argc; i++) {
 		if (!strcmp(argv[i], "-g") && i + 1 < argc) {
@@ -500,6 +501,8 @@ int main(int argc, const char *argv[])
 		}
 
 	}
+	init_logctx(&lc, argv[0], debug_level, NULL);
+	XSEGLOG2(&lc, D, "Main thread has tid %ld.\n", syscall(SYS_gettid));
 	
 	//TODO perform argument sanity checks
 	verbose = debug_level;

@@ -1,5 +1,7 @@
 #define _GNU_SOURCE
 #include <stdio.h>
+#include <stdarg.h>
+#include <time.h>
 #include <string.h>
 #include <dlfcn.h>
 #include <unistd.h>
@@ -84,3 +86,59 @@ void __get_current_time(struct timeval *tv) {
 	gettimeofday(tv, NULL);
 }
 
+
+int user_init_logctx(struct log_ctx *lc, char *peer_name, enum log_level log_level, char *logfile)
+{
+	FILE *file;
+	lc->peer_name = peer_name;
+	lc->log_level = log_level;
+	if (!logfile) {
+		lc->logfile = stderr;
+		return 0;
+	}
+
+	file = fopen(logfile, "a");
+	if (!file) {
+		lc->logfile = stderr;
+		return -1;
+	}
+	lc->logfile = file;
+	return 0;
+}
+int (*init_logctx)(struct log_ctx *lc, char *peer_name, enum log_level log_level, char *logfile) = user_init_logctx;
+
+void __xseg_log2(struct log_ctx *lc, enum log_level level, char *fmt, ...)
+{
+	va_list ap;
+	time_t timeval;	
+	char timebuf[1024], buffer[4096];
+	char *buf = buffer;
+	char *t = NULL, *pn = NULL;
+
+	va_start(ap, fmt);
+	switch (level) {
+		case E: t = "XSEG[EE]"; break;
+		case W: t = "XSEG[WW]"; break;
+		case I: t = "XSEG[II]"; break;
+		case D: t = "XSEG[DD]"; break;
+		default: t = "XSEG[UNKNONW]"; break;
+	}
+	pn = lc->peer_name;
+	if (!pn)
+		pn = "Invalid peer name";
+
+	time(&timeval);
+	ctime_r(&timeval, timebuf);
+	*strchr(timebuf, '\n') = '\0';
+	
+	buf += sprintf(buf, "%s: %s: ", t, lc->peer_name);
+	buf += sprintf(buf, "%s (%ld):\n\t", timebuf, timeval);
+	buf += vsprintf(buf, fmt, ap);
+	buf += sprintf(buf, "\n");
+
+	fprintf(lc->logfile, "%s", buffer);
+	fflush(lc->logfile);
+	va_end(ap);
+
+	return;
+}

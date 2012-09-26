@@ -7,4 +7,10 @@
 #include <string.h>
 #include <sys/time.h>
 
+struct log_ctx {
+	FILE *logfile;
+	char *peer_name;
+	unsigned int log_level; 
+};
+
 #endif

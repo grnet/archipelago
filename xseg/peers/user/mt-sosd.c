@@ -238,7 +238,7 @@ int handle_write(struct peerd *peer, struct peer_req *pr)
 }
 
 
-int custom_peer_init(struct peerd *peer, int argc, const char *argv[])
+int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 {
 	int i, j;
 	struct radosd *rados = malloc(sizeof(struct radosd));

@@ -86,6 +86,8 @@ struct mapper_io {
 };
 
 static int my_dispatch(struct peerd *peer, struct peer_req *pr, struct xseg_request *req);
+void print_map(struct map *m);
+
 /*
  * Helper functions
  */
@@ -500,6 +502,7 @@ static int read_map (struct peerd *peer, struct map *map, char *buf)
 			map_node[i].map = map;
 			map_node[i].objectidx = i;
 			xqindex *qidx = xq_alloc_empty(&map_node[i].pending, peer->nr_ops); //FIXME error check
+			(void) qidx;
 			map_to_object(&map_node[i], buf + pos);
 			pos += objectsize_in_map;
 			r = insert_object(map, &map_node[i]); //FIXME error check
@@ -516,6 +519,7 @@ static int read_map (struct peerd *peer, struct map *map, char *buf)
 			map_node[i].objectidx = i;
 			map_node[i].map = map;
 			xqindex *qidx = xq_alloc_empty(&map_node[i].pending, peer->nr_ops); //FIXME error check
+			(void) qidx;
 			pithosmap_to_object(&map_node[i], buf + pos);
 			pos += SHA256_DIGEST_SIZE; 
 			r = insert_object(map, &map_node[i]); //FIXME error check
@@ -699,7 +703,6 @@ out_err:
 static int handle_mapwrite(struct peerd *peer, struct peer_req *pr,
 				struct xseg_request *req)
 {
-	int r;
 	xqindex idx;
 	struct mapperd *mapper = __get_mapperd(peer);
 	//assert req->op = X_WRITE;
@@ -904,8 +907,10 @@ static int req2objs(struct peerd *peer, struct peer_req *pr,
 	uint64_t obj_size =  (obj_offset + rem_size > block_size) ? block_size - obj_offset : rem_size;
 	struct map_node * mn = find_object(map, obj_index);
 	if (!mn) {
-		fprintf(stderr,"coudn't find obj_index %llu\n", obj_index);
-		fprintf(stderr,"pr->req->offset: %llu, block_size %u\n", pr->req->offset, block_size);
+		fprintf(stderr,"coudn't find obj_index %llu\n", (unsigned long long) obj_index);
+		fprintf(stderr,"pr->req->offset: %llu, block_size %u\n", 
+				(unsigned long long) pr->req->offset, 
+				block_size);
 		goto out_err;
 	}
 	if (write && (mn->flags & MF_OBJECT_NOT_READY)) 
@@ -934,7 +939,7 @@ static int req2objs(struct peerd *peer, struct peer_req *pr,
 		rem_size -= obj_size;
 		mn = find_object(map, obj_index);
 		if (!mn) {
-			fprintf(stderr,"2coudn't find obj_index %llu\n", obj_index);
+			fprintf(stderr,"2coudn't find obj_index %llu\n", (unsigned long long) obj_index);
 			goto out_err;
 		}
 		if (write && (mn->flags & MF_OBJECT_NOT_READY)) 
@@ -974,6 +979,7 @@ static int handle_mapr(struct peerd *peer, struct peer_req *pr,
 {
 	struct mapperd *mapper = __get_mapperd(peer);
 	struct mapper_io *mio = __get_mapper_io(pr);
+	(void)mapper;
 	(void)mio;
 	//get_map
 	char *target = xseg_get_target(peer->xseg, pr->req);
@@ -1054,12 +1060,13 @@ out_err:
 static int handle_objectwrite(struct peerd *peer, struct peer_req *pr,
 				struct xseg_request *req)
 {
-	int r;
 	xqindex idx;
 	struct mapperd *mapper = __get_mapperd(peer);
 	struct mapper_io *mio = __get_mapper_io(pr);
 	//assert req->op = X_WRITE;
 	char *target = xseg_get_target(peer->xseg, req);
+	(void)target;
+	(void)mapper;
 	//printf("handle object write replyi\n");
 	struct map_node *mn = __get_copyup_node(mio, req);
 	if (!mn)
@@ -1112,6 +1119,7 @@ static int handle_mapw(struct peerd *peer, struct peer_req *pr,
 {
 	struct mapperd *mapper = __get_mapperd(peer);
 	struct mapper_io *mio = __get_mapper_io(pr);
+	(void) mapper;
 	(void) mio;
 	/* handle copy up replies separately */
 	if (req->op == X_COPY){
@@ -1143,7 +1151,7 @@ static int handle_mapw(struct peerd *peer, struct peer_req *pr,
 		return 0;
 	
 	if (map->flags & MF_MAP_DESTROYED) {
-		printf("map MF_MAP_DESTROYED req %lx\n", pr->req);
+		printf("map MF_MAP_DESTROYED req %lx\n", (long unsigned int) pr->req);
 		fail(peer, pr);
 		return 0;
 	}
@@ -1151,7 +1159,7 @@ static int handle_mapw(struct peerd *peer, struct peer_req *pr,
 
 	r = req2objs(peer, pr, map, 1);
 	if (r < 0){
-		fprintf(stderr, "req2obj returned r < 0 for req %lx\n", pr->req);
+		fprintf(stderr, "req2obj returned r < 0 for req %lx\n", (long unsigned int) pr->req);
 		fail(peer, pr);
 	}
 	if (r == 0)
@@ -1173,6 +1181,7 @@ static int handle_info(struct peerd *peer, struct peer_req *pr,
 {
 	struct mapperd *mapper = __get_mapperd(peer);
 	struct mapper_io *mio = __get_mapper_io(pr);
+	(void) mapper;
 	(void) mio;
 	char *target = xseg_get_target(peer->xseg, pr->req);
 	if (!target) {
@@ -1252,6 +1261,7 @@ static int handle_object_delete(struct peerd *peer, struct peer_req *pr,
 	uint64_t idx;
 	struct map *map = mn->map;
 	int r;
+	(void) mio;
 	//if object deletion failed, map deletion must continue
 	//and report OK, since map block has been deleted succesfully
 	//so, no check for err
@@ -1338,6 +1348,7 @@ static int handle_map_delete(struct peerd *peer, struct peer_req *pr,
 	struct mapper_io *mio = __get_mapper_io(pr);
 	xqindex idx;
 	int r;
+	(void) mio;
 	if (err) {
 		map->flags &= ~MF_MAP_DELETING;
 		//dispatch all pending
@@ -1418,6 +1429,7 @@ static int handle_destroy(struct peerd *peer, struct peer_req *pr,
 {
 	struct mapperd *mapper = __get_mapperd(peer);
 	struct mapper_io *mio = __get_mapper_io(pr);
+	(void) mapper;
 	int r;
 
 	if (pr->req != req && req->op == X_DELETE) {
@@ -1519,7 +1531,7 @@ int dispatch(struct peerd *peer, struct peer_req *pr, struct xseg_request *req)
 	return 0;
 }
 
-int custom_peer_init(struct peerd *peer, int argc, const char *argv[])
+int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 {
 	int i;
 	unsigned char buf[SHA256_DIGEST_SIZE];
@@ -1600,7 +1612,9 @@ int custom_peer_init(struct peerd *peer, int argc, const char *argv[])
 
 void print_obj(struct map_node *mn)
 {
-	fprintf(stderr, "[%llu]object name: %s[%u] exists: %c\n", mn->objectidx, mn->object, mn->objectlen, 
+	fprintf(stderr, "[%llu]object name: %s[%u] exists: %c\n", 
+			(unsigned long long) mn->objectidx, mn->object, 
+			(unsigned int) mn->objectlen, 
 			(mn->flags & MF_OBJECT_EXIST) ? 'y' : 'n');
 }
 
@@ -1610,7 +1624,9 @@ void print_map(struct map *m)
 	if (m->size % block_size)
 		nr_objs++;
 	fprintf(stderr, "Volume name: %s[%u], size: %llu, nr_objs: %llu\n", 
-			m->volume, m->volumelen, m->size, nr_objs);
+			m->volume, m->volumelen, 
+			(unsigned long long) m->size, 
+			(unsigned long long) nr_objs);
 	uint64_t i;
 	struct map_node *mn;
 	if (nr_objs > 1000000) //FIXME to protect against invalid volume size
@@ -1618,7 +1634,7 @@ void print_map(struct map *m)
 	for (i = 0; i < nr_objs; i++) {
 		mn = find_object(m, i);
 		if (!mn){
-			printf("object idx [%llu] not found!\n", i);
+			printf("object idx [%llu] not found!\n", (unsigned long long) i);
 			continue;
 		}
 		print_obj(mn);

@@ -4,9 +4,20 @@
 #include <_sysutil.h>
 #include <sys/domain.h>
 
+/* log stuff */
+
+
+
 #define FMTARG(fmt, arg, format, ...) fmt format "%s", arg, ## __VA_ARGS__
 #define XSEGLOG(...) (xseg_snprintf(__xseg_errbuf, 4096, FMTARG("%s: ", __func__, ## __VA_ARGS__, "")), \
                     __xseg_errbuf[4095] = 0, __xseg_log(__xseg_errbuf))
+
+#define XSEGLOG2(__ctx, __level, ...) 		\
+		do { 				\
+			if (__level <= ((__ctx)->log_level)) { \
+				__xseg_log2(__ctx, __level, FMTARG("%s: ", __func__, ## __VA_ARGS__ ,"")); \
+			}	\
+		} while(0) 
 
 /* general purpose xflags */
 #define X_ALLOC ((uint32_t) (1 << 0))

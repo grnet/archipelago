@@ -27,57 +27,6 @@ enum xhash_type {
 };
 #define NR_XHASH_TYPES 2
 
-static inline xhashidx hash_int(xhashidx key)
-{
-	return key;
-}
-
-static inline int cmp_int(xhashidx key1, xhashidx key2)
-{
-	return (key1 == key2);
-}
-
-static inline xhashidx hash_string(xhashidx key) 
-{
-	//assume a valind NULL terminated string
-	
-	//function to access key if in container
-	char *string = (char *) key;
-	unsigned int i, len = strlen(string);
-	xhashidx hv = string[0] << 7;
-	for (i = 1; i <= len; i++) {
-		hv = (hv * 1000003) ^ string[i];
-	}
-	if (hv == Noxhashidx)
-		hv = Noxhashidx -1;
-
-	return hv; 
-}
-
-static inline int cmp_string(xhashidx key1, xhashidx key2)
-{
-	char *string1 = (char *) key1;
-	char *string2 = (char *) key2;
-
-	return (!strcmp(string1, string2));
-}
-
-typedef int (*xhash_cmp_fun_t)(xhashidx key1, xhashidx key2);
-typedef xhashidx (*xhash_hash_fun_t)(xhashidx key);
-
-struct types_functions {
-//	int (*cmp_fun)(xhashidx key1, xhashidx key2);
-//	xhashidx (*hash_fun)(xhashidx key);
-	xhash_cmp_fun_t cmp_fun;
-	xhash_hash_fun_t hash_fun;
-};
-
-static struct types_functions types_fun[] = {
-	{ .cmp_fun = cmp_int, .hash_fun = hash_int },
-	{ .cmp_fun = cmp_string, .hash_fun = hash_string }
-};
-
-
 struct xhash {
     xhashidx size_shift;
     xhashidx minsize_shift;

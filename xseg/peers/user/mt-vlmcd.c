@@ -308,7 +308,7 @@ int dispatch(struct peerd *peer, struct peer_req *pr, struct xseg_request *req)
 }
 
 
-int custom_peer_init(struct peerd *peer, int argc, const char *argv[])
+int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 {
 	struct vlmc_io *vio;
 	struct vlmcd *vlmc = malloc(sizeof(struct vlmcd));

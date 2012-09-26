@@ -254,7 +254,7 @@ int vlmc_list()
 	exit(-1);							\
 	} while(0)
 
-int main(int argc, const char *argv[])
+int main(int argc, char *argv[])
 {
 	int i;
 	if (argc < 6){
@@ -283,7 +283,7 @@ int main(int argc, const char *argv[])
 	char *name = NULL;
 	char *snap = NULL;
 	uint64_t size = -1;
-	char *pool = NULL;
+	//char *pool = NULL;
 	char *config = NULL;
 
 	for (i = 3; i < argc; i++) {
