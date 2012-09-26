@@ -432,6 +432,7 @@ static void handle_copy(struct store *store, struct io *io)
         struct xseg_request_copy *xcopy = (struct xseg_request_copy *) xseg_get_data(store->xseg, req);
         struct stat st;
         int n, src, dst;
+	char buf[XSEG_MAX_TARGETLEN+1];
 	char *target = xseg_get_target(store->xseg, req);
 
         dst = dir_open(store, io, target, req->targetlen, 1);
@@ -441,10 +442,12 @@ static void handle_copy(struct store *store, struct io *io)
                 return;
         }
 
-	src = openat(store->dirfd, xcopy->target, O_RDWR);	
+	strncpy(buf, xcopy->target, xcopy->targetlen);
+	buf[xcopy->targetlen] = 0;
+	src = openat(store->dirfd, buf, O_RDWR);	
         if (src < 0) {
 		if (errno == ENOENT){
-			src = openat(store->dirfd, xcopy->target, 
+			src = openat(store->dirfd, buf, 
 					O_RDWR | O_CREAT, 0600);
 			if (src < 0 ) {
 				fprintf(stderr, "fail in src\n");

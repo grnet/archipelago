@@ -16,6 +16,7 @@ struct xseg_reply_info {
 
 struct xseg_reply_map_scatterlist {
 	char target[XSEG_MAX_TARGETLEN];
+	uint32_t targetlen;
 	uint64_t offset;
 	uint64_t size;
 };
@@ -27,11 +28,13 @@ struct xseg_reply_map {
 
 struct xseg_request_clone {
         char target[XSEG_MAX_TARGETLEN];
+	uint32_t targetlen;
         uint64_t size;
 };
 
 struct xseg_request_copy {
         char target[XSEG_MAX_TARGETLEN];
+	uint32_t targetlen;
 };
 
 

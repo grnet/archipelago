@@ -504,7 +504,7 @@ static void handle_copy(struct pfiled *pfiled, struct io *io)
 		return;
 	}
 
-	if (create_path(buf, pfiled->path, xcopy->target, strlen(xcopy->target), 0) < 0)  {
+	if (create_path(buf, pfiled->path, xcopy->target, xcopy->targetlen, 0) < 0)  {
 		fail(pfiled, io);
 		return;
 	}

@@ -180,7 +180,7 @@ static int handle_mapping(struct peerd *peer, struct peer_req *pr,
 		for (i = 0; i < vio->breq_len; i++) {
 			datalen = mreply->segs[i].size;
 			offset = mreply->segs[i].offset;
-			targetlen = strlen(mreply->segs[i].target);
+			targetlen = mreply->segs[i].targetlen;
 			breq = xseg_get_request(peer->xseg, peer->portno, vlmc->bportno, X_ALLOC);
 			if (!breq) {
 				vio->err = 1;
