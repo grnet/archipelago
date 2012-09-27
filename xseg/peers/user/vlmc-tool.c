@@ -100,6 +100,7 @@ int wait_reply(struct xseg_request *expected_req)
 
 int vlmc_create(char *name, uint64_t size, char *snap)
 {
+	int ret;
 	int targetlen = safe_strlen(name);
 	int snaplen = safe_strlen(snap);
 	if (targetlen <= 0) {
@@ -148,11 +149,11 @@ int vlmc_create(char *name, uint64_t size, char *snap)
 	}
 	xseg_signal(xseg, p);
 
-	wait_reply(req);
+	ret = wait_reply(req);
 	
 	xseg_put_request(xseg, req, srcport);
 
-	return 0;
+	return ret;
 }
 
 int vlmc_snapshot(char *name)

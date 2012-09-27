@@ -90,7 +90,7 @@ void __xseg_log2(struct log_ctx *lc, unsigned int level, char *fmt, ...)
 	va_list ap;
 	struct timeval t;
 	struct tm broken;
-	char buffer[4096];
+	char buffer[1500];
 	char *buf = buffer;
 	char *type = NULL, *pn = NULL;
 

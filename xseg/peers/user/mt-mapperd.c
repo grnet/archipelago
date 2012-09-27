@@ -21,8 +21,6 @@ GCRY_THREAD_OPTION_PTHREAD_IMPL;
 /* hex representation of sha256 value takes up double the sha256 size */
 #define HEXLIFIED_SHA256_DIGEST_SIZE (SHA256_DIGEST_SIZE << 1)
 
-#define XSEG_MAX_TARGETLEN (SHA256_DIGEST_SIZE << 1)
-
 #define block_size (1<<22) //FIXME this should be defined here?
 #define objectsize_in_map (1 + XSEG_MAX_TARGETLEN) /* transparency byte + max object len */
 #define mapheader_size (SHA256_DIGEST_SIZE + (sizeof(uint64_t)) ) /* magic hash value  + volume size */
@@ -140,6 +138,7 @@ static struct map * find_map(struct mapperd *mapper, char *target, uint32_t targ
 	//assert targetlen <= XSEG_MAX_TARGETLEN
 	strncpy(buf, target, targetlen);
 	buf[targetlen] = 0;
+	XSEGLOG2(&lc, D, "looking up map %s, len %u", buf, targetlen);
 	r = xhash_lookup(mapper->hashmaps, (xhashidx) buf, (xhashidx *) &m);
 	if (r < 0)
 		return NULL;
@@ -155,7 +154,8 @@ static int insert_map(struct mapperd *mapper, struct map *map)
 		XSEGLOG2(&lc, W, "Map %s found in hash maps", map->volume);
 		goto out;
 	}
-	
+
+	XSEGLOG2(&lc, D, "Inserting map %s, len: %d", map->volume, strlen(map->volume));
 	r = xhash_insert(mapper->hashmaps, (xhashidx) map->volume, (xhashidx) map);
 	if (r == -XHASH_ERESIZE) {
 		xhashidx shift = xhash_grow_size_shift(map->objects);
@@ -424,7 +424,7 @@ static int object_write(struct peerd *peer, struct peer_req *pr,
 				mn->object, map->volume, (unsigned long long) mn->objectidx);
 		goto out_err;
 	}
-	int r = xseg_prep_request(peer->xseg, req, mn->objectlen, objectsize_in_map);
+	int r = xseg_prep_request(peer->xseg, req, map->volumelen, objectsize_in_map);
 	if (r < 0){
 		XSEGLOG2(&lc, E, "Cannot allocate request for object %s. \n\t"
 				"(Map: %s [%llu]",
@@ -745,6 +745,7 @@ static int handle_mapread(struct peerd *peer, struct peer_req *pr,
 	
 	xseg_put_request(peer->xseg, req, peer->portno);
 	map->flags &= ~MF_MAP_LOADING;
+	print_map(map);
 	XSEGLOG2(&lc, I, "Map %s loaded. Dispatching pending", map->volume);
 	while((idx = __xq_pop_head(&map->pending)) != Noneidx){
 		struct peer_req *preq = (struct peer_req *) idx;
@@ -956,6 +957,7 @@ static int handle_clone(struct peerd *peer, struct peer_req *pr,
 			goto out_free_all;
 		}
 	}
+	print_map(clonemap);
 	//insert map
 	r = insert_map(mapper, clonemap);
 	if ( r < 0) {
@@ -1009,6 +1011,7 @@ static int req2objs(struct peerd *peer, struct peer_req *pr,
 	uint64_t size = sizeof(struct xseg_reply_map) + 
 			nr_objs * sizeof(struct xseg_reply_map_scatterlist);
 
+	XSEGLOG2(&lc, D, "Calculated %u nr_objs", nr_objs);
 	/* resize request to fit reply */
 	char buf[XSEG_MAX_TARGETLEN];
 	strncpy(buf, target, pr->req->targetlen);
@@ -1032,9 +1035,6 @@ static int req2objs(struct peerd *peer, struct peer_req *pr,
 	struct map_node * mn = find_object(map, obj_index);
 	if (!mn) {
 		XSEGLOG2(&lc, E, "Cannot find obj_index %llu\n", (unsigned long long) obj_index);
-		XSEGLOG2(&lc, E, "pr->req->offset: %llu, block_size %u\n", 
-				(unsigned long long) pr->req->offset, 
-				block_size);
 		goto out_err;
 	}
 	if (write && (mn->flags & MF_OBJECT_NOT_READY)) 
@@ -1050,11 +1050,18 @@ static int req2objs(struct peerd *peer, struct peer_req *pr,
 		goto out_object_copying;
 	}
 
+	XSEGLOG2(&lc, E, "pr->req->offset: %llu, pr->req->size %llu, block_size %u\n", 
+				(unsigned long long) pr->req->offset, 
+				(unsigned long long) pr->req->size, 
+				block_size);
 	strncpy(reply->segs[idx].target, mn->object, mn->objectlen);
 	reply->segs[idx].targetlen = mn->objectlen;
 	reply->segs[idx].target[mn->objectlen] = 0;
 	reply->segs[idx].offset = obj_offset;
 	reply->segs[idx].size = obj_size;
+//	XSEGLOG2(&lc, D, "Added object: %s, size: %llu, offset: %llu", mn->object,
+//					(unsigned long long) reply->segs[idx].size,
+//					(unsigned long long) reply->segs[idx].offset);
 	rem_size -= obj_size;
 	while (rem_size > 0) {
 		idx++;
@@ -1084,6 +1091,13 @@ static int req2objs(struct peerd *peer, struct peer_req *pr,
 		reply->segs[idx].target[mn->objectlen] = 0;
 		reply->segs[idx].offset = obj_offset;
 		reply->segs[idx].size = obj_size;
+//		XSEGLOG2(&lc, D, "Added object: %s, size: %llu, offset: %llu", mn->object,
+//				(unsigned long long) reply->segs[idx].size,
+//				(unsigned long long) reply->segs[idx].offset);
+	}
+	if (reply->cnt != (idx + 1)){
+		XSEGLOG2(&lc, E, "reply->cnt %u, idx+1: %u", reply->cnt, idx+1);
+		goto out_err;
 	}
 
 	return 0;
@@ -1091,7 +1105,7 @@ static int req2objs(struct peerd *peer, struct peer_req *pr,
 out_object_copying:
 	//printf("r2o mn: %lx\n", mn);
 	//printf("volume %s pending on %s\n", map->volume, mn->object);
-	//assert !write
+	//assert write
 	if(__xq_append_tail(&mn->pending, (xqindex) pr) == Noneidx)
 		XSEGLOG2(&lc, E, "Cannot append pr to tail");
 	XSEGLOG2(&lc, I, "object %s is pending \n\t idx:%llu of map %s",
@@ -1140,6 +1154,20 @@ static int handle_mapr(struct peerd *peer, struct peer_req *pr,
 				map->volume, 
 				(unsigned long long) pr->req->offset, 
 				(unsigned long long) (pr->req->offset + pr->req->size));
+		XSEGLOG2(&lc, D, "Req->offset: %llu, req->size: %llu",
+				(unsigned long long) req->offset,
+				(unsigned long long) req->size);
+		char buf[XSEG_MAX_TARGETLEN+1];
+		struct xseg_reply_map *reply = (struct xseg_reply_map *) xseg_get_data(peer->xseg, pr->req);
+		int i;
+		for (i = 0; i < reply->cnt; i++) {
+			XSEGLOG2(&lc, D, "i: %d, reply->cnt: %u",i, reply->cnt);
+			strncpy(buf, reply->segs[i].target, reply->segs[i].targetlen);
+			buf[reply->segs[i].targetlen] = 0;
+			XSEGLOG2(&lc, D, "%d: Object: %s, offset: %llu, size: %llu", i, buf,
+					(unsigned long long) reply->segs[i].offset,
+					(unsigned long long) reply->segs[i].size);
+		}
 		complete(peer, pr);
 
 	return 0;
@@ -1239,6 +1267,7 @@ static int handle_objectwrite(struct peerd *peer, struct peer_req *pr,
 	mn->objectlen = tmp.objectlen;
 	xseg_put_request(peer->xseg, req, peer->portno);
 
+	print_map(mn->map);
 	XSEGLOG2(&lc, I, "Object write of %s completed successfully", mn->object);
 	while ((idx = __xq_pop_head(&mn->pending)) != Noneidx){
 		struct peer_req * preq = (struct peer_req *) idx;
@@ -1317,6 +1346,20 @@ static int handle_mapw(struct peerd *peer, struct peer_req *pr,
 				map->volume, 
 				(unsigned long long) pr->req->offset, 
 				(unsigned long long) (pr->req->offset + pr->req->size));
+		XSEGLOG2(&lc, D, "Req->offset: %llu, req->size: %llu",
+				(unsigned long long) req->offset,
+				(unsigned long long) req->size);
+		char buf[XSEG_MAX_TARGETLEN+1];
+		struct xseg_reply_map *reply = (struct xseg_reply_map *) xseg_get_data(peer->xseg, pr->req);
+		int i;
+		for (i = 0; i < reply->cnt; i++) {
+			XSEGLOG2(&lc, D, "i: %d, reply->cnt: %u",i, reply->cnt);
+			strncpy(buf, reply->segs[i].target, reply->segs[i].targetlen);
+			buf[reply->segs[i].targetlen] = 0;
+			XSEGLOG2(&lc, D, "%d: Object: %s, offset: %llu, size: %llu", i, buf,
+					(unsigned long long) reply->segs[i].offset,
+					(unsigned long long) reply->segs[i].size);
+		}
 		complete(peer, pr);
 	}
 	//else copyup pending, wait for pr restart

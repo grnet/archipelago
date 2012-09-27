@@ -135,7 +135,7 @@ static void log_io(char *msg, struct io *io)
 	data[dend] = 0;
 
 	fprintf(stderr,
-		"%s: fd:%u, op:%u offset: %llu size: %lu retval: %lu, reqstate: %u\n"
+		"%s: fd:%u, op:%u offset: %llu size: %lu retval: %lu, reqstate: %u, serviced: %u\n"
 		"target[%u]: '%s', data[%llu]:\n%s------------------\n\n",
 		msg,
 		(unsigned int)io->fdcacheidx, /* this is cacheidx not fd */
@@ -144,6 +144,7 @@ static void log_io(char *msg, struct io *io)
 		(unsigned long)io->req->size,
 		(unsigned long)io->retval,
 		(unsigned int)io->req->state,
+		(unsigned long)io->req->serviced,
 		(unsigned int)io->req->targetlen, target,
 		(unsigned long long)io->req->datalen, data);
 }
@@ -426,7 +427,7 @@ static void handle_read_write(struct pfiled *pfiled, struct io *io)
 				req->datalen = req->serviced;
 			}
 			else if (r == 0) {
-				/* reached end of file. zero out the rest data buffer */
+				fprintf(stderr, "write returned 0\n");
 				memset(data + req->serviced, 0, req->datalen - req->serviced);
 				req->serviced = req->datalen;
 			}

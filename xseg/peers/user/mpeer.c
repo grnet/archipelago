@@ -300,8 +300,8 @@ static void* thread_loop(void *arg)
 				pr = alloc_peer_req(peer);
 				if (pr) {
 					accepted = xseg_accept(xseg, peer->portno);
-					XSEGLOG2(&lc, D, "Thread %u accepted\n", (unsigned int) (t- peer->thread));
 					if (accepted) {
+						XSEGLOG2(&lc, D, "Thread %u accepted\n", (unsigned int) (t- peer->thread));
 						pr->req = accepted;
 						xseg_cancel_wait(xseg, portno);
 						wake_up_next_thread(peer);

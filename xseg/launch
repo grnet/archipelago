@@ -112,7 +112,7 @@ function spawn_pfiled {
 
 function spawn_pfiledm {
 	"${XSEG_HOME}/peers/user/pfiled" -p "$MBPORT" -g "${SPEC}" -n \
-	${NR_OPS} "${PITHOSMAPS}" "${MAPS}" &> "${XSEG_LOGS}/pfiledm-${HOSTNAME}" &
+	${NR_OPS} "${PITHOSMAPS}" "${MAPS}" -v  &> "${XSEG_LOGS}/pfiledm-${HOSTNAME}" &
 }
 
 function spawn_vlmcd {
@@ -123,9 +123,11 @@ function spawn_vlmcd {
 }
 
 function spawn_mapperdc {
+	echo "${XSEG_HOME}/peers/user/mt-mapperd -t 1 -p $MPORT -bp $BPORT -mbp $MBPORT -g \"${SPEC}\"\
+	-v 3 &> \"${XSEG_LOGS}/mapperd-${HOSTNAME}\" &" 
 	pgrep -f "mt-mapperd" || \
 	"${XSEG_HOME}/peers/user/mt-mapperd" -t 1 -p "$MPORT" -bp "$BPORT" -mbp "$MBPORT" -g "${SPEC}"\
-	-v 2 &> "${XSEG_LOGS}/mapperd-${HOSTNAME}" & 
+	-v 3 &> "${XSEG_LOGS}/mapperd-${HOSTNAME}" & 
 #	alloc_requests "$MPORT:0" 128
 }
 
@@ -298,6 +300,19 @@ doublemap)
 		pkill -f peers/user/pfiled || true
 		sleep 0.5
 		unload_all
+		;;
+	*)
+		help
+		;;
+	esac
+	;;
+mapperd)
+	case $2 in
+	start)
+		spawn_mapperdc
+		;;
+	stop)
+		pkill -f peers/user/mt-mapperd || true
 		;;
 	*)
 		help
