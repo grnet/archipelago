@@ -31,7 +31,7 @@ int validate_alphanumeric(char *s)
 {
 	int i;
 	int len = safe_strlen(s);
-	if (len < 0){
+	if (len <= 0){
 		return 0;
 	}
 
@@ -47,7 +47,7 @@ int validate_numeric(char *s)
 {
 	int i;
 	int len = safe_strlen(s);
-	if (len < 0)
+	if (len <= 0)
 		return 0;
 
 	for (i = 0; i < len; i++) {
@@ -110,6 +110,8 @@ int vlmc_create(char *name, uint64_t size, char *snap)
 		fprintf(stderr, "Size or snap must be provided in create\n");
 		return -1;
 	}
+	XSEGLOG("Name: %s", name);
+	XSEGLOG("Snap: %s", snap);
 
 	struct xseg_request *req = xseg_get_request(xseg, srcport, mportno, X_ALLOC);
 	if (!req) {
@@ -125,10 +127,13 @@ int vlmc_create(char *name, uint64_t size, char *snap)
 	char *target = xseg_get_target(xseg, req);
 	strncpy(target, name, targetlen);
 	struct xseg_request_clone *xclone = (struct xseg_request_clone *) xseg_get_data(xseg, req);
-	if (snaplen < 0)
+	if (snaplen <= 0){
 		memset(xclone->target, 0, XSEG_MAX_TARGETLEN);
+		xclone->targetlen = 0;
+	}
 	else {
 		strncpy(xclone->target, snap, snaplen);
+		xclone->targetlen = snaplen;
 	}
 	xclone->size = size;
 	req->offset = 0;
