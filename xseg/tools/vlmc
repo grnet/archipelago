@@ -21,7 +21,7 @@ def vlmc_create(args):
             cmd.extend(["--size", "%s" % size])
     cmd.extend(["-mp", "%s" % MPORT])
     cmd.extend(["-p", "%s" % VTOOL])
-    os.environ['LD_LIBRARY_PATH'] = "/home/philipgian/archip/xseg/lib:/home/philipgian/archip/xseg/lib/user"
+    os.environ['LD_LIBRARY_PATH'] = XSEG_HOME + "/lib:" + XSEG_HOME + "/lib/user"
 
     try:
         check_call(cmd, stderr=subprocess.STDOUT, shell=False, env=os.environ);
@@ -43,9 +43,12 @@ def vlmc_remove(args):
     cmd = [XSEG_HOME + "/peers/user/vlmc-xseg", "%s" % SPEC, "remove", "--name", "%s" % name]
     cmd.extend(["-mp", "%s" % MPORT])
     cmd.extend(["-p", "%s" % VTOOL])
-    result = utils.RunCmd(cmd)
-    if result.failed:
-            sys.stderr.write("vlmc creation failed\n")
+    os.environ['LD_LIBRARY_PATH'] = XSEG_HOME + "/lib:" + XSEG_HOME + "/lib/user"
+
+    try:
+        check_call(cmd, stderr=subprocess.STDOUT, shell=False, env=os.environ);
+    except Exception:
+            sys.stderr.write("vlmc removal failed\n")
             sys.exit(-1)
 
 
