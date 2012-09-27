@@ -276,9 +276,9 @@ static void xsegbd_dev_release(struct device *dev)
 		put_disk(xsegbd_dev->gd);
 	}
 
-	if (xseg_free_requests(xsegbd_dev->xseg, 
-			xsegbd_dev->src_portno, xsegbd_dev->nr_requests) < 0)
-		XSEGLOG("Error trying to free requests!\n");
+//	if (xseg_free_requests(xsegbd_dev->xseg, 
+//			xsegbd_dev->src_portno, xsegbd_dev->nr_requests) < 0)
+//		XSEGLOG("Error trying to free requests!\n");
 
 
 	unregister_blkdev(xsegbd_dev->major, XSEGBD_NAME);
@@ -886,7 +886,6 @@ out_freeq:
 
 out_bus:
 	xsegbd_bus_del_dev(xsegbd_dev);
-	//FIXME why return here ??
 	return ret;
 
 out_blkdev:

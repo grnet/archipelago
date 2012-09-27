@@ -959,6 +959,7 @@ void xseg_quit_local_signal(struct xseg *xseg, xport portno)
 	type->peer_ops.local_signal_quit();
 }
 
+//FIXME doesn't increase alloced reqs
 //is integer i enough here?
 int xseg_alloc_requests(struct xseg *xseg, uint32_t portno, uint32_t nr)
 {
@@ -1003,7 +1004,11 @@ int xseg_free_requests(struct xseg *xseg, uint32_t portno, int nr)
 		i++;
 	}
 	if (i == 0)
-		i = -1;
+		return -1;
+	xlock_acquire(&port->port_lock, portno);
+	port->alloc_reqs -= i;
+	xlock_release(&port->port_lock);
+
 	return i;
 }
 
