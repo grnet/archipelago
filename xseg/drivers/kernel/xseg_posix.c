@@ -67,6 +67,7 @@ static int posix_signal(struct xseg *xseg, uint32_t portno)
 	struct pid *pid;
 	struct task_struct *task;
 	int ret = -ENOENT;
+	uint64_t p;
 	struct xseg_port *port = xseg_get_port(xseg, portno);
 	if (!port) 
 		return -1;
@@ -74,13 +75,13 @@ static int posix_signal(struct xseg *xseg, uint32_t portno)
 
 	rcu_read_lock();
 	/* XXX Security: xseg peers can kill anyone */
-	pid_t p = *(volatile unsigned uint64_t *)&port->waitcue;
+	p = * (volatile uint64_t *) &port->waitcue;
 	if (!p) {
 		ret = 0;
 		goto out;
 	}
 
-	pid = find_vpid((p);
+	pid = find_vpid((pid_t)p);
 	if (!pid)
 		goto out;
 	task = pid_task(pid, PIDTYPE_PID);

@@ -704,6 +704,39 @@ out:
 	return ret;
 }
 
+static ssize_t xsegbd_cleanup(struct device *dev,
+					struct device_attribute *attr,
+					const char *buf,
+					size_t size)
+{
+	struct xsegbd_device *xsegbd_dev = dev_to_xsegbd(dev);
+	int ret = size, i;
+	struct request *blkreq = NULL;
+	struct xsegbd_pending *pending = NULL;
+	struct completion *comp = NULL;
+
+	mutex_lock_nested(&xsegbd_mutex, SINGLE_DEPTH_NESTING);
+	for (i = 0; i < xsegbd_dev->nr_requests; i++) {
+		xlock_acquire(&xsegbd_dev->blk_queue_pending.lock, 
+				xsegbd_dev->src_portno);
+		if (!__xq_check(&xsegbd_dev->blk_queue_pending, i)) {
+			pending = &xsegbd_dev->blk_req_pending[i];
+			blkreq = pending->request;
+			pending->request = NULL;
+			comp = pending->comp;
+			pending->comp = NULL;
+		}
+		if (blkreq)
+			blk_end_request_all(blkreq, -EIO);
+		if (comp)
+			complete(comp);
+		xlock_release(&xsegbd_dev->blk_queue_pending.lock);
+	}
+
+	mutex_unlock(&xsegbd_mutex);
+	return ret;
+}
+
 static DEVICE_ATTR(size, S_IRUGO, xsegbd_size_show, NULL);
 static DEVICE_ATTR(major, S_IRUGO, xsegbd_major_show, NULL);
 static DEVICE_ATTR(srcport, S_IRUGO, xsegbd_srcport_show, NULL);
@@ -712,6 +745,7 @@ static DEVICE_ATTR(id , S_IRUGO, xsegbd_id_show, NULL);
 static DEVICE_ATTR(reqs , S_IRUGO, xsegbd_reqs_show, NULL);
 static DEVICE_ATTR(target, S_IRUGO, xsegbd_target_show, NULL);
 static DEVICE_ATTR(refresh , S_IWUSR, NULL, xsegbd_image_refresh);
+static DEVICE_ATTR(cleanup , S_IWUSR, NULL, xsegbd_cleanup);
 
 static struct attribute *xsegbd_attrs[] = {
 	&dev_attr_size.attr,
@@ -722,6 +756,7 @@ static struct attribute *xsegbd_attrs[] = {
 	&dev_attr_reqs.attr,
 	&dev_attr_target.attr,
 	&dev_attr_refresh.attr,
+	&dev_attr_cleanup.attr,
 	NULL
 };
 
