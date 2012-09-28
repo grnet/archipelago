@@ -138,7 +138,7 @@ static struct map * find_map(struct mapperd *mapper, char *target, uint32_t targ
 	//assert targetlen <= XSEG_MAX_TARGETLEN
 	strncpy(buf, target, targetlen);
 	buf[targetlen] = 0;
-	XSEGLOG2(&lc, D, "looking up map %s, len %u", buf, targetlen);
+	XSEGLOG2(&lc, E, "looking up map %s, len %u", buf, targetlen);
 	r = xhash_lookup(mapper->hashmaps, (xhashidx) buf, (xhashidx *) &m);
 	if (r < 0)
 		return NULL;
@@ -155,7 +155,7 @@ static int insert_map(struct mapperd *mapper, struct map *map)
 		goto out;
 	}
 
-	XSEGLOG2(&lc, D, "Inserting map %s, len: %d", map->volume, strlen(map->volume));
+	XSEGLOG2(&lc, E, "Inserting map %s, len: %d", map->volume, strlen(map->volume));
 	r = xhash_insert(mapper->hashmaps, (xhashidx) map->volume, (xhashidx) map);
 	if (r == -XHASH_ERESIZE) {
 		xhashidx shift = xhash_grow_size_shift(map->objects);
@@ -655,6 +655,7 @@ static int copyup_object(struct peerd *peer, struct map_node *mn, struct peer_re
 {
 	struct mapperd *mapper = __get_mapperd(peer);
 	struct mapper_io *mio = __get_mapper_io(pr);
+	struct map *map = mn->map;
 	void *dummy;
 	int r = -1, i;
 	xport p;
@@ -664,8 +665,8 @@ static int copyup_object(struct peerd *peer, struct map_node *mn, struct peer_re
 	char new_target[XSEG_MAX_TARGETLEN + 1]; 
 	unsigned char buf[SHA256_DIGEST_SIZE];	//assert sha256_digest_size(32) <= MAXTARGETLEN 
 	char new_object[XSEG_MAX_TARGETLEN + 20]; //20 is an arbitrary padding able to hold string representation of objectidx
-	strncpy(new_object, mn->object, mn->objectlen);
-	sprintf(new_object + mn->objectlen, "%u", mn->objectidx); //sprintf adds null termination
+	strncpy(new_object, map->volume, map->volumelen);
+	sprintf(new_object + map->volumelen, "%u", mn->objectidx); //sprintf adds null termination
 	new_object[XSEG_MAX_TARGETLEN + 19] = 0;
 
 	gcry_md_hash_buffer(GCRY_MD_SHA256, buf, new_object, strlen(new_object));
@@ -1050,10 +1051,10 @@ static int req2objs(struct peerd *peer, struct peer_req *pr,
 		goto out_object_copying;
 	}
 
-	XSEGLOG2(&lc, E, "pr->req->offset: %llu, pr->req->size %llu, block_size %u\n", 
-				(unsigned long long) pr->req->offset, 
-				(unsigned long long) pr->req->size, 
-				block_size);
+//	XSEGLOG2(&lc, D, "pr->req->offset: %llu, pr->req->size %llu, block_size %u\n", 
+//				(unsigned long long) pr->req->offset, 
+//				(unsigned long long) pr->req->size, 
+//				block_size);
 	strncpy(reply->segs[idx].target, mn->object, mn->objectlen);
 	reply->segs[idx].targetlen = mn->objectlen;
 	reply->segs[idx].target[mn->objectlen] = 0;
@@ -1225,6 +1226,7 @@ out_fail:
 		struct peer_req * preq = (struct peer_req *) idx;
 		fail(peer, preq);
 	}
+	return 0;
 
 out_err:
 	XSEGLOG2(&lc, E, "Cannot get map node");

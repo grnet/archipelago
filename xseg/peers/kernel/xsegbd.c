@@ -447,6 +447,10 @@ int update_dev_sectors_from_request(	struct xsegbd_device *xsegbd_dev,
 					struct xseg_request *xreq	)
 {
 	void *data;
+	if (!xreq) {
+		XSEGLOG("Invalid xreq");
+		return -EIO;
+	}
 
 	if (xreq->state & XS_FAILED)
 		return -ENOENT;
@@ -455,6 +459,10 @@ int update_dev_sectors_from_request(	struct xsegbd_device *xsegbd_dev,
 		return -EIO;
 
 	data = xseg_get_data(xsegbd_dev->xseg, xreq);
+	if (!data) {
+		XSEGLOG("Invalid req data");
+		return -EIO;
+	}
 	xsegbd_dev->sectors = *((uint64_t *) data) / 512ULL;
 	return 0;
 }
@@ -507,9 +515,9 @@ static int xsegbd_get_size(struct xsegbd_device *xsegbd_dev)
 		goto out_queue;
 	}
 	WARN_ON(xseg_signal(xsegbd_dev->xseg, p) < 0);
-
+	XSEGLOG("Before wait for completion, xreq %lx", (unsigned long) xreq);
 	wait_for_completion_interruptible(&comp);
-	//XSEGLOG("Woken up after wait_for_completion_interruptible()\n");
+	XSEGLOG("Woken up after wait_for_completion_interruptible(), xreq: %lx", (unsigned long) xreq);
 	ret = update_dev_sectors_from_request(xsegbd_dev, xreq);
 	//XSEGLOG("get_size: sectors = %ld\n", (long)xsegbd_dev->sectors);
 out:
@@ -725,11 +733,11 @@ static ssize_t xsegbd_cleanup(struct device *dev,
 			pending->request = NULL;
 			comp = pending->comp;
 			pending->comp = NULL;
+			if (blkreq)
+				blk_end_request_all(blkreq, -EIO);
+			if (comp)
+				complete(comp);
 		}
-		if (blkreq)
-			blk_end_request_all(blkreq, -EIO);
-		if (comp)
-			complete(comp);
 		xlock_release(&xsegbd_dev->blk_queue_pending.lock);
 	}
 
