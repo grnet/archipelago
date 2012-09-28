@@ -517,6 +517,8 @@ out:
 	return ret;
 
 out_queue:
+	pending->dev = NULL;
+	pending->comp = NULL;
 	xq_append_head(&xsegbd_dev->blk_queue_pending, blkreq_idx, 1);
 	
 	goto out;
@@ -560,7 +562,6 @@ static void xseg_callback(xport portno)
 			/* someone is blocking on this request
 			   and will handle it when we wake them up. */
 			complete(pending->comp);
-			pending->comp = NULL;
 			/* the request is blocker's responsibility so
 			   we will not put_request(); */
 			continue;
