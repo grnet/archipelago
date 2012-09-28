@@ -674,6 +674,8 @@ static int copyup_object(struct peerd *peer, struct map_node *mn, struct peer_re
 		sprintf (new_target + 2*i, "%02x", buf[i]);
 	newtargetlen = SHA256_DIGEST_SIZE  * 2;
 
+	if (!strncmp(mn->object, zero_block, (mn->objectlen < HEXLIFIED_SHA256_DIGEST_SIZE)? mn->objectlen : HEXLIFIED_SHA256_DIGEST_SIZE)) 
+		goto copyup_zeroblock;
 
 	struct xseg_request *req = xseg_get_request(peer->xseg, peer->portno, 
 							mapper->bportno, X_ALLOC);
@@ -705,10 +707,12 @@ static int copyup_object(struct peerd *peer, struct map_node *mn, struct peer_re
 	xseg_signal(peer->xseg, p);
 	mio->copyups++;
 
+	mn->flags |= MF_OBJECT_COPYING;
 	XSEGLOG2(&lc, I, "Copying up object %s \n\t to %s", mn->object, new_target);
 	return 0;
 
 out_unset:
+	r = __set_copyup_node(mio, req, NULL);
 	xseg_get_req_data(peer->xseg, req, &dummy);
 out_put:
 	xseg_put_request(peer->xseg, req, peer->portno);
@@ -716,6 +720,27 @@ out_err:
 	XSEGLOG2(&lc, E, "Copying up object %s \n\t to %s failed", mn->object, new_target);
 	return -1;
 
+copyup_zeroblock:
+	XSEGLOG2(&lc, I, "Copying up of zero block is not needed."
+			"Proceeding in writing the new object in map");
+	/* construct a tmp map_node for writing purposes */
+	struct map_node newmn = *mn;
+	newmn.flags = MF_OBJECT_EXIST;
+	strncpy(newmn.object, new_target, newtargetlen);
+	newmn.object[newtargetlen] = 0;
+	newmn.objectlen = newtargetlen;
+	newmn.objectidx = mn->objectidx; 
+	r = __set_copyup_node(mio, req, mn);
+	r = object_write(peer, pr, map, &newmn);
+	if (r != MF_PENDING){
+		XSEGLOG2(&lc, E, "Object write returned error for object %s"
+				"\n\t of map %s [%llu]",
+				mn->object, map->volume, (unsigned long long) mn->objectidx);
+		return -1;
+	}
+	mn->flags |= MF_OBJECT_WRITING;
+	XSEGLOG2(&lc, I, "Object %s copy up completed. Pending writing.", mn->object);
+	return 0;
 }
 
 /*
@@ -1047,7 +1072,6 @@ static int req2objs(struct peerd *peer, struct peer_req *pr,
 			XSEGLOG2(&lc, E, "Error in copy up object");
 			goto out_err_copy;
 		}
-		mn->flags |= MF_OBJECT_COPYING;
 		goto out_object_copying;
 	}
 
@@ -1084,7 +1108,6 @@ static int req2objs(struct peerd *peer, struct peer_req *pr,
 				XSEGLOG2(&lc, E, "Error in copy up object");
 				goto out_err_copy;
 			}
-			mn->flags |= MF_OBJECT_COPYING;
 			goto out_object_copying;
 		}
 		strncpy(reply->segs[idx].target, mn->object, mn->objectlen);

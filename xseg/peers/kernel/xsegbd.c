@@ -515,18 +515,18 @@ static int xsegbd_get_size(struct xsegbd_device *xsegbd_dev)
 		goto out_queue;
 	}
 	WARN_ON(xseg_signal(xsegbd_dev->xseg, p) < 0);
-	XSEGLOG("Before wait for completion, xreq %lx", (unsigned long) xreq);
+	XSEGLOG("Before wait for completion, comp %lx [%llu]", (unsigned long) pending->comp, (unsigned long long) blkreq_idx);
 	wait_for_completion_interruptible(&comp);
-	XSEGLOG("Woken up after wait_for_completion_interruptible(), xreq: %lx", (unsigned long) xreq);
+	XSEGLOG("Woken up after wait_for_completion_interruptible(), comp: %lx [%llu]", (unsigned long) pending->comp, (unsigned long long) blkreq_idx);
 	ret = update_dev_sectors_from_request(xsegbd_dev, xreq);
 	//XSEGLOG("get_size: sectors = %ld\n", (long)xsegbd_dev->sectors);
 out:
+	pending->dev = NULL;
+	pending->comp = NULL;
 	BUG_ON(xseg_put_request(xsegbd_dev->xseg, xreq, xsegbd_dev->src_portno) == -1);
 	return ret;
 
 out_queue:
-	pending->dev = NULL;
-	pending->comp = NULL;
 	xq_append_head(&xsegbd_dev->blk_queue_pending, blkreq_idx, 1);
 	
 	goto out;
@@ -726,23 +726,27 @@ static ssize_t xsegbd_cleanup(struct device *dev,
 	struct completion *comp = NULL;
 
 	mutex_lock_nested(&xsegbd_mutex, SINGLE_DEPTH_NESTING);
-	for (i = 0; i < xsegbd_dev->nr_requests; i++) {
-		xlock_acquire(&xsegbd_dev->blk_queue_pending.lock, 
+	xlock_acquire(&xsegbd_dev->blk_queue_pending.lock, 
 				xsegbd_dev->src_portno);
+	for (i = 0; i < xsegbd_dev->nr_requests; i++) {
 		if (!__xq_check(&xsegbd_dev->blk_queue_pending, i)) {
 			pending = &xsegbd_dev->blk_req_pending[i];
 			blkreq = pending->request;
 			pending->request = NULL;
 			comp = pending->comp;
 			pending->comp = NULL;
-			if (blkreq)
+			if (blkreq){
+				XSEGLOG("Cleaning up blkreq %lx [%d]", (unsigned long) blkreq, i);
 				blk_end_request_all(blkreq, -EIO);
-			if (comp)
+			}
+			if (comp){
+				XSEGLOG("Cleaning up comp %lx [%d]", (unsigned long) comp, i);
 				complete(comp);
+			}
 			__xq_append_tail(&xsegbd_dev->blk_queue_pending, i);
 		}
-		xlock_release(&xsegbd_dev->blk_queue_pending.lock);
 	}
+	xlock_release(&xsegbd_dev->blk_queue_pending.lock);
 
 	mutex_unlock(&xsegbd_mutex);
 	return ret;
