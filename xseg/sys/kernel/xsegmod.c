@@ -10,10 +10,8 @@
 #include <xseg/domain.h>
 
 int (*xseg_snprintf)(char *str, size_t size, const char *format, ...) = snprintf;
-EXPORT_SYMBOL(xseg_snprintf);
 
 char __xseg_errbuf[4096];
-EXPORT_SYMBOL(__xseg_errbuf);
 
 static spinlock_t __lock;
 
@@ -46,7 +44,6 @@ void __xseg_log(const char *msg)
 {
 	(void)printk(KERN_INFO "%s\n", msg);
 }
-EXPORT_SYMBOL(__xseg_log);
 
 void *xtypes_malloc(unsigned long size)
 {
@@ -83,7 +80,6 @@ int kernel_init_logctx(struct log_ctx *lc, char *peer_name, enum log_level log_l
 	return 0;
 }
 int (*init_logctx)(struct log_ctx *lc, char *peer_name, enum log_level log_level, char *logfile) = kernel_init_logctx;
-EXPORT_SYMBOL(init_logctx);
 
 void __xseg_log2(struct log_ctx *lc, unsigned int level, char *fmt, ...)
 {
@@ -120,7 +116,6 @@ void __xseg_log2(struct log_ctx *lc, unsigned int level, char *fmt, ...)
 
 	return;
 }
-EXPORT_SYMBOL(__xseg_log2);
 
 module_init(xsegmod_init);
 module_exit(xsegmod_exit);

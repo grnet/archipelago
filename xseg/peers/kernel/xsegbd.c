@@ -525,6 +525,8 @@ out:
 	return ret;
 
 out_queue:
+	pending->dev = NULL;
+	pending->comp = NULL;
 	xq_append_head(&xsegbd_dev->blk_queue_pending, blkreq_idx, 1);
 	
 	goto out;
@@ -737,6 +739,7 @@ static ssize_t xsegbd_cleanup(struct device *dev,
 				blk_end_request_all(blkreq, -EIO);
 			if (comp)
 				complete(comp);
+			__xq_append_tail(&xsegbd_dev->blk_queue_pending, i);
 		}
 		xlock_release(&xsegbd_dev->blk_queue_pending.lock);
 	}
