@@ -256,7 +256,7 @@ static int load_map(struct peerd *peer, struct peer_req *pr, char *target, uint3
 	char *reqtarget = xseg_get_target(peer->xseg, req);
 	if (!reqtarget)
 		goto out_put;
-	strncpy(reqtarget, target, targetlen);
+	strncpy(reqtarget, target, req->targetlen);
 	req->op = X_READ;
 	req->size = block_size;
 	req->offset = 0;
@@ -432,7 +432,7 @@ static int object_write(struct peerd *peer, struct peer_req *pr,
 		goto out_put;
 	}
 	char *target = xseg_get_target(peer->xseg, req);
-	strncpy(target, map->volume, map->volumelen);
+	strncpy(target, map->volume, req->targetlen);
 	req->size = objectsize_in_map;
 	req->offset = mapheader_size + mn->objectidx * objectsize_in_map;
 	req->op = X_WRITE;
@@ -687,7 +687,7 @@ static int copyup_object(struct peerd *peer, struct map_node *mn, struct peer_re
 		goto out_put;
 
 	char *target = xseg_get_target(peer->xseg, req);
-	strncpy(target, new_target, newtargetlen);
+	strncpy(target, new_target, req->targetlen);
 
 	struct xseg_request_copy *xcopy = (struct xseg_request_copy *) xseg_get_data(peer->xseg, req);
 	strncpy(xcopy->target, mn->object, mn->objectlen);
