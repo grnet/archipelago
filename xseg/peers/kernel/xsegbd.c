@@ -560,6 +560,7 @@ static void xseg_callback(xport portno)
 			/* someone is blocking on this request
 			   and will handle it when we wake them up. */
 			complete(pending->comp);
+			pending->comp = NULL;
 			/* the request is blocker's responsibility so
 			   we will not put_request(); */
 			continue;
@@ -730,6 +731,7 @@ static ssize_t xsegbd_cleanup(struct device *dev,
 			blk_end_request_all(blkreq, -EIO);
 		if (comp)
 			complete(comp);
+		__xq_append_tail(&xsegbd_dev->blk_queue_pending, i);
 		xlock_release(&xsegbd_dev->blk_queue_pending.lock);
 	}
 
