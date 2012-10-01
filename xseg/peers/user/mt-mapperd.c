@@ -142,7 +142,7 @@ static struct map * find_map(struct mapperd *mapper, char *target, uint32_t targ
 	//assert targetlen <= XSEG_MAX_TARGETLEN
 	strncpy(buf, target, targetlen);
 	buf[targetlen] = 0;
-	XSEGLOG2(&lc, E, "looking up map %s, len %u", buf, targetlen);
+	XSEGLOG2(&lc, D, "looking up map %s, len %u", buf, targetlen);
 	r = xhash_lookup(mapper->hashmaps, (xhashidx) buf, (xhashidx *) &m);
 	if (r < 0)
 		return NULL;
@@ -159,7 +159,7 @@ static int insert_map(struct mapperd *mapper, struct map *map)
 		goto out;
 	}
 
-	XSEGLOG2(&lc, E, "Inserting map %s, len: %d (map: %lx)", 
+	XSEGLOG2(&lc, D, "Inserting map %s, len: %d (map: %lx)", 
 			map->volume, strlen(map->volume), (unsigned long) map);
 	r = xhash_insert(mapper->hashmaps, (xhashidx) map->volume, (xhashidx) map);
 	while (r == -XHASH_ERESIZE) {
@@ -776,7 +776,6 @@ static int handle_mapread(struct peerd *peer, struct peer_req *pr,
 	
 	xseg_put_request(peer->xseg, req, peer->portno);
 	map->flags &= ~MF_MAP_LOADING;
-	print_map(map);
 	XSEGLOG2(&lc, I, "Map %s loaded. Dispatching pending", map->volume);
 	uint64_t qsize = xq_count(&map->pending);
 	while(qsize > 0 && (idx = __xq_pop_head(&map->pending)) != Noneidx){
@@ -992,7 +991,6 @@ static int handle_clone(struct peerd *peer, struct peer_req *pr,
 			goto out_free_all;
 		}
 	}
-	print_map(clonemap);
 	//insert map
 	r = insert_map(mapper, clonemap);
 	if ( r < 0) {
@@ -1299,7 +1297,6 @@ static int handle_objectwrite(struct peerd *peer, struct peer_req *pr,
 	mn->objectlen = tmp.objectlen;
 	xseg_put_request(peer->xseg, req, peer->portno);
 
-	print_map(mn->map);
 	XSEGLOG2(&lc, I, "Object write of %s completed successfully", mn->object);
 	uint64_t qsize = xq_count(&mn->pending);
 	while(qsize > 0 && (idx = __xq_pop_head(&mn->pending)) != Noneidx){
