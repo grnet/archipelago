@@ -199,14 +199,14 @@ out:
 }
 
 /* async map load */
-static int load_map(struct peerd *peer, struct peer_req *pr, char *target, uint32_t targetlen)
+static int load_map(struct peerd *peer, struct peer_req *pr, char *target, 
+			uint32_t targetlen)
 {
 	int r;
 	xport p;
 	struct xseg_request *req;
 	struct mapperd *mapper = __get_mapperd(peer);
 	void *dummy;
-	//printf("Loading map\n");
 
 	struct map *m = find_map(mapper, target, targetlen);
 	if (!m) {
@@ -241,7 +241,6 @@ static int load_map(struct peerd *peer, struct peer_req *pr, char *target, uint3
 	if (r < 0)  
 		goto out_hash;
 	
-	//printf("Loading map: preparing req\n");
 
 	req = xseg_get_request(peer->xseg, peer->portno, mapper->mbportno, X_ALLOC);
 	if (!req){

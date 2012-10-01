@@ -21,6 +21,7 @@
 
 #include <sys/kernel/segdev.h>
 #include "xsegbd.h"
+#include <xseg/protocol.h>
 
 #define XSEGBD_MINORS 1
 /* define max request size to be used in xsegbd */
@@ -185,6 +186,7 @@ static const struct block_device_operations xsegbd_ops = {
 
 static void xseg_request_fn(struct request_queue *rq);
 static int xsegbd_get_size(struct xsegbd_device *xsegbd_dev);
+static int xsegbd_mapclose(struct xsegbd_device *xsegbd_dev);
 
 static int xsegbd_dev_init(struct xsegbd_device *xsegbd_dev)
 {
@@ -274,6 +276,7 @@ static void xsegbd_dev_release(struct device *dev)
 
 		blk_cleanup_queue(xsegbd_dev->blk_queue);
 		put_disk(xsegbd_dev->gd);
+		xsegbd_mapclose(xsegbd_dev);
 	}
 
 //	if (xseg_free_requests(xsegbd_dev->xseg, 
@@ -485,11 +488,10 @@ static int xsegbd_get_size(struct xsegbd_device *xsegbd_dev)
 	xreq = xseg_get_request(xsegbd_dev->xseg, xsegbd_dev->src_portno,
 			xsegbd_dev->dst_portno, X_ALLOC);
 	if (!xreq)
-		goto out;
+		return ret;
 
-	datalen = sizeof(uint64_t);
-	BUG_ON(xseg_prep_request(xsegbd_dev->xseg, xreq, xsegbd_dev->targetlen, datalen));
-	BUG_ON(xreq->bufferlen - xsegbd_dev->targetlen < datalen);
+	BUG_ON(xseg_prep_request(xsegbd_dev->xseg, xreq, xsegbd_dev->targetlen, 
+				sizeof(struct xseg_reply_info)));
 
 	init_completion(&comp);
 	blkreq_idx = xq_pop_head(&xsegbd_dev->blk_queue_pending, 1);
@@ -506,7 +508,7 @@ static int xsegbd_get_size(struct xsegbd_device *xsegbd_dev)
 
 	target = xseg_get_target(xsegbd_dev->xseg, xreq);
 	strncpy(target, xsegbd_dev->target, xsegbd_dev->targetlen);
-	xreq->size = datalen;
+	xreq->size = xreq->datalen;
 	xreq->offset = 0;
 	xreq->op = X_INFO;
 
@@ -525,12 +527,75 @@ static int xsegbd_get_size(struct xsegbd_device *xsegbd_dev)
 	ret = update_dev_sectors_from_request(xsegbd_dev, xreq);
 	//XSEGLOG("get_size: sectors = %ld\n", (long)xsegbd_dev->sectors);
 out:
-	pending->dev = NULL;
-	pending->comp = NULL;
 	BUG_ON(xseg_put_request(xsegbd_dev->xseg, xreq, xsegbd_dev->src_portno) == -1);
 	return ret;
 
 out_queue:
+	pending->dev = NULL;
+	pending->comp = NULL;
+	xq_append_head(&xsegbd_dev->blk_queue_pending, blkreq_idx, 1);
+	
+	goto out;
+}
+
+static int xsegbd_mapclose(struct xsegbd_device *xsegbd_dev)
+{
+	struct xseg_request *xreq;
+	char *target;
+	uint64_t datalen;
+	xqindex blkreq_idx;
+	struct xsegbd_pending *pending;
+	struct completion comp;
+	xport p;
+	void *data;
+	int ret = -EBUSY, r;
+	xreq = xseg_get_request(xsegbd_dev->xseg, xsegbd_dev->src_portno,
+			xsegbd_dev->dst_portno, X_ALLOC);
+	if (!xreq)
+		return ret;;
+
+	BUG_ON(xseg_prep_request(xsegbd_dev->xseg, xreq, xsegbd_dev->targetlen, 0));
+	BUG_ON(xreq->bufferlen - xsegbd_dev->targetlen < datalen);
+
+	init_completion(&comp);
+	blkreq_idx = xq_pop_head(&xsegbd_dev->blk_queue_pending, 1);
+	if (blkreq_idx == Noneidx)
+		goto out;
+	
+	pending = &xsegbd_dev->blk_req_pending[blkreq_idx];
+	pending->dev = xsegbd_dev;
+	pending->request = NULL;
+	pending->comp = &comp;
+
+	
+	xreq->priv = (uint64_t) blkreq_idx;
+
+	target = xseg_get_target(xsegbd_dev->xseg, xreq);
+	strncpy(target, xsegbd_dev->target, xsegbd_dev->targetlen);
+	xreq->size = xreq->datalen;
+	xreq->offset = 0;
+	xreq->op = X_CLOSE;
+
+	xseg_prepare_wait(xsegbd_dev->xseg, xsegbd_dev->src_portno);
+	p = xseg_submit(xsegbd_dev->xseg, xreq, 
+				xsegbd_dev->src_portno, X_ALLOC);
+	if ( p == NoPort) {
+		XSEGLOG("couldn't submit request");
+		BUG_ON(1);
+		goto out_queue;
+	}
+	WARN_ON(xseg_signal(xsegbd_dev->xseg, p) < 0);
+	wait_for_completion_interruptible(&comp);
+	ret = 0;
+	if (xreq->state & XS_FAILED)
+		XSEGLOG("Couldn't close disk on mapper");
+out:
+	BUG_ON(xseg_put_request(xsegbd_dev->xseg, xreq, xsegbd_dev->src_portno) == -1);
+	return ret;
+
+out_queue:
+	pending->dev = NULL;
+	pending->comp = NULL;
 	xq_append_head(&xsegbd_dev->blk_queue_pending, blkreq_idx, 1);
 	
 	goto out;

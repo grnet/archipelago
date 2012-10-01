@@ -97,6 +97,7 @@ static int handle_accepted(struct peerd *peer, struct peer_req *pr,
 		case X_READ: vio->mreq->op = X_MAPR; break;
 		case X_WRITE: vio->mreq->op = X_MAPW; break;
 		case X_INFO: vio->mreq->op = X_INFO; break;
+		case X_CLOSE: vio->mreq->op = X_CLOSE; break;
 		default: goto out_put;
 	}
 	xseg_set_req_data(peer->xseg, vio->mreq, pr);
@@ -151,6 +152,12 @@ static int handle_mapping(struct peerd *peer, struct peer_req *pr,
 		struct xseg_reply_info *xinfo = (struct xseg_reply_info *) xseg_get_data(peer->xseg, vio->mreq);
 		char *data = xseg_get_data(peer->xseg, pr->req);
 		*(off_t *)data = xinfo->size;
+		xseg_put_request(peer->xseg, vio->mreq, peer->portno);
+		vio->mreq = NULL;
+		__set_vio_state(vio, CONCLUDED);
+		complete(peer, pr);
+	} else if (vio->mreq->op == X_CLOSE) {
+		struct xseg_reply_info *xinfo = (struct xseg_reply_info *) xseg_get_data(peer->xseg, vio->mreq);
 		xseg_put_request(peer->xseg, vio->mreq, peer->portno);
 		vio->mreq = NULL;
 		__set_vio_state(vio, CONCLUDED);
