@@ -1439,12 +1439,8 @@ static int delete_object(struct peerd *peer, struct peer_req *pr,
 	struct mapperd *mapper = __get_mapperd(peer);
 	struct mapper_io *mio = __get_mapper_io(pr);
 
-	if (!(mn->flags && MF_OBJECT_EXIST)){
-		//cant delete not existing object
-
-	}
+	mio->delobj = mn->objectidx;
 	if (xq_count(&mn->pending) != 0) {
-		mio->delobj = mn->objectidx;
 		__xq_append_tail(&mn->pending, (xqindex) pr); //FIXME err check
 		XSEGLOG2(&lc, I, "Object %s has pending requests. Adding to pending",
 				mn->object);
@@ -1484,6 +1480,61 @@ out_err:
 	XSEGLOG2(&lc, I, "Object %s deletion failed", mn->object);
 	return -1;
 }
+
+/*
+ * Find next object for deletion. Start searching on idx mio->delobj.
+ * Skip non existing map_nodes, free_resources and skip non-existing objects
+ * Wait for all pending operations on the object, before moving forward to the 
+ * next object.
+ *
+ * Return MF_PENDING if theres is a pending operation on the next object
+ * or zero if there is no next object
+ */
+static int delete_next_object(struct peerd *peer, struct peer_req *pr,
+				struct map *map)
+{
+	struct mapperd *mapper = __get_mapperd(peer);
+	struct mapper_io *mio = __get_mapper_io(pr);
+	uint64_t idx = mio->delobj;
+	struct map_node *mn;
+	int r;
+retry:
+	while (idx < calc_map_obj(map)) {
+		mn = find_object(map, idx);
+		if (!mn) {
+			idx++;
+			goto retry;
+		}
+		mio->delobj = idx;
+		if (xq_count(&mn->pending) != 0) {
+			__xq_append_tail(&mn->pending, (xqindex) pr); //FIXME err check
+			XSEGLOG2(&lc, I, "Object %s has pending requests. Adding to pending",
+					mn->object);
+			return MF_PENDING;
+		}
+		if (mn->flags & MF_OBJECT_EXIST){
+			r = delete_object(peer, pr, mn);
+			if (r < 0) {
+				/* on error, just log it, release resources and
+				 * proceed to the next object
+				 */
+				XSEGLOG2(&lc, E, "Object %s delete object return error"
+						"\n\t Map: %s [%llu]", 
+						mn->object, mn->map->volume, 
+						(unsigned long long) mn->objectidx);
+				xq_free(&mn->pending);
+			}
+			else if (r == MF_PENDING){
+				return r;
+			}
+		} else {
+			xq_free(&mn->pending);
+		}
+		idx++;
+	}
+	return 0;
+}
+
 static int handle_object_delete(struct peerd *peer, struct peer_req *pr, 
 				 struct map_node *mn, int err)
 {
@@ -1499,32 +1550,16 @@ static int handle_object_delete(struct peerd *peer, struct peer_req *pr,
 
 	//assert object flags OK
 	//free map_node_resources
-	map->flags &= ~MF_OBJECT_DELETING;
+	mn->flags &= ~MF_OBJECT_DELETING;
 	xq_free(&mn->pending);
-	//find next object
-	idx = mn->objectidx;
-	//remove_object(map, idx);
-	idx++;
-	mn = find_object(map, idx);
-	while (!mn && idx < calc_map_obj(map)) {
-		idx++;
-		mn = find_object(map, idx);
-	}
-	if (mn) {
-		//delete next object or complete;
-		r = delete_object(peer, pr, mn);
-		if (r < 0) {
-			XSEGLOG2(&lc, E, "Object %s delete object return error"
-					 "\n\t Map: %s [%llu]", 
-					 mn->object, mn->map->volume, 
-					 (unsigned long long) mn->objectidx);
-			goto del_completed;
-		}
-		XSEGLOG2(&lc, I, "Handle object delete OK");
-	} else {
-del_completed:
+	
+	r = delete_next_object(peer, pr, map);
+	if (r != MF_PENDING){
+		/* if there is no next object to delete, remove the map block
+		 * from memory
+		 */
+
 		//assert map flags OK
-		map->flags &= ~MF_MAP_DELETING;
 		map->flags |= MF_MAP_DESTROYED;
 		XSEGLOG2(&lc, I, "Map %s deleted", map->volume);
 		//make all pending requests on map to fail
@@ -1539,6 +1574,7 @@ del_completed:
 		xq_free(&map->pending);
 		free(map);
 	}
+	XSEGLOG2(&lc, I, "Handle object delete OK");
 	return 0;
 }
 
@@ -1601,11 +1637,16 @@ static int handle_map_delete(struct peerd *peer, struct peer_req *pr,
 	} else {
 		map->flags |= MF_MAP_DESTROYED;
 		//delete all objects
-		XSEGLOG2(&lc, E, "Map %s map block deleted. Deleting objects", map->volume);
-		struct map_node *mn = find_object(map, 0);
-		if (!mn) {
-			XSEGLOG2(&lc, E, "Map %s has no object 0", map->volume);
-			//this should never happen
+		XSEGLOG2(&lc, I, "Map %s map block deleted. Deleting objects", map->volume);
+		mio->delobj = 0;
+		r = delete_next_object(peer, pr, map);
+		if (r != MF_PENDING){
+			/* if there is no next object to delete, remove the map block
+			 * from memory
+			 */
+			//assert map flags OK
+			map->flags |= MF_MAP_DESTROYED;
+			XSEGLOG2(&lc, I, "Map %s deleted", map->volume);
 			//make all pending requests on map to fail
 			while ((idx = __xq_pop_head(&map->pending)) != Noneidx){
 				struct peer_req * preq = (struct peer_req *) idx;
@@ -1613,20 +1654,11 @@ static int handle_map_delete(struct peerd *peer, struct peer_req *pr,
 			}
 			//free map resources;
 			remove_map(mapper, map);
+			struct map_node *mn = find_object(map, 0);
+			if (mn)
+				free(mn);
 			xq_free(&map->pending);
 			free(map);
-			return 0;
-		}
-		r = delete_object(peer, pr, mn);
-		if (r < 0) {
-			XSEGLOG2(&lc, E, "Deleting first object of map %s returned error"
-					"\n\t Dispatching pending requests",
-					map->volume);
-			//dispatch all pending
-			while ((idx = __xq_pop_head(&map->pending)) != Noneidx){
-				struct peer_req * preq = (struct peer_req *) idx;
-				my_dispatch(peer, preq, preq->req);
-			}
 		}
 	}
 	return 0;
@@ -1703,20 +1735,14 @@ static int handle_destroy(struct peerd *peer, struct peer_req *pr,
 		}
 		else{
 			XSEGLOG2(&lc, I, "Map %s already destroyed", map->volume);
-			fprintf(stderr, "map destroyed\n");
 			fail(peer, pr);
 		}
 		return 0;
 	}
 	if (mio->state == DELETING) {
 		//continue deleting map objects;
-		struct map_node *mn = find_object(map, mio->delobj);
-		if (!mn) {
-			complete(peer, pr);
-			return 0;
-		}
-		r = delete_object(peer, pr, mn);
-		if (r < 0) {
+		r = delete_next_object(peer ,pr, map);
+		if (r != MF_PENDING){
 			complete(peer, pr);
 		}
 		return 0;
