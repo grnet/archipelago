@@ -42,7 +42,8 @@ enum mapper_state {
 	ACCEPTED = 0,
 	WRITING = 1,
 	COPYING = 2,
-	DELETING = 3
+	DELETING = 3,
+	DROPPING_CACHE = 4
 };
 
 struct map_node {
@@ -58,8 +59,10 @@ struct map_node {
 #define MF_MAP_DESTROYED	(1 << 1)
 #define MF_MAP_WRITING		(1 << 2)
 #define MF_MAP_DELETING		(1 << 3)
+#define MF_MAP_DROPPING_CACHE	(1 << 4)
 
-#define MF_MAP_NOT_READY	(MF_MAP_LOADING|MF_MAP_WRITING|MF_MAP_DELETING)
+#define MF_MAP_NOT_READY	(MF_MAP_LOADING|MF_MAP_WRITING|MF_MAP_DELETING|\
+					MF_MAP_DROPPING_CACHE)
 
 struct map {
 	uint32_t flags;
@@ -82,6 +85,7 @@ struct mapper_io {
 	struct map_node *copyup_node;
 	int err;			/* error flag */
 	uint64_t delobj;
+	uint64_t dcobj;
 	enum mapper_state state;
 };
 
@@ -1765,6 +1769,70 @@ static int handle_destroy(struct peerd *peer, struct peer_req *pr,
 	return 0;
 }
 
+static int handle_dropcache(struct peerd *peer, struct peer_req *pr, 
+				struct xseg_request *req)
+{
+	struct mapperd *mapper = __get_mapperd(peer);
+	struct mapper_io *mio = __get_mapper_io(pr);
+	(void) mapper;
+	(void) mio;
+	char *target = xseg_get_target(peer->xseg, pr->req);
+	if (!target) {
+		fail(peer, pr);
+		return 0;
+	}
+
+	struct map *map = find_map(mapper, target, pr->req->targetlen);
+	if (!map){
+		complete(peer, pr);
+		return 0;
+	} else if (map->flags & MF_MAP_DESTROYED) {
+		complete(peer, pr);
+		return 0;
+	} else if (map->flags & MF_MAP_NOT_READY && mio->state != DROPPING_CACHE) {
+		__xq_append_tail(&map->pending, (xqindex) pr);
+		return 0;
+	}
+
+	if (mio->state != DROPPING_CACHE) {
+		/* block all future operations on the map */
+		map->flags |= MF_MAP_DROPPING_CACHE;
+		mio->dcobj = 0;
+		mio->state = DROPPING_CACHE;
+	}
+
+	struct map_node *mn; 
+	uint64_t i;
+	for (i = mio->dcobj; i < calc_map_obj(map); i++) {
+		mn = find_object(map, i);
+		if (!mn)
+			continue;
+		mio->dcobj = i;
+		if (xq_count(&mn->pending) != 0){
+			__xq_append_tail(&mn->pending, (xqindex) pr);
+			return 0;
+		}
+		xq_free(&mn->pending);
+	}
+	remove_map(mapper, map);
+	//dispatch pending
+	while ((i = __xq_pop_head(&map->pending)) != Noneidx){
+		struct peer_req * preq = (struct peer_req *) i;
+		my_dispatch(peer, preq, preq->req);
+	}
+	
+	//free map resources;
+	mn = find_object(map, 0);
+	if (mn)
+		free(mn);
+	xq_free(&map->pending);
+	free(map);
+
+	complete(peer, pr);
+
+	return 0;
+}
+
 static int my_dispatch(struct peerd *peer, struct peer_req *pr, struct xseg_request *req)
 {
 	struct mapperd *mapper = __get_mapperd(peer);
@@ -1786,6 +1854,7 @@ static int my_dispatch(struct peerd *peer, struct peer_req *pr, struct xseg_requ
 //		case X_SNAPSHOT: handle_snap(peer, pr, req); break;
 		case X_INFO: handle_info(peer, pr, req); break;
 		case X_DELETE: handle_destroy(peer, pr, req); break;
+		case X_CLOSE: handle_dropcache(peer, pr, req); break;
 		default: fprintf(stderr, "mydispatch: unknown up\n"); break;
 	}
 	return 0;
