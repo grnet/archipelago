@@ -70,6 +70,7 @@ uint64_t __get_id(void)
 void __xseg_log(const char *msg)
 {
 	(void)puts(msg);
+	fflush(stdout);
 }
 
 void *xtypes_malloc(unsigned long size)

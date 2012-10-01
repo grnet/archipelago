@@ -114,6 +114,68 @@ int test_string(xhashidx loops)
     return 0;
 }
 
+int test_string2()
+{
+    xhashidx i, v;
+    struct xhash *h;
+    int rr;
+    char *string[4];
+    string[0] = "b79111bca0cfd1fa9ff0f435357567bcb016cd4949e55484a9b49b129fc5f757";
+    string[1] = "bf508f5b-7bc2-4963-9fd3-5e06ffe1b50e.ext.disk0";
+    string[2] = "e5856732-30c4-4f2b-b888-897b9079eddc.ext.disk0";
+    string[3] = "11b7e801-ea1a-44ab-9d25-ed675da29747.ext.disk0";
+
+    h = malloc(xhash_get_alloc_size(3));
+    if (!h){
+        perror("malloc");
+	exit(1);
+    }
+    xhash_init(h, 3, STRING);
+    for (i = 0; i < 4; i++) {
+	int ret;
+        xhashidx r;
+        rr = xhash_insert(h, (xhashidx) string[i], (xhashidx) i);
+	if (rr == -XHASH_ERESIZE){
+		h = my_resize(h, xhash_grow_size_shift(h));
+		rr = xhash_insert(h, string[i], (xhashidx) i);
+		if (rr != 0)
+			printf("resize string insert error in %lx: %lx != %lx\n", i, r, i);
+	}
+        ret = xhash_lookup(h, (xhashidx)string[i], (xhashidx *) &r);
+        if (ret || (r != i)) {
+            printf("string insert error in %lx (ret: %d): returned val %lx, expected val %lx\n ", i, ret, r, i);
+        }
+    }
+    for (i = 0; i < 4; i++) {
+        int ret = xhash_lookup(h, (xhashidx)string[i], (xhashidx *) &v);
+        //printf(" ->got(%lu, %lu)\n", i, v);
+        if (ret || (i != v)) {
+            printf("string error in %lu: %lu != %lu\n", i, i, v);
+            getchar();
+        }
+    }
+    for (i = 00; i < 4; i++) {
+	int ret;
+        xhashidx r;
+        //printf("insert(%lx, %lx)\n", i, -i);
+        rr = xhash_delete(h, (xhashidx)string[i]);
+	if (rr == -XHASH_ERESIZE){
+		h = my_resize(h, xhash_shrink_size_shift(h));
+		rr = xhash_delete(h, (xhashidx)string[i]);
+		if (rr != 0)
+			printf("resize string delele error in %lx: %lx != %lx\n", i, r, i);
+	}
+        ret = xhash_lookup(h, (xhashidx) string[i], (xhashidx *) &r);
+        if (!ret) {
+            printf("string delete error in %lx: %lx != %lx\n", i, r, i);
+        }
+        //printf(" ->got(%lx, %lx)\n", i, r);
+    }
+    free(h);
+
+    return 0;
+}
+
 int main(int argc, char **argv) {
     xhashidx loops, i, v;
     struct xhash *h;
@@ -175,6 +237,7 @@ int main(int argc, char **argv) {
     }
     free(h);
     test_string(loops);
+    test_string2();
     printf("test completed successfully\n");
     return 0;
 }

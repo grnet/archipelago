@@ -555,7 +555,6 @@ static int xsegbd_mapclose(struct xsegbd_device *xsegbd_dev)
 		return ret;;
 
 	BUG_ON(xseg_prep_request(xsegbd_dev->xseg, xreq, xsegbd_dev->targetlen, 0));
-	BUG_ON(xreq->bufferlen - xsegbd_dev->targetlen < datalen);
 
 	init_completion(&comp);
 	blkreq_idx = xq_pop_head(&xsegbd_dev->blk_queue_pending, 1);

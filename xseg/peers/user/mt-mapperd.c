@@ -159,10 +159,11 @@ static int insert_map(struct mapperd *mapper, struct map *map)
 		goto out;
 	}
 
-	XSEGLOG2(&lc, E, "Inserting map %s, len: %d", map->volume, strlen(map->volume));
+	XSEGLOG2(&lc, E, "Inserting map %s, len: %d (map: %lx)", 
+			map->volume, strlen(map->volume), (unsigned long) map);
 	r = xhash_insert(mapper->hashmaps, (xhashidx) map->volume, (xhashidx) map);
-	if (r == -XHASH_ERESIZE) {
-		xhashidx shift = xhash_grow_size_shift(map->objects);
+	while (r == -XHASH_ERESIZE) {
+		xhashidx shift = xhash_grow_size_shift(mapper->hashmaps);
 		xhash_t *new_hashmap = xhash_resize(mapper->hashmaps, shift, NULL);
 		if (!new_hashmap){
 			XSEGLOG2(&lc, E, "Cannot grow mapper->hashmaps to sizeshift %llu",
@@ -183,8 +184,8 @@ static int remove_map(struct mapperd *mapper, struct map *map)
 	//assert no pending pr on map
 	
 	r = xhash_delete(mapper->hashmaps, (xhashidx) map->volume);
-	if (r == -XHASH_ERESIZE) {
-		xhashidx shift = xhash_shrink_size_shift(map->objects);
+	while (r == -XHASH_ERESIZE) {
+		xhashidx shift = xhash_shrink_size_shift(mapper->hashmaps);
 		xhash_t *new_hashmap = xhash_resize(mapper->hashmaps, shift, NULL);
 		if (!new_hashmap){
 			XSEGLOG2(&lc, E, "Cannot shrink mapper->hashmaps to sizeshift %llu",
@@ -324,6 +325,7 @@ static int find_or_load_map(struct peerd *peer, struct peer_req *pr,
 	int r;
 	*m = find_map(mapper, target, targetlen);
 	if (*m) {
+		XSEGLOG2(&lc, D, "Found map %s (%u)", (*m)->volume, (unsigned long) *m);
 		if ((*m)->flags & MF_MAP_NOT_READY) {
 			__xq_append_tail(&(*m)->pending, (xqindex) pr);
 			XSEGLOG2(&lc, I, "Map %s found and not ready", (*m)->volume);
@@ -776,7 +778,9 @@ static int handle_mapread(struct peerd *peer, struct peer_req *pr,
 	map->flags &= ~MF_MAP_LOADING;
 	print_map(map);
 	XSEGLOG2(&lc, I, "Map %s loaded. Dispatching pending", map->volume);
-	while((idx = __xq_pop_head(&map->pending)) != Noneidx){
+	uint64_t qsize = xq_count(&map->pending);
+	while(qsize > 0 && (idx = __xq_pop_head(&map->pending)) != Noneidx){
+		qsize--;
 		struct peer_req *preq = (struct peer_req *) idx;
 		my_dispatch(peer, preq, preq->req);
 	}
@@ -826,7 +830,9 @@ static int handle_mapwrite(struct peerd *peer, struct peer_req *pr,
 	xseg_put_request(peer->xseg, req, peer->portno);
 	map->flags &= ~MF_MAP_WRITING;
 	XSEGLOG2(&lc, I, "Map %s written. Dispatching pending", map->volume);
-	while((idx = __xq_pop_head(&map->pending)) != Noneidx){
+	uint64_t qsize = xq_count(&map->pending);
+	while(qsize > 0 && (idx = __xq_pop_head(&map->pending)) != Noneidx){
+		qsize--;
 		struct peer_req *preq = (struct peer_req *) idx;
 		my_dispatch(peer, preq, preq->req);
 	}
@@ -1084,7 +1090,6 @@ static int req2objs(struct peerd *peer, struct peer_req *pr,
 //				block_size);
 	strncpy(reply->segs[idx].target, mn->object, mn->objectlen);
 	reply->segs[idx].targetlen = mn->objectlen;
-	reply->segs[idx].target[mn->objectlen] = 0;
 	reply->segs[idx].offset = obj_offset;
 	reply->segs[idx].size = obj_size;
 //	XSEGLOG2(&lc, D, "Added object: %s, size: %llu, offset: %llu", mn->object,
@@ -1115,7 +1120,6 @@ static int req2objs(struct peerd *peer, struct peer_req *pr,
 		}
 		strncpy(reply->segs[idx].target, mn->object, mn->objectlen);
 		reply->segs[idx].targetlen = mn->objectlen;
-		reply->segs[idx].target[mn->objectlen] = 0;
 		reply->segs[idx].offset = obj_offset;
 		reply->segs[idx].size = obj_size;
 //		XSEGLOG2(&lc, D, "Added object: %s, size: %llu, offset: %llu", mn->object,
@@ -1297,7 +1301,9 @@ static int handle_objectwrite(struct peerd *peer, struct peer_req *pr,
 
 	print_map(mn->map);
 	XSEGLOG2(&lc, I, "Object write of %s completed successfully", mn->object);
-	while ((idx = __xq_pop_head(&mn->pending)) != Noneidx){
+	uint64_t qsize = xq_count(&mn->pending);
+	while(qsize > 0 && (idx = __xq_pop_head(&mn->pending)) != Noneidx){
+		qsize--;
 		struct peer_req * preq = (struct peer_req *) idx;
 		my_dispatch(peer, preq, preq->req);
 	}
@@ -1555,7 +1561,8 @@ static int handle_object_delete(struct peerd *peer, struct peer_req *pr,
 	//free map_node_resources
 	mn->flags &= ~MF_OBJECT_DELETING;
 	xq_free(&mn->pending);
-	
+
+	mio->delobj++;
 	r = delete_next_object(peer, pr, map);
 	if (r != MF_PENDING){
 		/* if there is no next object to delete, remove the map block
@@ -1566,7 +1573,9 @@ static int handle_object_delete(struct peerd *peer, struct peer_req *pr,
 		map->flags |= MF_MAP_DESTROYED;
 		XSEGLOG2(&lc, I, "Map %s deleted", map->volume);
 		//make all pending requests on map to fail
-		while ((idx = __xq_pop_head(&map->pending)) != Noneidx){
+		uint64_t qsize = xq_count(&map->pending);
+		while(qsize > 0 && (idx = __xq_pop_head(&map->pending)) != Noneidx){
+			qsize--;
 			struct peer_req * preq = (struct peer_req *) idx;
 			my_dispatch(peer, preq, preq->req);
 		}
@@ -1651,7 +1660,9 @@ static int handle_map_delete(struct peerd *peer, struct peer_req *pr,
 			map->flags |= MF_MAP_DESTROYED;
 			XSEGLOG2(&lc, I, "Map %s deleted", map->volume);
 			//make all pending requests on map to fail
-			while ((idx = __xq_pop_head(&map->pending)) != Noneidx){
+			uint64_t qsize = xq_count(&map->pending);
+			while(qsize > 0 && (idx = __xq_pop_head(&map->pending)) != Noneidx){
+				qsize--;
 				struct peer_req * preq = (struct peer_req *) idx;
 				my_dispatch(peer, preq, preq->req);
 			}
@@ -1709,7 +1720,16 @@ static int handle_destroy(struct peerd *peer, struct peer_req *pr,
 	struct mapper_io *mio = __get_mapper_io(pr);
 	(void) mapper;
 	int r;
+	char buf[XSEG_MAX_TARGETLEN+1];
+	char *target = xseg_get_target(peer->xseg, pr->req);
 
+	strncpy(buf, target, pr->req->targetlen);
+	buf[req->targetlen] = 0;
+
+	XSEGLOG2(&lc, D, "Handle destroy pr: %lx, pr->req: %lx, req: %lx",
+			(unsigned long) pr, (unsigned long) pr->req,
+			(unsigned long) req);
+	XSEGLOG2(&lc, D, "target: %s (%u)", buf, strlen(buf));
 	if (pr->req != req && req->op == X_DELETE) {
 		//assert mio->state == DELETING
 		r = handle_delete(peer, pr, req);
@@ -1723,7 +1743,6 @@ static int handle_destroy(struct peerd *peer, struct peer_req *pr,
 	}
 
 	struct map *map;
-	char *target = xseg_get_target(peer->xseg, pr->req);
 	r = find_or_load_map(peer, pr, target, pr->req->targetlen, &map);
 	if (r < 0) {
 		fail(peer, pr);
@@ -1798,6 +1817,9 @@ static int handle_dropcache(struct peerd *peer, struct peer_req *pr,
 		map->flags |= MF_MAP_DROPPING_CACHE;
 		mio->dcobj = 0;
 		mio->state = DROPPING_CACHE;
+		XSEGLOG2(&lc, I, "Map %s start dropping cache", map->volume);
+	} else {
+		XSEGLOG2(&lc, I, "Map %s continue dropping cache", map->volume);
 	}
 
 	struct map_node *mn; 
@@ -1808,17 +1830,24 @@ static int handle_dropcache(struct peerd *peer, struct peer_req *pr,
 			continue;
 		mio->dcobj = i;
 		if (xq_count(&mn->pending) != 0){
+			XSEGLOG2(&lc, D, "Map %s pending dropping cache for obj idx: %llu", 
+				map->volume, (unsigned long long) mn->objectidx);
 			__xq_append_tail(&mn->pending, (xqindex) pr);
 			return 0;
 		}
 		xq_free(&mn->pending);
+		XSEGLOG2(&lc, D, "Map %s dropped cache for obj idx: %llu", 
+				map->volume, (unsigned long long) mn->objectidx);
 	}
 	remove_map(mapper, map);
 	//dispatch pending
-	while ((i = __xq_pop_head(&map->pending)) != Noneidx){
+	uint64_t qsize = xq_count(&map->pending);
+	while(qsize > 0 && (i = __xq_pop_head(&map->pending)) != Noneidx){
+		qsize--;
 		struct peer_req * preq = (struct peer_req *) i;
 		my_dispatch(peer, preq, preq->req);
 	}
+	XSEGLOG2(&lc, I, "Map %s droped cache", map->volume);
 	
 	//free map resources;
 	mn = find_object(map, 0);

@@ -201,19 +201,12 @@ static int create_path(char *buf, char *path, char *target, uint32_t targetlen, 
 	int i;
 	struct stat st;
 	uint32_t pathlen = strlen(path);
-	char *start;
 
 	strncpy(buf, path, pathlen);
 
-	start = strchr(target, ':');
-	if (start == NULL)
-		start = target;
-	else 
-		start++;
-
 	for (i = 0; i < 9; i+= 3) {
-		buf[pathlen + i] = start[i - (i/3)];
-		buf[pathlen + i +1] = start[i + 1 - (i/3)];
+		buf[pathlen + i] = target[i - (i/3)];
+		buf[pathlen + i +1] = target[i + 1 - (i/3)];
 		buf[pathlen + i + 2] = '/';
 		if (mkdirs == 1) {
 			buf[pathlen + i + 3] = '\0';
@@ -512,7 +505,8 @@ static void handle_copy(struct pfiled *pfiled, struct io *io)
 
 	src = open(buf, O_RDWR);
 	if (src < 0) {
-		fprintf(stderr, "fail in src\n");
+		XSEGLOG("fail in src %s\n", buf);
+		perror("open src");
 		fail(pfiled, io);
 		return;
 	}

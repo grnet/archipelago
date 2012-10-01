@@ -182,7 +182,6 @@ int vlmc_remove(char *name)
 	}
 	char *target = xseg_get_target(xseg, req);
 	strncpy(target, name, targetlen);
-	target[targetlen] = 0;
 	req->offset = 0;
 	req->size = req->datalen;
 	req->op = X_DELETE;

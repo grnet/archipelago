@@ -26,7 +26,7 @@ static inline int cmp_int(xhashidx key1, xhashidx key2)
 
 static inline xhashidx hash_string(xhashidx key) 
 {
-	//assume a valind NULL terminated string
+	//assume a valid NULL terminated string
 	
 	//function to access key if in container
 	char *string = (char *) key;
@@ -38,6 +38,8 @@ static inline xhashidx hash_string(xhashidx key)
 	if (hv == Noxhashidx)
 		hv = Noxhashidx -1;
 
+	XSEGLOG("String %s (%lx). Hash value: %llu",
+			string, string, hv);
 	return hv; 
 }
 
@@ -45,8 +47,13 @@ static inline int cmp_string(xhashidx key1, xhashidx key2)
 {
 	char *string1 = (char *) key1;
 	char *string2 = (char *) key2;
+	int value = !strcmp(string1, string2);
+	XSEGLOG("String1 %s (%lx), string2: %s(%lx), r: %d",
+			string1, (unsigned long) string1,
+			string2, (unsigned long) string2,
+			value);
 
-	return (!strcmp(string1, string2));
+	return (value);
 }
 
 typedef int (*xhash_cmp_fun_t)(xhashidx key1, xhashidx key2);
@@ -253,9 +260,10 @@ xhash_resize__(struct xhash *xhash, xhashidx new_size_shift, bool vals)
 int
 xhash_delete__(xhash_t *xhash, xhashidx key, bool vals)
 {
+    XSEGLOG("Deleting %lx", key);
     xhash_cmp_fun_t cmp_fun = types_fun[xhash->type].cmp_fun;
     xhash_hash_fun_t hash_fun = types_fun[xhash->type].hash_fun; 
-    xhashidx perturb = key;
+    xhashidx perturb = hash_fun(key);
     xhashidx mask = xhash_size(xhash)-1;
     xhashidx idx = hash_fun(key) & mask;
     xhashidx *kvs = xhash_kvs(xhash);
@@ -385,13 +393,15 @@ xhash_grow_check(xhash_t *xhash)
     xhash_cmp_fun_t cmp_fun = types_fun[xhash->type].cmp_fun;         \
     xhash_hash_fun_t hash_fun = types_fun[xhash->type].hash_fun;       \
     xhashidx size = 1UL<<(xhash->size_shift);         \
-    xhashidx perturb = key;                           \
+    xhashidx perturb = hash_fun(key);                           \
     xhashidx mask = size-1;                           \
     xhashidx idx = hash_fun(key) & mask;              \
     xhashidx *kvs = xhash_kvs(xhash);                 \
                                                       \
     INCSTAT(xhash->inserts);                          \
     for (;;) {                                        \
+    XSEGLOG("size %llu, perturb %llu idx %llu mask %llu",\
+		    size, perturb, idx, mask);		\
         if ( !item_valid(xhash, idx, vals_flag) ){    \
              PHUPD_SET__(xhash, idx, key, val);       \
              break;                                   \
@@ -415,6 +425,7 @@ set_val(xhash_t *p, xhashidx idx, xhashidx key, xhashidx val)
     xhashidx *vals = xhash_vals(p);
     kvs[idx] = key;
     vals[idx] = val;
+    XSEGLOG("Seting idx %llu to key: %lx, val: %lx", idx, key, val);
 }
 
 void static inline xhash_upd_set(xhash_t *p, xhashidx idx, xhashidx key, xhashidx val)
@@ -426,6 +437,7 @@ void static inline xhash_upd_set(xhash_t *p, xhashidx idx, xhashidx key, xhashid
     p->used++;
     kvs[idx] = key;
     vals[idx] = val;
+    XSEGLOG("Seting idx %llu to key: %lx, val: %lx", idx, key, val);
 }
 
 static inline void
@@ -437,6 +449,7 @@ inc_val(xhash_t *p, xhashidx idx, xhashidx val)
 
 void xhash_insert__(struct xhash *xhash, xhashidx key, xhashidx val)
 {
+    XSEGLOG("inserting %lx", key);
     //fprintf(stderr, "insert: (%lu,%lu)\n", key, val);
     #define PHUPD_UPDATE__(_p, _i, _k, _v) set_val(_p, _i, _k, _v)
     #define PHUPD_SET__(_p, _i, _k, _v)    xhash_upd_set(_p, _i, _k, _v)
@@ -474,6 +487,7 @@ int xhash_freql_update(struct xhash *xhash, xhashidx key, xhashidx val)
 xhash_t *
 xhash_resize(xhash_t *xhash, xhashidx new_size_shift, xhash_t *new)
 {
+    XSEGLOG("Resizing xhash from %llu to %llu", xhash->size_shift, new_size_shift);
     xhashidx i;
     int f = !!new;
     if (!f)
@@ -523,17 +537,20 @@ int xhash_delete(struct xhash *xhash, xhashidx key)
 
 int xhash_lookup__(xhash_t *xhash, xhashidx key, xhashidx *idx_ret, bool vals)
 {
+    XSEGLOG("looking up %lx", key);
     xhash_cmp_fun_t cmp_fun = types_fun[xhash->type].cmp_fun;
     xhash_hash_fun_t hash_fun = types_fun[xhash->type].hash_fun; 
     xhashidx size_shift = xhash->size_shift;
-    xhashidx size = (xhashidx)1<<size_shift;
-    xhashidx perturb = key;
+    xhashidx size = (1UL)<<size_shift;
+    xhashidx perturb = hash_fun(key);
     xhashidx mask = size-1;
     xhashidx idx = hash_fun(key) & mask;
     xhashidx *kvs = xhash_kvs(xhash);
 
     INCSTAT(xhash->lookups);
     for (;;) {
+	XSEGLOG("size %llu, perturb %llu idx %llu mask %llu",\
+		    size, perturb, idx, mask);		\
         if ( item_unused(xhash, idx, vals) )
             return -XHASH_EEXIST;
 
