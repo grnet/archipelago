@@ -14,6 +14,7 @@
 #include <xseg/xseg.h>
 #include <sys/util.h>
 #include <sys/kernel/segdev.h>
+#include <drivers/xseg_segdev.h>
 
 #define ERRSIZE 512
 static char errbuf[ERRSIZE];
@@ -188,8 +189,11 @@ static int segdev_signal(struct xseg *xseg, uint32_t portno)
 	struct xseg_port *port = xseg_get_port(xseg, portno);
 	if (!port)
 		return -1;
+	struct segdev_signal_desc *ssd = xseg_get_signal_desc(xseg, port);
+	if (!ssd)
+		return -1;
 
-	if (!port->waitcue)
+	if (!ssd->waitcue)
 		return 0;
 	else
 		return write(opendev(), &portno, sizeof(portno));
@@ -207,9 +211,45 @@ static void *segdev_realloc(void *mem, uint64_t size)
 
 static void segdev_mfree(void *mem) { }
 
+static int segdev_init_signal_desc(struct xseg *xseg, void *sd)
+{
+	return -1;
+}
+
+static void segdev_quit_signal_desc(struct xseg *xseg, void *sd)
+{
+	return;
+}
+
+static void *segdev_alloc_data(struct xseg *xseg)
+{
+	return NULL;
+}
+
+static void segdev_free_data(struct xseg *xseg, void *data)
+{
+	return;
+}
+
+static void *segdev_alloc_signal_desc(struct xseg *xseg, void *data)
+{
+	return NULL;
+}
+
+static void segdev_free_signal_desc(struct xseg *xseg, void *data, void *sd)
+{
+	return;
+}
+
 static struct xseg_peer xseg_peer_segdev = {
 	/* xseg signal operations */
 	{
+		.init_signal_desc   = segdev_init_signal_desc,
+		.quit_signal_desc   = segdev_quit_signal_desc,
+		.alloc_data         = segdev_alloc_data,
+		.free_data          = segdev_free_data,
+		.alloc_signal_desc  = segdev_alloc_signal_desc,
+		.free_signal_desc   = segdev_free_signal_desc,
 		.local_signal_init  = segdev_local_signal_init,
 		.local_signal_quit  = segdev_local_signal_quit,
 		.remote_signal_init = segdev_remote_signal_init,

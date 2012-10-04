@@ -13,7 +13,7 @@
 #include <sys/util.h>
 #include <xseg/xseg.h>
 #include <pthread.h>
-
+#include <drivers/xseg_pthread.h>
 #define ERRSIZE 512
 char errbuf[ERRSIZE];
 
@@ -248,13 +248,16 @@ static int pthread_prepare_wait(struct xseg *xseg, uint32_t portno)
 	struct xseg_port *port = xseg_get_port(xseg, portno);
 	if (!port) 
 		return -1;
+	struct pthread_signal_desc *psd = xseg_get_signal_desc(xseg, port);
+	if (!psd)
+		return -1;
 
 	tmp = pthread_getspecific(pid_key);
 	POINTER_TO_INT(pid, tmp);
 	if (!pid)
 		return -1;
 
-	r = xpool_add(&port->waiters, (xpool_index) pid, portno); 
+	r = xpool_add(&psd->waiters, (xpool_index) pid, portno); 
 	if (r == NoIndex)
 		return -1;
 	pthread_setspecific(xpidx_key, (void *)r);
@@ -270,6 +273,9 @@ static int pthread_cancel_wait(struct xseg *xseg, uint32_t portno)
 	struct xseg_port *port = xseg_get_port(xseg, portno);
 	if (!port) 
 		return -1;
+	struct pthread_signal_desc *psd = xseg_get_signal_desc(xseg, port);
+	if (!psd)
+		return -1;
 	
 	tmp = pthread_getspecific(pid_key);
 	POINTER_TO_INT(pid, tmp);
@@ -278,7 +284,7 @@ static int pthread_cancel_wait(struct xseg *xseg, uint32_t portno)
 
 	xpidx = (xpool_index) pthread_getspecific(xpidx_key);
 
-	r = xpool_remove(&port->waiters, xpidx, &data, portno);
+	r = xpool_remove(&psd->waiters, xpidx, &data, portno);
 	if (r == NoIndex)
 		return -1;
 	
@@ -312,8 +318,11 @@ static int pthread_signal(struct xseg *xseg, uint32_t portno)
 	struct xseg_port *port = xseg_get_port(xseg, portno);
 	if (!port) 
 		return -1;
+	struct pthread_signal_desc *psd = xseg_get_signal_desc(xseg, port);
+	if (!psd)
+		return -1;
 
-	idx = xpool_peek(&port->waiters, &data, portno); //FIXME portno is not the caller but the callee
+	idx = xpool_peek(&psd->waiters, &data, portno); //FIXME portno is not the caller but the callee
 	if (idx == NoIndex) 
 		return 0;
 
@@ -352,9 +361,73 @@ static struct xseg_type xseg_pthread = {
 	"pthread"
 };
 
+int pthread_init_signal_desc(struct xseg *xseg, void *sd)
+{       
+	struct pthread_signal_desc *psd = (struct pthread_signal_desc *)sd;
+	xpool_init(&psd->waiters, MAX_WAITERS, &psd->bufs);
+	xpool_clear(&psd->waiters, 1);
+	return 0;
+}       
+
+void pthread_quit_signal_desc(struct xseg *xseg, void *sd)
+{       
+	struct pthread_signal_desc *psd = (struct pthread_signal_desc *)sd;
+	xpool_clear(&psd->waiters, 1);
+	return;
+}           
+
+void * pthread_alloc_data(struct xseg *xseg)
+{               
+	struct xobject_h *sd_h = (struct xobject_h *) xobj_get_obj(xseg->object_handlers, X_ALLOC);
+	if (!sd_h)
+		return NULL;
+	int r = xobj_handler_init(sd_h, xseg->segment, MAGIC_PTHREAD_SD,
+			sizeof(struct pthread_signal_desc), xseg->heap);
+	if (r < 0) {
+		xobj_put_obj(xseg->object_handlers, sd_h);
+		sd_h = NULL;
+	}
+	return sd_h;
+}
+
+void pthread_free_data(struct xseg *xseg, void *data)
+{
+	if (data)
+		xobj_put_obj(xseg->object_handlers, data);
+}
+
+void *pthread_alloc_signal_desc(struct xseg *xseg, void *data)
+{
+	struct xobject_h *sd_h = (struct xobject_h *) data;
+	if (!sd_h)
+		return NULL;
+	struct pthread_signal_desc *psd = xobj_get_obj(sd_h, X_ALLOC);
+	if (!psd)
+		return NULL;
+	return psd;
+
+}
+
+void pthread_free_signal_desc(struct xseg *xseg, void *data, void *sd)
+{
+	struct xobject_h *sd_h = (struct xobject_h *) data;
+	if (!sd_h)
+		return;
+	if (sd)
+		xobj_put_obj(sd_h, sd);
+	return;
+}
+
+
 static struct xseg_peer xseg_peer_pthread = {
 	/* xseg_peer_operations */
 	{
+		.init_signal_desc   = pthread_init_signal_desc,
+		.quit_signal_desc   = pthread_quit_signal_desc,
+		.alloc_data         = pthread_alloc_data,
+		.free_data          = pthread_free_data,
+		.alloc_signal_desc  = pthread_alloc_signal_desc,
+		.free_signal_desc   = pthread_free_signal_desc,
 		.local_signal_init  = pthread_local_signal_init,
 		.local_signal_quit  = pthread_local_signal_quit,
 		.remote_signal_init = pthread_remote_signal_init,

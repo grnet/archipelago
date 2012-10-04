@@ -235,7 +235,7 @@ static int mapperd_init(struct mapperd *mapperd)
 		goto out_with_xseginit;
 	}
 
-	if (! (mapperd->mport = xseg_bind_port(mapperd->xseg, mapperd->mportno))) {
+	if (! (mapperd->mport = xseg_bind_port(mapperd->xseg, mapperd->mportno, NULL))) {
 		perr(PE, 0, "cannot bind to xseg port %ld", (long)mapperd->mportno);
 		ret = -EIO;
 		goto out_with_xsegjoin;

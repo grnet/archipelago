@@ -343,7 +343,7 @@ int main(int argc, char *argv[])
 		return -1;
 	}
 
-	port = xseg_bind_port(xseg, srcport);
+	port = xseg_bind_port(xseg, srcport, NULL);
 	if (!port) {
 		fprintf(stderr, "Error binding port %u\n", srcport);
 		exit(-1);

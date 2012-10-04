@@ -330,7 +330,7 @@ int cmd_delete(char *target)
         int r;
         struct xseg_request *req;
 	init_local_signal();
-        xseg_bind_port(xseg, srcport);
+        xseg_bind_port(xseg, srcport, NULL);
 
         req = xseg_get_request(xseg, srcport, dstport, X_ALLOC);
         if (!req) {
@@ -384,7 +384,7 @@ int cmd_clone(char *src, char *dst)
 	uint32_t parentlen = strlen(src);
         struct xseg_request *req;
         struct xseg_request_clone *xclone;
-	xseg_bind_port(xseg, srcport);
+	xseg_bind_port(xseg, srcport, NULL);
 	req = xseg_get_request(xseg, srcport, dstport, X_ALLOC);
         if (!req) {
                 fprintf(stderr, "No request\n");
@@ -789,7 +789,7 @@ int cmd_submit_reqs(long loops, long concurrent_reqs, int op)
 	xport p;
 	char *req_data, *req_target;
 
-	xseg_bind_port(xseg, srcport);
+	xseg_bind_port(xseg, srcport, NULL);
 
 	gettimeofday(&tv1, NULL);
 	for (;;) {
@@ -970,7 +970,7 @@ int cmd_finish(unsigned long nr, int fail)
 	struct xseg_request *req;
 	char *buf = malloc(sizeof(char) * 8128);
 	char *req_target, *req_data;
-	xseg_bind_port(xseg, srcport);
+	xseg_bind_port(xseg, srcport, NULL);
 	xport p;
 
 	for (; nr--;) {
@@ -1103,7 +1103,7 @@ int cmd_put_replies(void)
 
 int cmd_bind(long portno)
 {
-	struct xseg_port *port = xseg_bind_port(xseg, portno);
+	struct xseg_port *port = xseg_bind_port(xseg, portno, NULL);
 	if (!port) {
 		fprintf(stderr, "failed to bind port %ld\n", portno);
 		return 1;

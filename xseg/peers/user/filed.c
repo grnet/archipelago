@@ -706,7 +706,7 @@ malloc_fail:
 	if (!store->xseg)
 		return -1;
 
-	store->xport = xseg_bind_port(store->xseg, portno);
+	store->xport = xseg_bind_port(store->xseg, portno, NULL);
 	if (!store->xport) {
 		printf("cannot bind to port %ld\n", portno);
 		return -1;

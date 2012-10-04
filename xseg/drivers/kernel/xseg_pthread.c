@@ -23,6 +23,7 @@
 #include <sys/kernel/segdev.h>
 #include <sys/util.h>
 #include <xtypes/xpool.h>
+#include <drivers/xseg_pthread.h>
 
 MODULE_DESCRIPTION("xseg_pthread");
 MODULE_AUTHOR("XSEG");
@@ -70,13 +71,17 @@ static int pthread_signal(struct xseg *xseg, uint32_t portno)
 	int ret = -ENOENT;
 	xpool_data data;
 	xpool_index idx;
+	struct pthread_signal_desc *psd;
 	struct xseg_port *port = xseg_get_port(xseg, portno);
 	if (!port) 
+		return -1;
+	psd = xseg_get_signal_desc(xseg, portno);
+	if (!psd)
 		return -1;
 
 	rcu_read_lock();
 	/* XXX Security: xseg peers can kill anyone */
-	idx = xpool_peek(&port->waiters, &data, portno); //FIXME portno is not the caller but the callee
+	idx = xpool_peek(&psd->waiters, &data, portno); //FIXME portno is not the caller but the callee
 	if (idx == NoIndex){
 		/* no waiters */
 		ret = 0;
@@ -108,9 +113,46 @@ static void *pthread_realloc(void *mem, uint64_t size)
 
 static void pthread_mfree(void *mem) { }
 
+int pthread_init_signal_desc(struct xseg *xseg, void *sd)
+{
+	return -1;
+}
+
+void pthread_quit_signal_desc(struct xseg *xseg, void *sd)
+{
+	return;
+}
+
+void * pthread_alloc_data(struct xseg *xseg)
+{
+	return NULL;
+}
+
+void pthread_free_data(struct xseg *xseg, void *data)
+{
+	return;
+}
+
+void *pthread_alloc_signal_desc(struct xseg *xseg, void *data)
+{
+	return NULL;
+}
+
+void pthread_free_signal_desc(struct xseg *xseg, void *data, void *sd)
+{
+	return;
+}
+
+
 static struct xseg_peer xseg_peer_pthread = {
 	/* xseg signal operations */
 	{
+		.init_signal_desc   = pthread_init_signal_desc,
+		.quit_signal_desc   = pthread_quit_signal_desc,
+		.alloc_data         = pthread_alloc_data,
+		.free_data          = pthread_free_data,
+		.alloc_signal_desc  = pthread_alloc_signal_desc,
+		.free_signal_desc   = pthread_free_signal_desc,
 		.local_signal_init  = pthread_local_signal_init,
 		.local_signal_quit  = pthread_local_signal_quit,
 		.remote_signal_init = pthread_remote_signal_init,

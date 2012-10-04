@@ -22,6 +22,7 @@
 #include <xseg/xseg.h>
 #include <sys/kernel/segdev.h>
 #include <sys/util.h>
+#include <drivers/xseg_posix.h>
 
 MODULE_DESCRIPTION("xseg_posix");
 MODULE_AUTHOR("XSEG");
@@ -72,10 +73,13 @@ static int posix_signal(struct xseg *xseg, uint32_t portno)
 	if (!port) 
 		return -1;
 
+	struct posix_signal_desc *psd = xseg_get_signal_desc(xseg, port);
+	if (!psd)
+		return -1;
 
 	rcu_read_lock();
 	/* XXX Security: xseg peers can kill anyone */
-	p = * (volatile uint64_t *) &port->waitcue;
+	p = * (volatile uint64_t *) &psd->waitcue;
 	if (!p) {
 		ret = 0;
 		goto out;
@@ -106,9 +110,45 @@ static void *posix_realloc(void *mem, uint64_t size)
 
 static void posix_mfree(void *mem) { }
 
+int posix_init_signal_desc(struct xseg *xseg, void *sd)
+{
+	return -1;
+}
+
+void posix_quit_signal_desc(struct xseg *xseg, void *sd)
+{
+	return;
+}
+
+void * posix_alloc_data(struct xseg *xseg)
+{
+	return NULL;
+}
+
+void posix_free_data(struct xseg *xseg, void *data)
+{
+	return;
+}
+
+void *posix_alloc_signal_desc(struct xseg *xseg, void *data)
+{
+	return NULL;
+}
+
+void posix_free_signal_desc(struct xseg *xseg, void *data, void *sd)
+{
+	return;
+}
+
 static struct xseg_peer xseg_peer_posix = {
 	/* xseg signal operations */
 	{
+		.init_signal_desc   = posix_init_signal_desc,
+		.quit_signal_desc   = posix_quit_signal_desc,
+		.alloc_data         = posix_alloc_data,
+		.free_data          = posix_free_data,
+		.alloc_signal_desc  = posix_alloc_signal_desc,
+		.free_signal_desc   = posix_free_signal_desc,
 		.local_signal_init  = posix_local_signal_init,
 		.local_signal_quit  = posix_local_signal_quit,
 		.remote_signal_init = posix_remote_signal_init,

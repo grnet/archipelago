@@ -37,10 +37,6 @@ typedef uint32_t xport;
 #define MAX_PATH_LEN 32
 #endif
 
-#ifndef MAX_WAITERS
-#define MAX_WAITERS 32
-#endif
-
 /* Peers and Segments
  *
  *  Segments are memory segments shared among peers.
@@ -95,7 +91,14 @@ struct xseg_type {
 	char name[XSEG_TNAMESIZE];
 };
 
+
 struct xseg_peer_operations {
+	int   (*init_signal_desc)(struct xseg *xseg, void *sd);
+	void  (*quit_signal_desc)(struct xseg *xseg, void *sd);
+	void *(*alloc_data)(struct xseg *xseg);
+	void  (*free_data)(struct xseg *xseg, void *data);
+	void *(*alloc_signal_desc)(struct xseg *xseg, void *data);
+	void  (*free_signal_desc)(struct xseg *xseg, void *data, void *sd);
 	int   (*local_signal_init)(void);
 	void  (*local_signal_quit)(void);
 	int   (*remote_signal_init)(void);
@@ -137,9 +140,7 @@ struct xseg_port {
 	uint64_t max_alloc_reqs;
 	uint64_t alloc_reqs;
 	struct xlock port_lock;
-	volatile uint64_t waitcue;
-	struct xpool waiters;
-	struct xpool_node bufs[MAX_WAITERS];
+	xptr signal_desc;
 };
 
 struct xseg_request;
@@ -215,6 +216,7 @@ struct xseg_request {
 struct xseg_shared {
 	uint64_t flags;
 	char (*peer_types)[XSEG_TNAMESIZE]; /* alignment? */
+	xptr *peer_type_data;
 	uint32_t nr_peer_types;
 };
 
@@ -222,6 +224,7 @@ struct xseg_private {
 	struct xseg_type segment_type;
 	struct xseg_peer peer_type;
 	struct xseg_peer **peer_types;
+	xptr *peer_type_data;
 	uint32_t max_peer_types;
 	void (*wakeup)(uint32_t portno);
 	xhash_t *req_data;
@@ -265,7 +268,8 @@ struct xseg {
                                               struct xseg_config  * config    );
 
    struct xseg_port *  xseg_bind_port       ( struct xseg         * xseg,
-                                              uint32_t              portno    );
+                                              uint32_t              portno,
+					      void		  * sd        );
 
     static uint32_t    xseg_portno          ( struct xseg         * xseg,
                                               struct xseg_port    * port      );
@@ -381,6 +385,11 @@ static inline char* xseg_get_target(struct xseg* xseg, struct xseg_request *req)
 static inline char* xseg_get_data(struct xseg* xseg, struct xseg_request *req)
 {
 	return (char *) XPTR_TAKE(req->data, xseg->segment);
+}
+
+static inline void * xseg_get_signal_desc(struct xseg *xseg, struct xseg_port *port)
+{
+	return (void *) XPTR_TAKE(port->signal_desc, xseg->segment);
 }
 
 #define xseg_get_queue(__xseg, __port, __queue) \

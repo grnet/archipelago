@@ -151,3 +151,7 @@ out:
 	return obj;
 }
 
+#ifdef __KERNEL__
+#include <linux/module.h>
+#include <xtypes/xobj_exports.h>
+#endif

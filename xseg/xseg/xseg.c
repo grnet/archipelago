@@ -114,6 +114,36 @@ static struct xseg_peer *__get_peer_type(struct xseg *xseg, uint32_t serial)
 	return type;
 }
 
+static xptr __get_peer_type_data(struct xseg *xseg, uint32_t serial)
+{
+	char *name;
+	xptr data;
+	struct xseg_private *priv = xseg->priv;
+	char (*shared_peer_types)[XSEG_TNAMESIZE];
+	xptr *shared_peer_type_data;
+
+	if (serial >= xseg->max_peer_types) {
+		XSEGLOG("invalid peer type serial %d >= %d\n",
+			 serial, xseg->max_peer_types);
+		return 0;
+	}
+
+	data = priv->peer_type_data[serial];
+	if (data)
+		return data;
+
+	shared_peer_types = XPTR_TAKE(xseg->shared->peer_types, xseg->segment);
+	name = shared_peer_types[serial];
+	if (!*name) {
+		XSEGLOG("nonexistent peer type serial %d\n", serial);
+		return 0;
+	}
+	shared_peer_type_data = XPTR_TAKE(xseg->shared->peer_type_data, xseg->segment);
+
+	priv->peer_type_data[serial] = XPTR_TAKE(shared_peer_type_data[serial], xseg->segment);
+	return priv->peer_type_data[serial];
+}
+
 static inline int __validate_port(struct xseg *xseg, uint32_t portno)
 {
 	return portno < xseg->config.nr_ports;
@@ -312,6 +342,8 @@ int64_t __enable_driver(struct xseg *xseg, struct xseg_peer *driver)
 	int64_t r;
 	char (*drivers)[XSEG_TNAMESIZE];
 	uint32_t max_drivers = xseg->max_peer_types;
+	void *data;
+	xptr peer_type_data;
 
 	if (xseg->shared->nr_peer_types >= max_drivers) {
 		XSEGLOG("cannot register '%s': driver namespace full\n",
@@ -332,12 +364,18 @@ int64_t __enable_driver(struct xseg *xseg, struct xseg_peer *driver)
 
 bind:
 	/* assert(xseg->shared->nr_peer_types == r); */
+	data = driver->peer_ops.alloc_data(xseg);
+	if (!data)
+		return -1;
+	peer_type_data = XPTR_MAKE(data, xseg->segment);
+	xseg->shared->peer_type_data[r] = peer_type_data;
 	xseg->shared->nr_peer_types = r + 1;
 	strncpy(drivers[r], driver->name, XSEG_TNAMESIZE);
 	drivers[r][XSEG_TNAMESIZE-1] = 0;
 
 success:
 	xseg->priv->peer_types[r] = driver;
+	xseg->priv->peer_type_data[r] = xseg->shared->peer_type_data[r];
 	return r;
 }
 
@@ -519,6 +557,10 @@ static long initialize_segment(struct xseg *xseg, struct xseg_config *cfg)
 		return -1;
 	shared->peer_types = (char **) XPTR_MAKE(mem, segment);
 	xseg->max_peer_types = xheap_get_chunk_size(mem) / XSEG_TNAMESIZE;
+	mem = xheap_allocate(heap, page_size);
+	if (!mem)
+		return -1;
+	shared->peer_type_data = (xptr *) XPTR_MAKE(mem, segment);
 
 	memcpy(&xseg->config, cfg, sizeof(struct xseg_config));
 
@@ -710,6 +752,12 @@ struct xseg *xseg_join(	char *segtypename,
 		goto err_unmap;
 	}
 	memset(priv->peer_types, 0, sizeof(void *) * xseg->max_peer_types);
+	priv->peer_type_data = pops->malloc(sizeof(void *) * xseg->max_peer_types);
+	if (!priv->peer_types) {
+		XSEGLOG("Cannot allocate memory");
+		//FIXME wrong err handling
+		goto err_unmap;
+	}
 
 	xseg->priv = priv;
 	xseg->config = __xseg->config;
@@ -837,12 +885,10 @@ struct xseg_port *xseg_alloc_port(struct xseg *xseg, uint32_t flags, uint64_t nr
 	xlock_release(&port->pq_lock);
 	xlock_release(&port->port_lock);
 	port->owner = 0; //should be Noone;
-	port->waitcue = 0;
 	port->portno = 0; // should be Noport;
 	port->peer_type = 0; //FIXME what  here ??
 	port->alloc_reqs = 0;
 	port->max_alloc_reqs = 512; //FIXME 
-	xpool_init(&port->waiters, MAX_WAITERS, &port->bufs);
 
 
 	return port;
@@ -1483,7 +1529,7 @@ int xseg_fail_req(struct xseg_request *req)
 }
 */
 
-struct xseg_port *xseg_bind_port(struct xseg *xseg, uint32_t req)
+struct xseg_port *xseg_bind_port(struct xseg *xseg, uint32_t req, void * sd)
 {
 	uint32_t portno, maxno, id = __get_id(), force;
 	struct xseg_port *port = NULL;
@@ -1515,6 +1561,18 @@ struct xseg_port *xseg_bind_port(struct xseg *xseg, uint32_t req)
 		driver = __enable_driver(xseg, &xseg->priv->peer_type);
 		if (driver < 0)
 			break;
+		if (!sd){
+			xptr data = __get_peer_type_data(xseg, (uint64_t) driver);
+			if (!data)
+				break;
+			void *peer_data = XPTR_TAKE(data, xseg->segment);
+			void *sigdesc = xseg->priv->peer_type.peer_ops.alloc_signal_desc(xseg, peer_data);
+			if (sigdesc)
+				break;
+			port->signal_desc = XPTR_MAKE(sigdesc, xseg->segment);
+		} else {
+			port->signal_desc = XPTR_MAKE(sd, xseg->segment);
+		}
 		port->peer_type = (uint64_t)driver;
 		port->owner = id;
 		port->portno = portno;
@@ -1527,9 +1585,6 @@ struct xseg_port *xseg_bind_port(struct xseg *xseg, uint32_t req)
 	}
 out:
 	__unlock_segment(xseg);
-	if (port) {
-		xpool_clear(&port->waiters, port->portno);
-	}
 	return port;
 }
 

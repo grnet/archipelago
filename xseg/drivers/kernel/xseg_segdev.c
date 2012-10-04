@@ -22,6 +22,7 @@
 #include <xseg/xseg.h>
 #include <sys/kernel/segdev.h>
 #include <sys/util.h>
+#include <drivers/xseg_segdev.h>
 
 MODULE_DESCRIPTION("xseg_segdev");
 MODULE_AUTHOR("XSEG");
@@ -151,15 +152,19 @@ static void segdev_callback(struct segdev *dev, xport portno)
 	struct segpriv *priv = dev->priv;
 	struct xseg_private *xpriv;
 	struct xseg_port *port;
+	struct segdev_signal_desc *ssd;
 	if (priv->segno >= nr_xsegments)
 		return;
 
 	xseg = xsegments[priv->segno];
 	xpriv = xseg->priv;
 	port = xseg_get_port(xseg, portno);
-	if (!port || !port->waitcue)
+	if (!port)
 		return;
-	
+	ssd = xseg_get_signal_desc(xseg, port);
+	if (!ssd || !ssd->waitcue)
+		return;
+
 	if (xpriv->wakeup) {
 		xpriv->wakeup(portno);
 	}
@@ -227,21 +232,29 @@ static void segdev_local_signal_quit(void)
 
 static int segdev_prepare_wait(struct xseg *xseg, uint32_t portno)
 {
+	struct segdev_signal_desc *ssd; 
 	struct xseg_port *port = xseg_get_port(xseg, portno);
 	if (!port)
 		return -1;
+	ssd = xseg_get_signal_desc(xseg, port);
+	if (!ssd)
+		return -1;
 	/* true/false value */
-	port->waitcue = 1;
+	ssd->waitcue = 1;
 	return 0;
 }
 
 static int segdev_cancel_wait(struct xseg *xseg, uint32_t portno)
 {
+	struct segdev_signal_desc *ssd; 
 	struct xseg_port *port = xseg_get_port(xseg, portno);
 	if (!port)
 		return -1;
+	ssd = xseg_get_signal_desc(xseg, port);
+	if (!ssd)
+		return -1;
 	/* true/false value */
-	port->waitcue = 0;
+	ssd->waitcue = 0;
 	return -0;
 }
 
@@ -255,9 +268,74 @@ static int segdev_signal(struct xseg *xseg, uint32_t portno)
 	return -1;
 }
 
+static int segdev_init_signal_desc(struct xseg *xseg, void *sd)
+{
+	struct segdev_signal_desc *ssd = sd;
+	if (!ssd)
+		return -1;
+	ssd->waitcue = 0;
+	return 0;
+}
+
+static void segdev_quit_signal_desc(struct xseg *xseg, void *sd)
+{
+	return;
+}
+
+static void *segdev_alloc_data(struct xseg *xseg)
+{
+
+	struct xobject_h *sd_h = (struct xobject_h *) xobj_get_obj(xseg->object_handlers, X_ALLOC);
+	if (!sd_h)
+		return NULL;
+	int r = xobj_handler_init(sd_h, xseg->segment, MAGIC_SEGDEV_SD,
+			sizeof(struct segdev_signal_desc), xseg->heap);
+	if (r < 0) {
+		xobj_put_obj(xseg->object_handlers, sd_h);
+		sd_h = NULL;
+	}
+	return sd_h;
+}
+
+static void segdev_free_data(struct xseg *xseg, void *data)
+{
+	if (data)
+		xobj_put_obj(xseg->object_handlers, data);
+
+	return;
+}
+
+static void *segdev_alloc_signal_desc(struct xseg *xseg, void *data)
+{
+	struct xobject_h *sd_h = (struct xobject_h *) data;
+	if (!sd_h)
+		return NULL;
+	struct segdev_signal_desc *ssd = xobj_get_obj(sd_h, X_ALLOC);
+	if (!ssd)
+		return NULL;
+	ssd->waitcue = 0;
+	return ssd;
+}
+
+static void segdev_free_signal_desc(struct xseg *xseg, void *data, void *sd)
+{
+	struct xobject_h *sd_h = (struct xobject_h *) data;
+	if (!sd_h)
+		return;
+	if (sd)
+		xobj_put_obj(sd_h, sd);
+	return;
+}
+
 static struct xseg_peer xseg_peer_segdev = {
 	/* xseg signal operations */
 	{
+		.init_signal_desc   = segdev_init_signal_desc,
+		.quit_signal_desc   = segdev_quit_signal_desc,
+		.alloc_data         = segdev_alloc_data,
+		.free_data          = segdev_free_data,
+		.alloc_signal_desc  = segdev_alloc_signal_desc,
+		.free_signal_desc   = segdev_free_signal_desc,
 		.local_signal_init  = segdev_local_signal_init,
 		.local_signal_quit  = segdev_local_signal_quit,
 		.remote_signal_init = segdev_remote_signal_init,

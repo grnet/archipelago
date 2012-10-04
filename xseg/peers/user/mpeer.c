@@ -427,7 +427,7 @@ malloc_fail:
 	if (!peer->xseg) 
 		return NULL;
 
-	peer->xport = xseg_bind_port(peer->xseg, portno);
+	peer->xport = xseg_bind_port(peer->xseg, portno, NULL);
 	if (!peer->xport){
 		printf("cannot bind to port %ld\n", portno);
 		return NULL;

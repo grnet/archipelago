@@ -988,7 +988,7 @@ static ssize_t xsegbd_add(struct bus_type *bus, const char *buf, size_t count)
 
 	XSEGLOG("binding to source port %u (destination %u)",
 			xsegbd_dev->src_portno, xsegbd_dev->dst_portno);
-	port = xseg_bind_port(xsegbd_dev->xseg, xsegbd_dev->src_portno);
+	port = xseg_bind_port(xsegbd_dev->xseg, xsegbd_dev->src_portno, NULL);
 	if (!port) {
 		XSEGLOG("cannot bind to port");
 		ret = -EFAULT;

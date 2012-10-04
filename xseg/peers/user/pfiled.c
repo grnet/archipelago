@@ -765,7 +765,7 @@ static int pfiled_init(struct pfiled *pfiled)
 		goto out_with_xseginit;
 	}
 
-	pfiled->xport = xseg_bind_port(pfiled->xseg, cmdline_portno);
+	pfiled->xport = xseg_bind_port(pfiled->xseg, cmdline_portno, NULL);
 	if (!pfiled->xport) {
 		ret = -EIO;
 		perr(PE, 0, "could not bind to xseg port %ld", cmdline_portno);

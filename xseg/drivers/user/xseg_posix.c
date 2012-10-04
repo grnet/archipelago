@@ -12,7 +12,8 @@
 #include <signal.h>
 #include <sys/util.h>
 #include <xseg/xseg.h>
-
+#include <xtypes/xobj.h>
+#include <drivers/xseg_posix.h>
 #define ERRSIZE 512
 char errbuf[ERRSIZE];
 
@@ -141,7 +142,10 @@ static int posix_prepare_wait(struct xseg *xseg, uint32_t portno)
 	struct xseg_port *port = xseg_get_port(xseg, portno);
 	if (!port) 
 		return -1;
-	port->waitcue = pid;
+	struct posix_signal_desc *psd = xseg_get_signal_desc(xseg, port);
+	if (!psd)
+		return -1;
+	psd->waitcue = pid;
 	return 0;
 }
 
@@ -150,7 +154,10 @@ static int posix_cancel_wait(struct xseg *xseg, uint32_t portno)
 	struct xseg_port *port = xseg_get_port(xseg, portno);
 	if (!port) 
 		return -1;
-	port->waitcue = 0;
+	struct posix_signal_desc *psd = xseg_get_signal_desc(xseg, port);
+	if (!psd)
+		return -1;
+	psd->waitcue = 0;
 	return 0;
 }
 
@@ -178,7 +185,10 @@ static int posix_signal(struct xseg *xseg, uint32_t portno)
 	struct xseg_port *port = xseg_get_port(xseg, portno);
 	if (!port) 
 		return -1;
-	pid_t cue = (pid_t)port->waitcue;
+	struct posix_signal_desc *psd = xseg_get_signal_desc(xseg, port);
+	if (!psd)
+		return -1;
+	pid_t cue = (pid_t)psd->waitcue;
 	if (!cue)
 		return 0;
 
@@ -201,6 +211,64 @@ static void posix_mfree(void *mem)
 	free(mem);
 }
 
+
+int posix_init_signal_desc(struct xseg *xseg, void *sd)
+{
+	struct posix_signal_desc *psd = sd;
+	if (!psd)
+		return -1;
+	psd->waitcue = 0;
+	return 0;
+}
+
+void posix_quit_signal_desc(struct xseg *xseg, void *sd)
+{
+	return;
+}
+
+void * posix_alloc_data(struct xseg *xseg)
+{
+	struct xobject_h *sd_h = (struct xobject_h *) xobj_get_obj(xseg->object_handlers, X_ALLOC);
+	if (!sd_h)
+		return NULL;
+	int r = xobj_handler_init(sd_h, xseg->segment, MAGIC_POSIX_SD,
+			sizeof(struct posix_signal_desc), xseg->heap);
+	if (r < 0) {
+		xobj_put_obj(xseg->object_handlers, sd_h);
+		sd_h = NULL;
+	}
+	return sd_h;
+}
+
+void posix_free_data(struct xseg *xseg, void *data)
+{
+	if (data)
+		xobj_put_obj(xseg->object_handlers, data);
+}
+
+void *posix_alloc_signal_desc(struct xseg *xseg, void *data)
+{
+	struct xobject_h *sd_h = (struct xobject_h *) data;
+	if (!sd_h)
+		return NULL;
+	struct posix_signal_desc *psd = xobj_get_obj(sd_h, X_ALLOC);
+	if (!psd)
+		return NULL;
+	psd->waitcue = 0;
+	return psd;
+
+}
+
+void posix_free_signal_desc(struct xseg *xseg, void *data, void *sd)
+{
+	struct xobject_h *sd_h = (struct xobject_h *) data;
+	if (!sd_h)
+		return;
+	if (sd)
+		xobj_put_obj(sd_h, sd);
+	return;
+}
+
 static struct xseg_type xseg_posix = {
 	/* xseg_operations */
 	{
@@ -217,6 +285,12 @@ static struct xseg_type xseg_posix = {
 static struct xseg_peer xseg_peer_posix = {
 	/* xseg_peer_operations */
 	{
+		.init_signal_desc   = posix_init_signal_desc,
+		.quit_signal_desc   = posix_quit_signal_desc,
+		.alloc_data         = posix_alloc_data,
+		.free_data          = posix_free_data,
+		.alloc_signal_desc  = posix_alloc_signal_desc,
+		.free_signal_desc   = posix_free_signal_desc,
 		.local_signal_init  = posix_local_signal_init,
 		.local_signal_quit  = posix_local_signal_quit,
 		.remote_signal_init = posix_remote_signal_init,

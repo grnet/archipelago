@@ -75,7 +75,8 @@ xseg_user.o: xseg_user.c
 	$(CC) $(CFLAGS) $(INC) -Wall -O2 -finline-functions -fPIC -c -o $@ $<
 
 libxseg.map: $(BASE)/xtypes/xq_exports.h $(BASE)/xseg/xseg_exports.h \
-		$(BASE)/xtypes/xpool_exports.h $(BASE)/xtypes/xhash_exports.h
+		$(BASE)/xtypes/xpool_exports.h $(BASE)/xtypes/xhash_exports.h\
+		$(BASE)/xtypes/xobj_exports.h
 	cat $(BASE)/xtypes/xq_exports.h $(BASE)/xseg/xseg_exports.h \
 		$(BASE)/xtypes/xpool_exports.h $(BASE)/xtypes/xhash_exports.h | ./make_symbol_map.sh > $@
 
