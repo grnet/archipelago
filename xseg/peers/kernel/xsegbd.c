@@ -345,8 +345,18 @@ static void xseg_request_fn(struct request_queue *rq)
 	uint64_t datalen;
 	xport p;
 	int r;
+	unsigned long flags;
 
+	spin_unlock_irq(&xsegbd_dev->rqlock);
 	for (;;) {
+		if (current_thread_info()->preempt_count || irqs_disabled()){
+			XSEGLOG("Current thread preempt_count: %d, irqs_disabled(): %lu ",
+					current_thread_info()->preempt_count, irqs_disabled());
+		}
+		//XSEGLOG("Priority: %d", current_thread_info()->task->prio);
+		//XSEGLOG("Static priority: %d", current_thread_info()->task->static_prio);
+		//XSEGLOG("Normal priority: %d", current_thread_info()->task->normal_prio);
+		//XSEGLOG("Rt_priority: %u", current_thread_info()->task->rt_priority);
 		blkreq_idx = Noneidx;
 		xreq = xseg_get_request(xsegbd_dev->xseg, xsegbd_dev->src_portno, 
 				xsegbd_dev->dst_portno, X_ALLOC);
@@ -364,15 +374,25 @@ static void xseg_request_fn(struct request_queue *rq)
 			break;
 		}
 
+		
+		spin_lock_irqsave(&xsegbd_dev->rqlock, flags);
 		blkreq = blk_fetch_request(rq);
-		if (!blkreq)
+		if (!blkreq){
+			spin_unlock_irqrestore(&xsegbd_dev->rqlock, flags);
 			break;
+		}
 
 		if (blkreq->cmd_type != REQ_TYPE_FS) {
 			//we lose xreq here
 			XSEGLOG("non-fs cmd_type: %u. *shrug*", blkreq->cmd_type);
 			__blk_end_request_all(blkreq, 0);
+			spin_unlock_irqrestore(&xsegbd_dev->rqlock, flags);
 			continue;
+		}
+		spin_unlock_irqrestore(&xsegbd_dev->rqlock, flags);
+		if (current_thread_info()->preempt_count || irqs_disabled()){
+			XSEGLOG("Current thread preempt_count: %d, irqs_disabled(): %lu ",
+					current_thread_info()->preempt_count, irqs_disabled());
 		}
 
 		datalen = blk_rq_bytes(blkreq);
@@ -380,14 +400,14 @@ static void xseg_request_fn(struct request_queue *rq)
 					xsegbd_dev->targetlen, datalen);
 		if (r < 0) {
 			XSEGLOG("couldn't prep request");
-			__blk_end_request_err(blkreq, r);
+			blk_end_request_err(blkreq, r);
 			BUG_ON(1);
 			break;
 		}
 		r = -ENOMEM;
 		if (xreq->bufferlen - xsegbd_dev->targetlen < datalen){
 			XSEGLOG("malformed req buffers");
-			__blk_end_request_err(blkreq, r);
+			blk_end_request_err(blkreq, r);
 			BUG_ON(1);
 			break;
 		}
@@ -433,7 +453,7 @@ static void xseg_request_fn(struct request_queue *rq)
 		if (p == NoPort) {
 			XSEGLOG("coundn't submit req");
 			BUG_ON(1);
-			__blk_end_request_err(blkreq, r);
+			blk_end_request_err(blkreq, r);
 			break;
 		}
 		WARN_ON(xseg_signal(xsegbd_dev->xsegbd->xseg, p) < 0);
@@ -444,6 +464,7 @@ static void xseg_request_fn(struct request_queue *rq)
 	if (blkreq_idx != Noneidx)
 		BUG_ON(xq_append_head(&xsegbd_dev->blk_queue_pending, 
 				blkreq_idx, xsegbd_dev->src_portno) == Noneidx);
+	spin_lock_irq(&xsegbd_dev->rqlock);
 }
 
 int update_dev_sectors_from_request(	struct xsegbd_device *xsegbd_dev,
@@ -688,7 +709,6 @@ blk_end:
 			BUG_ON(1);
 		}
 	}
-
 	if (xsegbd_dev) {
 		spin_lock_irqsave(&xsegbd_dev->rqlock, flags);
 		xseg_request_fn(xsegbd_dev->blk_queue);

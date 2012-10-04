@@ -43,3 +43,4 @@ EXPORT_SYMBOL(__xseg_errbuf);
 EXPORT_SYMBOL(__xseg_log);
 EXPORT_SYMBOL(init_logctx);
 EXPORT_SYMBOL(__xseg_log2);
+EXPORT_SYMBOL(xseg_printtrace);

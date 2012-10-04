@@ -40,7 +40,7 @@ function parse_config {
 	[ "${CHRDEV_NAME}" = "/dev/" ] && CHRDEV_NAME="/dev/segdev"
 	[ -z "${CHRDEV_MAJOR}" ] && CHRDEV_MAJOR=`cat /proc/devices | grep segdev | awk '{print $1}'`
 	[ -z "${CHRDEV_MAJOR}" ] && CHRDEV_MAJOR=60
-	[ -z "${NR_OPS}" ] && NR_OPS=64
+	[ -z "${NR_OPS}" ] && NR_OPS=128
 	[ -z "${BPORT}" ] && BPORT=0
 	[ -z "${VPORT}" ] && VPORT=2
 	[ -z "${MPORT}" ] && MPORT=1
@@ -125,7 +125,7 @@ function spawn_vlmcd {
 function spawn_mapperdc {
 	pgrep -f "mt-mapperd" || \
 	"${XSEG_HOME}/peers/user/mt-mapperd" -t 1 -p "$MPORT" -bp "$BPORT" -mbp "$MBPORT" -g "${SPEC}"\
-	&> "${XSEG_LOGS}/mapperd-${HOSTNAME}" & 
+	-n ${NR_OPS} &> "${XSEG_LOGS}/mapperd-${HOSTNAME}" & 
 #	alloc_requests "$MPORT:0" 128
 }
 

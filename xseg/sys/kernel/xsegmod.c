@@ -117,6 +117,11 @@ void __xseg_log2(struct log_ctx *lc, unsigned int level, char *fmt, ...)
 	return;
 }
 
+void xseg_printtrace(void)
+{
+	dump_stack();
+}
+
 module_init(xsegmod_init);
 module_exit(xsegmod_exit);
 
