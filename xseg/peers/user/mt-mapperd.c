@@ -12,6 +12,8 @@
 #include <fcntl.h>
 #include <gcrypt.h>
 #include <errno.h>
+#include <sched.h>
+#include <sys/syscall.h>
 
 GCRY_THREAD_OPTION_PTHREAD_IMPL;
 
@@ -1964,6 +1966,10 @@ int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 			continue;
 		}
 	}
+
+	const struct sched_param param = { .sched_priority = 99 };
+	sched_setscheduler(syscall(SYS_gettid), SCHED_FIFO, &param);
+
 
 //	test_map(peer);
 

@@ -8,6 +8,7 @@
 
 #include <linux/kernel.h>
 #include <linux/types.h>
+#include <linux/wait.h>
 #include <xseg/xseg.h>
 #include <xtypes/xq.h>
 
@@ -43,6 +44,8 @@ struct xsegbd_device {
 	struct list_head node;
 	char target[XSEGBD_TARGET_NAMELEN + 1];
 	uint32_t targetlen;
+	atomic_t usercount;
+	wait_queue_head_t wq;
 };
 
 #endif

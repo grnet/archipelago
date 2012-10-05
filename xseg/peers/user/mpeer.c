@@ -515,6 +515,8 @@ int main(int argc, char *argv[])
 
 	//TODO err check
 	peer = peerd_init(nr_ops, spec, portno, nr_threads, defer_portno);
+	if (!peer)
+		return -1;
 	r = custom_peer_init(peer, argc, argv);
 	if (r < 0)
 		return -1;

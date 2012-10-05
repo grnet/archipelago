@@ -4,6 +4,8 @@
 #include <xseg/xseg.h>
 #include <xseg/protocol.h>
 #include <mpeer.h>
+#include <sched.h>
+#include <sys/syscall.h>
 
 enum io_state_enum {
 	ACCEPTED = 0,
@@ -358,6 +360,9 @@ int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 			continue;
 		}
 	}
+
+	const struct sched_param param = { .sched_priority = 99 };
+	sched_setscheduler(syscall(SYS_gettid), SCHED_FIFO, &param);
 
 	return 0;
 }

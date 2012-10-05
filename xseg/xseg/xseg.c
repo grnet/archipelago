@@ -564,6 +564,7 @@ static long initialize_segment(struct xseg *xseg, struct xseg_config *cfg)
 	mem = xheap_allocate(heap, xseg->max_peer_types * sizeof(xptr));
 	if (!mem)
 		return -1;
+	memset(mem, 0, xheap_get_chunk_size(mem));
 	shared->peer_type_data = (xptr *) XPTR_MAKE(mem, segment);
 
 	memcpy(&xseg->config, cfg, sizeof(struct xseg_config));
@@ -762,6 +763,7 @@ struct xseg *xseg_join(	char *segtypename,
 		//FIXME wrong err handling
 		goto err_unmap;
 	}
+	memset(priv->peer_type_data, 0, sizeof(void *) * xseg->max_peer_types);
 
 	xseg->priv = priv;
 	xseg->config = __xseg->config;
@@ -820,6 +822,7 @@ void xseg_leave(struct xseg *xseg)
 	__unlock_domain();
 
 	type->ops.unmap(xseg->segment, xseg->segment_size);
+	//FIXME free xseg?
 }
 
 struct xseg_port* xseg_get_port(struct xseg *xseg, uint32_t portno)
