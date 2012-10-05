@@ -224,7 +224,7 @@ struct xseg_private {
 	struct xseg_type segment_type;
 	struct xseg_peer peer_type;
 	struct xseg_peer **peer_types;
-	xptr *peer_type_data;
+	void **peer_type_data;
 	uint32_t max_peer_types;
 	void (*wakeup)(uint32_t portno);
 	xhash_t *req_data;
@@ -391,6 +391,9 @@ static inline void * xseg_get_signal_desc(struct xseg *xseg, struct xseg_port *p
 {
 	return (void *) XPTR_TAKE(port->signal_desc, xseg->segment);
 }
+
+struct xobject_h * xseg_get_objh(struct xseg *xseg, uint32_t magic, uint64_t size);
+void xseg_put_objh(struct xseg *xseg, struct xobject_h *objh);
 
 #define xseg_get_queue(__xseg, __port, __queue) \
 	((struct xq *) XPTR_TAKE(__port->__queue, __xseg->segment))

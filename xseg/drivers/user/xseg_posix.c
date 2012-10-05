@@ -228,22 +228,15 @@ void posix_quit_signal_desc(struct xseg *xseg, void *sd)
 
 void * posix_alloc_data(struct xseg *xseg)
 {
-	struct xobject_h *sd_h = (struct xobject_h *) xobj_get_obj(xseg->object_handlers, X_ALLOC);
-	if (!sd_h)
-		return NULL;
-	int r = xobj_handler_init(sd_h, xseg->segment, MAGIC_POSIX_SD,
-			sizeof(struct posix_signal_desc), xseg->heap);
-	if (r < 0) {
-		xobj_put_obj(xseg->object_handlers, sd_h);
-		sd_h = NULL;
-	}
+	struct xobject_h *sd_h = xseg_get_objh(xseg, MAGIC_POSIX_SD, 
+			sizeof(struct posix_signal_desc));
 	return sd_h;
 }
 
 void posix_free_data(struct xseg *xseg, void *data)
 {
 	if (data)
-		xobj_put_obj(xseg->object_handlers, data);
+		xseg_put_objh(xseg, (struct xobject_h *)data);
 }
 
 void *posix_alloc_signal_desc(struct xseg *xseg, void *data)

@@ -284,25 +284,15 @@ static void segdev_quit_signal_desc(struct xseg *xseg, void *sd)
 
 static void *segdev_alloc_data(struct xseg *xseg)
 {
-
-	struct xobject_h *sd_h = (struct xobject_h *) xobj_get_obj(xseg->object_handlers, X_ALLOC);
-	if (!sd_h)
-		return NULL;
-	int r = xobj_handler_init(sd_h, xseg->segment, MAGIC_SEGDEV_SD,
-			sizeof(struct segdev_signal_desc), xseg->heap);
-	if (r < 0) {
-		xobj_put_obj(xseg->object_handlers, sd_h);
-		sd_h = NULL;
-	}
+	struct xobject_h *sd_h = xseg_get_objh(xseg, MAGIC_SEGDEV_SD,
+				sizeof(struct segdev_signal_desc));
 	return sd_h;
 }
 
 static void segdev_free_data(struct xseg *xseg, void *data)
 {
 	if (data)
-		xobj_put_obj(xseg->object_handlers, data);
-
-	return;
+		xseg_put_objh(xseg, (struct xobject_h *)data);
 }
 
 static void *segdev_alloc_signal_desc(struct xseg *xseg, void *data)

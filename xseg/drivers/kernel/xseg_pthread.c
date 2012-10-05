@@ -75,7 +75,7 @@ static int pthread_signal(struct xseg *xseg, uint32_t portno)
 	struct xseg_port *port = xseg_get_port(xseg, portno);
 	if (!port) 
 		return -1;
-	psd = xseg_get_signal_desc(xseg, portno);
+	psd = xseg_get_signal_desc(xseg, port);
 	if (!psd)
 		return -1;
 

@@ -114,10 +114,10 @@ static struct xseg_peer *__get_peer_type(struct xseg *xseg, uint32_t serial)
 	return type;
 }
 
-static xptr __get_peer_type_data(struct xseg *xseg, uint32_t serial)
+static void * __get_peer_type_data(struct xseg *xseg, uint32_t serial)
 {
 	char *name;
-	xptr data;
+	void *data;
 	struct xseg_private *priv = xseg->priv;
 	char (*shared_peer_types)[XSEG_TNAMESIZE];
 	xptr *shared_peer_type_data;
@@ -341,6 +341,7 @@ int64_t __enable_driver(struct xseg *xseg, struct xseg_peer *driver)
 {
 	int64_t r;
 	char (*drivers)[XSEG_TNAMESIZE];
+	xptr *ptd;
 	uint32_t max_drivers = xseg->max_peer_types;
 	void *data;
 	xptr peer_type_data;
@@ -355,8 +356,10 @@ int64_t __enable_driver(struct xseg *xseg, struct xseg_peer *driver)
 	for (r = 0; r < max_drivers; r++) {
 		if (!*drivers[r])
 			goto bind;
-		if (!strncmp(drivers[r], driver->name, XSEG_TNAMESIZE))
+		if (!strncmp(drivers[r], driver->name, XSEG_TNAMESIZE)){
+			data = __get_peer_type_data(xseg, r);
 			goto success;
+		}
 	}
 
 	/* Unreachable */
@@ -368,14 +371,15 @@ bind:
 	if (!data)
 		return -1;
 	peer_type_data = XPTR_MAKE(data, xseg->segment);
-	xseg->shared->peer_type_data[r] = peer_type_data;
+	ptd = XPTR_TAKE(xseg->shared->peer_type_data, xseg->segment);
+	ptd[r] = peer_type_data;
 	xseg->shared->nr_peer_types = r + 1;
 	strncpy(drivers[r], driver->name, XSEG_TNAMESIZE);
 	drivers[r][XSEG_TNAMESIZE-1] = 0;
 
 success:
 	xseg->priv->peer_types[r] = driver;
-	xseg->priv->peer_type_data[r] = xseg->shared->peer_type_data[r];
+	xseg->priv->peer_type_data[r] = data;
 	return r;
 }
 
@@ -557,7 +561,7 @@ static long initialize_segment(struct xseg *xseg, struct xseg_config *cfg)
 		return -1;
 	shared->peer_types = (char **) XPTR_MAKE(mem, segment);
 	xseg->max_peer_types = xheap_get_chunk_size(mem) / XSEG_TNAMESIZE;
-	mem = xheap_allocate(heap, page_size);
+	mem = xheap_allocate(heap, xseg->max_peer_types * sizeof(xptr));
 	if (!mem)
 		return -1;
 	shared->peer_type_data = (xptr *) XPTR_MAKE(mem, segment);
@@ -1515,6 +1519,26 @@ int xseg_get_req_data(struct xseg *xseg, struct xseg_request *xreq, void **data)
 	return r;
 }
 
+struct xobject_h * xseg_get_objh(struct xseg *xseg, uint32_t magic, uint64_t size)
+{
+	int r;
+	struct xobject_h *obj_h = xobj_get_obj(xseg->object_handlers, X_ALLOC);
+	if (!obj_h)
+		return NULL;
+	r = xobj_handler_init(obj_h, xseg->segment, magic, size, xseg->heap);
+	if (r < 0) {
+		xobj_put_obj(xseg->object_handlers, obj_h);
+		return NULL;
+	}
+	return obj_h;
+}
+
+void xseg_put_objh(struct xseg *xseg, struct xobject_h *objh)
+{
+	xobj_put_obj(xseg->object_handlers, objh);
+}
+
+
 /*
 int xseg_complete_req(struct xseg_request *req)
 {
@@ -1562,13 +1586,17 @@ struct xseg_port *xseg_bind_port(struct xseg *xseg, uint32_t req, void * sd)
 		if (driver < 0)
 			break;
 		if (!sd){
-			xptr data = __get_peer_type_data(xseg, (uint64_t) driver);
-			if (!data)
+			void *peer_data = __get_peer_type_data(xseg, (uint64_t) driver);
+			if (!peer_data)
 				break;
-			void *peer_data = XPTR_TAKE(data, xseg->segment);
 			void *sigdesc = xseg->priv->peer_type.peer_ops.alloc_signal_desc(xseg, peer_data);
-			if (sigdesc)
+			if (!sigdesc)
 				break;
+			int r = xseg->priv->peer_type.peer_ops.init_signal_desc(xseg, sigdesc);
+			if (r < 0){
+				xseg->priv->peer_type.peer_ops.free_signal_desc(xseg, peer_data, sigdesc);
+				break;
+			}
 			port->signal_desc = XPTR_MAKE(sigdesc, xseg->segment);
 		} else {
 			port->signal_desc = XPTR_MAKE(sd, xseg->segment);
