@@ -79,7 +79,7 @@ int wait_reply(struct xseg_request *expected_req)
 	struct xseg_request *rec;
 	xseg_prepare_wait(xseg, srcport);
 	while(1) {
-		rec = xseg_receive(xseg, srcport);
+		rec = xseg_receive(xseg, srcport, 0);
 		if (rec) {
 			if (rec != expected_req) {
 				fprintf(stderr, "Unknown received req. Putting req.\n");

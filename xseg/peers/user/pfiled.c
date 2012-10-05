@@ -618,7 +618,7 @@ void *io_loop(void *arg)
 
 	for (;;) {
 		accepted = NULL;
-		accepted = xseg_accept(xseg, portno);
+		accepted = xseg_accept(xseg, portno, 0);
 		if (accepted) {
 			io->req = accepted;
 			wake_up_next_iothread(pfiled);

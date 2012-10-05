@@ -20,8 +20,9 @@
 		} while(0) 
 
 /* general purpose xflags */
-#define X_ALLOC ((uint32_t) (1 << 0))
-#define X_LOCAL ((uint32_t) (1 << 1))
+#define X_ALLOC    ((uint32_t) (1 << 0))
+#define X_LOCAL    ((uint32_t) (1 << 1))
+#define X_NONBLOCK ((uint32_t) (1 << 2))
 
 
 typedef uint64_t xpointer;

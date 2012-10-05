@@ -309,7 +309,6 @@ static void* thread_loop(void *arg)
 							pr->req = accepted;
 							pr->portno = i;
 							xseg_cancel_wait(xseg, i);
-							wake_up_next_thread(peer);
 							handle_accepted(peer, pr, accepted);
 							change = 1;
 						}
@@ -329,7 +328,6 @@ static void* thread_loop(void *arg)
 							//FIXME if fails, put req
 						}
 						xseg_cancel_wait(xseg, i);
-						wake_up_next_thread(peer);
 						handle_received(peer, pr, received);
 						change = 1;
 					}
@@ -370,12 +368,12 @@ static struct xseg *join(char *spec)
 	struct xseg *xseg;
 
 	(void)xseg_parse_spec(spec, &config);
-	xseg = xseg_join(config.type, config.name, "pthread", NULL);
+	xseg = xseg_join(config.type, config.name, "posix", NULL);
 	if (xseg)
 		return xseg;
 
 	(void)xseg_create(&config);
-	return xseg_join(config.type, config.name, "pthread", NULL);
+	return xseg_join(config.type, config.name, "posix", NULL);
 }
 
 int peerd_start_threads(struct peerd *peer)
@@ -473,7 +471,7 @@ int main(int argc, char *argv[])
 	long portno_start = -1, portno_end = -1;
 	//set defaults here
 	uint32_t nr_ops = 16;
-	uint32_t nr_threads = 16 ;
+	uint32_t nr_threads = 1 ;
 	unsigned int debug_level = 0;
 	uint32_t defer_portno = NoPort;
 	char *logfile = NULL;
@@ -509,11 +507,6 @@ int main(int argc, char *argv[])
 		}
 		if (!strcmp(argv[i], "-v") && i + 1 < argc ) {
 			debug_level = atoi(argv[i+1]);
-			i += 1;
-			continue;
-		}
-		if (!strcmp(argv[i], "-t") && i + 1 < argc ) {
-			nr_threads = strtoul(argv[i+1], NULL, 10);
 			i += 1;
 			continue;
 		}

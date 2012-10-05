@@ -75,7 +75,7 @@ def vlmc_map(args):
 
         port = prev + 1
         fd = os.open(XSEGBD_SYSFS + "add", os.O_WRONLY)
-        os.write(fd, "%s %d:%d:%d" % (name, port, VPORT, REQS))
+        os.write(fd, "%s %d:%d:%d" % (name, port, port + VPORT_START-4, REQS))
         os.close(fd)
     except Exception, reason:
         print >> sys.stderr, reason

@@ -1,16 +1,19 @@
 #include <stddef.h>
+#include <xseg/xseg.h>
 /* main mpeer structs */
 struct peer_req {
 	struct peerd *peer;
 	struct xseg_request *req;
 	ssize_t retval;
+	xport portno;
 	void *priv;
 };
 
 struct peerd {
 	struct xseg *xseg;
-	struct xseg_port *xport;
-	uint32_t portno;
+	struct xseg_port *port;
+	xport portno_start;
+	xport portno_end;
 	long nr_ops;
 	uint32_t nr_threads;
 	uint32_t defer_portno;

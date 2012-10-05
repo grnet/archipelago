@@ -26,9 +26,9 @@ function parse_config {
 	[ -z "${HOSTNAME}" ] && HOSTNAME=`hostname`
 	[ -z "${XSEG_HOME}" ] && XSEG_HOME="/root/archip/xseg"
 	[ -z "${MODULES_DIR}" ] && MODULES_DIR="${XSEG_HOME}/lib/kernel"
-	[ -z "${SPEC}" ] && SPEC="segdev:xsegbd:16:1024:12"
+	[ -z "${SPEC}" ] && SPEC="segdev:xsegbd:512:1024:12"
 	[ -z "${REQS}" ] && REQS=512
-	[ -z "${PORTS}" ] && PORTS=16
+	[ -z "${PORTS}" ] && PORTS=512
 	[ -z "${IMAGES}" ] && IMAGES="/home/user/archip/xseg/peers/user/foo"
 	[ -z "${MAPS}" ] && MAPS="/home/user/archip/xseg/peers/user/foo"
 	[ -z "${PITHOS}" ] && PITHOS="/srv/pithos/data/blocks"
@@ -42,10 +42,11 @@ function parse_config {
 	[ -z "${CHRDEV_MAJOR}" ] && CHRDEV_MAJOR=60
 	[ -z "${NR_OPS}" ] && NR_OPS=128
 	[ -z "${BPORT}" ] && BPORT=0
-	[ -z "${VPORT}" ] && VPORT=2
+	[ -z "${VPORT_START}" ] && VPORT_START=4
+	[ -z "${VPORT_END}" ] && VPORT_END=200
 	[ -z "${MPORT}" ] && MPORT=1
-	[ -z "${MBPORT}" ] && MBPORT=3
-	[ -z "${VTOOL}" ] && VTOOL=15
+	[ -z "${MBPORT}" ] && MBPORT=2
+	[ -z "${VTOOL}" ] && VTOOL=3
 }
 
 
@@ -116,15 +117,17 @@ function spawn_pfiledm {
 }
 
 function spawn_vlmcd {
-	pgrep -f "peers/user/mt-vlmcd" || \
-	"${XSEG_HOME}/peers/user/mt-vlmcd" -t 1 -p "$VPORT" -bp "$BPORT" -mp "$MPORT" -g \
+	pgrep -f "peers/user/st-vlmcd" || \
+	"${XSEG_HOME}/peers/user/st-vlmcd" -t 1 -sp "$VPORT_START" \
+	-ep "$VPORT_END" -bp "$BPORT" -mp "$MPORT" -g \
 	"${SPEC}" -n ${NR_OPS} &> "${XSEG_LOGS}/vlmcd-${HOSTNAME}" &
 #	alloc_requests "$VPORT:0" 128
 }
 
 function spawn_mapperdc {
 	pgrep -f "mt-mapperd" || \
-	"${XSEG_HOME}/peers/user/mt-mapperd" -t 1 -p "$MPORT" -bp "$BPORT" -mbp "$MBPORT" -g "${SPEC}"\
+	"${XSEG_HOME}/peers/user/mt-mapperd" -t 1 -sp "$MPORT" -ep "$MPORT"\
+	-bp "$BPORT" -mbp "$MBPORT" -g "${SPEC}"\
 	-n ${NR_OPS} &> "${XSEG_LOGS}/mapperd-${HOSTNAME}" & 
 #	alloc_requests "$MPORT:0" 128
 }
@@ -291,7 +294,7 @@ doublemap)
 		spawn_vlmcd
 		;;
 	stop)
-		pkill -f peers/user/mt-vlmcd || true
+		pkill -f peers/user/st-vlmcd || true
 #		free_requests "$VPORT:0" 128 || true
 		pkill -f peers/user/mt-mapperd || true
 #		free_requests "$MPORT:0" 128 || true

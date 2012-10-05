@@ -337,13 +337,15 @@ struct xseg_request *  xseg_get_request     ( struct xseg         * xseg,
 					      uint32_t              flags     );
 
 struct xseg_request *  xseg_receive         ( struct xseg         * xseg,
-                                              xport                 portno    );
+                                              xport                 portno,    
+					      uint32_t		    flags     );
 /*                    \___________________/                       \_________/ */
 /*                     ___________________                         _________  */
 /*                    /                   \                       /         \ */
 
 struct xseg_request *  xseg_accept          ( struct xseg         * xseg,
-                                              xport                 portno    );
+                                              xport                 portno,    
+					      uint32_t		    flags     );
 
               xport    xseg_respond         ( struct xseg         * xseg,
                                               struct xseg_request * xreq,

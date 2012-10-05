@@ -74,7 +74,7 @@ static int handle_accepted(struct peerd *peer, struct peer_req *pr,
 		return 0;		
 	}
 	vio->err = 0; //reset error state
-	vio->mreq = xseg_get_request(peer->xseg, peer->portno, 
+	vio->mreq = xseg_get_request(peer->xseg, pr->portno, 
 					vlmc->mportno, X_ALLOC);
 	if (!vio->mreq)
 		goto out_err;
@@ -104,7 +104,7 @@ static int handle_accepted(struct peerd *peer, struct peer_req *pr,
 	}
 	xseg_set_req_data(peer->xseg, vio->mreq, pr);
 	__set_vio_state(vio, MAPPING);
-	p = xseg_submit(peer->xseg, vio->mreq, peer->portno, X_ALLOC);
+	p = xseg_submit(peer->xseg, vio->mreq, pr->portno, X_ALLOC);
 	if (p == NoPort)
 		goto out_unset;
 	r = xseg_signal(peer->xseg, p);
@@ -118,7 +118,7 @@ static int handle_accepted(struct peerd *peer, struct peer_req *pr,
 out_unset:
 	xseg_get_req_data(peer->xseg, vio->mreq, &dummy);
 out_put:
-	xseg_put_request(peer->xseg, vio->mreq, peer->portno);
+	xseg_put_request(peer->xseg, vio->mreq, pr->portno);
 out_err:
 	__set_vio_state(vio, CONCLUDED);
 	fail(peer, pr);
@@ -146,7 +146,7 @@ static int handle_mapping(struct peerd *peer, struct peer_req *pr,
 	/* FIXME shouldn's XS_FAILED be sufficient ?? */
 	if (vio->mreq->state & XS_FAILED && !(vio->mreq->state & XS_SERVED)){
 		fprintf(stderr, "req %lx (op: %d) failed\n", vio->mreq, vio->mreq->op);
-		xseg_put_request(peer->xseg, vio->mreq, peer->portno);
+		xseg_put_request(peer->xseg, vio->mreq, pr->portno);
 		vio->mreq = NULL;
 		__set_vio_state(vio, CONCLUDED);
 		fail(peer, pr);
@@ -154,13 +154,12 @@ static int handle_mapping(struct peerd *peer, struct peer_req *pr,
 		struct xseg_reply_info *xinfo = (struct xseg_reply_info *) xseg_get_data(peer->xseg, vio->mreq);
 		char *data = xseg_get_data(peer->xseg, pr->req);
 		*(off_t *)data = xinfo->size;
-		xseg_put_request(peer->xseg, vio->mreq, peer->portno);
+		xseg_put_request(peer->xseg, vio->mreq, pr->portno);
 		vio->mreq = NULL;
 		__set_vio_state(vio, CONCLUDED);
 		complete(peer, pr);
 	} else if (vio->mreq->op == X_CLOSE) {
-		struct xseg_reply_info *xinfo = (struct xseg_reply_info *) xseg_get_data(peer->xseg, vio->mreq);
-		xseg_put_request(peer->xseg, vio->mreq, peer->portno);
+		xseg_put_request(peer->xseg, vio->mreq, pr->portno);
 		vio->mreq = NULL;
 		__set_vio_state(vio, CONCLUDED);
 		complete(peer, pr);
@@ -168,7 +167,7 @@ static int handle_mapping(struct peerd *peer, struct peer_req *pr,
 		struct xseg_reply_map *mreply = (struct xseg_reply_map *) xseg_get_data(peer->xseg, vio->mreq);
 		if (!mreply->cnt){
 			printf("foo2\n");
-			xseg_put_request(peer->xseg, vio->mreq, peer->portno);
+			xseg_put_request(peer->xseg, vio->mreq, pr->portno);
 			vio->mreq = NULL;
 			__set_vio_state(vio, CONCLUDED);
 			fail(peer, pr);
@@ -178,7 +177,7 @@ static int handle_mapping(struct peerd *peer, struct peer_req *pr,
 		vio->breqs = calloc(vio->breq_len, sizeof(struct xseg_request *));
 		if (!vio->breqs) {
 			printf("foo3\n");
-			xseg_put_request(peer->xseg, vio->mreq, peer->portno);
+			xseg_put_request(peer->xseg, vio->mreq, pr->portno);
 			vio->mreq = NULL;
 			__set_vio_state(vio, CONCLUDED);
 			fail(peer, pr);
@@ -190,7 +189,7 @@ static int handle_mapping(struct peerd *peer, struct peer_req *pr,
 			datalen = mreply->segs[i].size;
 			offset = mreply->segs[i].offset;
 			targetlen = mreply->segs[i].targetlen;
-			breq = xseg_get_request(peer->xseg, peer->portno, vlmc->bportno, X_ALLOC);
+			breq = xseg_get_request(peer->xseg, pr->portno, vlmc->bportno, X_ALLOC);
 			if (!breq) {
 				vio->err = 1;
 				break;
@@ -198,7 +197,7 @@ static int handle_mapping(struct peerd *peer, struct peer_req *pr,
 			r = xseg_prep_request(peer->xseg, breq, targetlen, datalen);
 			if (r < 0) {
 				vio->err = 1;
-				xseg_put_request(peer->xseg, breq, peer->portno);
+				xseg_put_request(peer->xseg, breq, pr->portno);
 				break;
 			}
 			breq->offset = offset;
@@ -207,26 +206,26 @@ static int handle_mapping(struct peerd *peer, struct peer_req *pr,
 			target = xseg_get_target(peer->xseg, breq);
 			if (!target) {
 				vio->err = 1;
-				xseg_put_request(peer->xseg, breq, peer->portno);
+				xseg_put_request(peer->xseg, breq, pr->portno);
 				break;
 			}
 			strncpy(target, mreply->segs[i].target, targetlen);
 			r = xseg_set_req_data(peer->xseg, breq, pr);
 			if (r<0) {
 				vio->err = 1;
-				xseg_put_request(peer->xseg, breq, peer->portno);
+				xseg_put_request(peer->xseg, breq, pr->portno);
 				break;
 			}
 
 			// this should work, right ?
 			breq->data = pr->req->data + pos;
 			pos += datalen;
-			p = xseg_submit(peer->xseg, breq, peer->portno, X_ALLOC);
+			p = xseg_submit(peer->xseg, breq, pr->portno, X_ALLOC);
 			if (p == NoPort){
 				void *dummy;
 				vio->err = 1;
 				xseg_get_req_data(peer->xseg, breq, &dummy);
-				xseg_put_request(peer->xseg, breq, peer->portno);
+				xseg_put_request(peer->xseg, breq, pr->portno);
 				break;
 			}
 			r = xseg_signal(peer->xseg, p);
@@ -236,7 +235,7 @@ static int handle_mapping(struct peerd *peer, struct peer_req *pr,
 			vio->breqs[i] = breq;
 		}
 		vio->breq_cnt = i;
-		xseg_put_request(peer->xseg, vio->mreq, peer->portno);
+		xseg_put_request(peer->xseg, vio->mreq, pr->portno);
 		vio->mreq = NULL;
 		if (i == 0) {
 			printf("foo4\n");
@@ -269,7 +268,7 @@ static int handle_serving(struct peerd *peer, struct peer_req *pr,
 		//assert breq->serviced == breq->size
 		__sync_fetch_and_add(&pr->req->serviced, breq->serviced);
 	}
-	xseg_put_request(peer->xseg, breq, peer->portno);
+	xseg_put_request(peer->xseg, breq, pr->portno);
 
 	if (!__sync_sub_and_fetch(&vio->breq_cnt, 1)) {
 		__set_vio_state(vio, CONCLUDED);

@@ -510,28 +510,28 @@ int cmd_bridge(uint32_t portno1, uint32_t portno2, char *logfile, char *how)
 			active = 0;
 
 			//FIXME
-			req = xseg_accept(xseg, portno1);
+			req = xseg_accept(xseg, portno1, 0);
 			if (req) {
 				xseg_submit(xseg, req, portno2, X_ALLOC);
 				log_req(logfd, portno1, portno2, LOG_ACCEPT, method, req);
 				active += 1;
 			}
 
-			req = xseg_accept(xseg, portno2);
+			req = xseg_accept(xseg, portno2, 0);
 			if (req) {
 				xseg_submit(xseg, req, portno1, X_ALLOC);
 				log_req(logfd, portno2, portno1, LOG_ACCEPT, method, req);
 				active += 1;
 			}
 
-			req = xseg_receive(xseg, portno1);
+			req = xseg_receive(xseg, portno1, 0);
 			if (req) {
 				xseg_respond(xseg, req, portno2, X_ALLOC);
 				log_req(logfd, portno1, portno2, LOG_RECEIVE, method, req);
 				active += 1;
 			}
 
-			req = xseg_receive(xseg, portno2);
+			req = xseg_receive(xseg, portno2, 0);
 			if (req) {
 				xseg_respond(xseg, req, portno1, X_ALLOC);
 				log_req(logfd, portno2, portno1, LOG_RECEIVE, method, req);
@@ -632,7 +632,7 @@ int cmd_rndwrite(long loops, int32_t seed, uint32_t targetlen, uint32_t chunksiz
 			}
 		}
 
-		received = xseg_receive(xseg, srcport);
+		received = xseg_receive(xseg, srcport, 0);
 		if (received) {
 			xseg_cancel_wait(xseg, srcport);
 			nr_received += 1;
@@ -738,7 +738,7 @@ int cmd_rndread(long loops, int32_t seed, uint32_t targetlen, uint32_t chunksize
 			}
 		}
 
-		received = xseg_receive(xseg, srcport);
+		received = xseg_receive(xseg, srcport, 0);
 		if (received) {
 			xseg_cancel_wait(xseg, srcport);
 			nr_received += 1;
@@ -832,7 +832,7 @@ int cmd_submit_reqs(long loops, long concurrent_reqs, int op)
 					perror("Cannot signal peer");
 			}
 		}
-		received = xseg_receive(xseg, srcport);
+		received = xseg_receive(xseg, srcport, 0);
 		if (received) {
 			xseg_cancel_wait(xseg, srcport);
 			--nr_flying;
@@ -955,7 +955,7 @@ int cmd_put_requests(void)
 	struct xseg_request *req;
 
 	for (;;) {
-		req = xseg_accept(xseg, dstport);
+		req = xseg_accept(xseg, dstport, 0);
 		if (!req)
 			break;
 		if (xseg_put_request(xseg, req, srcport))
@@ -975,7 +975,7 @@ int cmd_finish(unsigned long nr, int fail)
 
 	for (; nr--;) {
 		xseg_prepare_wait(xseg, srcport);
-		req = xseg_accept(xseg, srcport);
+		req = xseg_accept(xseg, srcport, 0);
 		if (req) {
 			req_target = xseg_get_target(xseg, req);
 			req_data = xseg_get_data(xseg, req);
@@ -1054,7 +1054,7 @@ int cmd_wait(uint32_t nr)
 	init_local_signal(); 
 
 	for (;;) {
-		req = xseg_receive(xseg, srcport);
+		req = xseg_receive(xseg, srcport, 0);
 		if (req) {
 			handle_reply(req);
 			nr--;
@@ -1081,7 +1081,7 @@ int cmd_put_replies(void)
 	struct xseg_request *req;
 
 	for (;;) {
-		req = xseg_receive(xseg, dstport);
+		req = xseg_receive(xseg, dstport, 0);
 		if (!req)
 			break;
 		fprintf(stderr, "request: %08llx%08llx\n"

@@ -245,7 +245,7 @@ static int load_map(struct peerd *peer, struct peer_req *pr, char *target,
 		goto out_hash;
 	
 
-	req = xseg_get_request(peer->xseg, peer->portno, mapper->mbportno, X_ALLOC);
+	req = xseg_get_request(peer->xseg, pr->portno, mapper->mbportno, X_ALLOC);
 	if (!req){
 		XSEGLOG2(&lc, E, "Cannot allocate request for map %s",
 				m->volume);
@@ -272,7 +272,7 @@ static int load_map(struct peerd *peer, struct peer_req *pr, char *target,
 				m->volume);
 		goto out_put;
 	}
-	p = xseg_submit(peer->xseg, req, peer->portno, X_ALLOC);
+	p = xseg_submit(peer->xseg, req, pr->portno, X_ALLOC);
 	if (p == NoPort){ 
 		XSEGLOG2(&lc, E, "Cannot submit request for map %s",
 				m->volume);
@@ -286,7 +286,7 @@ static int load_map(struct peerd *peer, struct peer_req *pr, char *target,
 out_unset:
 	xseg_get_req_data(peer->xseg, req, &dummy);
 out_put:
-	xseg_put_request(peer->xseg, req, peer->portno);
+	xseg_put_request(peer->xseg, req, pr->portno);
 
 out_fail:
 	remove_map(mapper, m);
@@ -423,7 +423,7 @@ static int object_write(struct peerd *peer, struct peer_req *pr,
 {
 	void *dummy;
 	struct mapperd *mapper = __get_mapperd(peer);
-	struct xseg_request *req = xseg_get_request(peer->xseg, peer->portno,
+	struct xseg_request *req = xseg_get_request(peer->xseg, pr->portno,
 							mapper->mbportno, X_ALLOC);
 	if (!req){
 		XSEGLOG2(&lc, E, "Cannot allocate request for object %s. \n\t"
@@ -453,7 +453,7 @@ static int object_write(struct peerd *peer, struct peer_req *pr,
 				mn->object, map->volume, (unsigned long long) mn->objectidx);
 		goto out_put;
 	}
-	xport p = xseg_submit(peer->xseg, req, peer->portno, X_ALLOC);
+	xport p = xseg_submit(peer->xseg, req, pr->portno, X_ALLOC);
 	if (p == NoPort){
 		XSEGLOG2(&lc, E, "Cannot submit request for object %s. \n\t"
 				"(Map: %s [%llu]",
@@ -473,7 +473,7 @@ static int object_write(struct peerd *peer, struct peer_req *pr,
 out_unset:
 	xseg_get_req_data(peer->xseg, req, &dummy);
 out_put:
-	xseg_put_request(peer->xseg, req, peer->portno);
+	xseg_put_request(peer->xseg, req, pr->portno);
 out_err:
 	XSEGLOG2(&lc, E, "Object write for object %s failed. \n\t"
 			"(Map: %s [%llu]",
@@ -487,7 +487,7 @@ static int map_write(struct peerd *peer, struct peer_req* pr, struct map *map)
 	struct mapperd *mapper = __get_mapperd(peer);
 	struct map_node *mn;
 	uint64_t i, pos, max_objidx = calc_map_obj(map);
-	struct xseg_request *req = xseg_get_request(peer->xseg, peer->portno, 
+	struct xseg_request *req = xseg_get_request(peer->xseg, pr->portno, 
 							mapper->mbportno, X_ALLOC);
 	if (!req){
 		XSEGLOG2(&lc, E, "Cannot allocate request for map %s", map->volume);
@@ -526,7 +526,7 @@ static int map_write(struct peerd *peer, struct peer_req* pr, struct map *map)
 				map->volume);
 		goto out_put;
 	}
-	xport p = xseg_submit(peer->xseg, req, peer->portno, X_ALLOC);
+	xport p = xseg_submit(peer->xseg, req, pr->portno, X_ALLOC);
 	if (p == NoPort){
 		XSEGLOG2(&lc, E, "Cannot submit request for map %s",
 				map->volume);
@@ -543,7 +543,7 @@ static int map_write(struct peerd *peer, struct peer_req* pr, struct map *map)
 out_unset:
 	xseg_get_req_data(peer->xseg, req, &dummy);
 out_put:
-	xseg_put_request(peer->xseg, req, peer->portno);
+	xseg_put_request(peer->xseg, req, pr->portno);
 out_err:
 	XSEGLOG2(&lc, E, "Map write for map %s failed.", map->volume);
 	return -1;
@@ -684,7 +684,7 @@ static int copyup_object(struct peerd *peer, struct map_node *mn, struct peer_re
 	if (!strncmp(mn->object, zero_block, (mn->objectlen < HEXLIFIED_SHA256_DIGEST_SIZE)? mn->objectlen : HEXLIFIED_SHA256_DIGEST_SIZE)) 
 		goto copyup_zeroblock;
 
-	struct xseg_request *req = xseg_get_request(peer->xseg, peer->portno, 
+	struct xseg_request *req = xseg_get_request(peer->xseg, pr->portno, 
 							mapper->bportno, X_ALLOC);
 	if (!req)
 		goto out_err;
@@ -707,7 +707,7 @@ static int copyup_object(struct peerd *peer, struct map_node *mn, struct peer_re
 	if (r<0)
 		goto out_put;
 	r = __set_copyup_node(mio, req, mn);
-	p = xseg_submit(peer->xseg, req, peer->portno, X_ALLOC);
+	p = xseg_submit(peer->xseg, req, pr->portno, X_ALLOC);
 	if (p == NoPort) {
 		goto out_unset;
 	}
@@ -722,7 +722,7 @@ out_unset:
 	r = __set_copyup_node(mio, req, NULL);
 	xseg_get_req_data(peer->xseg, req, &dummy);
 out_put:
-	xseg_put_request(peer->xseg, req, peer->portno);
+	xseg_put_request(peer->xseg, req, pr->portno);
 out_err:
 	XSEGLOG2(&lc, E, "Copying up object %s \n\t to %s failed", mn->object, new_target);
 	return -1;
@@ -776,7 +776,7 @@ static int handle_mapread(struct peerd *peer, struct peer_req *pr,
 	if (r < 0)
 		goto out_fail;
 	
-	xseg_put_request(peer->xseg, req, peer->portno);
+	xseg_put_request(peer->xseg, req, pr->portno);
 	map->flags &= ~MF_MAP_LOADING;
 	XSEGLOG2(&lc, I, "Map %s loaded. Dispatching pending", map->volume);
 	uint64_t qsize = xq_count(&map->pending);
@@ -789,7 +789,7 @@ static int handle_mapread(struct peerd *peer, struct peer_req *pr,
 
 out_fail:
 	XSEGLOG2(&lc, E, "Map read for map %s failed", map->volume);
-	xseg_put_request(peer->xseg, req, peer->portno);
+	xseg_put_request(peer->xseg, req, pr->portno);
 	map->flags &= ~MF_MAP_LOADING;
 	while((idx = __xq_pop_head(&map->pending)) != Noneidx){
 		struct peer_req *preq = (struct peer_req *) idx;
@@ -804,7 +804,7 @@ out_err:
 	strncpy(buf, target, req->targetlen);
 	buf[req->targetlen] = 0;
 	XSEGLOG2(&lc, E, "Cannot find map for request target %s", buf);
-	xseg_put_request(peer->xseg, req, peer->portno);
+	xseg_put_request(peer->xseg, req, pr->portno);
 	return -1;
 }
 
@@ -828,7 +828,7 @@ static int handle_mapwrite(struct peerd *peer, struct peer_req *pr,
 		goto out_fail;
 	}
 	
-	xseg_put_request(peer->xseg, req, peer->portno);
+	xseg_put_request(peer->xseg, req, pr->portno);
 	map->flags &= ~MF_MAP_WRITING;
 	XSEGLOG2(&lc, I, "Map %s written. Dispatching pending", map->volume);
 	uint64_t qsize = xq_count(&map->pending);
@@ -842,7 +842,7 @@ static int handle_mapwrite(struct peerd *peer, struct peer_req *pr,
 
 out_fail:
 	XSEGLOG2(&lc, E, "Map write for map %s failed", map->volume);
-	xseg_put_request(peer->xseg, req, peer->portno);
+	xseg_put_request(peer->xseg, req, pr->portno);
 	map->flags &= ~MF_MAP_WRITING;
 	while((idx = __xq_pop_head(&map->pending)) != Noneidx){
 		struct peer_req *preq = (struct peer_req *) idx;
@@ -857,7 +857,7 @@ out_err:
 	strncpy(buf, target, req->targetlen);
 	buf[req->targetlen] = 0;
 	XSEGLOG2(&lc, E, "Cannot find map for request target %s", buf);
-	xseg_put_request(peer->xseg, req, peer->portno);
+	xseg_put_request(peer->xseg, req, pr->portno);
 	return -1;
 }
 
@@ -1245,12 +1245,12 @@ static int handle_copyup(struct peerd *peer, struct peer_req *pr,
 		goto out_fail;
 	}
 	mn->flags |= MF_OBJECT_WRITING;
-	xseg_put_request(peer->xseg, req, peer->portno);
+	xseg_put_request(peer->xseg, req, pr->portno);
 	XSEGLOG2(&lc, I, "Object %s copy up completed. Pending writing.", mn->object);
 	return 0;
 
 out_fail:
-	xseg_put_request(peer->xseg, req, peer->portno);
+	xseg_put_request(peer->xseg, req, pr->portno);
 	__set_copyup_node(mio, req, NULL);
 	while ((idx = __xq_pop_head(&mn->pending)) != Noneidx){
 		struct peer_req * preq = (struct peer_req *) idx;
@@ -1297,7 +1297,7 @@ static int handle_objectwrite(struct peerd *peer, struct peer_req *pr,
 	strncpy(mn->object, tmp.object, tmp.objectlen);
 	mn->object[tmp.objectlen] = 0;
 	mn->objectlen = tmp.objectlen;
-	xseg_put_request(peer->xseg, req, peer->portno);
+	xseg_put_request(peer->xseg, req, pr->portno);
 
 	XSEGLOG2(&lc, I, "Object write of %s completed successfully", mn->object);
 	uint64_t qsize = xq_count(&mn->pending);
@@ -1310,7 +1310,7 @@ static int handle_objectwrite(struct peerd *peer, struct peer_req *pr,
 
 out_fail:
 	XSEGLOG2(&lc, E, "Write of object %s failed", mn->object);
-	xseg_put_request(peer->xseg, req, peer->portno);
+	xseg_put_request(peer->xseg, req, pr->portno);
 	while((idx = __xq_pop_head(&mn->pending)) != Noneidx){
 		struct peer_req *preq = (struct peer_req *) idx;
 		fail(peer, preq);
@@ -1319,7 +1319,7 @@ out_fail:
 
 out_err:
 	XSEGLOG2(&lc, E, "Cannot find map node. Failure!");
-	xseg_put_request(peer->xseg, req, peer->portno);
+	xseg_put_request(peer->xseg, req, pr->portno);
 	return -1;
 }
 
@@ -1455,7 +1455,7 @@ static int delete_object(struct peerd *peer, struct peer_req *pr,
 		return MF_PENDING;
 	}
 
-	struct xseg_request *req = xseg_get_request(peer->xseg, peer->portno, 
+	struct xseg_request *req = xseg_get_request(peer->xseg, pr->portno, 
 							mapper->bportno, X_ALLOC);
 	if (!req)
 		goto out_err;
@@ -1472,7 +1472,7 @@ static int delete_object(struct peerd *peer, struct peer_req *pr,
 	if (r < 0)
 		goto out_put;
 	__set_copyup_node(mio, req, mn);
-	xport p = xseg_submit(peer->xseg, req, peer->portno, X_ALLOC);
+	xport p = xseg_submit(peer->xseg, req, pr->portno, X_ALLOC);
 	if (p == NoPort)
 		goto out_unset;
 	r = xseg_signal(peer->xseg, p);
@@ -1483,7 +1483,7 @@ static int delete_object(struct peerd *peer, struct peer_req *pr,
 out_unset:
 	xseg_get_req_data(peer->xseg, req, &dummy);
 out_put:
-	xseg_put_request(peer->xseg, req, peer->portno);
+	xseg_put_request(peer->xseg, req, pr->portno);
 out_err:
 	XSEGLOG2(&lc, I, "Object %s deletion failed", mn->object);
 	return -1;
@@ -1595,7 +1595,7 @@ static int delete_map(struct peerd *peer, struct peer_req *pr,
 	void *dummy;
 	struct mapperd *mapper = __get_mapperd(peer);
 	struct mapper_io *mio = __get_mapper_io(pr);
-	struct xseg_request *req = xseg_get_request(peer->xseg, peer->portno, 
+	struct xseg_request *req = xseg_get_request(peer->xseg, pr->portno, 
 							mapper->mbportno, X_ALLOC);
 	if (!req)
 		goto out_err;
@@ -1612,7 +1612,7 @@ static int delete_map(struct peerd *peer, struct peer_req *pr,
 	if (r < 0)
 		goto out_put;
 	__set_copyup_node(mio, req, NULL);
-	xport p = xseg_submit(peer->xseg, req, peer->portno, X_ALLOC);
+	xport p = xseg_submit(peer->xseg, req, pr->portno, X_ALLOC);
 	if (p == NoPort)
 		goto out_unset;
 	r = xseg_signal(peer->xseg, p);
@@ -1623,7 +1623,7 @@ static int delete_map(struct peerd *peer, struct peer_req *pr,
 out_unset:
 	xseg_get_req_data(peer->xseg, req, &dummy);
 out_put:
-	xseg_put_request(peer->xseg, req, peer->portno);
+	xseg_put_request(peer->xseg, req, pr->portno);
 out_err:
 	XSEGLOG2(&lc, I, "Map %s deletion failed", map->volume);
 	return -1;
@@ -1695,7 +1695,7 @@ static int handle_delete(struct peerd *peer, struct peer_req *pr,
 		//map block delete
 		map = find_map(mapper, target, req->targetlen);
 		if (!map) {
-			xseg_put_request(peer->xseg, req, peer->portno);
+			xseg_put_request(peer->xseg, req, pr->portno);
 			return -1;
 		}
 		handle_map_delete(peer, pr, map, err);
@@ -1703,12 +1703,12 @@ static int handle_delete(struct peerd *peer, struct peer_req *pr,
 		//object delete
 		map = mn->map;
 		if (!map) {
-			xseg_put_request(peer->xseg, req, peer->portno);
+			xseg_put_request(peer->xseg, req, pr->portno);
 			return -1;
 		}
 		handle_object_delete(peer, pr, mn, err);
 	}
-	xseg_put_request(peer->xseg, req, peer->portno);
+	xseg_put_request(peer->xseg, req, pr->portno);
 	return 0;
 }
 

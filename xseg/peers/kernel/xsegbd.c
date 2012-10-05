@@ -673,7 +673,7 @@ static void xseg_callback(xport portno)
 
 	for (;;) {
 		xseg_prepare_wait(xsegbd_dev->xseg, xsegbd_dev->src_portno);
-		xreq = xseg_receive(xsegbd_dev->xseg, portno);
+		xreq = xseg_receive(xsegbd_dev->xseg, portno, 0);
 		if (!xreq)
 			break;
 

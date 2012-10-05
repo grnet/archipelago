@@ -1334,7 +1334,7 @@ out:
 	
 }
 
-struct xseg_request *xseg_receive(struct xseg *xseg, xport portno)
+struct xseg_request *xseg_receive(struct xseg *xseg, xport portno, uint32_t flags)
 {
 	xqindex xqi;
 	xserial serial = NoSerial;
@@ -1344,7 +1344,12 @@ struct xseg_request *xseg_receive(struct xseg *xseg, xport portno)
 	if (!port)
 		return NULL;
 retry:
-	xlock_acquire(&port->pq_lock, portno);
+	if (flags & X_NONBLOCK) {
+		if (!xlock_try_lock(&port->pq_lock, portno))
+			return NULL;
+	} else {
+		xlock_acquire(&port->pq_lock, portno);
+	}
 	q = XPTR_TAKE(port->reply_queue, xseg->segment);
 	xqi = __xq_pop_head(q);
 	xlock_release(&port->pq_lock);
@@ -1365,7 +1370,7 @@ retry:
 	return req;
 }
 
-struct xseg_request *xseg_accept(struct xseg *xseg, xport portno)
+struct xseg_request *xseg_accept(struct xseg *xseg, xport portno, uint32_t flags)
 {
 	xqindex xqi;
 	struct xq *q;
@@ -1373,7 +1378,13 @@ struct xseg_request *xseg_accept(struct xseg *xseg, xport portno)
 	struct xseg_port *port = xseg_get_port(xseg, portno);
 	if (!port)
 		return NULL;
-	xlock_acquire(&port->rq_lock, portno);
+	if (flags & X_NONBLOCK) {
+		if (!xlock_try_lock(&port->rq_lock, portno))
+			return NULL;
+	} else {
+		xlock_acquire(&port->rq_lock, portno);
+	}
+
 	q = XPTR_TAKE(port->request_queue, xseg->segment);
 	xqi = __xq_pop_head(q);
 	xlock_release(&port->rq_lock);

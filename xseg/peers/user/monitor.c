@@ -64,19 +64,19 @@ int dispatch(struct peerd *peer, struct peer_req *pr, struct xseg_request *xreq)
 int mpause(struct peerd *peer)
 {
 	struct xseg *xseg = peer->xseg;
-	struct xseg_port *port = xseg_get_port(xseg, peer->portno);
+	struct xseg_port *port = xseg_get_port(xseg, peer->portno_start);
 	if (!port)
 		return -1;
 	
-	xlock_acquire(&port->rq_lock, peer->portno);
-	xlock_acquire(&port->pq_lock, peer->portno);
+	xlock_acquire(&port->rq_lock, peer->portno_start);
+	xlock_acquire(&port->pq_lock, peer->portno_start);
 	return 0;
 }
 
 int munpause(struct peerd *peer)
 {
 	struct xseg *xseg = peer->xseg;
-	struct xseg_port *port = xseg_get_port(xseg, peer->portno);
+	struct xseg_port *port = xseg_get_port(xseg, peer->portno_start);
 	if (!port)
 		return -1;
 	

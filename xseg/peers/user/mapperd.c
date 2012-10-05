@@ -157,7 +157,7 @@ static int mapperd_loop(struct mapperd *mapperd)
 		ret = xseg_prepare_wait(xseg, mportno);
 		always_assert(ret == 0);
 
-		xreq = xseg_accept(xseg, mportno);
+		xreq = xseg_accept(xseg, mportno, 0);
 		if (xreq) {
 			xseg_cancel_wait(xseg, mportno);
 			/*
