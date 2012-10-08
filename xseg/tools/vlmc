@@ -2,7 +2,7 @@
 #
 # vlmc tool
 
-import os, sys, subprocess, argparse
+import os, sys, subprocess, argparse, time
 from subprocess import call, check_call
 
 def vlmc_create(args):
@@ -59,6 +59,25 @@ def xsegbd_loaded():
         print >> sys.stderr, reason
         sys.exit(-1)
 
+def exclusive(fn):
+    def exclusive_args(args):
+        file = "/tmp/vlmc_map.lock"
+        while True:
+            try:
+                fd = os.open(file, os.O_CREAT|os.O_EXCL|os.O_WRONLY)
+                break;
+            except Exception, reason:
+                print >> sys.stderr, reason
+                time.sleep(0.05)
+        try:
+            fn(args)
+        finally:
+            os.close(fd)
+            os.unlink(file)
+
+    return exclusive_args
+
+@exclusive
 def vlmc_map(args):
     xsegbd_loaded()
     name = args.name[0]
@@ -75,12 +94,14 @@ def vlmc_map(args):
 
         port = prev + 1
         fd = os.open(XSEGBD_SYSFS + "add", os.O_WRONLY)
+        print >> sys.stderr, "write to %s : %s %d:%d:%d" %( XSEGBD_SYSFS + "add", name, port, port + VPORT_START -4, REQS )
         os.write(fd, "%s %d:%d:%d" % (name, port, port + VPORT_START-4, REQS))
         os.close(fd)
     except Exception, reason:
         print >> sys.stderr, reason
         sys.exit(-1)
 
+@exclusive
 def vlmc_unmap(args):
     xsegbd_loaded()
     device = args.name[0]
@@ -100,6 +121,7 @@ def vlmc_unmap(args):
         print >> sys.stderr, reason
         sys.exit(-1)
 
+@exclusive
 def vlmc_showmapped(args):
     xsegbd_loaded()
     print "id\tpool\timage\tsnap\tdevice"

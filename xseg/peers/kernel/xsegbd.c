@@ -270,8 +270,8 @@ outdisk:
 	put_disk(xsegbd_dev->gd);
 outqueue:
 	blk_cleanup_queue(xsegbd_dev->blk_queue);
-	xsegbd_dev->blk_queue = NULL;
 out:
+	xsegbd_dev->blk_queue = NULL;
 	xsegbd_dev->gd = NULL;
 	return ret;
 }
@@ -281,7 +281,6 @@ static void xsegbd_dev_release(struct device *dev)
 	int ret;
 	struct xsegbd_device *xsegbd_dev = dev_to_xsegbd(dev);
 
-	xseg_cancel_wait(xsegbd_dev->xseg, xsegbd_dev->src_portno);
 
 	/* cleanup gendisk and blk_queue the right way */
 	if (xsegbd_dev->gd) {
@@ -297,8 +296,10 @@ static void xsegbd_dev_release(struct device *dev)
 	xsegbd_devices[xsegbd_dev->src_portno] = NULL;
 	spin_unlock(&xsegbd_devices_lock);
 	
+//	xseg_cancel_wait(xsegbd_dev->xseg, xsegbd_dev->src_portno);
 	/* wait for all pending operations on device to end */
-	wait_event(xsegbd_dev->wq, atomic_read(&xsegbd_dev->usercount) <= 1);
+	wait_event(xsegbd_dev->wq, atomic_read(&xsegbd_dev->usercount) <= 0);
+	XSEGLOG("releasing id: %d", xsegbd_dev->id);
 	if (xsegbd_dev->blk_queue)
 		blk_cleanup_queue(xsegbd_dev->blk_queue);
 
@@ -479,6 +480,8 @@ static void xseg_request_fn(struct request_queue *rq)
 			break;
 		}
 		WARN_ON(xseg_signal(xsegbd_dev->xsegbd->xseg, p) < 0);
+		/* xsegbd_get here. will be put on receive */
+		__xsegbd_get(xsegbd_dev);
 	}
 	if (xreq)
 		BUG_ON(xseg_put_request(xsegbd_dev->xsegbd->xseg, xreq, 
@@ -722,7 +725,6 @@ static void xseg_callback(xport portno)
 			goto blk_end;
 
 		err = 0;
-		/* unlock for data transfer? */
 		if (!rq_data_dir(blkreq)){
 			xseg_to_blk(xsegbd_dev->xseg, xreq, blkreq);
 		}	
@@ -741,6 +743,7 @@ blk_end:
 			XSEGLOG("couldn't put req");
 			BUG_ON(1);
 		}
+		__xsegbd_put(xsegbd_dev);
 	}
 	if (xsegbd_dev) {
 		spin_lock_irqsave(&xsegbd_dev->rqlock, flags);
@@ -1022,7 +1025,7 @@ static ssize_t xsegbd_add(struct bus_type *bus, const char *buf, size_t count)
 		goto out_freepending;
 	
 
-	XSEGLOG("binding to source port %u (destination %u)",
+	XSEGLOG("%s binding to source port %u (destination %u)", xsegbd_dev->target,
 			xsegbd_dev->src_portno, xsegbd_dev->dst_portno);
 	port = xseg_bind_port(xsegbd_dev->xseg, xsegbd_dev->src_portno, NULL);
 	if (!port) {
@@ -1097,12 +1100,12 @@ static ssize_t xsegbd_remove(struct bus_type *bus, const char *buf, size_t count
 	mutex_lock_nested(&xsegbd_mutex, SINGLE_DEPTH_NESTING);
 
 	ret = count;
-	//FIXME when to put dev?
 	xsegbd_dev = __xsegbd_get_dev(id);
 	if (!xsegbd_dev) {
 		ret = -ENOENT;
 		goto out_unlock;
 	}
+	__xsegbd_put(xsegbd_dev);
 	xsegbd_bus_del_dev(xsegbd_dev);
 
 out_unlock:
