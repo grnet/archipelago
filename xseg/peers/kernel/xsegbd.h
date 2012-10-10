@@ -48,4 +48,7 @@ struct xsegbd_device {
 	wait_queue_head_t wq;
 };
 
+void __xsegbd_get(struct xsegbd_device *xsegbd_dev);
+void __xsegbd_put(struct xsegbd_device *xsegbd_dev);
+struct xsegbd_device *__xsegbd_get_dev(unsigned long id);
 #endif

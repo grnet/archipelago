@@ -778,6 +778,7 @@ struct xseg *xseg_join(	char *segtypename,
 	xseg->shared = XPTR_TAKE(__xseg->shared, __xseg);
 	xseg->segment_size = size;
 	xseg->segment = __xseg;
+	__sync_synchronize();
 
 	r = xseg_validate_pointers(xseg);
 	if (r) {
@@ -828,7 +829,21 @@ void xseg_leave(struct xseg *xseg)
 struct xseg_port* xseg_get_port(struct xseg *xseg, uint32_t portno)
 {
 	xptr p;
+	if (!xseg) {
+		XSEGLOG("xseg == NULL");
+		return NULL;
+	}
+	if (!xseg->segment) {
+		XSEGLOG("xseg->segment == NULL");
+		return NULL;
+	}
 	if (!__validate_port(xseg, portno))
+		return NULL;
+	if (pointer_ok((unsigned long)(xseg->ports), (unsigned long)xseg->segment,
+				xseg->segment_size, "ports"))
+		return NULL;
+	if (pointer_ok((unsigned long)(xseg->ports + portno), (unsigned long)xseg->segment,
+				xseg->segment_size, "ports[portno]"))
 		return NULL;
 	p = xseg->ports[portno];
 	if (p)
@@ -995,7 +1010,7 @@ int xseg_init_local_signal(struct xseg *xseg, xport portno)
 	if (!type)
 		return -1;
 
-	return type->peer_ops.local_signal_init();
+	return type->peer_ops.local_signal_init(xseg, portno);
 }
 
 void xseg_quit_local_signal(struct xseg *xseg, xport portno)
@@ -1009,7 +1024,7 @@ void xseg_quit_local_signal(struct xseg *xseg, xport portno)
 	if (!type)
 		return;
 
-	type->peer_ops.local_signal_quit();
+	type->peer_ops.local_signal_quit(xseg, portno);
 }
 
 //FIXME doesn't increase alloced reqs

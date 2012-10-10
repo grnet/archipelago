@@ -99,8 +99,8 @@ struct xseg_peer_operations {
 	void  (*free_data)(struct xseg *xseg, void *data);
 	void *(*alloc_signal_desc)(struct xseg *xseg, void *data);
 	void  (*free_signal_desc)(struct xseg *xseg, void *data, void *sd);
-	int   (*local_signal_init)(void);
-	void  (*local_signal_quit)(void);
+	int   (*local_signal_init)(struct xseg *xseg, xport portno);
+	void  (*local_signal_quit)(struct xseg *xseg, xport portno);
 	int   (*remote_signal_init)(void);
 	void  (*remote_signal_quit)(void);
 	int   (*signal_join)(struct xseg *xseg);

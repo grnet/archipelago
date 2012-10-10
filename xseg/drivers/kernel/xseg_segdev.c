@@ -23,13 +23,13 @@
 #include <sys/kernel/segdev.h>
 #include <sys/util.h>
 #include <drivers/xseg_segdev.h>
-
+#include <peers/kernel/xsegbd.h>
 MODULE_DESCRIPTION("xseg_segdev");
 MODULE_AUTHOR("XSEG");
 MODULE_LICENSE("GPL");
 
-/* for now, support only one peer */
-static struct xseg *xsegments[1];
+/* FIXME */
+static struct xseg *xsegments[65536];
 static unsigned int nr_xsegments = 1;
 
 struct segpriv {
@@ -117,8 +117,8 @@ static void *segdev_map(const char *name, uint64_t size, struct xseg *seg)
 	if (priv->segno >= nr_xsegments)
 		goto out;
 
-	if (seg)
-		xsegments[priv->segno] = seg;
+//	if (seg)
+//		xsegments[priv->segno] = seg;
 
 	xseg = (void *)dev->segment;
 out:
@@ -137,7 +137,7 @@ static void segdev_unmap(void *ptr, uint64_t size)
 	if (priv->segno >= nr_xsegments)
 		goto out;
 
-	xsegments[priv->segno] = NULL;
+//	xsegments[priv->segno] = NULL;
 
 out:
 	/* unmap() releases the reference taken by map() */
@@ -153,21 +153,27 @@ static void segdev_callback(struct segdev *dev, xport portno)
 	struct xseg_private *xpriv;
 	struct xseg_port *port;
 	struct segdev_signal_desc *ssd;
+
+	xseg = xsegments[portno];
+	if (!xseg)
+		return;
 	if (priv->segno >= nr_xsegments)
 		return;
 
-	xseg = xsegments[priv->segno];
 	xpriv = xseg->priv;
 	port = xseg_get_port(xseg, portno);
 	if (!port)
 		return;
 	ssd = xseg_get_signal_desc(xseg, port);
-	if (!ssd || !ssd->waitcue)
+	if (!ssd || !ssd->waitcue){
+		XSEGLOG("portno %u has waitcue == 0", portno);
 		return;
+	}
 
 	if (xpriv->wakeup) {
 		xpriv->wakeup(portno);
 	}
+	return;
 }
 
 static struct xseg_type xseg_segdev = {
@@ -192,41 +198,16 @@ static void segdev_remote_signal_quit(void)
 	return;
 }
 
-static int segdev_local_signal_init(void)
+static int segdev_local_signal_init(struct xseg *xseg, xport portno)
 {
-	struct segdev *segdev = segdev_get(0);
-	struct segpriv *segpriv;
-	int r = IS_ERR(segdev) ? PTR_ERR(segdev) : 0;
-	if (r)
-		goto out;
-
-	r = -EADDRINUSE;
-	if (xsegments[0]) 
-		goto out;
-
-	r = -ENOMEM;
-	segpriv = kmalloc(sizeof(struct segpriv), GFP_KERNEL);
-	if (!segpriv)
-		goto out;
-
-	segpriv->segno = 0;
-	segdev->callback = segdev_callback;
-	segdev->priv = segpriv;
-	r = 0;
-out:
-	segdev_put(segdev);
-	return r;
+	//assert xsegments[portno] == NULL;
+	xsegments[portno] = xseg;
 }
 
-static void segdev_local_signal_quit(void)
+static void segdev_local_signal_quit(struct xseg *xseg, xport portno)
 {
-	struct segdev *segdev = segdev_get(0);
-	int r = IS_ERR(segdev) ? PTR_ERR(segdev) : 0;
-	xsegments[0] = NULL;
-	if (!r)
-		segdev->callback = NULL;
-
-	segdev_put(segdev);
+	//assert xsegments[portno] == xseg;
+	xsegments[portno] = NULL;
 	return;
 }
 
@@ -349,6 +330,8 @@ static struct xseg_peer xseg_peer_segdev = {
 
 static int segdev_init(void)
 {
+	struct segdev *segdev;
+	struct segpriv *segpriv;
 	int r;
 
 	XSEGLOG("registering xseg types");
@@ -359,15 +342,27 @@ static int segdev_init(void)
 	r = xseg_register_peer(&xseg_peer_segdev);
 	if (r)
 		goto err1;
-
-	r = segdev_local_signal_init();
+	
+	segdev = segdev_get(0);
+	r = IS_ERR(segdev) ? PTR_ERR(segdev) : 0;
 	if (r)
 		goto err2;
 
+	r = -ENOMEM;
+	segpriv = kmalloc(sizeof(struct segpriv), GFP_KERNEL);
+	if (!segpriv)
+		goto err3;
+
+	segpriv->segno = 0;
+	segdev->callback = segdev_callback;
+	segdev->priv = segpriv;
+
 	return 0;
 
+err3:
+	segdev_put(segdev);
 err2:
-	segdev_local_signal_quit();
+	xseg_unregister_peer(xseg_peer_segdev.name);
 err1:
 	xseg_unregister_type(xseg_segdev.name);
 err0:
@@ -376,14 +371,15 @@ err0:
 
 static int segdev_quit(void)
 {
-	struct segdev *segdev;
-
-	/* make sure to unmap the segment first */
-	segdev = segdev_get(0);
-	clear_bit(SEGDEV_RESERVED, &segdev->flags);
-	segdev_put(segdev);
-
-	segdev_local_signal_quit();
+	struct segdev *segdev = segdev_get(0);
+	int r = IS_ERR(segdev) ? PTR_ERR(segdev) : 0;
+	if (!r){
+		/* make sure to unmap the segment first */
+		clear_bit(SEGDEV_RESERVED, &segdev->flags);
+		segdev->callback = NULL;
+		//FIXME what aboud segdev->priv?
+		segdev_put(segdev);
+	}
 	xseg_unregister_peer(xseg_peer_segdev.name);
 	xseg_unregister_type(xseg_segdev.name);
 

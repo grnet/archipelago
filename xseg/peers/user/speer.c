@@ -169,7 +169,8 @@ void fail(struct peerd *peer, struct peer_req *pr)
 	req->state |= XS_FAILED;
 	//xseg_set_req_data(peer->xseg, pr->req, NULL);
 	p = xseg_respond(peer->xseg, req, pr->portno, X_ALLOC);
-	xseg_signal(peer->xseg, p);
+	if (xseg_signal(peer->xseg, p) < 0)
+		XSEGLOG2(&lc, W, "Cannot signal portno %u", p);
 	free_peer_req(peer, pr);
 	wake_up_next_thread(peer);
 }
@@ -188,7 +189,8 @@ void complete(struct peerd *peer, struct peer_req *pr)
 	//timersub(&resp_end, &resp_start, &resp_end);
 	//timeradd(&resp_end, &resp_accum, &resp_accum);
 	//printf("xseg_signal: %u\n", p);
-	xseg_signal(peer->xseg, p);
+	if (xseg_signal(peer->xseg, p) < 0)
+		XSEGLOG2(&lc, W, "Cannot signal portno %u", p);
 	free_peer_req(peer, pr);
 	wake_up_next_thread(peer);
 }

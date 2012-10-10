@@ -149,12 +149,12 @@ static struct xseg_type xseg_segdev = {
 	"segdev"
 };
 
-static int segdev_local_signal_init(void)
+static int segdev_local_signal_init(struct xseg *xseg, xport portno)
 {
 	return -1;
 }
 
-static void segdev_local_signal_quit(void)
+static void segdev_local_signal_quit(struct xseg *xseg, xport portno)
 {
 	return;
 }
@@ -193,8 +193,10 @@ static int segdev_signal(struct xseg *xseg, uint32_t portno)
 	if (!ssd)
 		return -1;
 
-	if (!ssd->waitcue)
+	if (!ssd->waitcue){
+		XSEGLOG("portno %u has waitcue == 0", portno);
 		return 0;
+	}
 	else
 		return write(opendev(), &portno, sizeof(portno));
 }

@@ -38,12 +38,12 @@ static void posix_remote_signal_quit(void)
 	return;
 }
 
-static int posix_local_signal_init(void)
+static int posix_local_signal_init(struct xseg *xseg, xport portno)
 {
 	return -1;
 }
 
-static void posix_local_signal_quit(void)
+static void posix_local_signal_quit(struct xseg *xseg, xport portno)
 {
 	return;
 }

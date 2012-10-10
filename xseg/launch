@@ -120,7 +120,7 @@ function spawn_vlmcd {
 	pgrep -f "peers/user/st-vlmcd" || \
 	"${XSEG_HOME}/peers/user/st-vlmcd" -t 1 -sp "$VPORT_START" \
 	-ep "$VPORT_END" -bp "$BPORT" -mp "$MPORT" -g \
-	"${SPEC}" -n ${NR_OPS} &> "${XSEG_LOGS}/vlmcd-${HOSTNAME}" &
+	"${SPEC}" -n ${NR_OPS} -v 1 &> "${XSEG_LOGS}/vlmcd-${HOSTNAME}" &
 #	alloc_requests "$VPORT:0" 128
 }
 

@@ -101,7 +101,7 @@ static void handler(int signum)
 static sigset_t savedset, set;
 static pid_t pid;
 
-static int posix_local_signal_init(void)
+static int posix_local_signal_init(struct xseg *xseg, xport portno)
 {
 	void (*h)(int);
 	int r;
@@ -120,7 +120,7 @@ static int posix_local_signal_init(void)
 	return 0;
 }
 
-static void posix_local_signal_quit(void)
+static void posix_local_signal_quit(struct xseg *xseg, xport portno)
 {
 	pid = 0;
 	signal(SIGIO, SIG_DFL);

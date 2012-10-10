@@ -52,18 +52,18 @@ static DEFINE_MUTEX(xsegbd_mutex);
 static DEFINE_SPINLOCK(xsegbd_devices_lock);
 
 
-static void __xsegbd_get(struct xsegbd_device *xsegbd_dev)
+void __xsegbd_get(struct xsegbd_device *xsegbd_dev)
 {
 	atomic_inc(&xsegbd_dev->usercount);
 }
 
-static void __xsegbd_put(struct xsegbd_device *xsegbd_dev)
+void __xsegbd_put(struct xsegbd_device *xsegbd_dev)
 {
-	atomic_dec(&xsegbd_dev->usercount);
-	wake_up(&xsegbd_dev->wq);
+	if (atomic_dec_and_test(&xsegbd_dev->usercount))
+		wake_up(&xsegbd_dev->wq);
 }
 
-static struct xsegbd_device *__xsegbd_get_dev(unsigned long id)
+struct xsegbd_device *__xsegbd_get_dev(unsigned long id)
 {
 	struct xsegbd_device *xsegbd_dev = NULL;
 
@@ -297,6 +297,7 @@ static void xsegbd_dev_release(struct device *dev)
 	spin_unlock(&xsegbd_devices_lock);
 	
 //	xseg_cancel_wait(xsegbd_dev->xseg, xsegbd_dev->src_portno);
+	xseg_quit_local_signal(xsegbd_dev->xseg, xsegbd_dev->src_portno);
 	/* wait for all pending operations on device to end */
 	wait_event(xsegbd_dev->wq, atomic_read(&xsegbd_dev->usercount) <= 0);
 	XSEGLOG("releasing id: %d", xsegbd_dev->id);
@@ -471,17 +472,18 @@ static void xseg_request_fn(struct request_queue *rq)
 
 
 		r = -EIO;
+		/* xsegbd_get here. will be put on receive */
+		__xsegbd_get(xsegbd_dev);
 		p = xseg_submit(xsegbd_dev->xseg, xreq, 
 					xsegbd_dev->src_portno, X_ALLOC);
 		if (p == NoPort) {
 			XSEGLOG("coundn't submit req");
-			BUG_ON(1);
+			WARN_ON(1);
 			blk_end_request_err(blkreq, r);
+			__xsegbd_put(xsegbd_dev);
 			break;
 		}
 		WARN_ON(xseg_signal(xsegbd_dev->xsegbd->xseg, p) < 0);
-		/* xsegbd_get here. will be put on receive */
-		__xsegbd_get(xsegbd_dev);
 	}
 	if (xreq)
 		BUG_ON(xseg_put_request(xsegbd_dev->xsegbd->xseg, xreq, 
@@ -680,7 +682,7 @@ static void xseg_callback(xport portno)
 		if (!xreq)
 			break;
 
-		xseg_cancel_wait(xsegbd_dev->xseg, xsegbd_dev->src_portno);
+//		xseg_cancel_wait(xsegbd_dev->xseg, xsegbd_dev->src_portno);
 
 		blkreq_idx = (xqindex) xreq->priv;
 		if (blkreq_idx >= xsegbd_dev->nr_requests) {
@@ -839,6 +841,7 @@ out:
 	return ret;
 }
 
+//FIXME
 static ssize_t xsegbd_cleanup(struct device *dev,
 					struct device_attribute *attr,
 					const char *buf,
@@ -1023,8 +1026,8 @@ static ssize_t xsegbd_add(struct bus_type *bus, const char *buf, size_t count)
 					xseg_callback		);
 	if (!xsegbd_dev->xseg)
 		goto out_freepending;
+	__sync_synchronize();
 	
-
 	XSEGLOG("%s binding to source port %u (destination %u)", xsegbd_dev->target,
 			xsegbd_dev->src_portno, xsegbd_dev->dst_portno);
 	port = xseg_bind_port(xsegbd_dev->xseg, xsegbd_dev->src_portno, NULL);
@@ -1041,6 +1044,7 @@ static ssize_t xsegbd_add(struct bus_type *bus, const char *buf, size_t count)
 		ret = -EFAULT;
 		goto out_xseg;
 	}
+	xseg_init_local_signal(xsegbd_dev->xseg, xsegbd_dev->src_portno);
 
 
 	/* make sure we don't get any requests until we're ready to handle them */
@@ -1048,11 +1052,13 @@ static ssize_t xsegbd_add(struct bus_type *bus, const char *buf, size_t count)
 
 	ret = xsegbd_dev_init(xsegbd_dev);
 	if (ret)
-		goto out_xseg;
+		goto out_signal;
 
 	xseg_prepare_wait(xsegbd_dev->xseg, xseg_portno(xsegbd_dev->xseg, port));
 	return count;
 
+out_signal:
+	xseg_quit_local_signal(xsegbd_dev->xseg, xsegbd_dev->src_portno);
 out_xseg:
 	xseg_leave(xsegbd_dev->xseg);
 	

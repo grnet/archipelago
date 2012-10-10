@@ -150,7 +150,7 @@ static void keys_init(void)
 	} while (0)
 
 /* must be called by each thread */
-static int pthread_local_signal_init(void)
+static int pthread_local_signal_init(struct xseg *xseg, xport portno)
 {
 	int r;
 	pid_t pid;
@@ -217,7 +217,7 @@ err1:
 }
 
 /* should be called by each thread which had initialized signals */
-static void pthread_local_signal_quit(void)
+static void pthread_local_signal_quit(struct xseg *xseg, xport portno)
 {
 	sigset_t *savedset;
 	struct sigaction *old_act;
