@@ -153,7 +153,7 @@ static int handle_mapping(struct peerd *peer, struct peer_req *pr,
 	} else if (vio->mreq->op == X_INFO) {
 		struct xseg_reply_info *xinfo = (struct xseg_reply_info *) xseg_get_data(peer->xseg, vio->mreq);
 		char *data = xseg_get_data(peer->xseg, pr->req);
-		*(off_t *)data = xinfo->size;
+		*(uint64_t *)data = xinfo->size;
 		xseg_put_request(peer->xseg, vio->mreq, pr->portno);
 		vio->mreq = NULL;
 		__set_vio_state(vio, CONCLUDED);

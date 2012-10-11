@@ -471,6 +471,7 @@ static void xseg_request_fn(struct request_queue *rq)
 		}
 
 
+//		XSEGLOG("%s : %lu (%lu)", xsegbd_dev->target, xreq->offset, xreq->datalen);
 		r = -EIO;
 		/* xsegbd_get here. will be put on receive */
 		__xsegbd_get(xsegbd_dev);
@@ -577,7 +578,7 @@ static int xsegbd_get_size(struct xsegbd_device *xsegbd_dev)
 	wait_for_completion_interruptible(&comp);
 	XSEGLOG("Woken up after wait_for_completion_interruptible(), comp: %lx [%llu]", (unsigned long) pending->comp, (unsigned long long) blkreq_idx);
 	ret = update_dev_sectors_from_request(xsegbd_dev, xreq);
-	//XSEGLOG("get_size: sectors = %ld\n", (long)xsegbd_dev->sectors);
+	XSEGLOG("get_size: sectors = %ld\n", (long)xsegbd_dev->sectors);
 out_put:
 	BUG_ON(xseg_put_request(xsegbd_dev->xseg, xreq, xsegbd_dev->src_portno) == -1);
 out:
