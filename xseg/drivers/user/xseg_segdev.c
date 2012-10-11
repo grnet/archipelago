@@ -194,7 +194,6 @@ static int segdev_signal(struct xseg *xseg, uint32_t portno)
 		return -1;
 
 	if (!ssd->waitcue){
-		XSEGLOG("portno %u has waitcue == 0", portno);
 		return 0;
 	}
 	else

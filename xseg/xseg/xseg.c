@@ -829,21 +829,7 @@ void xseg_leave(struct xseg *xseg)
 struct xseg_port* xseg_get_port(struct xseg *xseg, uint32_t portno)
 {
 	xptr p;
-	if (!xseg) {
-		XSEGLOG("xseg == NULL");
-		return NULL;
-	}
-	if (!xseg->segment) {
-		XSEGLOG("xseg->segment == NULL");
-		return NULL;
-	}
 	if (!__validate_port(xseg, portno))
-		return NULL;
-	if (pointer_ok((unsigned long)(xseg->ports), (unsigned long)xseg->segment,
-				xseg->segment_size, "ports"))
-		return NULL;
-	if (pointer_ok((unsigned long)(xseg->ports + portno), (unsigned long)xseg->segment,
-				xseg->segment_size, "ports[portno]"))
 		return NULL;
 	p = xseg->ports[portno];
 	if (p)

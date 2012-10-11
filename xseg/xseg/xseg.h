@@ -37,6 +37,9 @@ typedef uint32_t xport;
 #define MAX_PATH_LEN 32
 #endif
 
+#define XSEG_NAMESIZE 256
+#define XSEG_TNAMESIZE 32
+
 /* Peers and Segments
  *
  *  Segments are memory segments shared among peers.
@@ -82,9 +85,6 @@ struct xseg_operations {
 	void *(*map)(const char *name, uint64_t size, struct xseg *seg);
 	void  (*unmap)(void *xseg, uint64_t size);
 };
-
-#define XSEG_NAMESIZE 256
-#define XSEG_TNAMESIZE 32
 
 struct xseg_type {
 	struct xseg_operations ops;
@@ -188,8 +188,7 @@ struct xseg_task {
 struct xseg_request {
 	xserial serial;
 	uint64_t offset;
-	uint64_t size; /* FIXME: why are there both size and datalen fields? */
-		/* FIXME: why does filed use ->datalen instead of ->size? */
+	uint64_t size; 
 	uint64_t serviced;
 	xptr data;
 	uint64_t datalen;
