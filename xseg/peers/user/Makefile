@@ -37,7 +37,7 @@ mt-vlmcd: mt-vlmcd.c mpeer.c mpeer.h $(BASE)/xseg/protocol.h
 	$(CC) $(CFLAGS) -o $@ $< mpeer.c $(INC) -L$(LIB) -lxseg -lpthread
 
 st-vlmcd: mt-vlmcd.c speer.c speer.h $(BASE)/xseg/protocol.h 
-	$(CC) $(CFLAGS) -o $@ $< speer.c $(INC) -L$(LIB) -lxseg -lpthread
+	$(CC) $(CFLAGS) -o $@ $< speer.c $(INC) -L$(LIB) -lxseg
 
 mt-mapperd: mt-mapperd.c mpeer.c mpeer.h $(BASE)/xseg/protocol.h 
 	$(CC) $(CFLAGS) -o $@ $< mpeer.c $(INC) -L$(LIB) -lxseg -lpthread -lgcrypt

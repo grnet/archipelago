@@ -11,7 +11,6 @@ struct peer_req {
 
 struct peerd {
 	struct xseg *xseg;
-	struct xseg_port *port;
 	xport portno_start;
 	xport portno_end;
 	long nr_ops;

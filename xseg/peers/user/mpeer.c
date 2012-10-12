@@ -391,6 +391,7 @@ static struct peerd* peerd_init(uint32_t nr_ops, char* spec, long portno_start,
 {
 	int i;
 	struct peerd *peer;
+	struct xseg_port *port;
 	peer = malloc(sizeof(struct peerd));
 	if (!peer) {
 		perror("malloc");
@@ -425,8 +426,8 @@ malloc_fail:
 
 	peer->portno_start = (xport) portno_start;
 	peer->portno_end= (xport) portno_end;
-	peer->port = xseg_bind_port(peer->xseg, peer->portno_start, NULL);
-	if (!peer->port){
+	port = xseg_bind_port(peer->xseg, peer->portno_start, NULL);
+	if (!port){
 		printf("cannot bind to port %ld\n", peer->portno_start);
 		return NULL;
 	}
@@ -434,7 +435,7 @@ malloc_fail:
 	xport p;
 	for (p = peer->portno_start + 1; p <= peer->portno_end; p++) {
 		struct xseg_port *tmp;
-		tmp = xseg_bind_port(peer->xseg, p, (void *)xseg_get_signal_desc(peer->xseg, peer->port));
+		tmp = xseg_bind_port(peer->xseg, p, (void *)xseg_get_signal_desc(peer->xseg, port));
 		if (!tmp){
 			printf("cannot bind to port %ld\n", p);
 			return NULL;
@@ -449,6 +450,7 @@ malloc_fail:
 		peer->peer_reqs[i].req = NULL;
 		peer->peer_reqs[i].retval = 0;
 		peer->peer_reqs[i].priv = NULL;
+		peer->peer_reqs[i].portno = NoPort;
 	}
 	peer->interactive_func = NULL;
 	return peer;
