@@ -136,6 +136,7 @@ int handle_info(struct peerd *peer, struct peer_req *pr)
 	return 0;
 }
 
+//FIXME req->state no longer apply
 int handle_read(struct peerd *peer, struct peer_req *pr)
 {
 	struct xseg_request *req = pr->req;
@@ -247,6 +248,46 @@ int handle_write(struct peerd *peer, struct peer_req *pr)
 
 int handle_copy(struct peerd *peer, struct peer_req *pr)
 {
+	struct radosd *rados = (struct radosd *) peer->priv;
+	struct xseg_request *req = pr->req;
+	struct rados_io *rio = (struct rados_io *) pr->priv;
+	int r, sum;
+	char *buf, src_name[MAX_OBJ_NAME];
+	struct xseg_request_copy *xcopy = xseg_get_data(peer->xseg, req);
+	unsigned int end = (xcopy->targetlen > MAX_OBJ_NAME -1 )? MAX_OBJ_NAME - 1 : xcopy->targetlen;
+
+	strncpy(src_name, xcopy->target, end);
+	src_name[end] = 0;
+
+	req->serviced = 0;
+	buf = malloc(req->size);
+	if (!buf) {
+		fail(peer, pr);
+		return -1;
+	}
+	sum = 0;
+	do {
+		r = rados_read(rados->ioctx, rio->obj_name, buf, req->size, 0);
+		if (r < 0) 
+			goto out_fail;
+		else if (r == 0) {
+			memset(buf+r, 0, req->size - r);
+			sum = req->size;
+		} else 
+			sum += r;
+	} while (sum < req->size);
+
+	r = rados_write_full(rados->ioctx, rio->obj_name, buf, req->size);
+	if (r < 0)
+		goto out_fail;
+	
+	req->serviced = block_size;
+	return 0;
+
+out_fail:
+	free(buf);
+	pr->retval = -1;
+	fail(peer, pr);
 	return 0;
 }
 
