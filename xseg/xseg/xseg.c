@@ -1255,6 +1255,7 @@ static void __update_timestamp(struct xseg_request *xreq)
 	xreq->timestamp.tv_usec = tv.tv_usec;
 }
 
+//FIXME cur should match portno ??
 xport xseg_submit (struct xseg *xseg, struct xseg_request *xreq, 
 			xport portno, uint32_t flags)
 {
@@ -1269,6 +1270,7 @@ xport xseg_submit (struct xseg *xseg, struct xseg_request *xreq,
 		XSEGLOG("couldn't validate src_transit_portno");
 		return NoPort;
 	}
+	//FIXME if path changes, this does not work
 	next = xseg->src_gw[xreq->src_transit_portno];
 	if (next != xreq->src_portno) {
 		cur = xreq->src_transit_portno;

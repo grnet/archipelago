@@ -10,15 +10,6 @@
 #include <sys/time.h>
 #include <signal.h>
 
-#define REARRANGE(__fun_name__, __format__, ...) __format__ "%s", __fun_name__, ##__VA_ARGS__
-#define LOG(level, ...)                                              \
-	        do {                                                               \
-			if (level <=  verbose) {                           \
-				fprintf(stderr, "%s: "  REARRANGE( __func__ , ## __VA_ARGS__, "" )); \
-			}                                                          \
-		}while (0)
-
-
 unsigned int verbose = 0;
 struct log_ctx lc;
 
