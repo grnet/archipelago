@@ -239,6 +239,11 @@ int handle_write(struct peerd *peer, struct peer_req *pr)
 	return 0;
 }
 
+int handle_copy(struct peerd *peer, struct peer_req *pr)
+{
+	return 0;
+}
+
 
 int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 {
@@ -328,6 +333,12 @@ int dispatch(struct peerd *peer, struct peer_req *pr, struct xseg_request *req)
 			defer_request(peer, pr);
 		else
 			handle_info(peer, pr);
+		break;
+	case X_COPY:
+		if (canDefer(peer))
+			defer_request(peer, pr);
+		else
+			handle_copy(peer, pr);
 		break;
 	default:
 		fail(peer, pr);
