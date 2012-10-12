@@ -4,6 +4,7 @@
 #include <xseg/xseg.h>
 #include <mpeer.h>
 #include <rados/librados.h>
+#include <xseg/protocol.h>
 
 #define MAX_POOL_NAME 64
 #define MAX_OBJ_NAME 256
@@ -112,6 +113,7 @@ int handle_info(struct peerd *peer, struct peer_req *pr)
 	struct radosd *rados = (struct radosd *) peer->priv;
 	struct rados_io *rio = (struct rados_io *) pr->priv;
 	char *req_data = xseg_get_data(peer->xseg, req);
+	struct xseg_reply_info *xinfo = req_data;
 
 	log_pr("info start", pr);
 	
@@ -121,7 +123,7 @@ int handle_info(struct peerd *peer, struct peer_req *pr)
 		fail(peer, pr);
 	}
 	else {
-		*((uint64_t *) req_data) = size;
+		xinfo->size = size;
 		pr->retval = sizeof(uint64_t);
 		complete(peer,pr);
 	}
