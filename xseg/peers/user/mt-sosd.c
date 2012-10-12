@@ -9,6 +9,11 @@
 #define MAX_POOL_NAME 64
 #define MAX_OBJ_NAME 256
 
+enum rados_state {
+	ACCEPTED = 0,
+	PENDING = 1
+};
+
 struct radosd {
 	rados_t cluster;
 	rados_ioctx_t ioctx;
@@ -17,6 +22,7 @@ struct radosd {
 
 struct rados_io{
 	char obj_name[MAX_OBJ_NAME];
+	enum rados_state state;
 };
 
 void rados_ack_cb(rados_completion_t c, void *arg)
@@ -318,30 +324,30 @@ int dispatch(struct peerd *peer, struct peer_req *pr, struct xseg_request *req)
 	rio->obj_name[end] = 0;
 	//log_pr("dispatch", pr);
 	switch (pr->req->op){
-	case X_READ:
-		handle_read(peer, pr); break;
-	case X_WRITE: 
-		handle_write(peer, pr); break;
-	case X_DELETE:
-		if (canDefer(peer))
-			defer_request(peer, pr);
-		else
-			handle_delete(peer, pr);
-		break;
-	case X_INFO:
-		if (canDefer(peer))
-			defer_request(peer, pr);
-		else
-			handle_info(peer, pr);
-		break;
-	case X_COPY:
-		if (canDefer(peer))
-			defer_request(peer, pr);
-		else
-			handle_copy(peer, pr);
-		break;
-	default:
-		fail(peer, pr);
+		case X_READ:
+			handle_read(peer, pr); break;
+		case X_WRITE: 
+			handle_write(peer, pr); break;
+		case X_DELETE:
+			if (canDefer(peer))
+				defer_request(peer, pr);
+			else
+				handle_delete(peer, pr);
+			break;
+		case X_INFO:
+			if (canDefer(peer))
+				defer_request(peer, pr);
+			else
+				handle_info(peer, pr);
+			break;
+		case X_COPY:
+			if (canDefer(peer))
+				defer_request(peer, pr);
+			else
+				handle_copy(peer, pr);
+			break;
+		default:
+			fail(peer, pr);
 	}
 	return 0;
 }
