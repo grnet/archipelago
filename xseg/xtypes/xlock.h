@@ -82,12 +82,15 @@ static inline unsigned long xlock_try_lock(struct xlock *lock, unsigned long who
 static inline void xlock_release(struct xlock *lock)
 {
 	BARRIER();
+	/*
 #ifdef XLOCK_SANITY_CHECKS
 	if (lock->owner > MAX_VALID_OWNER){
 		XSEGLOG("xlock %lx releasing lock with INVALID lock owner %lu",
 				(unsigned long) lock, lock->owner);
 	}
-#endif /* XLOCK_SANITY_CHECKS */
+#endif 
+	*/
+	/* XLOCK_SANITY_CHECKS */
 	lock->owner = Noone;
 }
 

@@ -26,7 +26,8 @@
 #define XSEGBD_MINORS 1
 /* define max request size to be used in xsegbd */
 //FIXME should we make this 4MB instead of 256KB ?
-#define XSEGBD_MAX_REQUEST_SIZE 262144U
+//#define XSEGBD_MAX_REQUEST_SIZE 262144U
+#define XSEGBD_MAX_REQUEST_SIZE 4194304U
 
 MODULE_DESCRIPTION("xsegbd");
 MODULE_AUTHOR("XSEG");
@@ -229,6 +230,7 @@ static int xsegbd_dev_init(struct xsegbd_device *xsegbd_dev)
 
 	max_request_size_bytes = XSEGBD_MAX_REQUEST_SIZE;
 	blk_queue_max_hw_sectors(xsegbd_dev->blk_queue, max_request_size_bytes >> 9);
+//	blk_queue_max_sectors(xsegbd_dev->blk_queue, max_request_size_bytes >> 10);
 	blk_queue_max_segment_size(xsegbd_dev->blk_queue, max_request_size_bytes);
 	blk_queue_io_min(xsegbd_dev->blk_queue, max_request_size_bytes);
 	blk_queue_io_opt(xsegbd_dev->blk_queue, max_request_size_bytes);
@@ -843,6 +845,8 @@ out:
 }
 
 //FIXME
+//maybe try callback, first and then do a more invasive cleanup
+//DO NOT forget to put device!!
 static ssize_t xsegbd_cleanup(struct device *dev,
 					struct device_attribute *attr,
 					const char *buf,
