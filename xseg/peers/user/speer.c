@@ -268,6 +268,7 @@ static int peerd_loop(struct peerd *peer)
 		xseg_cancel_wait(xseg, peer->portno_start);
 		XSEGLOG2(&lc, I, "Peer woke up\n");
 	}
+	xseg_quit_local_signal(xseg, peer->portno_start);
 	return 0;
 }
 

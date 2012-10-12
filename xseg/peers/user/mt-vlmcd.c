@@ -3,7 +3,7 @@
 #include <unistd.h>
 #include <xseg/xseg.h>
 #include <xseg/protocol.h>
-#include <mpeer.h>
+#include <speer.h>
 #include <sched.h>
 #include <sys/syscall.h>
 
