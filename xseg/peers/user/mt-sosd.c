@@ -139,21 +139,22 @@ int handle_info(struct peerd *peer, struct peer_req *pr)
 //FIXME req->state no longer apply
 int handle_read(struct peerd *peer, struct peer_req *pr)
 {
+	struct rados_io *rio = (struct rados_io *) (pr->priv);
 	struct xseg_request *req = pr->req;
 	char *data;
-	if (req->state == XS_ACCEPTED) {
+	if (rio->state == ACCEPTED) {
 		if (!req->size) {
 			complete(peer, pr);
 			return 0;
 		}
 		//should we ensure req->op = X_READ ?
-		pending(peer, pr);
+		rio->state = PENDING;
 		log_pr("read", pr);
 		if (do_aio_read(peer, pr) < 0) {
 			fail(peer, pr);
 		}
 	}
-	else if (req->state == XS_PENDING) {
+	else if (rio->state == PENDING) {
 		data = xseg_get_data(peer->xseg, pr->req);
 		if (pr->retval > 0) 
 			req->serviced += pr->retval;
@@ -203,8 +204,9 @@ int handle_read(struct peerd *peer, struct peer_req *pr)
 
 int handle_write(struct peerd *peer, struct peer_req *pr)
 {
+	struct rados_io *rio = (struct rados_io *) (pr->priv);
 	struct xseg_request *req = pr->req;
-	if (req->state == XS_ACCEPTED) {
+	if (rio->state == ACCEPTED) {
 		if (!req->size) {
 			// for future use
 			if (req->flags & XF_FLUSH) {
@@ -217,13 +219,13 @@ int handle_write(struct peerd *peer, struct peer_req *pr)
 			}
 		}
 		//should we ensure req->op = X_READ ?
-		pending(peer, pr);
+		rio->state = PENDING;
 		//log_pr("write", pr);
 		if (do_aio_write(peer, pr) < 0) {
 			fail(peer, pr);
 		}
 	}
-	else if (req->state == XS_PENDING) {
+	else if (rio->state == PENDING) {
 		/* rados writes return 0 if write succeeded or < 0 if failed
 		 * no resubmission occurs
 		 */
