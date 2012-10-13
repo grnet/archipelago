@@ -20,6 +20,12 @@ struct peerd {
 	void *priv;
 };
 
+enum dispatch_reason {
+	accept = 0,
+	receive = 1,
+	internal = 2
+};
+
 void fail(struct peerd *peer, struct peer_req *pr);
 void complete(struct peerd *peer, struct peer_req *pr);
 void defer_request(struct peerd *peer, struct peer_req *pr);
@@ -47,6 +53,7 @@ int custom_peer_init(struct peerd *peer, int argc, char *argv[]);
 /* dispatch function that cannot block
  * defers blocking calls to helper threads
  */
-int dispatch(struct peerd *peer, struct peer_req *pr, struct xseg_request *xseg);
+int dispatch(struct peerd *peer, struct peer_req *pr, struct xseg_request *xseg,
+		enum dispatch_reason reason);
 
 void usage();

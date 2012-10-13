@@ -284,7 +284,8 @@ static int handle_serving(struct peerd *peer, struct peer_req *pr,
 	return 0;
 }
 
-int dispatch(struct peerd *peer, struct peer_req *pr, struct xseg_request *req)
+int dispatch(struct peerd *peer, struct peer_req *pr, struct xseg_request *req,
+		enum dispatch_reason reason)
 {
 	struct vlmc_io *vio = __get_vlmcio(pr);
 	struct vlmcd *vlmc = __get_vlmcd(peer);

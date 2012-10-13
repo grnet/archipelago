@@ -32,7 +32,7 @@ void rados_ack_cb(rados_completion_t c, void *arg)
 	int ret = rados_aio_get_return_value(c);
 	pr->retval = ret;
 	rados_aio_release(c);
-	dispatch(peer, pr, pr->req);
+	dispatch(peer, pr, pr->req, internal);
 }
 
 void rados_commit_cb(rados_completion_t c, void *arg)
@@ -42,7 +42,7 @@ void rados_commit_cb(rados_completion_t c, void *arg)
 	int ret = rados_aio_get_return_value(c);
 	pr->retval = ret;
 	rados_aio_release(c);
-	dispatch(peer, pr, pr->req);
+	dispatch(peer, pr, pr->req, internal);
 }
 
 int do_aio_read(struct peerd *peer, struct peer_req *pr)
@@ -356,7 +356,8 @@ int custom_arg_parse(int argc, const char *argv[])
 	return 0;
 }
 
-int dispatch(struct peerd *peer, struct peer_req *pr, struct xseg_request *req)
+int dispatch(struct peerd *peer, struct peer_req *pr, struct xseg_request *req,
+		enum dispatch_reason reason)
 {
 	struct rados_io *rio = (struct rados_io *) (pr->priv);
 	char *target = xseg_get_target(peer->xseg, pr->req);
@@ -364,6 +365,9 @@ int dispatch(struct peerd *peer, struct peer_req *pr, struct xseg_request *req)
 	strncpy(rio->obj_name, target, end);
 	rio->obj_name[end] = 0;
 	//log_pr("dispatch", pr);
+	if (reason == accept)
+		rio->state = ACCEPTED;
+
 	switch (pr->req->op){
 		case X_READ:
 			handle_read(peer, pr); break;
