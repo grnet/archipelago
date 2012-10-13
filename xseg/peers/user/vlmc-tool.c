@@ -125,6 +125,7 @@ int vlmc_create(char *name, uint64_t size, char *snap)
 		xseg_put_request(xseg, req, srcport);
 		return -1;
 	}
+	//FIXME what to do if no snap ? how do i send mapper to create a non copy up volume?
 	char *target = xseg_get_target(xseg, req);
 	strncpy(target, name, targetlen);
 	struct xseg_request_clone *xclone = (struct xseg_request_clone *) xseg_get_data(xseg, req);

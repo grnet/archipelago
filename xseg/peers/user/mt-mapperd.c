@@ -135,6 +135,8 @@ static uint32_t calc_nr_obj(struct xseg_request *req)
 /*
  * Maps handling functions
  */
+//FIXME assert targetlen > 0
+
 
 static struct map * find_map(struct mapperd *mapper, char *target, uint32_t targetlen)
 {
@@ -901,6 +903,7 @@ static int handle_clone(struct peerd *peer, struct peer_req *pr,
 	if (!xclone) {
 		goto out_err;
 	}
+//	if (xclone->targetlen) {
 	struct map *map;
 	r = find_or_load_map(peer, pr, xclone->target, xclone->targetlen, &map);
 	if (r < 0){
@@ -916,10 +919,11 @@ static int handle_clone(struct peerd *peer, struct peer_req *pr,
 		target = xseg_get_target(peer->xseg, pr->req);
 		strncpy(buf, target, req->targetlen);
 		buf[req->targetlen] = 0;
-		XSEGLOG2(&lc, W, "Cannont clone %s because base map destroyed", buf);
+		XSEGLOG2(&lc, W, "Cannot clone %s because base map destroyed", buf);
 		fail(peer, pr);
 		return 0;
 	}
+//	}
 
 	struct map *clonemap = malloc(sizeof(struct map));
 	if (!clonemap) {
