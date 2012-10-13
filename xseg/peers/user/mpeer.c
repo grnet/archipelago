@@ -463,7 +463,7 @@ int main(int argc, char *argv[])
 	//parse args
 	char *spec = "";
 	int i, r;
-	long portno_start = -1, portno_end = -1;
+	long portno_start = -1, portno_end = -1, portno = -1;
 	//set defaults here
 	uint32_t nr_ops = 16;
 	uint32_t nr_threads = 16 ;
@@ -491,6 +491,12 @@ int main(int argc, char *argv[])
 		
 		if (!strcmp(argv[i], "-ep") && i + 1 < argc) {
 			portno_end = strtoul(argv[i+1], NULL, 10);
+			i += 1;
+			continue;
+		}
+
+		if (!strcmp(argv[i], "-p") && i + 1 < argc) {
+			portno = strtoul(argv[i+1], NULL, 10);
 			i += 1;
 			continue;
 		}
@@ -527,6 +533,10 @@ int main(int argc, char *argv[])
 	
 	//TODO perform argument sanity checks
 	verbose = debug_level;
+	if (portno != -1) {
+		portno_start = portno;
+		portno_end = portno;
+	}
 
 	//TODO err check
 	peer = peerd_init(nr_ops, spec, portno_start, portno_end, nr_threads, defer_portno);

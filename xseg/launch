@@ -116,6 +116,16 @@ function spawn_pfiledm {
 	${NR_OPS} "${PITHOSMAPS}" "${MAPS}" -v 1  &> "${XSEG_LOGS}/pfiledm-${HOSTNAME}" &
 }
 
+function spawn_sosd {
+	"${XSEG_HOME}/peers/user/mt-sosd" -p "$BPORT" -g "${SPEC}" -n \
+	${NR_OPS} --pool "blocks" -v 1 &> "${XSEG_LOGS}/sosd-${HOSTNAME}" &
+}
+
+function spawn_sosdm {
+	"${XSEG_HOME}/peers/user/mt-sosd" -p "$MBPORT" -g "${SPEC}" -n \
+	${NR_OPS} --pool "maps" -v 1  &> "${XSEG_LOGS}/sosdm-${HOSTNAME}" &
+}
+
 function spawn_vlmcd {
 	pgrep -f "peers/user/st-vlmcd" || \
 	"${XSEG_HOME}/peers/user/st-vlmcd" -t 1 -sp "$VPORT_START" \
@@ -314,6 +324,30 @@ mapperd)
 		;;
 	stop)
 		pkill -f peers/user/mt-mapperd || true
+		;;
+	*)
+		help
+		;;
+	esac
+	;;
+doublesosd)
+	case $2 in
+	start)
+		load_all
+		sleep 0.5
+		spawn_sosd
+		spawn_sosdm
+		spawn_mapperdc
+		spawn_vlmcd
+		;;
+	stop)
+		pkill -f peers/user/st-vlmcd || true
+#		free_requests "$VPORT:0" 128 || true
+		pkill -f peers/user/mt-mapperd || true
+#		free_requests "$MPORT:0" 128 || true
+		pkill -f peers/user/mt-sosd || true
+		sleep 0.5
+		unload_all
 		;;
 	*)
 		help
