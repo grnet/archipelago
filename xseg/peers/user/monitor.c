@@ -47,7 +47,8 @@ static int complete_forwarded(struct peerd *peer, struct peer_req *pr)
 	return 0;
 }
 
-int dispatch(struct peerd *peer, struct peer_req *pr, struct xseg_request *xreq)
+int dispatch(struct peerd *peer, struct peer_req *pr, struct xseg_request *xreq,
+		enum dispatch_reason reason)
 {
 	struct xseg_request *req = pr->req;
 	if (req->state & (XS_SERVED | XS_FAILED)){

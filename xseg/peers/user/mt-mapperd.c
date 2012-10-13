@@ -91,7 +91,6 @@ struct mapper_io {
 	enum mapper_state state;
 };
 
-static int my_dispatch(struct peerd *peer, struct peer_req *pr, struct xseg_request *req);
 void print_map(struct map *m);
 
 /*
@@ -316,7 +315,7 @@ map_exists:
 	}
 	else {
 		XSEGLOG2(&lc, I, "Map %s already exists and loaded. Dispatching.", m->volume);
-	 	my_dispatch(peer, pr, pr->req);
+	 	dispatch(peer, pr, pr->req, internal);
 	}
 	return 0;
 }
@@ -785,7 +784,7 @@ static int handle_mapread(struct peerd *peer, struct peer_req *pr,
 	while(qsize > 0 && (idx = __xq_pop_head(&map->pending)) != Noneidx){
 		qsize--;
 		struct peer_req *preq = (struct peer_req *) idx;
-		my_dispatch(peer, preq, preq->req);
+		dispatch(peer, preq, preq->req, internal);
 	}
 	return 0;
 
@@ -837,7 +836,7 @@ static int handle_mapwrite(struct peerd *peer, struct peer_req *pr,
 	while(qsize > 0 && (idx = __xq_pop_head(&map->pending)) != Noneidx){
 		qsize--;
 		struct peer_req *preq = (struct peer_req *) idx;
-		my_dispatch(peer, preq, preq->req);
+		dispatch(peer, preq, preq->req, internal);
 	}
 	return 0;
 
@@ -1308,7 +1307,7 @@ static int handle_objectwrite(struct peerd *peer, struct peer_req *pr,
 	while(qsize > 0 && (idx = __xq_pop_head(&mn->pending)) != Noneidx){
 		qsize--;
 		struct peer_req * preq = (struct peer_req *) idx;
-		my_dispatch(peer, preq, preq->req);
+		dispatch(peer, preq, preq->req, internal);
 	}
 	return 0;
 
@@ -1580,7 +1579,7 @@ static int handle_object_delete(struct peerd *peer, struct peer_req *pr,
 		while(qsize > 0 && (idx = __xq_pop_head(&map->pending)) != Noneidx){
 			qsize--;
 			struct peer_req * preq = (struct peer_req *) idx;
-			my_dispatch(peer, preq, preq->req);
+			dispatch(peer, preq, preq->req, internal);
 		}
 		//free map resources;
 		remove_map(mapper, map);
@@ -1647,7 +1646,7 @@ static int handle_map_delete(struct peerd *peer, struct peer_req *pr,
 		//dispatch all pending
 		while ((idx = __xq_pop_head(&map->pending)) != Noneidx){
 			struct peer_req * preq = (struct peer_req *) idx;
-			my_dispatch(peer, preq, preq->req);
+			dispatch(peer, preq, preq->req, internal);
 		}
 	} else {
 		map->flags |= MF_MAP_DESTROYED;
@@ -1667,7 +1666,7 @@ static int handle_map_delete(struct peerd *peer, struct peer_req *pr,
 			while(qsize > 0 && (idx = __xq_pop_head(&map->pending)) != Noneidx){
 				qsize--;
 				struct peer_req * preq = (struct peer_req *) idx;
-				my_dispatch(peer, preq, preq->req);
+				dispatch(peer, preq, preq->req, internal);
 			}
 			//free map resources;
 			remove_map(mapper, map);
@@ -1848,7 +1847,7 @@ static int handle_dropcache(struct peerd *peer, struct peer_req *pr,
 	while(qsize > 0 && (i = __xq_pop_head(&map->pending)) != Noneidx){
 		qsize--;
 		struct peer_req * preq = (struct peer_req *) i;
-		my_dispatch(peer, preq, preq->req);
+		dispatch(peer, preq, preq->req, internal);
 	}
 	XSEGLOG2(&lc, I, "Map %s droped cache", map->volume);
 	
@@ -1864,13 +1863,17 @@ static int handle_dropcache(struct peerd *peer, struct peer_req *pr,
 	return 0;
 }
 
-static int my_dispatch(struct peerd *peer, struct peer_req *pr, struct xseg_request *req)
+int dispatch(struct peerd *peer, struct peer_req *pr, struct xseg_request *req,
+		enum dispatch_reason reason)
 {
 	struct mapperd *mapper = __get_mapperd(peer);
 	(void) mapper;
 	struct mapper_io *mio = __get_mapper_io(pr);
 	(void) mio;
 
+	if (reason == accept)
+		mio->state = ACCEPTED;
+	
 	if (req->op == X_READ) {
 		/* catch map reads requests here */
 		handle_mapread(peer, pr, req);
@@ -1888,19 +1891,6 @@ static int my_dispatch(struct peerd *peer, struct peer_req *pr, struct xseg_requ
 		case X_CLOSE: handle_dropcache(peer, pr, req); break;
 		default: fprintf(stderr, "mydispatch: unknown up\n"); break;
 	}
-	return 0;
-}
-
-int dispatch(struct peerd *peer, struct peer_req *pr, struct xseg_request *req)
-{
-	struct mapperd *mapper = __get_mapperd(peer);
-	(void) mapper;
-	struct mapper_io *mio = __get_mapper_io(pr);
-	(void) mio;
-
-	if (pr->req == req)
-		mio->state = ACCEPTED;
-	my_dispatch(peer, pr ,req);
 	return 0;
 }
 

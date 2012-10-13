@@ -4,9 +4,15 @@
 #include <xseg/xseg.h>
 #include <mpeer.h>
 #include <rados/librados.h>
+#include <xseg/protocol.h>
 
 #define MAX_POOL_NAME 64
 #define MAX_OBJ_NAME 256
+
+enum rados_state {
+	ACCEPTED = 0,
+	PENDING = 1
+};
 
 struct radosd {
 	rados_t cluster;
@@ -16,6 +22,7 @@ struct radosd {
 
 struct rados_io{
 	char obj_name[MAX_OBJ_NAME];
+	enum rados_state state;
 };
 
 void rados_ack_cb(rados_completion_t c, void *arg)
@@ -25,7 +32,7 @@ void rados_ack_cb(rados_completion_t c, void *arg)
 	int ret = rados_aio_get_return_value(c);
 	pr->retval = ret;
 	rados_aio_release(c);
-	dispatch(peer, pr, pr->req);
+	dispatch(peer, pr, pr->req, internal);
 }
 
 void rados_commit_cb(rados_completion_t c, void *arg)
@@ -35,7 +42,7 @@ void rados_commit_cb(rados_completion_t c, void *arg)
 	int ret = rados_aio_get_return_value(c);
 	pr->retval = ret;
 	rados_aio_release(c);
-	dispatch(peer, pr, pr->req);
+	dispatch(peer, pr, pr->req, internal);
 }
 
 int do_aio_read(struct peerd *peer, struct peer_req *pr)
@@ -112,6 +119,7 @@ int handle_info(struct peerd *peer, struct peer_req *pr)
 	struct radosd *rados = (struct radosd *) peer->priv;
 	struct rados_io *rio = (struct rados_io *) pr->priv;
 	char *req_data = xseg_get_data(peer->xseg, req);
+	struct xseg_reply_info *xinfo = req_data;
 
 	log_pr("info start", pr);
 	
@@ -121,30 +129,32 @@ int handle_info(struct peerd *peer, struct peer_req *pr)
 		fail(peer, pr);
 	}
 	else {
-		*((uint64_t *) req_data) = size;
+		xinfo->size = size;
 		pr->retval = sizeof(uint64_t);
 		complete(peer,pr);
 	}
 	return 0;
 }
 
+//FIXME req->state no longer apply
 int handle_read(struct peerd *peer, struct peer_req *pr)
 {
+	struct rados_io *rio = (struct rados_io *) (pr->priv);
 	struct xseg_request *req = pr->req;
 	char *data;
-	if (req->state == XS_ACCEPTED) {
+	if (rio->state == ACCEPTED) {
 		if (!req->size) {
 			complete(peer, pr);
 			return 0;
 		}
 		//should we ensure req->op = X_READ ?
-		pending(peer, pr);
+		rio->state = PENDING;
 		log_pr("read", pr);
 		if (do_aio_read(peer, pr) < 0) {
 			fail(peer, pr);
 		}
 	}
-	else if (req->state == XS_PENDING) {
+	else if (rio->state == PENDING) {
 		data = xseg_get_data(peer->xseg, pr->req);
 		if (pr->retval > 0) 
 			req->serviced += pr->retval;
@@ -194,8 +204,9 @@ int handle_read(struct peerd *peer, struct peer_req *pr)
 
 int handle_write(struct peerd *peer, struct peer_req *pr)
 {
+	struct rados_io *rio = (struct rados_io *) (pr->priv);
 	struct xseg_request *req = pr->req;
-	if (req->state == XS_ACCEPTED) {
+	if (rio->state == ACCEPTED) {
 		if (!req->size) {
 			// for future use
 			if (req->flags & XF_FLUSH) {
@@ -208,13 +219,13 @@ int handle_write(struct peerd *peer, struct peer_req *pr)
 			}
 		}
 		//should we ensure req->op = X_READ ?
-		pending(peer, pr);
+		rio->state = PENDING;
 		//log_pr("write", pr);
 		if (do_aio_write(peer, pr) < 0) {
 			fail(peer, pr);
 		}
 	}
-	else if (req->state == XS_PENDING) {
+	else if (rio->state == PENDING) {
 		/* rados writes return 0 if write succeeded or < 0 if failed
 		 * no resubmission occurs
 		 */
@@ -234,6 +245,51 @@ int handle_write(struct peerd *peer, struct peer_req *pr)
 		printf("write request reached this\n");
 		fail(peer, pr);
 	}
+	return 0;
+}
+
+int handle_copy(struct peerd *peer, struct peer_req *pr)
+{
+	struct radosd *rados = (struct radosd *) peer->priv;
+	struct xseg_request *req = pr->req;
+	struct rados_io *rio = (struct rados_io *) pr->priv;
+	int r, sum;
+	char *buf, src_name[MAX_OBJ_NAME];
+	struct xseg_request_copy *xcopy = xseg_get_data(peer->xseg, req);
+	unsigned int end = (xcopy->targetlen > MAX_OBJ_NAME -1 )? MAX_OBJ_NAME - 1 : xcopy->targetlen;
+
+	strncpy(src_name, xcopy->target, end);
+	src_name[end] = 0;
+
+	req->serviced = 0;
+	buf = malloc(req->size);
+	if (!buf) {
+		fail(peer, pr);
+		return -1;
+	}
+	sum = 0;
+	do {
+		r = rados_read(rados->ioctx, rio->obj_name, buf, req->size, 0);
+		if (r < 0) 
+			goto out_fail;
+		else if (r == 0) {
+			memset(buf+r, 0, req->size - r);
+			sum = req->size;
+		} else 
+			sum += r;
+	} while (sum < req->size);
+
+	r = rados_write_full(rados->ioctx, rio->obj_name, buf, req->size);
+	if (r < 0)
+		goto out_fail;
+	
+	req->serviced = block_size;
+	return 0;
+
+out_fail:
+	free(buf);
+	pr->retval = -1;
+	fail(peer, pr);
 	return 0;
 }
 
@@ -302,7 +358,8 @@ int custom_arg_parse(int argc, const char *argv[])
 	return 0;
 }
 
-int dispatch(struct peerd *peer, struct peer_req *pr, struct xseg_request *req)
+int dispatch(struct peerd *peer, struct peer_req *pr, struct xseg_request *req,
+		enum dispatch_reason reason)
 {
 	struct rados_io *rio = (struct rados_io *) (pr->priv);
 	char *target = xseg_get_target(peer->xseg, pr->req);
@@ -310,25 +367,34 @@ int dispatch(struct peerd *peer, struct peer_req *pr, struct xseg_request *req)
 	strncpy(rio->obj_name, target, end);
 	rio->obj_name[end] = 0;
 	//log_pr("dispatch", pr);
+	if (reason == accept)
+		rio->state = ACCEPTED;
+
 	switch (pr->req->op){
-	case X_READ:
-		handle_read(peer, pr); break;
-	case X_WRITE: 
-		handle_write(peer, pr); break;
-	case X_DELETE:
-		if (canDefer(peer))
-			defer_request(peer, pr);
-		else
-			handle_delete(peer, pr);
-		break;
-	case X_INFO:
-		if (canDefer(peer))
-			defer_request(peer, pr);
-		else
-			handle_info(peer, pr);
-		break;
-	default:
-		fail(peer, pr);
+		case X_READ:
+			handle_read(peer, pr); break;
+		case X_WRITE: 
+			handle_write(peer, pr); break;
+		case X_DELETE:
+			if (canDefer(peer))
+				defer_request(peer, pr);
+			else
+				handle_delete(peer, pr);
+			break;
+		case X_INFO:
+			if (canDefer(peer))
+				defer_request(peer, pr);
+			else
+				handle_info(peer, pr);
+			break;
+		case X_COPY:
+			if (canDefer(peer))
+				defer_request(peer, pr);
+			else
+				handle_copy(peer, pr);
+			break;
+		default:
+			fail(peer, pr);
 	}
 	return 0;
 }
