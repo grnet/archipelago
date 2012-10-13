@@ -198,7 +198,7 @@ static void handle_accepted(struct peerd *peer, struct peer_req *pr,
 	xreq->serviced = 0;
 	//xreq->state = XS_ACCEPTED;
 	pr->retval = 0;
-	dispatch(peer, pr, req, accept);
+	dispatch(peer, pr, req, dispatch_accept);
 }
 
 static void handle_received(struct peerd *peer, struct peer_req *pr,
@@ -207,7 +207,7 @@ static void handle_received(struct peerd *peer, struct peer_req *pr,
 	//struct xseg_request *req = pr->req;
 	//assert req->state != XS_ACCEPTED;
 	XSEGLOG2(&lc, D, "Handle received \n");
-	dispatch(peer, pr, req, receive);
+	dispatch(peer, pr, req, dispatch_receive);
 
 }
 struct timeval sub_start, sub_end, sub_accum = {0, 0};

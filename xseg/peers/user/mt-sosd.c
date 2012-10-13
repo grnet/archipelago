@@ -32,7 +32,7 @@ void rados_ack_cb(rados_completion_t c, void *arg)
 	int ret = rados_aio_get_return_value(c);
 	pr->retval = ret;
 	rados_aio_release(c);
-	dispatch(peer, pr, pr->req, internal);
+	dispatch(peer, pr, pr->req, dispatch_internal);
 }
 
 void rados_commit_cb(rados_completion_t c, void *arg)
@@ -42,7 +42,7 @@ void rados_commit_cb(rados_completion_t c, void *arg)
 	int ret = rados_aio_get_return_value(c);
 	pr->retval = ret;
 	rados_aio_release(c);
-	dispatch(peer, pr, pr->req, internal);
+	dispatch(peer, pr, pr->req, dispatch_internal);
 }
 
 int do_aio_read(struct peerd *peer, struct peer_req *pr)
@@ -283,7 +283,7 @@ int handle_copy(struct peerd *peer, struct peer_req *pr)
 	if (r < 0)
 		goto out_fail;
 	
-	req->serviced = block_size;
+	req->serviced = req->size;
 	return 0;
 
 out_fail:
@@ -367,7 +367,7 @@ int dispatch(struct peerd *peer, struct peer_req *pr, struct xseg_request *req,
 	strncpy(rio->obj_name, target, end);
 	rio->obj_name[end] = 0;
 	//log_pr("dispatch", pr);
-	if (reason == accept)
+	if (reason == dispatch_accept)
 		rio->state = ACCEPTED;
 
 	switch (pr->req->op){

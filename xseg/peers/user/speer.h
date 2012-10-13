@@ -21,9 +21,9 @@ struct peerd {
 };
 
 enum dispatch_reason {
-	accept = 0,
-	receive = 1,
-	internal = 2
+	dispatch_accept = 0,
+	dispatch_receive = 1,
+	dispatch_internal = 2
 };
 
 void fail(struct peerd *peer, struct peer_req *pr);
