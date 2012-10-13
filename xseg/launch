@@ -118,12 +118,12 @@ function spawn_pfiledm {
 
 function spawn_sosd {
 	"${XSEG_HOME}/peers/user/mt-sosd" -p "$BPORT" -g "${SPEC}" -n \
-	${NR_OPS} --pool "blocks" -v 1 &> "${XSEG_LOGS}/sosd-${HOSTNAME}" &
+	${NR_OPS} --pool "blocks" -v 3 &> "${XSEG_LOGS}/sosd-${HOSTNAME}" &
 }
 
 function spawn_sosdm {
 	"${XSEG_HOME}/peers/user/mt-sosd" -p "$MBPORT" -g "${SPEC}" -n \
-	${NR_OPS} --pool "maps" -v 1  &> "${XSEG_LOGS}/sosdm-${HOSTNAME}" &
+	${NR_OPS} --pool "maps" -v 3  &> "${XSEG_LOGS}/sosdm-${HOSTNAME}" &
 }
 
 function spawn_vlmcd {

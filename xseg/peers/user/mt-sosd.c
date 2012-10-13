@@ -9,6 +9,8 @@
 #define MAX_POOL_NAME 64
 #define MAX_OBJ_NAME 256
 
+extern struct log_ctx lc;
+
 enum rados_state {
 	ACCEPTED = 0,
 	PENDING = 1
@@ -170,7 +172,7 @@ int handle_read(struct peerd *peer, struct peer_req *pr)
 			/* reached end of object. zero out rest of data
 			 * requested from this object
 			 */
-			memset(data, 0, req->datalen - req->serviced);
+			memset(data + req->serviced, 0, req->datalen - req->serviced);
 			req->serviced = req->datalen ;
 		}
 		else if (pr->retval == -2) {
@@ -281,28 +283,37 @@ int handle_copy(struct peerd *peer, struct peer_req *pr)
 		fail(peer, pr);
 		return -1;
 	}
+	XSEGLOG2(&lc, I, "Copy of object %s to object %s started", src_name, rio->obj_name);
 	sum = 0;
 	do {
-		r = rados_read(rados->ioctx, rio->obj_name, buf, req->size, 0);
-		if (r < 0) 
+		r = rados_read(rados->ioctx, src_name, buf, req->size, 0);
+		if (r < 0){
+			XSEGLOG2(&lc, E, "Read of object %s failed", src_name);
 			goto out_fail;
+		}
 		else if (r == 0) {
 			memset(buf+r, 0, req->size - r);
 			sum = req->size;
 		} else 
 			sum += r;
 	} while (sum < req->size);
+	XSEGLOG2(&lc, D, "Read of object %s Completed", src_name);
 
 	r = rados_write_full(rados->ioctx, rio->obj_name, buf, req->size);
-	if (r < 0)
+	if (r < 0){
+		XSEGLOG2(&lc, E, "Read of object %s failed", rio->obj_name);
 		goto out_fail;
+	}
 	
 	req->serviced = req->size;
+	XSEGLOG2(&lc, I, "Copy of object %s to object %s completed", src_name, rio->obj_name);
+	complete(peer, pr);
 	return 0;
 
 out_fail:
 	free(buf);
 	pr->retval = -1;
+	XSEGLOG2(&lc, E, "Copy of object %s to object %s failed", src_name, rio->obj_name);
 	fail(peer, pr);
 	return 0;
 }
