@@ -305,6 +305,7 @@ int handle_copy(struct peerd *peer, struct peer_req *pr)
 		goto out_fail;
 	}
 	
+	free(buf);
 	req->serviced = req->size;
 	XSEGLOG2(&lc, I, "Copy of object %s to object %s completed", src_name, rio->obj_name);
 	complete(peer, pr);
