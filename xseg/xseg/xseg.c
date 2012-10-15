@@ -1143,6 +1143,7 @@ done:
 	req->elapsed = 0;
 	req->timestamp.tv_sec = 0;
 	req->timestamp.tv_usec = 0;
+	req->flags = 0;
 
 	xq_init_empty(&req->path, MAX_PATH_LEN, req->path_bufs); 
 
