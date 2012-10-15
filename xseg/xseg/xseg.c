@@ -1627,6 +1627,7 @@ struct xseg_port *xseg_bind_port(struct xseg *xseg, uint32_t req, void * sd)
 	}
 	if (port) {
 		xseg_free_port(xseg, port);
+		xseg->ports[portno] = 0;
 		port = NULL;
 	}
 out:
