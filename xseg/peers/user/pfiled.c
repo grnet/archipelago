@@ -488,6 +488,7 @@ static void handle_copy(struct pfiled *pfiled, struct io *io)
 	char *data = xseg_get_data(pfiled->xseg, req);
 	struct xseg_request_copy *xcopy = (struct xseg_request_copy *)data;
 	struct stat st;
+	//FIXME is 256 enough?
 	char *buf = malloc(256);
 	int n, src, dst;
 
@@ -563,6 +564,74 @@ static void handle_delete(struct pfiled *pfiled, struct io *io)
 	return;
 }
 
+static void handle_open(struct pfiled *pfiled, struct io *io)
+{
+	struct xseg_request *req = io->req;
+	char *buf = malloc(MAX_FILENAME_SIZE + strlen("_lock"));
+	char *pathname = malloc(MAX_PATH_SIZE + MAX_FILENAME_SIZE + strlen("_lock"));
+	int fd;
+	char *target = xseg_get_target(pfiled->xseg, req);
+
+	if (!buf || !pathname) {
+		fail(pfiled, io);
+		return;
+	}
+
+	strncpy(buf, target, req->targetlen);
+	strncpy(buf+req->targetlen, "_lock", strlen("_lock"));
+
+	if (create_path(pathname, pfiled->vpath, buf, req->targetlen + strlen("_lock"), 1) < 0) {
+		goto out_fail;
+	}
+
+	fd = open(pathname, O_CREAT | O_EXCL, S_IRWXU | S_IRUSR);
+	if (fd < 0)
+		goto out_fail;
+	
+	close(fd);
+	free(buf);
+	free(pathname);
+	complete(pfiled, io);
+	return;
+
+out_fail:
+	free(buf);
+	free(pathname);
+	fail(pfiled, io);
+	return;
+}
+
+static void handle_close(struct pfiled *pfiled, struct io *io)
+{
+	struct xseg_request *req = io->req;
+	char *buf = malloc(MAX_FILENAME_SIZE + strlen("_lock"));
+	char *pathname = malloc(MAX_PATH_SIZE + MAX_FILENAME_SIZE + strlen("_lock"));
+	char *target = xseg_get_target(pfiled->xseg, req);
+
+	if (!buf || !pathname) {
+		fail(pfiled, io);
+		return;
+	}
+
+	strncpy(buf, target, req->targetlen);
+	strncpy(buf+req->targetlen, "_lock", strlen("_lock"));
+
+	if (create_path(pathname, pfiled->vpath, buf, req->targetlen + strlen("_lock"), 1) < 0) {
+		goto out_fail;
+	}
+	unlink(pathname);
+	free(buf);
+	free(pathname);
+	complete(pfiled, io);
+	return;
+
+out_fail:
+	free(buf);
+	free(pathname);
+	fail(pfiled, io);
+	return;
+}
+
 static void dispatch(struct pfiled *pfiled, struct io *io)
 {
 	if (cmdline_verbose) { 
@@ -580,6 +649,10 @@ static void dispatch(struct pfiled *pfiled, struct io *io)
 		handle_copy(pfiled, io); break;
 	case X_DELETE:
 		handle_delete(pfiled, io); break;
+	case X_OPEN:
+		handle_open(pfiled, io); break;
+	case X_CLOSE:
+		handle_close(pfiled, io); break;
 //	case X_SNAPSHOT:
 	case X_SYNC:
 	default:
