@@ -319,6 +319,20 @@ out_fail:
 	return 0;
 }
 
+int handle_open(struct peerd *peer, struct peer_req *pr)
+{
+	/* FIXME to be implemented */
+	complete(peer, pr);
+	return 0;
+}
+
+
+int handle_close(struct peerd *peer, struct peer_req *pr)
+{
+	/* FIXME to be implemented */
+	complete(peer, pr);
+	return 0;
+}
 
 int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 {
@@ -431,6 +445,11 @@ int dispatch(struct peerd *peer, struct peer_req *pr, struct xseg_request *req,
 			else
 				handle_copy(peer, pr);
 			break;
+		case X_OPEN:
+			handle_open(peer, pr); break;
+		case X_CLOSE:
+			handle_close(peer, pr); break;
+
 		default:
 			fail(peer, pr);
 	}
