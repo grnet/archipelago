@@ -354,6 +354,19 @@ doublesosd)
 		;;
 	esac
 	;;
+mtmapperd)
+	case $2 in
+	start)
+		spawn_mapperdc
+		;;
+	stop)
+		pkill -f peers/user/mt-mapperd || true
+		;;
+	*)
+		help
+		;;
+	esac
+	;;
 *)
 	help
 	;;

@@ -8,10 +8,11 @@
 #include <sys/syscall.h>
 #include <sys/time.h>
 #include <signal.h>
-
+#include <st.h>
 
 unsigned int verbose;
 struct log_ctx lc;
+uint32_t ta = 0;
 
 inline int canDefer(struct peerd *peer)
 {
@@ -250,7 +251,7 @@ static int peerd_loop(struct peerd *peer)
 	struct xseg *xseg = peer->xseg;
 	xport portno_start = peer->portno_start;
 	xport portno_end = peer->portno_end;
-	uint64_t threshold=1000/(portno_end - portno_start);
+	uint64_t threshold=1000/(1 + portno_end - portno_start);
 	pid_t pid =syscall(SYS_gettid);
 	uint64_t loops;
 	
@@ -263,10 +264,14 @@ static int peerd_loop(struct peerd *peer)
 			if (check_ports(peer))
 				loops = threshold;
 		}
-		XSEGLOG2(&lc, I, "Peer goes to sleep\n");
-		xseg_wait_signal(xseg, 10000000UL);
-		xseg_cancel_wait(xseg, peer->portno_start);
-		XSEGLOG2(&lc, I, "Peer woke up\n");
+		if (ta){
+			st_sleep(0);
+		} else {
+			XSEGLOG2(&lc, I, "Peer goes to sleep\n");
+			xseg_wait_signal(xseg, 10000000UL);
+			xseg_cancel_wait(xseg, peer->portno_start);
+			XSEGLOG2(&lc, I, "Peer woke up\n");
+		}
 	}
 	xseg_quit_local_signal(xseg, peer->portno_start);
 	return 0;
@@ -300,6 +305,9 @@ static struct peerd* peerd_init(uint32_t nr_ops, char* spec, long portno_start,
 	int i;
 	struct peerd *peer;
 	struct xseg_port *port;
+
+	st_init();
+
 	peer = malloc(sizeof(struct peerd));
 	if (!peer) {
 		perror("malloc");
@@ -353,6 +361,7 @@ malloc_fail:
 		peer->peer_reqs[i].retval = 0;
 		peer->peer_reqs[i].priv = NULL;
 		peer->peer_reqs[i].portno = NoPort;
+		peer->peer_reqs[i].cond = st_cond_new(); //FIXME err check
 	}
 	return peer;
 }
@@ -439,5 +448,7 @@ int main(int argc, char *argv[])
 	r = custom_peer_init(peer, argc, argv);
 	if (r < 0)
 		return -1;
-	return peerd_loop(peer);
+	st_thread_t st = st_thread_create(peerd_loop, peer, 1, 0);
+	return st_thread_join(st, NULL);
+//	return peerd_loop(peer);
 }

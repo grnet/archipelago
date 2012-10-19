@@ -211,7 +211,7 @@ static int create_path(char *buf, char *path, char *target, uint32_t targetlen, 
 		if (mkdirs == 1) {
 			buf[pathlen + i + 3] = '\0';
 			if (stat(buf, &st) < 0) 
-				if (mkdir(buf, 0600) < 0) {
+				if (mkdir(buf, 0700) < 0) {
 					perror(buf);
 					return errno;
 				}

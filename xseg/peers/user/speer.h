@@ -1,11 +1,13 @@
 #include <stddef.h>
 #include <xseg/xseg.h>
-/* main mpeer structs */
+#include <st.h>
+/* main speer structs */
 struct peer_req {
 	struct peerd *peer;
 	struct xseg_request *req;
 	ssize_t retval;
 	xport portno;
+	st_cond_t cond;
 	void *priv;
 };
 
@@ -18,6 +20,7 @@ struct peerd {
 	struct peer_req *peer_reqs;
 	struct xq free_reqs;
 	void *priv;
+	uint32_t ta;
 };
 
 enum dispatch_reason {
