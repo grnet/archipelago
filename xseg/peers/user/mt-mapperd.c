@@ -1641,11 +1641,15 @@ struct map * get_map(struct peer_req *pr, char *name, uint32_t namelen, uint32_t
 	struct peerd *peer = pr->peer;
 	struct mapperd *mapper = __get_mapperd(peer);
 	struct map *map = find_map(mapper, name, namelen);
-	if (!map && flags & MF_LOAD){
-		map = create_map(mapper, name, namelen);
-		r = open_load_map(pr, map, flags);
-		if (r < 0){
-			do_dropcache(pr, map);
+	if (!map){
+		if (flags & MF_LOAD){
+			map = create_map(mapper, name, namelen);
+			r = open_load_map(pr, map, flags);
+			if (r < 0){
+				do_dropcache(pr, map);
+				return NULL;
+			}
+		} else {
 			return NULL;
 		}
 	} else if (map->flags & MF_MAP_DESTROYED){

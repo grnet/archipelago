@@ -276,10 +276,10 @@ static void xsegbd_dev_release(struct device *dev)
 //	xseg_cancel_wait(xsegbd_dev->xseg, xsegbd_dev->src_portno);
 	xseg_quit_local_signal(xsegbd_dev->xseg, xsegbd_dev->src_portno);
 
-	if (xsegbd_dev->gd)
-		put_disk(xsegbd_dev->gd);
 	if (xsegbd_dev->blk_queue)
 		blk_cleanup_queue(xsegbd_dev->blk_queue);
+	if (xsegbd_dev->gd)
+		put_disk(xsegbd_dev->gd);
 
 //	if (xseg_free_requests(xsegbd_dev->xseg, 
 //			xsegbd_dev->src_portno, xsegbd_dev->nr_requests) < 0)

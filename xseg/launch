@@ -135,6 +135,8 @@ function spawn_vlmcd {
 }
 
 function spawn_mapperdc {
+	echo "\"${XSEG_HOME}/peers/user/mt-mapperd\" -t 1 -sp \"$MPORT\" -ep
+	\"$MPORT\" -bp \"$BPORT\" -mbp \"$MBPORT\" -g \"${SPEC}\" -n ${NR_OPS} -v 3" 
 	pgrep -f "mt-mapperd" || \
 	"${XSEG_HOME}/peers/user/mt-mapperd" -t 1 -sp "$MPORT" -ep "$MPORT"\
 	-bp "$BPORT" -mbp "$MBPORT" -g "${SPEC}"\
