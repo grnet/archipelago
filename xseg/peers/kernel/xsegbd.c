@@ -53,25 +53,12 @@ static DEFINE_MUTEX(xsegbd_mutex);
 static DEFINE_SPINLOCK(xsegbd_devices_lock);
 
 
-void __xsegbd_get(struct xsegbd_device *xsegbd_dev)
-{
-	atomic_inc(&xsegbd_dev->usercount);
-}
-
-void __xsegbd_put(struct xsegbd_device *xsegbd_dev)
-{
-	if (atomic_dec_and_test(&xsegbd_dev->usercount))
-		wake_up(&xsegbd_dev->wq);
-}
-
 struct xsegbd_device *__xsegbd_get_dev(unsigned long id)
 {
 	struct xsegbd_device *xsegbd_dev = NULL;
 
 	spin_lock(&xsegbd_devices_lock);
 	xsegbd_dev = xsegbd_devices[id];
-	if (xsegbd_dev)
-		__xsegbd_get(xsegbd_dev);
 	spin_unlock(&xsegbd_devices_lock);
 
 	return xsegbd_dev;
@@ -211,13 +198,10 @@ static int xsegbd_dev_init(struct xsegbd_device *xsegbd_dev)
 
 	xsegbd_dev->xsegbd = &xsegbd;
 
-	xsegbd_dev->blk_queue = blk_alloc_queue(GFP_KERNEL);
+	/* allocates and initializes queue */
+	xsegbd_dev->blk_queue = blk_init_queue(xseg_request_fn, &xsegbd_dev->rqlock);
 	if (!xsegbd_dev->blk_queue)
 		goto out;
-
-	if (!blk_init_allocated_queue(xsegbd_dev->blk_queue, 
-			xseg_request_fn, &xsegbd_dev->rqlock))
-		goto outqueue;
 
 	xsegbd_dev->blk_queue->queuedata = xsegbd_dev;
 
@@ -240,7 +224,7 @@ static int xsegbd_dev_init(struct xsegbd_device *xsegbd_dev)
 	/* vkoukis says we don't need partitions */
 	xsegbd_dev->gd = disk = alloc_disk(1);
 	if (!disk)
-		goto outqueue;
+		goto out;
 
 	disk->major = xsegbd_dev->major;
 	disk->first_minor = 0; // id * XSEGBD_MINORS;
@@ -258,29 +242,20 @@ static int xsegbd_dev_init(struct xsegbd_device *xsegbd_dev)
 	else {
 		ret = xsegbd_get_size(xsegbd_dev);
 		if (ret)
-			goto outdisk;
+			goto out;
 	}
 
 	set_capacity(disk, xsegbd_dev->sectors);
 	XSEGLOG("xsegbd active...");
 	add_disk(disk); /* immediately activates the device */
 
-	return 0;
-
-
-outdisk:
-	put_disk(xsegbd_dev->gd);
-outqueue:
-	blk_cleanup_queue(xsegbd_dev->blk_queue);
 out:
-	xsegbd_dev->blk_queue = NULL;
-	xsegbd_dev->gd = NULL;
+	/* on error, everything is cleaned up in xsegbd_dev_release */
 	return ret;
 }
 
 static void xsegbd_dev_release(struct device *dev)
 {
-	int ret;
 	struct xsegbd_device *xsegbd_dev = dev_to_xsegbd(dev);
 
 
@@ -288,8 +263,7 @@ static void xsegbd_dev_release(struct device *dev)
 	if (xsegbd_dev->gd) {
 		if (xsegbd_dev->gd->flags & GENHD_FL_UP)
 			del_gendisk(xsegbd_dev->gd);
-
-		put_disk(xsegbd_dev->gd);
+		
 		xsegbd_mapclose(xsegbd_dev);
 	}
 	
@@ -297,30 +271,33 @@ static void xsegbd_dev_release(struct device *dev)
 	BUG_ON(xsegbd_devices[xsegbd_dev->src_portno] != xsegbd_dev);
 	xsegbd_devices[xsegbd_dev->src_portno] = NULL;
 	spin_unlock(&xsegbd_devices_lock);
-	
+
+	XSEGLOG("releasing id: %d", xsegbd_dev->id);
 //	xseg_cancel_wait(xsegbd_dev->xseg, xsegbd_dev->src_portno);
 	xseg_quit_local_signal(xsegbd_dev->xseg, xsegbd_dev->src_portno);
-	/* wait for all pending operations on device to end */
-	wait_event(xsegbd_dev->wq, atomic_read(&xsegbd_dev->usercount) <= 0);
-	XSEGLOG("releasing id: %d", xsegbd_dev->id);
+
+	if (xsegbd_dev->gd)
+		put_disk(xsegbd_dev->gd);
 	if (xsegbd_dev->blk_queue)
 		blk_cleanup_queue(xsegbd_dev->blk_queue);
-
 
 //	if (xseg_free_requests(xsegbd_dev->xseg, 
 //			xsegbd_dev->src_portno, xsegbd_dev->nr_requests) < 0)
 //		XSEGLOG("Error trying to free requests!\n");
 
+	if (xsegbd_dev->xseg){
+		xseg_leave(xsegbd_dev->xseg);
+		xsegbd_dev->xseg = NULL;
+	}
 
-	//FIXME xseg_leave to free_up resources ?
 	unregister_blkdev(xsegbd_dev->major, XSEGBD_NAME);
 
-	if (xsegbd_dev->blk_req_pending)
+	if (xsegbd_dev->blk_req_pending){
 		kfree(xsegbd_dev->blk_req_pending);
+		xsegbd_dev->blk_req_pending = NULL;
+	}
 	xq_free(&xsegbd_dev->blk_queue_pending);
-
 	kfree(xsegbd_dev);
-
 	module_put(THIS_MODULE);
 }
 
@@ -371,8 +348,6 @@ static void xseg_request_fn(struct request_queue *rq)
 	int r;
 	unsigned long flags;
 
-	__xsegbd_get(xsegbd_dev);
-
 	spin_unlock_irq(&xsegbd_dev->rqlock);
 	for (;;) {
 		if (current_thread_info()->preempt_count || irqs_disabled()){
@@ -409,7 +384,7 @@ static void xseg_request_fn(struct request_queue *rq)
 		}
 
 		if (blkreq->cmd_type != REQ_TYPE_FS) {
-			//we lose xreq here
+			//FIXME we lose xreq here
 			XSEGLOG("non-fs cmd_type: %u. *shrug*", blkreq->cmd_type);
 			__blk_end_request_all(blkreq, 0);
 			spin_unlock_irqrestore(&xsegbd_dev->rqlock, flags);
@@ -465,7 +440,6 @@ static void xseg_request_fn(struct request_queue *rq)
 			xreq->flags |= XF_FUA;
 
 		if (rq_data_dir(blkreq)) {
-			/* unlock for data transfers? */
 			blk_to_xseg(xsegbd_dev->xseg, xreq, blkreq);
 			xreq->op = X_WRITE;
 		} else {
@@ -475,15 +449,12 @@ static void xseg_request_fn(struct request_queue *rq)
 
 //		XSEGLOG("%s : %lu (%lu)", xsegbd_dev->target, xreq->offset, xreq->datalen);
 		r = -EIO;
-		/* xsegbd_get here. will be put on receive */
-		__xsegbd_get(xsegbd_dev);
 		p = xseg_submit(xsegbd_dev->xseg, xreq, 
 					xsegbd_dev->src_portno, X_ALLOC);
 		if (p == NoPort) {
 			XSEGLOG("coundn't submit req");
 			WARN_ON(1);
 			blk_end_request_err(blkreq, r);
-			__xsegbd_put(xsegbd_dev);
 			break;
 		}
 		WARN_ON(xseg_signal(xsegbd_dev->xsegbd->xseg, p) < 0);
@@ -495,7 +466,6 @@ static void xseg_request_fn(struct request_queue *rq)
 		BUG_ON(xq_append_head(&xsegbd_dev->blk_queue_pending, 
 				blkreq_idx, xsegbd_dev->src_portno) == Noneidx);
 	spin_lock_irq(&xsegbd_dev->rqlock);
-	__xsegbd_put(xsegbd_dev);
 }
 
 int update_dev_sectors_from_request(	struct xsegbd_device *xsegbd_dev,
@@ -530,15 +500,11 @@ static int xsegbd_get_size(struct xsegbd_device *xsegbd_dev)
 {
 	struct xseg_request *xreq;
 	char *target;
-	uint64_t datalen;
 	xqindex blkreq_idx;
 	struct xsegbd_pending *pending;
 	struct completion comp;
 	xport p;
-	void *data;
-	int ret = -EBUSY, r;
-
-	__xsegbd_get(xsegbd_dev);
+	int ret = -EBUSY;
 
 	xreq = xseg_get_request(xsegbd_dev->xseg, xsegbd_dev->src_portno,
 			xsegbd_dev->dst_portno, X_ALLOC);
@@ -584,7 +550,6 @@ static int xsegbd_get_size(struct xsegbd_device *xsegbd_dev)
 out_put:
 	BUG_ON(xseg_put_request(xsegbd_dev->xseg, xreq, xsegbd_dev->src_portno) == -1);
 out:
-	__xsegbd_put(xsegbd_dev);
 	return ret;
 
 out_queue:
@@ -599,15 +564,12 @@ static int xsegbd_mapclose(struct xsegbd_device *xsegbd_dev)
 {
 	struct xseg_request *xreq;
 	char *target;
-	uint64_t datalen;
 	xqindex blkreq_idx;
 	struct xsegbd_pending *pending;
 	struct completion comp;
 	xport p;
-	void *data;
-	int ret = -EBUSY, r;
+	int ret = -EBUSY;
 
-	__xsegbd_get(xsegbd_dev);
 	xreq = xseg_get_request(xsegbd_dev->xseg, xsegbd_dev->src_portno,
 			xsegbd_dev->dst_portno, X_ALLOC);
 	if (!xreq)
@@ -650,7 +612,6 @@ static int xsegbd_mapclose(struct xsegbd_device *xsegbd_dev)
 out_put:
 	BUG_ON(xseg_put_request(xsegbd_dev->xseg, xreq, xsegbd_dev->src_portno) == -1);
 out:
-	__xsegbd_put(xsegbd_dev);
 	return ret;
 
 out_queue:
@@ -670,7 +631,6 @@ static void xseg_callback(xport portno)
 	unsigned long flags;
 	xqindex blkreq_idx, ridx;
 	int err;
-	void *data;
 
 	xsegbd_dev  = __xsegbd_get_dev(portno);
 	if (!xsegbd_dev) {
@@ -701,7 +661,6 @@ static void xseg_callback(xport portno)
 			complete(pending->comp);
 			/* the request is blocker's responsibility so
 			   we will not put_request(); */
-
 			continue;
 		}
 
@@ -748,13 +707,11 @@ blk_end:
 			XSEGLOG("couldn't put req");
 			BUG_ON(1);
 		}
-		__xsegbd_put(xsegbd_dev);
 	}
 	if (xsegbd_dev) {
 		spin_lock_irqsave(&xsegbd_dev->rqlock, flags);
 		xseg_request_fn(xsegbd_dev->blk_queue);
 		spin_unlock_irqrestore(&xsegbd_dev->rqlock, flags);
-		__xsegbd_put(xsegbd_dev);
 	}
 }
 
@@ -846,7 +803,6 @@ out:
 
 //FIXME
 //maybe try callback, first and then do a more invasive cleanup
-//DO NOT forget to put device!!
 static ssize_t xsegbd_cleanup(struct device *dev,
 					struct device_attribute *attr,
 					const char *buf,
@@ -976,8 +932,6 @@ static ssize_t xsegbd_add(struct bus_type *bus, const char *buf, size_t count)
 
 	spin_lock_init(&xsegbd_dev->rqlock);
 	INIT_LIST_HEAD(&xsegbd_dev->node);
-	init_waitqueue_head(&xsegbd_dev->wq);
-	atomic_set(&xsegbd_dev->usercount, 0);
 
 	/* parse cmd */
 	if (sscanf(buf, "%" __stringify(XSEGBD_TARGET_NAMELEN) "s "
@@ -1020,7 +974,7 @@ static ssize_t xsegbd_add(struct bus_type *bus, const char *buf, size_t count)
 			xsegbd_dev->nr_requests *sizeof(struct xsegbd_pending),
 				   GFP_KERNEL);
 	if (!xsegbd_dev->blk_req_pending)
-		goto out_freeq;
+		goto out_bus;
 
 	
 	XSEGLOG("joining segment");
@@ -1030,8 +984,7 @@ static ssize_t xsegbd_add(struct bus_type *bus, const char *buf, size_t count)
 					"segdev",
 					xseg_callback		);
 	if (!xsegbd_dev->xseg)
-		goto out_freepending;
-	__sync_synchronize();
+		goto out_bus;
 	
 	XSEGLOG("%s binding to source port %u (destination %u)", xsegbd_dev->target,
 			xsegbd_dev->src_portno, xsegbd_dev->dst_portno);
@@ -1040,14 +993,14 @@ static ssize_t xsegbd_add(struct bus_type *bus, const char *buf, size_t count)
 		XSEGLOG("cannot bind to port");
 		ret = -EFAULT;
 
-		goto out_xseg;
+		goto out_bus;
 	}
 	
 	if (xsegbd_dev->src_portno != xseg_portno(xsegbd_dev->xseg, port)) {
 		XSEGLOG("portno != xsegbd_dev->src_portno");
 		BUG_ON(1);
 		ret = -EFAULT;
-		goto out_xseg;
+		goto out_bus;
 	}
 	xseg_init_local_signal(xsegbd_dev->xseg, xsegbd_dev->src_portno);
 
@@ -1057,21 +1010,10 @@ static ssize_t xsegbd_add(struct bus_type *bus, const char *buf, size_t count)
 
 	ret = xsegbd_dev_init(xsegbd_dev);
 	if (ret)
-		goto out_signal;
+		goto out_bus;
 
 	xseg_prepare_wait(xsegbd_dev->xseg, xseg_portno(xsegbd_dev->xseg, port));
 	return count;
-
-out_signal:
-	xseg_quit_local_signal(xsegbd_dev->xseg, xsegbd_dev->src_portno);
-out_xseg:
-	xseg_leave(xsegbd_dev->xseg);
-	
-out_freepending:
-	kfree(xsegbd_dev->blk_req_pending);
-
-out_freeq:
-	xq_free(&xsegbd_dev->blk_queue_pending);
 
 out_bus:
 	xsegbd_bus_del_dev(xsegbd_dev);
@@ -1116,7 +1058,6 @@ static ssize_t xsegbd_remove(struct bus_type *bus, const char *buf, size_t count
 		ret = -ENOENT;
 		goto out_unlock;
 	}
-	__xsegbd_put(xsegbd_dev);
 	xsegbd_bus_del_dev(xsegbd_dev);
 
 out_unlock:

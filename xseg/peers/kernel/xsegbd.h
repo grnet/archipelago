@@ -44,8 +44,6 @@ struct xsegbd_device {
 	struct list_head node;
 	char target[XSEGBD_TARGET_NAMELEN + 1];
 	uint32_t targetlen;
-	atomic_t usercount;
-	wait_queue_head_t wq;
 };
 
 void __xsegbd_get(struct xsegbd_device *xsegbd_dev);
