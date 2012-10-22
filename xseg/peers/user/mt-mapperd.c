@@ -1062,7 +1062,6 @@ static inline void put_map(struct map *map)
 	map->ref--;
 	if (!map->ref){
 		//clean up map
-		remove_map(mapper, map);
 		uint64_t i;
 		for (i = 0; i < calc_map_obj(map); i++) {
 			mn = get_mapnode(map, i);
@@ -1372,6 +1371,8 @@ out:
 static int do_dropcache(struct peer_req *pr, struct map *map)
 {
 	struct map_node *mn;
+	struct peerd *peer = pr->peer;
+	struct mapperd *mapper = __get_mapperd(peer);
 	uint64_t i;
 	map->flags |= MF_MAP_DROPPING_CACHE;
 	for (i = 0; i < calc_map_obj(map); i++) {
@@ -1389,6 +1390,7 @@ static int do_dropcache(struct peer_req *pr, struct map *map)
 	}
 	map->flags &= ~MF_MAP_DROPPING_CACHE;
 	map->flags |= MF_MAP_DESTROYED;
+	remove_map(mapper, map);
 	put_map(map);	// put map here to destroy it (matches m->ref = 1 on map create)
 	return 0;
 }
@@ -1435,7 +1437,7 @@ static int do_destroy(struct peer_req *pr, struct map *map)
 	uint64_t deleted = 0;
 	while (deleted < nr_obj){ 
 		deleted = 0;
-		for (i = 0; i < nr_obj; i++)
+		for (i = 0; i < nr_obj; i++){
 			mn = get_mapnode(map, i);
 			if (mn) {
 				if (!(mn->flags & MF_OBJECT_DESTROYED)){
@@ -1616,11 +1618,12 @@ out_err:
 static int open_load_map(struct peer_req *pr, struct map *map, uint32_t flags)
 {
 	int r, opened = 0;
+retry_open:
 	if (flags & MF_EXCLUSIVE){
 		r = open_map(pr, map);
 		if (r < 0) {
 			if (flags & MF_FORCE)
-				return -1; // fail or retry?
+				goto retry_open;
 		} else {
 			opened = 1;
 		}

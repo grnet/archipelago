@@ -33,7 +33,7 @@ function parse_config {
 	[ -z "${MAPS}" ] && MAPS="/home/user/archip/xseg/peers/user/foo"
 	[ -z "${PITHOS}" ] && PITHOS="/srv/pithos/data/blocks"
 	[ -z "${PITHOSMAPS}" ] && PITHOSMAPS="/srv/pithos/data/maps"
-	[ -z "${XSEG_LOGS}" ] && XSEG_LOGS="/home/philipgian/archip/logs"
+	[ -z "${XSEG_LOGS}" ] && XSEG_LOGS="/srv/archip/logs"
 	[ -z "${DEVICE_PREFIX}" ] && DEVICE_PREFIX="/dev/xsegbd"
 	[ -z "${XSEGBD_SYSFS}" ] && XSEGBD_SYSFS="/sys/bus/xsegbd"
 	[ -z "${CHRDEV_NAME}" ] && CHRDEV_NAME="/dev/`cat /proc/devices | grep segdev | awk '{print $2}'`"
