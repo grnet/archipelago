@@ -7,8 +7,10 @@ struct peer_req {
 	struct xseg_request *req;
 	ssize_t retval;
 	xport portno;
-	st_cond_t cond;
 	void *priv;
+#ifdef ST_THREADS
+	st_cond_t cond;
+#endif
 };
 
 struct peerd {
@@ -20,7 +22,6 @@ struct peerd {
 	struct peer_req *peer_reqs;
 	struct xq free_reqs;
 	void *priv;
-	uint32_t ta;
 };
 
 enum dispatch_reason {

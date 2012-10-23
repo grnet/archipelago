@@ -1,12 +1,20 @@
 #include <stddef.h>
 #include <xseg/xseg.h>
-/* main mpeer structs */
+
+#ifdef ST_THREADS
+#include <st.h>
+#endif
+
+/* main peer structs */
 struct peer_req {
 	struct peerd *peer;
 	struct xseg_request *req;
 	ssize_t retval;
 	xport portno;
 	void *priv;
+#ifdef ST_THREADS
+	st_cond_t cond;
+#endif
 };
 
 struct peerd {
@@ -18,10 +26,12 @@ struct peerd {
 	struct peer_req *peer_reqs;
 	struct xq free_reqs;
 	void *priv;
+#ifdef MT
 	uint32_t nr_threads;
 	struct thread *thread;
 	struct xq threads;
 	void (*interactive_func)(void);
+#endif
 };
 
 enum dispatch_reason {
@@ -39,9 +49,12 @@ int canDefer(struct peerd *peer);
 int submit_peer_req(struct peerd *peer, struct peer_req *pr);
 struct peer_req *alloc_peer_req(struct peerd *peer);
 void free_peer_req(struct peerd *peer, struct peer_req *pr);
-int thread_execute(struct peerd *peer, void (*func)(void *arg), void *arg);
 void get_submits_stats();
 void get_responds_stats();
+
+#ifdef MT
+int thread_execute(struct peerd *peer, void (*func)(void *arg), void *arg);
+#endif
 
 static inline struct peerd * __get_peerd(void * custom_peerd)
 {
@@ -55,9 +68,7 @@ static inline struct peerd * __get_peerd(void * custom_peerd)
 /* peer main function */
 int custom_peer_init(struct peerd *peer, int argc, char *argv[]);
 
-/* dispatch function that cannot block
- * defers blocking calls to helper threads
- */
+/* dispatch function */
 int dispatch(struct peerd *peer, struct peer_req *pr, struct xseg_request *xseg,
 		enum dispatch_reason reason);
 

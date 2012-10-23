@@ -24,23 +24,23 @@ sosd: sosd.c $(BASE)/xseg/xseg.h $(BASE)/util_libs/user/sos/sos.h
 xseg: xseg-tool.c $(BASE)/xseg/xseg.h
 	$(CC) $(CFLAGS) -o $@ $< $(INC) -L$(LIB) -lxseg
 
-mt-sosd: mt-sosd.c mpeer.c mpeer.h
-	$(CC) $(CFLAGS) -o $@ $< mpeer.c $(INC) -L$(LIB) -lxseg -lrados -lpthread
+mt-sosd: mt-sosd.c peer.c peer.h
+	$(CC) $(CFLAGS) -o $@ $< peer.c $(INC) -L$(LIB) -lxseg -lrados -lpthread -DMT
 
-dummy: dummy.c mpeer.c mpeer.h
-	$(CC) $(CFLAGS) -o $@ $< mpeer.c $(INC) -L$(LIB) -lxseg -lpthread
+dummy: dummy.c peer.c peer.h
+	$(CC) $(CFLAGS) -o $@ $< peer.c $(INC) -L$(LIB) -lxseg -lpthread -DMT
 
-monitor: monitor.c mpeer.c mpeer.h
-	$(CC) $(CFLAGS) -o $@ $< mpeer.c $(INC) -L$(LIB) -lxseg -lpthread
+monitor: monitor.c peer.c peer.h
+	$(CC) $(CFLAGS) -o $@ $< peer.c $(INC) -L$(LIB) -lxseg -lpthread -DMT
 
-mt-vlmcd: mt-vlmcd.c mpeer.c mpeer.h $(BASE)/xseg/protocol.h 
-	$(CC) $(CFLAGS) -o $@ $< mpeer.c $(INC) -L$(LIB) -lxseg -lpthread
+mt-vlmcd: mt-vlmcd.c peer.c peer.h $(BASE)/xseg/protocol.h 
+	$(CC) $(CFLAGS) -o $@ $< peer.c $(INC) -L$(LIB) -lxseg -lpthread -DMT
 
-st-vlmcd: mt-vlmcd.c speer.c speer.h $(BASE)/xseg/protocol.h 
-	$(CC) $(CFLAGS) -o $@ $< speer.c $(INC) -L$(LIB) -lxseg -lst
+st-vlmcd: mt-vlmcd.c peer.c peer.h $(BASE)/xseg/protocol.h 
+	$(CC) $(CFLAGS) -o $@ $< peer.c $(INC) -L$(LIB) -lxseg 
 
-mt-mapperd: mt-mapperd.c speer.c speer.h $(BASE)/xseg/protocol.h 
-	$(CC) $(CFLAGS) -o $@ $< speer.c $(INC) -L$(LIB) -lxseg -lpthread -lgcrypt -lst
+mt-mapperd: mt-mapperd.c peer.c peer.h $(BASE)/xseg/protocol.h 
+	$(CC) $(CFLAGS) -o $@ $< peer.c $(INC) -L$(LIB) -DST_THREADS -lxseg -lgcrypt -lst
 
 pfiled: pfiled.c common.c $(BASE)/xseg/xseg.h $(BASE)/xseg/protocol.h common.h
 	$(CC) $(CFLAGS) -o $@ $< common.c  $(INC) -L$(LIB) -lxseg -lpthread
