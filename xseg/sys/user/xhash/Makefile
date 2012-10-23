@@ -22,4 +22,4 @@ xhash.pic.o: $(BASE)/xtypes/xhash.c $(BASE)/xtypes/xhash.h $(BASE)/xtypes/xlock.
 	$(CC) $(CFLAGS) $(INC) -DVAL_OVERLOAD -fPIC -c -o $@ $<
 
 clean:
-	rm -f xhash.o xhash.pic.o
+	rm -f xhash.o xhash.pic.o xhash_test

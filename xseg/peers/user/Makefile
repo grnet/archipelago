@@ -49,4 +49,4 @@ vlmc-xseg: vlmc-tool.c $(BASE)/xseg/xseg.h
 	$(CC) $(CFLAGS) -o $@ $< $(INC) -L$(LIB) -lxseg
 
 clean:
-	rm -f filed xseg sosd vlmcd mapperd mt-sosd dummy monitor mt-mapperd pfiled vlmc-xseg st-vlmcd
+	rm -f filed xseg sosd vlmcd mapperd mt-sosd dummy monitor mt-mapperd pfiled vlmc-xseg st-vlmcd mt-vlmcd
