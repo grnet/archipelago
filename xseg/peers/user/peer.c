@@ -18,6 +18,7 @@
 #define PEER_TYPE "posix"
 #endif
 
+unsigned int terminated = 0;
 unsigned int verbose = 0;
 struct log_ctx lc;
 #ifdef ST_THREADS
@@ -69,6 +70,33 @@ inline static int wake_up_next_thread(struct peerd *peer)
 	return (xseg_signal(peer->xseg, peer->portno_start));
 }
 #endif
+
+
+static inline int isTerminate()
+{
+#ifdef ST_THREADS
+	return (!ta & terminated);
+#else
+	return terminated;
+#endif
+}
+
+void signal_handler(int signal)
+{
+	XSEGLOG2(&lc, I, "Caught SIGTERM. Terminating gracefully");
+	terminated = 1;
+}
+
+static int setup_signals()
+{
+	int r;
+	struct sigaction sa;
+	sigemptyset(&sa.sa_mask);
+	sa.sa_flags = 0;
+	sa.sa_handler = signal_handler;
+	return (sigaction(SIGTERM, &sa, NULL));
+
+}
 
 inline int canDefer(struct peerd *peer)
 {
@@ -263,18 +291,20 @@ static int check_ports(struct peerd *peer)
 	for (i = portno_start; i <= portno_end; i++) {
 		accepted = NULL;
 		received = NULL;
-		pr = alloc_peer_req(peer);
-		if (pr) {
-			accepted = xseg_accept(xseg, i, X_NONBLOCK);
-			if (accepted) {
-				pr->req = accepted;
-				pr->portno = i;
-				xseg_cancel_wait(xseg, i);
-				handle_accepted(peer, pr, accepted);
-				c = 1;
-			}
-			else {
-				free_peer_req(peer, pr);
+		if (!isTerminate()) {
+			pr = alloc_peer_req(peer);
+			if (pr) {
+				accepted = xseg_accept(xseg, i, X_NONBLOCK);
+				if (accepted) {
+					pr->req = accepted;
+					pr->portno = i;
+					xseg_cancel_wait(xseg, i);
+					handle_accepted(peer, pr, accepted);
+					c = 1;
+				}
+				else {
+					free_peer_req(peer, pr);
+				}
 			}
 		}
 		received = xseg_receive(xseg, i, X_NONBLOCK);
@@ -399,7 +429,7 @@ static int peerd_loop(struct peerd *peer)
 	
 	XSEGLOG2(&lc, I, "Peer has tid %u.\n", pid);
 	xseg_init_local_signal(xseg, peer->portno_start);
-	for (;;) {
+	for (;!(isTerminate() && xq_count(&peer->free_reqs) == peer->nr_ops);) {
 		for(loops= threshold; loops > 0; loops--) {
 			if (loops == 1)
 				xseg_prepare_wait(xseg, peer->portno_start);
@@ -601,6 +631,7 @@ int main(int argc, char *argv[])
 		portno_end = portno;
 	}
 
+	setup_signals();
 	//TODO err check
 	peer = peerd_init(nr_ops, spec, portno_start, portno_end, nr_threads, defer_portno);
 	if (!peer)
