@@ -2,7 +2,12 @@
 
 set -e
 
-[ -z "${XSEG_HOME}" ] && source $(dirname -- "$0")/../envsetup
+[ -z "${XSEG_HOME}" ] && source $(dirname -- "$0")/../config.mk
+
+if [ -z "${XSEG_HOME}" ] ; then
+	echo "Cannot find XSEG_HOME"
+	exit 1
+fi
 
 if [ "$1" = "-h" ] || [ "$1" = "--help" ]; then
 	echo "Usage: xseg-domain-targets"

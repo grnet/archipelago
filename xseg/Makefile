@@ -37,6 +37,6 @@ $(XSEG_CLEAN_TARGETS):
 	rm -f ./config.mk
 	@echo " "
 
-distclean:
+distclean: $(XSEG_CLEAN_TARGETS)
 	rm -f lib/user/*.so* lib/user/*.a
 	rm -f lib/kernel/*.ko

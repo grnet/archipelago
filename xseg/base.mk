@@ -24,9 +24,9 @@ export INC
 export LIB=$(BASE)/lib/$(TARGET)
 export CFLAGS=-Wall $(COPTS) $(CSTD)
 
-ifeq (,$(XSEG_HOME))
-export XSEG_HOME=$(shell ${XSEG_HOME})
-endif
+#ifeq (,$(XSEG_HOME))
+#export XSEG_HOME=$(shell ${XSEG_HOME})
+#endif
 
 ifeq (,$(XSEG_HOME))
 export XSEG_HOME=.
