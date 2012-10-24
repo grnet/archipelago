@@ -210,11 +210,11 @@ static int xsegbd_dev_init(struct xsegbd_device *xsegbd_dev)
 	blk_queue_physical_block_size(xsegbd_dev->blk_queue, blksize);
 	blk_queue_bounce_limit(xsegbd_dev->blk_queue, BLK_BOUNCE_ANY);
 	
-	//blk_queue_max_segments(dev->blk_queue, 512);
 
 	max_request_size_bytes = XSEGBD_MAX_REQUEST_SIZE;
 	blk_queue_max_hw_sectors(xsegbd_dev->blk_queue, max_request_size_bytes >> 9);
 //	blk_queue_max_sectors(xsegbd_dev->blk_queue, max_request_size_bytes >> 10);
+	blk_queue_max_segments(xsegbd_dev->blk_queue, 1024);
 	blk_queue_max_segment_size(xsegbd_dev->blk_queue, max_request_size_bytes);
 	blk_queue_io_min(xsegbd_dev->blk_queue, max_request_size_bytes);
 	blk_queue_io_opt(xsegbd_dev->blk_queue, max_request_size_bytes);
