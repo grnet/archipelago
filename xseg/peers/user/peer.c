@@ -74,11 +74,16 @@ inline static int wake_up_next_thread(struct peerd *peer)
 
 static inline int isTerminate()
 {
+/* ta doesn't need to be taken into account, because the main loops
+ * doesn't check the terminated flag if ta is not 0.
+ *
 #ifdef ST_THREADS
 	return (!ta & terminated);
 #else
 	return terminated;
 #endif
+	*/
+	return terminated;
 }
 
 void signal_handler(int signal)
@@ -361,7 +366,7 @@ static void* thread_loop(void *arg)
 
 	XSEGLOG2(&lc, I, "Thread %u has tid %u.\n", (unsigned int) (t- peer->thread), pid);
 	xseg_init_local_signal(xseg, peer->portno_start);
-	for (;;) {
+	for (;!(isTerminate() && xq_count(&peer->free_reqs) == peer->nr_ops);) {
 		if (t->func) {
 			XSEGLOG2(&lc, D, "Thread %u executes function\n", (unsigned int) (t- peer->thread));
 			xseg_cancel_wait(xseg, peer->portno_start);
@@ -414,10 +419,11 @@ void defer_request(struct peerd *peer, struct peer_req *pr)
 static int peerd_loop(struct peerd *peer) 
 {
 #ifdef MT
+	int i;
 	if (peer->interactive_func)
 		peer->interactive_func();
-	for (;;) {
-		pthread_join(peer->thread[0].tid, NULL);
+	for (i = 0; i < peer->nr_threads; i++) {
+		pthread_join(peer->thread[i].tid, NULL);
 	}
 #else
 	struct xseg *xseg = peer->xseg;
