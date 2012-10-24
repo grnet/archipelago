@@ -88,7 +88,7 @@ static inline int isTerminate()
 
 void signal_handler(int signal)
 {
-	XSEGLOG2(&lc, I, "Caught SIGTERM. Terminating gracefully");
+	XSEGLOG2(&lc, I, "Caught signal. Terminating gracefully");
 	terminated = 1;
 }
 
@@ -99,8 +99,16 @@ static int setup_signals()
 	sigemptyset(&sa.sa_mask);
 	sa.sa_flags = 0;
 	sa.sa_handler = signal_handler;
-	return (sigaction(SIGTERM, &sa, NULL));
-
+	r = sigaction(SIGTERM, &sa, NULL);
+	if (r < 0)
+		return r;
+	r = sigaction(SIGINT, &sa, NULL);
+	if (r < 0)
+		return r;
+	r = sigaction(SIGQUIT, &sa, NULL);
+	if (r < 0)
+		return r;
+	return r;
 }
 
 inline int canDefer(struct peerd *peer)
