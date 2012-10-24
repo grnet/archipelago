@@ -547,17 +547,15 @@ static int xsegbd_get_size(struct xsegbd_device *xsegbd_dev)
 	XSEGLOG("Woken up after wait_for_completion_interruptible(), comp: %lx [%llu]", (unsigned long) pending->comp, (unsigned long long) blkreq_idx);
 	ret = update_dev_sectors_from_request(xsegbd_dev, xreq);
 	XSEGLOG("get_size: sectors = %ld\n", (long)xsegbd_dev->sectors);
-out_put:
-	BUG_ON(xseg_put_request(xsegbd_dev->xseg, xreq, xsegbd_dev->src_portno) == -1);
-out:
-	return ret;
 
 out_queue:
 	pending->dev = NULL;
 	pending->comp = NULL;
 	xq_append_head(&xsegbd_dev->blk_queue_pending, blkreq_idx, 1);
-	
-	goto out;
+out_put:
+	BUG_ON(xseg_put_request(xsegbd_dev->xseg, xreq, xsegbd_dev->src_portno) == -1);
+out:
+	return ret;
 }
 
 static int xsegbd_mapclose(struct xsegbd_device *xsegbd_dev)
@@ -609,17 +607,15 @@ static int xsegbd_mapclose(struct xsegbd_device *xsegbd_dev)
 	ret = 0;
 	if (xreq->state & XS_FAILED)
 		XSEGLOG("Couldn't close disk on mapper");
-out_put:
-	BUG_ON(xseg_put_request(xsegbd_dev->xseg, xreq, xsegbd_dev->src_portno) == -1);
-out:
-	return ret;
 
 out_queue:
 	pending->dev = NULL;
 	pending->comp = NULL;
 	xq_append_head(&xsegbd_dev->blk_queue_pending, blkreq_idx, 1);
-	
-	goto out;
+out_put:
+	BUG_ON(xseg_put_request(xsegbd_dev->xseg, xreq, xsegbd_dev->src_portno) == -1);
+out:
+	return ret;
 }
 
 static void xseg_callback(xport portno)
