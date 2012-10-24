@@ -18,7 +18,7 @@
 #define PEER_TYPE "posix"
 #endif
 
-unsigned int terminated = 0;
+volatile unsigned int terminated = 0;
 unsigned int verbose = 0;
 struct log_ctx lc;
 #ifdef ST_THREADS
