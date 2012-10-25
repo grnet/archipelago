@@ -1,0 +1,28 @@
+#file directory without starting /
+#FILL ME 
+#
+xseg/lib/user/libxseg.so usr/lib
+xseg/lib/user/libxseg.so.0 usr/lib
+xseg/lib/user/libxseg.so.0.0.1 usr/lib
+#xseg/lib/user/xseg_posix.so usr/lib
+#xseg/lib/user/xseg_pthread.so usr/lib
+#xseg/lib/user/xseg_segdev.so usr/lib
+
+xseg/peers/user/st-vlmcd usr/bin
+xseg/peers/user/mt-mapperd usr/bin
+xseg/peers/user/pfiled usr/bin
+xseg/peers/user/mt-sosd usr/bin
+xseg/peers/user/xseg usr/bin
+xseg/peers/user/vlmc-xseg usr/bin
+xseg/tools/vlmc usr/bin
+
+#vlmc ganeti ext storage scripts 
+xseg/tools/ext_scripts/attach usr/share/ganeti/extstorage/vlmc
+xseg/tools/ext_scripts/create usr/share/ganeti/extstorage/vlmc
+xseg/tools/ext_scripts/detach usr/share/ganeti/extstorage/vlmc
+xseg/tools/ext_scripts/grow usr/share/ganeti/extstorage/vlmc
+xseg/tools/ext_scripts/parameters.list usr/share/ganeti/extstorage/vlmc
+xseg/tools/ext_scripts/remove usr/share/ganeti/extstorage/vlmc
+xseg/tools/ext_scripts/verify usr/share/ganeti/extstorage/vlmc
+xseg/tools/ext_scripts/vlmc_wrapper.py usr/share/ganeti/extstorage/vlmc
+

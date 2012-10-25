@@ -34,9 +34,9 @@ $(XSEG_CLEAN_TARGETS):
 		make -C $$f/$(@:clean-%=%) TARGET=$@ clean || true; \
 		echo " "; \
 	done
-	rm -f ./config.mk
 	@echo " "
 
 distclean: $(XSEG_CLEAN_TARGETS)
 	rm -f lib/user/*.so* lib/user/*.a
 	rm -f lib/kernel/*.ko
+	rm -f $(XSEG_HOME)/config.mk

@@ -29,7 +29,7 @@ export CFLAGS=-Wall $(COPTS) $(CSTD)
 #endif
 
 ifeq (,$(XSEG_HOME))
-export XSEG_HOME=.
+export XSEG_HOME=$(CURDIR)
 endif
 
 CONFIG=./config.mk

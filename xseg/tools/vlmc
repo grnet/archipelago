@@ -14,14 +14,13 @@ def vlmc_create(args):
         print >> sys.stderr, "At least one of the size/snap args must be provided"
         sys.exit(-1)
 
-    cmd = [XSEG_HOME + "/peers/user/vlmc-xseg", "%s" % SPEC, "create", "--name", "%s" % name]
+    cmd = ["vlmc-xseg", "%s" % SPEC, "create", "--name", "%s" % name]
     if snap != None:
             cmd.extend(["--snap", "%s" % snap])
     if size != None:
             cmd.extend(["--size", "%s" % size])
     cmd.extend(["-mp", "%s" % MPORT])
     cmd.extend(["-p", "%s" % VTOOL])
-    os.environ['LD_LIBRARY_PATH'] = XSEG_HOME + "/lib:" + XSEG_HOME + "/lib/user"
 
     try:
         check_call(cmd, shell=False, env=os.environ);
@@ -40,10 +39,9 @@ def vlmc_list(args):
 
 def vlmc_remove(args):
     name = args.name[0]
-    cmd = [XSEG_HOME + "/peers/user/vlmc-xseg", "%s" % SPEC, "remove", "--name", "%s" % name]
+    cmd = ["vlmc-xseg", "%s" % SPEC, "remove", "--name", "%s" % name]
     cmd.extend(["-mp", "%s" % MPORT])
     cmd.extend(["-p", "%s" % VTOOL])
-    os.environ['LD_LIBRARY_PATH'] = XSEG_HOME + "/lib:" + XSEG_HOME + "/lib/user"
 
     try:
         check_call(cmd, shell=False, env=os.environ);
@@ -162,7 +160,7 @@ def loadrc(rc):
     #FIXME
     try:
         if rc == None:
-            execfile(os.path.expanduser("~/.xsegrc"), globals())
+            execfile(os.path.expanduser("/etc/default/archipelagos"), globals())
         else:
             execfile(rc, globals())
     except:
