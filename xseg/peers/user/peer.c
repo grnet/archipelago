@@ -8,6 +8,9 @@
 #include <sys/syscall.h>
 #include <sys/time.h>
 #include <signal.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <errno.h>
 #ifdef MT
 #include <pthread.h>
 #endif
@@ -563,13 +566,63 @@ malloc_fail:
 	return peer;
 }
 
+int pidfile_remove(char *path, int fd)
+{
+	close(fd);
+	return (unlink(path));
+}
+
+int pidfile_write(int pid_fd)
+{
+	char buf[16];
+	snprintf(buf, sizeof(buf), "%d", syscall(SYS_gettid));
+	buf[15] = 0;
+	
+	lseek(pid_fd, 0, SEEK_SET);
+	int ret = write(pid_fd, buf, 16);
+	return ret;
+}
+
+int pidfile_read(char *path, pid_t *pid)
+{
+	char buf[16], *endptr;
+	*pid = 0;
+
+	int fd = open(path, O_RDONLY);
+	if (fd < 0)
+		return -1;
+	int ret = read(fd, buf, 15);
+	buf[15]=0;
+	close(fd);
+	if (ret < 0)
+		return -1;
+	else{
+		*pid = strtol(buf, &endptr, 10);
+		if (endptr != &buf[ret]){
+			*pid = 0;
+			return -1;
+		}
+	}
+	return 0;
+}
+
+int pidfile_open(char *path, pid_t *old_pid)
+{
+	//nfs version > 3
+	int fd = open(path, O_CREAT|O_EXCL|O_WRONLY);
+	if (fd < 0){
+		if (errno == -EEXIST)
+			pidfile_read(path, old_pid);
+	}
+	return fd;
+}
 
 int main(int argc, char *argv[])
 {
 	struct peerd *peer = NULL;
 	//parse args
 	char *spec = "";
-	int i, r;
+	int i, r, daemonize = 0;
 	long portno_start = -1, portno_end = -1, portno = -1;
 	//set defaults here
 	uint32_t nr_ops = 16;
@@ -577,6 +630,9 @@ int main(int argc, char *argv[])
 	unsigned int debug_level = 0;
 	uint32_t defer_portno = NoPort;
 	char *logfile = NULL;
+	char *pidfile = NULL;
+	pid_t old_pid;
+	int pid_fd = -1;
 
 	//capture here -g spec, -n nr_ops, -p portno, -t nr_threads -v verbose level
 	// -dp xseg_portno to defer blocking requests
@@ -633,10 +689,43 @@ int main(int argc, char *argv[])
 			i += 1;
 			continue;
 		}
+		if (!strcmp(argv[i], "-d")) {
+			daemonize = 1;
+			continue;
+		}
+		if (!strcmp(argv[i], "--pidfile") && i + 1 < argc ) {
+			pidfile = argv[i+1];
+			i += 1;
+			continue;
+		}
 
 	}
 	init_logctx(&lc, argv[0], debug_level, logfile);
 	XSEGLOG2(&lc, D, "Main thread has tid %ld.\n", syscall(SYS_gettid));
+	
+	if (pidfile){
+		pid_fd = pidfile_open(pidfile, &old_pid);
+		if (pid_fd < 0) {
+			if (old_pid) {
+				XSEGLOG2(&lc, E, "Daemon already running, pid: %d.", old_pid);
+			} else {
+				XSEGLOG2(&lc, E, "Cannot open or create pidfile");
+			}
+			return -1;
+		}
+	}
+	
+	if (daemonize){
+		if (daemon(0, 1) < 0){
+			XSEGLOG2(&lc, E, "Cannot daemonize");
+			if (pid_fd > 0)
+				pidfile_remove(pidfile, pid_fd);
+			return -1;
+
+		}
+	}
+
+	pidfile_write(pid_fd);
 	
 	//TODO perform argument sanity checks
 	verbose = debug_level;
@@ -659,8 +748,11 @@ int main(int argc, char *argv[])
 
 #ifdef ST_THREADS
 	st_thread_t st = st_thread_create(peerd_loop, peer, 1, 0);
-	return st_thread_join(st, NULL);
+	r = st_thread_join(st, NULL);
 #else
-	return peerd_loop(peer);
+	r = peerd_loop(peer);
 #endif
+	if (pid_fd > 0)
+		pidfile_remove(pidfile, pid_fd);
+	return r;
 }
