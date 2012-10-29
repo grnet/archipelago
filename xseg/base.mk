@@ -29,7 +29,7 @@ export CFLAGS=-Wall $(COPTS) $(CSTD)
 #endif
 
 ifeq (,$(XSEG_HOME))
-export XSEG_HOME=.
+export XSEG_HOME=$(CURDIR)
 endif
 
 CONFIG=./config.mk
@@ -52,6 +52,8 @@ $(shell $(XSEG_HOME)/envsetup show | sed -e 's/"//g' > "$(CONFIG)")
 include $(CONFIG)
 endif
 
+ifeq (,$(XSEG_DOMAIN_TARGETS))
 export XSEG_DOMAIN_TARGETS=$(shell $(XSEG_HOME)/tools/xseg-domain-targets | sed -e 's/^[^=]*=//;s/"//g')
+endif
 export BASE=$(XSEG_HOME)
 endif
