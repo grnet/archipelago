@@ -579,7 +579,7 @@ int pidfile_write(int pid_fd)
 	buf[15] = 0;
 	
 	lseek(pid_fd, 0, SEEK_SET);
-	int ret = write(pid_fd, buf, 16);
+	int ret = write(pid_fd, buf, strlen(buf));
 	return ret;
 }
 
@@ -718,10 +718,8 @@ int main(int argc, char *argv[])
 	if (daemonize){
 		if (daemon(0, 1) < 0){
 			XSEGLOG2(&lc, E, "Cannot daemonize");
-			if (pid_fd > 0)
-				pidfile_remove(pidfile, pid_fd);
-			return -1;
-
+			r = -1;
+			goto out;
 		}
 	}
 
@@ -737,11 +735,13 @@ int main(int argc, char *argv[])
 	setup_signals();
 	//TODO err check
 	peer = peerd_init(nr_ops, spec, portno_start, portno_end, nr_threads, defer_portno);
-	if (!peer)
-		return -1;
+	if (!peer){
+		r = -1;
+		goto out;
+	}
 	r = custom_peer_init(peer, argc, argv);
 	if (r < 0)
-		return -1;
+		goto out;
 #ifdef MT
 	peerd_start_threads(peer);
 #endif
@@ -752,6 +752,7 @@ int main(int argc, char *argv[])
 #else
 	r = peerd_loop(peer);
 #endif
+out:
 	if (pid_fd > 0)
 		pidfile_remove(pidfile, pid_fd);
 	return r;
