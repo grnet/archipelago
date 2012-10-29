@@ -2,14 +2,17 @@
 #
 # archipelagos tool
 
-import os, sys, subprocess, argparse, time, psutil
+import os, sys, subprocess, argparse, time, psutil, signal
 from subprocess import call, check_call
 
 BIN_PATH="/usr/bin"
 MAPPER="mt-mapperd"
 VLMC="st-vlmcd"
 BLOCKER="pfiled"
-PIDFILE_PATH="/var/run/lock/archipelagos"
+PIDFILE_PATH="/var/run/archipelagos"
+CHARDEV_NAME="/dev/segdev"
+CHARDEV_MAJOR="60"
+CHARDEV_MINOR="0"
 
 try:
     execfile(os.path.expanduser("/etc/default/archipelagos"), globals())
@@ -18,17 +21,18 @@ except:
 
 #FIXME check defaults
 peer_blockerb = [BLOCKER, ["-p" , str(BPORT), "-g", str(SPEC), "-n", str(NR_OPS),
-        str(PITHOS), str(IMAGES), "-d", "--pidfile", os.join(PIDFILE_PATH, "blockerd.pid")], "blockerb"]
+        str(PITHOS), str(IMAGES), "-d", "--pidfile", os.path.join(PIDFILE_PATH, "blockerd.pid")], "blockerb"]
 peer_blockerm = [BLOCKER, ["-p" , str(MBPORT), "-g", str(SPEC), "-n", str(NR_OPS),
-        str(PITHOSMAPS), str(MAPS), "-d", "--pidfile", os.join(PIDFILE_PATH, "blockerm.pid")], "blockerm" ]
+        str(PITHOSMAPS), str(MAPS), "-d", "--pidfile", os.path.join(PIDFILE_PATH, "blockerm.pid")], "blockerm" ]
 peer_vlmcd = [VLMC, ["-t" , "1", "-sp",  str(VPORT_START), "-ep", str(VPORT_END), 
         "-g", str(SPEC), "-n", str(NR_OPS), "-bp", str(BPORT), "-mp", str(MPORT),
-	"-d", "--pidfile", os.join(PIDFILE_PATH, "vlmcd.pid")], "vlmcd"]
+	"-d", "--pidfile", os.path.join(PIDFILE_PATH, "vlmcd.pid")], "vlmcd"]
 peer_mapperd = [MAPPER, ["-t" , "1", "-p",  str(MPORT), "-mbp", str(MBPORT),
         "-g", str(SPEC), "-n", str(NR_OPS), "-bp", str(BPORT), "-d", "--pidfile",
-	os.join(PIDFILE_PATH, "mapper.pid"], "mapper"]
+	os.path.join(PIDFILE_PATH, "mapper.pid")], "mapper"]
 
-peers = [peer_blockerb, peer_blockerm, peer_vlmcd, peer_mapperd]
+#peers = [peer_blockerb, peer_blockerm, peer_vlmcd, peer_mapperd]
+peers = [peer_vlmcd, peer_mapperd]
 modules = ["xseg", "segdev", "xseg_posix", "xseg_pthread", "xseg_segdev"]
 xsegbd = "xsegbd"
     
@@ -83,10 +87,11 @@ def loaded_modules():
 def load_module(name):
     modules = loaded_modules()
     if name in modules:
-        return -2
+        return 0
     cmd = ["modprobe -v %s" % name]
+    print cmd
     try:
-        check_call(cmd, shell=False);
+        check_call(cmd, shell=True);
     except Exception:
             sys.stderr.write("Module %s failed to load. \n" % name)
             return -1
@@ -95,10 +100,11 @@ def load_module(name):
 def unload_module(name):
     modules = loaded_modules()
     if name not in modules:
-        return -2
+        return 0
     cmd = ["modprobe -rv %s" % name]
+    print cmd
     try:
-        check_call(cmd, shell=False);
+        check_call(cmd, shell=True);
     except Exception:
             sys.stderr.write("Module %s failed to unload. \n" % name)
             return -1
@@ -110,7 +116,7 @@ def create_segment():
     try:
         check_call(cmd, shell=False);
     except Exception:
-            sys.stderr.write("Cannot create segment. \n" % name)
+            sys.stderr.write("Cannot create segment. \n")
             return -1
     return 0
 
@@ -120,8 +126,8 @@ def destroy_segment():
     try:
         check_call(cmd, shell=False);
     except Exception:
-            sys.stderr.write("Cannot destroy segment. \n" % name)
-            return -1
+            sys.stderr.write("Cannot destroy segment. \n")
+            return 0
     return 0
 
 def check_running(name, pid = -1):
@@ -135,13 +141,14 @@ def check_running(name, pid = -1):
     return -1
 
 def check_pidfile(name):
-    pidfile = os.join(PIDFILE_PATH, name + ".pid")
+    pidfile = os.path.join(PIDFILE_PATH, name + ".pid")
+    pf = None
     try:
         pf = open(pidfile, "r")
-        pid = pf.read()
+        pid = int(pf.read())
         pf.close()
     except:
-        if pf :
+        if pf:
             pf.close()
         return -1
 
@@ -152,7 +159,7 @@ def start_peer(peer):
     try:
         check_call(cmd, shell=False);
     except Exception:
-        sys.stderr.write("Segdev %s device creation failed. \n" % name)
+        sys.stderr.write("Peer %s start failed.\n" % peer[0])
         return -1
     return 0
 
@@ -162,7 +169,7 @@ def stop_peer(peer):
         print " process not running"
         return -1
 
-    os.kill(pid, SIGTERM)
+    os.kill(pid, signal.SIGTERM)
     i = 0
     while check_running(peer[0], pid) > 0:
         time.sleep(0.1)
@@ -173,23 +180,29 @@ def stop_peer(peer):
     return 0
 
 def make_segdev():
-    if os.stat(str(CHARDEV_NAME)):
+    try:
+        os.stat(str(CHARDEV_NAME))
         return -2
+    except:
+        pass
     cmd = ["mknod", str(CHARDEV_NAME), "c", str(CHARDEV_MAJOR), str(CHARDEV_MINOR)]
+    print cmd
     try:
         check_call(cmd, shell=False);
     except Exception:
-        sys.stderr.write("Segdev %s device creation failed. \n" % name)
+        sys.stderr.write("Segdev %s device creation failed. \n")
         return -1
     return 0
 
 def remove_segdev():
-    if not os.stat(str(CHARDEV_NAME)):
+    try:
+        os.stat(str(CHARDEV_NAME))
+    except:
         return -2
     try:
         os.unlink(str(CHARDEV_NAME))
     except:
-        sys.stderr.write("Segdev %s device removal failed. \n" % name)
+        sys.stderr.write("Segdev %s device removal failed. \n")
         return -1
 
 
@@ -203,19 +216,25 @@ def start(args):
         if load_module(m) < 0:
             stop(args)
             return -1
+    time.sleep(0.5)
 
-    if make_segdev < 0:
+    if make_segdev() < 0:
         stop(args)
         return -1
+    
+    time.sleep(0.5)
+    
+    if create_segment() < 0:
+        stop(args)
+        return -1
+    
+    time.sleep(0.5)
     
     for p in peers:
         if start_peer(p) < 0:
             stop(args)
             return -1
 
-    if create_segment() < 0:
-        stop(args)
-        return -1
 
     if load_module(xsegbd) < 0:
         stop(args)
@@ -226,21 +245,19 @@ def stop(args):
     #check devices
     if unload_module(xsegbd):
         return -1
+    
+    for p in reversed(peers):
+        stop_peer(p)
+
 
     #destroy segment with timeout
-    if destroy_segment() < 0:
-        return -1
-
-    for p in peers.reverse():
-        stop_peer(p)
+#    if destroy_segment() < 0:
+#       return -1
 
     remove_segdev()
     
-    for m in modules:
+    for m in reversed(modules):
         unload_module(m)
-
-
-    
 
 
 if __name__ == "__main__":
