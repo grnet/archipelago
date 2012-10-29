@@ -2,7 +2,12 @@
 
 include $(XSEG_HOME)/base.mk
 
-KDIR := /lib/modules/$(shell uname -r)/build
+ifeq (,$(KVER))
+KVER := $(shell uname -r)
+endif
+
+
+KDIR := /lib/modules/$(KVER)/build
 PWD := $(shell pwd)
 EXTRA_CFLAGS += -g -I$(BASE) -I$(BASE)/sys/kernel
 LIBDIR=$(BASE)/lib/kernel
@@ -21,4 +26,4 @@ all: $(BASE)/drivers/kernel/Module.symvers
 
 clean:
 	rm -f Module.symvers
-	make -C /lib/modules/$(shell uname -r)/build M=$(PWD) V=$(V) clean
+	make -C /lib/modules/$(KVER)/build M=$(PWD) V=$(V) clean
