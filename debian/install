@@ -15,6 +15,7 @@ xseg/peers/user/mt-sosd usr/bin
 xseg/peers/user/xseg usr/bin
 xseg/peers/user/vlmc-xseg usr/bin
 xseg/tools/vlmc usr/bin
+xseg/archipelagos usr/bin
 
 #vlmc ganeti ext storage scripts 
 xseg/tools/ext_scripts/attach usr/share/ganeti/extstorage/vlmc
