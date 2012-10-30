@@ -5,7 +5,7 @@ default: xseg
 build: xseg
 
 xseg:
-	make -C xseg XSEG_DOMAIN_TARGET="user"
+	make -C xseg XSEG_DOMAIN_TARGETS="user"
 
 clean:
 	make -C xseg clean

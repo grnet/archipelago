@@ -266,30 +266,17 @@ def stop(args):
     if vlmc_showmapped(args) >= 0:
         print "Cannot stop archipelagos. Mapped volumes"
         return -1
-<<<<<<< HEAD
-    
-    for p in reversed(peers):
-        stop_peer(p)
-
-
-    #destroy segment with timeout
-    if destroy_segment() < 0:
-        return -1
-=======
     if unload_module(xsegbd):
         return -1
     r = 0
     for p in reversed(peers):
         stop_peer(p)
->>>>>>> xseg-refactor
 
     remove_segdev()
     
     for m in reversed(modules):
         unload_module(m)
 
-<<<<<<< HEAD
-=======
 def status(args):
     r = 0
     if vlmc_showmapped(args) >= 0:
@@ -316,7 +303,6 @@ def status(args):
 def restart(args):
     stop(args)
     start(args)
->>>>>>> xseg-refactor
 
 if __name__ == "__main__":
     # parse arguments and discpatch to the correct func
