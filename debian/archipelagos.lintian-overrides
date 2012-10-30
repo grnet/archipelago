@@ -1,0 +1,3 @@
+archipelagos binary: new-package-should-close-itp-bug
+archipelagos binary: non-dev-pkg-with-shlib-symlink
+archipelagos binary: package-name-doesnt-match-sonames 
