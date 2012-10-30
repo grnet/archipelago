@@ -46,6 +46,7 @@ char *cmdline_pidfile = NULL;
 int  cmdline_daemon = 0;
 long cmdline_nr_ops = DEFAULT_NR_OPS;
 long cmdline_verbose = 0;
+volatile unsigned int terminated = 0;
 
 static int usage(char *argv0)
 {
@@ -112,6 +113,45 @@ struct io {
 	pthread_cond_t cond;
 	pthread_mutex_t lock;
 };
+
+
+static inline int isTerminate()
+{
+	/* ta doesn't need to be taken into account, because the main loops
+	 * doesn't check the terminated flag if ta is not 0.
+	 * 
+	 * #ifdef ST_THREADS
+	 * return (!ta & terminated);
+	 * #else
+	 * return terminated;
+	 *  #endif
+	 */
+	return terminated;
+}
+
+void signal_handler(int signal)
+{      
+	terminated = 1;
+}
+
+static int setup_signals()
+{      
+	int r;
+	struct sigaction sa;
+	sigemptyset(&sa.sa_mask);
+	sa.sa_flags = 0;
+	sa.sa_handler = signal_handler;
+	r = sigaction(SIGTERM, &sa, NULL);
+	if (r < 0)
+		return r;
+	r = sigaction(SIGINT, &sa, NULL);
+	if (r < 0)
+		return r;
+	r = sigaction(SIGQUIT, &sa, NULL);
+	if (r < 0)
+		return r;
+	return r;
+}
 
 
 static unsigned long sigaction_count;
@@ -694,7 +734,8 @@ void *io_loop(void *arg)
 
 	for (;;) {
 		accepted = NULL;
-		accepted = xseg_accept(xseg, portno, 0);
+		if (!isTerminate())
+			accepted = xseg_accept(xseg, portno, 0);
 		if (accepted) {
 			io->req = accepted;
 			wake_up_next_iothread(pfiled);
@@ -732,7 +773,7 @@ static int pfiled_loop(struct pfiled *pfiled)
 	/* GCC + pthreads glitch? */
 	struct io *io;
 
-	for (;;) {
+	for (;!isTerminate() && xq_count(&pfiled->free_ops) != pfiled->nr_ops;) {
 		io = wake_up_next_iothread(pfiled);
 		xseg_prepare_wait(xseg, portno);
 		xseg_wait_signal(xseg, 1000000UL);
@@ -1047,7 +1088,6 @@ int main(int argc, char **argv)
 			return -1;
 		}
 	}
-
 	if (cmdline_daemon){
 		if (daemon(0, 1) < 0){
 			perr(PFE, 0, "Cannot daemonize");
@@ -1055,6 +1095,7 @@ int main(int argc, char **argv)
 			goto out;
 		}
 	}
+	setup_signals();
 	if (pid_fd > 0)
 		pidfile_write(pid_fd);
 

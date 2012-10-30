@@ -23,7 +23,7 @@ except:
 
 #FIXME check defaults
 peer_blockerb = [BLOCKER, ["-p" , str(BPORT), "-g", str(SPEC), "-n", str(NR_OPS),
-        str(PITHOS), str(IMAGES), "-d", "-f", os.path.join(PIDFILE_PATH, "blockerd.pid")], "blockerb"]
+        str(PITHOS), str(IMAGES), "-d", "-f", os.path.join(PIDFILE_PATH, "blockerd.pid")], "blockerd"]
 peer_blockerm = [BLOCKER, ["-p" , str(MBPORT), "-g", str(SPEC), "-n", str(NR_OPS),
         str(PITHOSMAPS), str(MAPS), "-d", "-f", os.path.join(PIDFILE_PATH, "blockerm.pid")], "blockerm" ]
 peer_vlmcd = [VLMC, ["-t" , "1", "-sp",  str(VPORT_START), "-ep", str(VPORT_END), 
