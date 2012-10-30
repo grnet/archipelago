@@ -900,7 +900,7 @@ static void parse_cmdline(int argc, char **argv)
 		int c;
 
 		opterr = 0;
-		c = getopt(argc, argv, "dhp:n:g:v");
+		c = getopt(argc, argv, "dhp:n:g:vf:");
 		if (c == -1)
 			break;
 
