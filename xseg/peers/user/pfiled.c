@@ -1055,12 +1055,14 @@ int main(int argc, char **argv)
 			goto out;
 		}
 	}
-	pidfile_write(pid_fd);
+	if (pid_fd > 0)
+		pidfile_write(pid_fd);
 
 
-	if (pfiled_init(&pfiled) < 0)
+	if (pfiled_init(&pfiled) < 0){
 		r = -1;
 		goto out;
+	}
 
 	r = pfiled_loop(&pfiled);
 out:
