@@ -773,7 +773,7 @@ static int pfiled_loop(struct pfiled *pfiled)
 	/* GCC + pthreads glitch? */
 	struct io *io;
 
-	for (;!isTerminate() && xq_count(&pfiled->free_ops) != pfiled->nr_ops;) {
+	for (;!(isTerminate() && xq_count(&pfiled->free_ops) == pfiled->nr_ops);) {
 		io = wake_up_next_iothread(pfiled);
 		xseg_prepare_wait(xseg, portno);
 		xseg_wait_signal(xseg, 1000000UL);
@@ -1098,8 +1098,7 @@ int main(int argc, char **argv)
 	setup_signals();
 	if (pid_fd > 0)
 		pidfile_write(pid_fd);
-
-
+	
 	if (pfiled_init(&pfiled) < 0){
 		r = -1;
 		goto out;
@@ -1110,5 +1109,4 @@ out:
 	if (pid_fd > 0)
 		pidfile_remove(cmdline_pidfile, pid_fd);
 	return r;
-
 }
