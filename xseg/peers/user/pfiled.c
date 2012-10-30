@@ -853,7 +853,7 @@ static int pfiled_init(struct pfiled *pfiled)
 			pfiled->portno, pfiled->xseg->config.nr_ports);
 
 	if (xseg_init_local_signal(pfiled->xseg, pfiled->portno) < 0){
-		printf("cannot int local signals\n");
+		perr(PE, 0, "cannot int local signals\n");
 		return -1;
 	}
 
