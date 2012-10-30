@@ -23,9 +23,9 @@ except:
 
 #FIXME check defaults
 peer_blockerb = [BLOCKER, ["-p" , str(BPORT), "-g", str(SPEC), "-n", str(NR_OPS),
-        str(PITHOS), str(IMAGES), "-d", "--pidfile", os.path.join(PIDFILE_PATH, "blockerd.pid")], "blockerb"]
+        str(PITHOS), str(IMAGES), "-d", "-f", os.path.join(PIDFILE_PATH, "blockerd.pid")], "blockerd"]
 peer_blockerm = [BLOCKER, ["-p" , str(MBPORT), "-g", str(SPEC), "-n", str(NR_OPS),
-        str(PITHOSMAPS), str(MAPS), "-d", "--pidfile", os.path.join(PIDFILE_PATH, "blockerm.pid")], "blockerm" ]
+        str(PITHOSMAPS), str(MAPS), "-d", "-f", os.path.join(PIDFILE_PATH, "blockerm.pid")], "blockerm" ]
 peer_vlmcd = [VLMC, ["-t" , "1", "-sp",  str(VPORT_START), "-ep", str(VPORT_END), 
         "-g", str(SPEC), "-n", str(NR_OPS), "-bp", str(BPORT), "-mp", str(MPORT),
 	    "-d", "--pidfile", os.path.join(PIDFILE_PATH, "vlmcd.pid")], "vlmcd"]
@@ -33,8 +33,8 @@ peer_mapperd = [MAPPER, ["-t" , "1", "-p",  str(MPORT), "-mbp", str(MBPORT),
         "-g", str(SPEC), "-n", str(NR_OPS), "-bp", str(BPORT), "-d", "--pidfile",
 	    os.path.join(PIDFILE_PATH, "mapper.pid")], "mapper"]
 
-#peers = [peer_blockerb, peer_blockerm, peer_vlmcd, peer_mapperd]
-peers = [peer_vlmcd, peer_mapperd]
+peers = [peer_blockerb, peer_blockerm, peer_vlmcd, peer_mapperd]
+#peers = [peer_vlmcd, peer_mapperd]
 modules = ["xseg", "segdev", "xseg_posix", "xseg_pthread", "xseg_segdev"]
 xsegbd = "xsegbd"
     
