@@ -2,6 +2,10 @@
 # -*- makefile -*-
 
 %:
-	dh $@
+	dh $@ --with dkms
+
+override_dh_dkms:
+	dh_dkms -V
+
 
 
