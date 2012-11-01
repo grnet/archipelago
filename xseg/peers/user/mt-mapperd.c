@@ -1715,13 +1715,37 @@ void * handle_clone(struct peer_req *pr)
 		if (!pr->req->size){
 			r = -1;
 		} else {
+			struct map *map;
+			char *target = xseg_get_target(peer->xseg, pr->req);
+			XSEGLOG2(&lc, I, "Creating volume");
+			map = get_map(pr, target, pr->req->targetlen, MF_LOAD);
+			if (map){
+				XSEGLOG2(&lc, E, "Volume %s exists", map->volume);
+				do_dropcache(pr, map);
+				r = -1;
+				goto out;
+			}
 			//create a new empty map of size
-			//map = create_map(pr, map);
-			//if (!map)
-			//	r = -1;
+			map = create_map(mapper, target, pr->req->targetlen);
+			if (!map){
+				r = -1;
+				goto out;
+			}
 			//populate_map with zero objects;
-			//r = write_map(pr, map);
-			r = -1;
+			uint64_t nr_objs = pr->req->size / block_size;
+			if (pr->req->size % block_size)
+				nr_objs++;
+			uint64_t i;
+			for (i = 0; i < nr_objs; i++) {
+				
+			}
+			r = write_map(pr, map);
+			if (r < 0){
+				XSEGLOG2(&lc, E, "Cannot write map %s", map->volume);
+				put_map(map);
+			}
+			XSEGLOG2(&lc, I, "Volume %s created", map->volume);
+			r = 0;
 		}
 	}
 out:
