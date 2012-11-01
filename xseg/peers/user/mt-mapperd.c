@@ -892,12 +892,16 @@ static struct xseg_request * copyup_object(struct peerd *peer, struct map_node *
 
 	struct xseg_request *req = xseg_get_request(peer->xseg, pr->portno, 
 							mapper->bportno, X_ALLOC);
-	if (!req)
+	if (!req){
+		XSEGLOG2(&lc, E, "Cannot get request for object %s", mn->object);
 		goto out_err;
+	}
 	r = xseg_prep_request(peer->xseg, req, newtargetlen, 
 				sizeof(struct xseg_request_copy));
-	if (r < 0)
+	if (r < 0){
+		XSEGLOG2(&lc, E, "Cannot prepare request for object %s", mn->object);
 		goto out_put;
+	}
 
 	char *target = xseg_get_target(peer->xseg, req);
 	strncpy(target, new_target, req->targetlen);
@@ -910,11 +914,14 @@ static struct xseg_request * copyup_object(struct peerd *peer, struct map_node *
 	req->size = block_size;
 	req->op = X_COPY;
 	r = xseg_set_req_data(peer->xseg, req, pr);
-	if (r<0)
+	if (r<0){
+		XSEGLOG2(&lc, E, "Cannot set request data for object %s", mn->object);
 		goto out_put;
+	}
 	r = __set_copyup_node(mio, req, mn);
 	p = xseg_submit(peer->xseg, req, pr->portno, X_ALLOC);
 	if (p == NoPort) {
+		XSEGLOG2(&lc, E, "Cannot submit for object %s", mn->object);
 		goto out_unset;
 	}
 	xseg_signal(peer->xseg, p);
@@ -964,23 +971,32 @@ static struct xseg_request * delete_object(struct peer_req *pr, struct map_node 
 	struct mapper_io *mio = __get_mapper_io(pr);
 	struct xseg_request *req = xseg_get_request(peer->xseg, pr->portno, 
 							mapper->bportno, X_ALLOC);
-	if (!req)
+	XSEGLOG2(&lc, I, "Deleting mapnode %s", mn->object);
+	if (!req){
+		XSEGLOG2(&lc, E, "Cannot get request for object %s", mn->object);
 		goto out_err;
+	}
 	int r = xseg_prep_request(peer->xseg, req, mn->objectlen, 0);
-	if (r < 0)
+	if (r < 0){
+		XSEGLOG2(&lc, E, "Cannot prep request for object %s", mn->object);
 		goto out_put;
+	}
 	char *target = xseg_get_target(peer->xseg, req);
 	strncpy(target, mn->object, req->targetlen);
 	req->op = X_DELETE;
 	req->size = req->datalen;
 	req->offset = 0;
 	r = xseg_set_req_data(peer->xseg, req, pr);
-	if (r < 0)
+	if (r < 0){
+		XSEGLOG2(&lc, E, "Cannot set req data for object %s", mn->object);
 		goto out_put;
+	}
 	__set_copyup_node(mio, req, mn);
 	xport p = xseg_submit(peer->xseg, req, pr->portno, X_ALLOC);
-	if (p == NoPort)
+	if (p == NoPort){
+		XSEGLOG2(&lc, E, "Cannot submit request for object %s", mn->object);
 		goto out_unset;
+	}
 	r = xseg_signal(peer->xseg, p);
 	XSEGLOG2(&lc, I, "Object %s deletion pending", mn->object);
 	return req;
@@ -1002,23 +1018,32 @@ static struct xseg_request * delete_map(struct peer_req *pr, struct map *map)
 	struct mapper_io *mio = __get_mapper_io(pr);
 	struct xseg_request *req = xseg_get_request(peer->xseg, pr->portno, 
 							mapper->mbportno, X_ALLOC);
-	if (!req)
+	XSEGLOG2(&lc, I, "Deleting map %s", map->volume);
+	if (!req){
+		XSEGLOG2(&lc, E, "Cannot get request for map %s", map->volume);
 		goto out_err;
+	}
 	int r = xseg_prep_request(peer->xseg, req, map->volumelen, 0);
-	if (r < 0)
+	if (r < 0){
+		XSEGLOG2(&lc, E, "Cannot prep request for map %s", map->volume);
 		goto out_put;
+	}
 	char *target = xseg_get_target(peer->xseg, req);
 	strncpy(target, map->volume, req->targetlen);
 	req->op = X_DELETE;
 	req->size = req->datalen;
 	req->offset = 0;
 	r = xseg_set_req_data(peer->xseg, req, pr);
-	if (r < 0)
+	if (r < 0){
+		XSEGLOG2(&lc, E, "Cannot set req data for map %s", map->volume);
 		goto out_put;
+	}
 	__set_copyup_node(mio, req, NULL);
 	xport p = xseg_submit(peer->xseg, req, pr->portno, X_ALLOC);
-	if (p == NoPort)
+	if (p == NoPort){
+		XSEGLOG2(&lc, E, "Cannot submit request for map %s", map->volume);
 		goto out_unset;
+	}
 	r = xseg_signal(peer->xseg, p);
 	map->flags |= MF_MAP_DELETING;
 	XSEGLOG2(&lc, I, "Map %s deletion pending", map->volume);
@@ -1029,7 +1054,7 @@ out_unset:
 out_put:
 	xseg_put_request(peer->xseg, req, pr->portno);
 out_err:
-	XSEGLOG2(&lc, I, "Map %s deletion failed", map->volume);
+	XSEGLOG2(&lc, E, "Map %s deletion failed", map->volume);
 	return  NULL;
 }
 
@@ -1107,8 +1132,10 @@ static struct map * create_map(struct mapperd *mapper, char *name, uint32_t name
 	m->waiters = 0;
 	m->cond = st_cond_new(); //FIXME err check;
 	r = insert_map(mapper, m);
-	if (r < 0)  
+	if (r < 0){
+		XSEGLOG2(&lc, E, "Cannot insert map %s", m->volume);
 		goto out_hash;
+	}
 
 	return m;
 
@@ -1375,6 +1402,7 @@ static int do_dropcache(struct peer_req *pr, struct map *map)
 	struct peerd *peer = pr->peer;
 	struct mapperd *mapper = __get_mapperd(peer);
 	uint64_t i;
+	XSEGLOG2(&lc, I, "Dropping cache for map %s", map->volume);
 	map->flags |= MF_MAP_DROPPING_CACHE;
 	for (i = 0; i < calc_map_obj(map); i++) {
 		mn = get_mapnode(map, i);
@@ -1392,6 +1420,7 @@ static int do_dropcache(struct peer_req *pr, struct map *map)
 	map->flags &= ~MF_MAP_DROPPING_CACHE;
 	map->flags |= MF_MAP_DESTROYED;
 	remove_map(mapper, map);
+	XSEGLOG2(&lc, I, "Dropping cache for map %s completed", map->volume);
 	put_map(map);	// put map here to destroy it (matches m->ref = 1 on map create)
 	return 0;
 }
@@ -1421,7 +1450,8 @@ static int do_destroy(struct peer_req *pr, struct map *map)
 	struct mapper_io *mio = __get_mapper_io(pr);
 	struct map_node *mn;
 	struct xseg_request *req;
-
+	
+	XSEGLOG2(&lc, I, "Destroying map %s", map->volume);
 	map->flags |= MF_MAP_DELETING;
 	req = delete_map(pr, map);
 	if (!req)
@@ -1470,6 +1500,7 @@ wait_pending:
 	}
 	mio->cb = NULL;
 	map->flags &= ~MF_MAP_DELETING;
+	XSEGLOG2(&lc, I, "Destroyed map %s", map->volume);
 	return do_close(pr, map);
 }
 
@@ -1550,10 +1581,12 @@ static int do_clone(struct peer_req *pr, struct map *map)
 	*/
 
 	int r;
+	char buf[XSEG_MAX_TARGETLEN];
 	struct peerd *peer = pr->peer;
 	struct mapperd *mapper = __get_mapperd(peer);
 	char *target = xseg_get_target(peer->xseg, pr->req);
 	struct xseg_request_clone *xclone = (struct xseg_request_clone *) xseg_get_data(peer->xseg, pr->req);
+	XSEGLOG2(&lc, I, "Cloning map %s", map->volume);
 	struct map *clonemap = create_map(mapper, target, pr->req->targetlen);
 	if (!clonemap) 
 		return -1;
@@ -1563,15 +1596,13 @@ static int do_clone(struct peer_req *pr, struct map *map)
 	else
 		clonemap->size = xclone->size;
 	if (clonemap->size < map->size){
-		/*
 		target = xseg_get_target(peer->xseg, pr->req);
-		strncpy(buf, target, req->targetlen);
-		buf[req->targetlen] = 0;
+		strncpy(buf, target, pr->req->targetlen);
+		buf[pr->req->targetlen] = 0;
 		XSEGLOG2(&lc, W, "Requested clone size (%llu) < map size (%llu)"
 				"\n\t for requested clone %s",
 				(unsigned long long) xclone->size,
 				(unsigned long long) map->size, buf);
-		*/
 		goto out_err;
 	}
 	
@@ -1601,6 +1632,7 @@ static int do_clone(struct peer_req *pr, struct map *map)
 		map_nodes[i].cond = st_cond_new(); //FIXME errcheck;
 		r = insert_object(clonemap, &map_nodes[i]);
 		if (r < 0){
+			XSEGLOG2(&lc, E, "Cannot insert object %d to map %s", i, clonemap->volume);
 			goto out_err;
 		}
 	}
@@ -1679,7 +1711,6 @@ start:
 	}
 	int r = action(pr, map);
 	//always drop cache if map not read exclusively
-	//maybe make it if it was requested exclusively?
 	if (!(map->flags & MF_MAP_EXCLUSIVE))
 		do_dropcache(pr, map);
 	//maybe capture ref before and compare here?
@@ -1892,7 +1923,7 @@ int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 {
 	int i;
 	unsigned char buf[SHA256_DIGEST_SIZE];
-	char *zero;
+	unsigned char *zero;
 
 	gcry_control (GCRYCTL_SET_THREAD_CBS, &gcry_threads_pthread);
 
