@@ -1644,6 +1644,8 @@ struct map * get_map(struct peer_req *pr, char *name, uint32_t namelen, uint32_t
 	if (!map){
 		if (flags & MF_LOAD){
 			map = create_map(mapper, name, namelen);
+			if (!map)
+				return NULL;
 			r = open_load_map(pr, map, flags);
 			if (r < 0){
 				do_dropcache(pr, map);
