@@ -1734,6 +1734,7 @@ void * handle_clone(struct peer_req *pr)
 				r = -1;
 				goto out;
 			}
+			map->size = pr->req->size
 			//populate_map with zero objects;
 			uint64_t nr_objs = pr->req->size / block_size;
 			if (pr->req->size % block_size)
