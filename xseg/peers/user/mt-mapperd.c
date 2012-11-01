@@ -1086,6 +1086,7 @@ static inline void put_map(struct map *map)
 	struct map_node *mn;
 	map->ref--;
 	if (!map->ref){
+		XSEGLOG2(&lc, I, "Freeing map %s", map->volume);
 		//clean up map
 		uint64_t i;
 		for (i = 0; i < calc_map_obj(map); i++) {
@@ -1105,6 +1106,7 @@ static inline void put_map(struct map *map)
 		mn = find_object(map, 0);
 		if (mn)
 			free(mn);
+		XSEGLOG2(&lc, I, "Freed map %s", map->volume);
 		free(map);
 	}
 }
@@ -1755,7 +1757,9 @@ void * handle_clone(struct peer_req *pr)
 			map = get_map(pr, target, pr->req->targetlen, MF_LOAD);
 			if (map){
 				XSEGLOG2(&lc, E, "Volume %s exists", map->volume);
-				do_dropcache(pr, map);
+				if (map->ref <= 2) //initial one + one ref from __get_map
+					do_dropcache(pr, map); //we are the only ones usining this map. Drop the cache. 
+				put_map(map); //matches get_map
 				r = -1;
 				goto out;
 			}
@@ -1773,7 +1777,7 @@ void * handle_clone(struct peer_req *pr)
 				
 			struct map_node *map_nodes = calloc(nr_objs, sizeof(struct map_node));
 			if (!map_nodes){
-				do_dropcache(pr, map);
+				do_dropcache(pr, map); //Since we just created the map, dropping cache should be sufficient.
 				r = -1;
 				goto out;
 			}
@@ -1803,6 +1807,7 @@ void * handle_clone(struct peer_req *pr)
 			}
 			XSEGLOG2(&lc, I, "Volume %s created", map->volume);
 			r = 0;
+			do_dropcache(pr, map); //drop cache here for consistency
 		}
 	}
 out:
