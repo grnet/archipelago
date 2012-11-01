@@ -7,12 +7,17 @@ from subprocess import call, check_call
 
 def vlmc_create(args):
     name = args.name[0]
-    size = args.size << 20
+    size = args.size 
     snap = args.snap
 
     if size == None and snap == None:
         print >> sys.stderr, "At least one of the size/snap args must be provided"
         sys.exit(-1)
+
+    if size:
+        size = size << 20
+    else:
+        size = 0
 
     cmd = ["vlmc-xseg", "%s" % SPEC, "create", "--name", "%s" % name]
     if snap != None:

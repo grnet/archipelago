@@ -1715,7 +1715,7 @@ void * handle_clone(struct peer_req *pr)
 	if (xclone->targetlen){
 		r = map_action(do_clone, pr, xclone->target, xclone->targetlen, MF_LOAD);
 	} else {
-		if (!pr->req->size){
+		if (!xclone->size){
 			r = -1;
 		} else {
 			struct map *map;
@@ -1734,15 +1734,15 @@ void * handle_clone(struct peer_req *pr)
 				r = -1;
 				goto out;
 			}
-			map->size = pr->req->size;
+			map->size = xclone->size;
 			//populate_map with zero objects;
-			uint64_t nr_objs = pr->req->size / block_size;
-			if (pr->req->size % block_size)
+			uint64_t nr_objs = xclone->size / block_size;
+			if (xclone->size % block_size)
 				nr_objs++;
 				
 			struct map_node *map_nodes = calloc(nr_objs, sizeof(struct map_node));
 			if (!map_nodes){
-				put_map(map);
+				do_dropcache(pr, map);
 				r = -1;
 				goto out;
 			}
@@ -1759,7 +1759,7 @@ void * handle_clone(struct peer_req *pr)
 				map_nodes[i].cond = st_cond_new(); //FIXME errcheck;
 				r = insert_object(map, &map_nodes[i]);
 				if (r < 0){
-					put_map(map);
+					do_dropcache(pr, map);
 					r = -1;
 					goto out;
 				}
@@ -1767,7 +1767,7 @@ void * handle_clone(struct peer_req *pr)
 			r = write_map(pr, map);
 			if (r < 0){
 				XSEGLOG2(&lc, E, "Cannot write map %s", map->volume);
-				put_map(map);
+				do_dropcache(pr, map);
 				goto out;
 			}
 			XSEGLOG2(&lc, I, "Volume %s created", map->volume);
