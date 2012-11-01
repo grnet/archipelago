@@ -59,7 +59,7 @@ def exclusive(fn):
 @exclusive
 def vlmc_showmapped(args):
     try:
-        devices = os.listdir(XSEGBD_SYSFS + "devices/")
+        devices = os.listdir(os.path.join(XSEGBD_SYSFS, "devices/"))
     except:
         return -1
 
@@ -76,7 +76,7 @@ def vlmc_showmapped(args):
     except Exception, reason:
         print >> sys.stderr, reason
         return -2
-    return -1
+    return len(devices)
 
 def loadrc(rc):
     #FIXME
@@ -147,8 +147,8 @@ def check_running(name, pid = -1):
     for p in psutil.process_iter():
         if p.name == name:
             if pid != -1:
-                if pid != p.pid:
-                    return -1
+                if pid == p.pid:
+                    return pid
             else:
                 return pid
     return -1
@@ -197,7 +197,9 @@ def peer_running(peer):
     if pid < 0:
         return -1
 
-    check_running(peer[0], pid)
+    r = check_running(peer[0], pid)
+    if r < 0:
+        print "Peer " + peer[2] + " has valid pidfile but does not seem to be active"
     return 0
 
 
@@ -212,7 +214,7 @@ def make_segdev():
     try:
         check_call(cmd, shell=False);
     except Exception:
-        sys.stderr.write("Segdev %s device creation failed. \n")
+        sys.stderr.write("Segdev device creation failed. \n")
         return -1
     return 0
 
@@ -224,7 +226,7 @@ def remove_segdev():
     try:
         os.unlink(str(CHARDEV_NAME))
     except:
-        sys.stderr.write("Segdev %s device removal failed. \n")
+        sys.stderr.write("Segdev device removal failed. \n")
         return -1
 
 
@@ -264,7 +266,7 @@ def start(args):
 def stop(args):
     #check devices
     if vlmc_showmapped(args) >= 0:
-        print "Cannot stop archipelagos. Mapped volumes"
+        print "Cannot stop archipelagos. Mapped volumes exist"
         return -1
     if unload_module(xsegbd):
         return -1
