@@ -1074,6 +1074,7 @@ static inline void put_map(struct map *map)
 				mn->flags &= MF_OBJECT_DESTROYED;
 				put_mapnode(mn); //matchin mn->ref = 1 on mn init
 				put_mapnode(mn); //matcing get_mapnode;
+				//assert mn->ref == 0;
 			}
 		}
 		mn = find_object(map, 0);
@@ -1733,18 +1734,41 @@ void * handle_clone(struct peer_req *pr)
 				r = -1;
 				goto out;
 			}
+			map->size = pr->req->size
 			//populate_map with zero objects;
 			uint64_t nr_objs = pr->req->size / block_size;
 			if (pr->req->size % block_size)
 				nr_objs++;
+				
+			struct map_node *map_nodes = calloc(nr_objs, sizeof(struct map_node));
+			if (!map_nodes){
+				put_map(map);
+				r = -1;
+				goto out;
+			}
 			uint64_t i;
 			for (i = 0; i < nr_objs; i++) {
-				
+				strncpy(map_nodes[i].object, zero_block, strlen(zero_block)); //this should be SHA256_DIGEST_SIZE *2
+				map_nodes[i].objectlen = strlen(zero_block);
+				map_nodes[i].object[map_nodes[i].objectlen] = 0; //NULL terminate
+				map_nodes[i].flags = 0;
+				map_nodes[i].objectidx = i;
+				map_nodes[i].map = map;
+				map_nodes[i].ref = 1;
+				map_nodes[i].waiters = 0;
+				map_nodes[i].cond = st_cond_new(); //FIXME errcheck;
+				r = insert_object(map, &map_nodes[i]);
+				if (r < 0){
+					put_map(map);
+					r = -1;
+					goto out;
+				}
 			}
 			r = write_map(pr, map);
 			if (r < 0){
 				XSEGLOG2(&lc, E, "Cannot write map %s", map->volume);
 				put_map(map);
+				goto out;
 			}
 			XSEGLOG2(&lc, I, "Volume %s created", map->volume);
 			r = 0;
