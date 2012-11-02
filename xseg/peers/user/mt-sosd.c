@@ -97,7 +97,6 @@ int handle_delete(struct peerd *peer, struct peer_req *pr)
 	struct radosd *rados = (struct radosd *) peer->priv;
 	struct rados_io *rio = (struct rados_io *) pr->priv;
 	
-	//log_pr("delete start", pr);
 	XSEGLOG2(&lc, I, "Deleting %s", rio->obj_name);
 	r = rados_remove(rados->ioctx, rio->obj_name);
 	if (r < 0) {
@@ -110,7 +109,41 @@ int handle_delete(struct peerd *peer, struct peer_req *pr)
 		XSEGLOG2(&lc, E, "Deletion of %s completed", rio->obj_name);
 		complete(peer, pr);
 	}
+
 	return 0;
+
+/*
+	int r;
+	if (rio->state == ACCEPTED) {
+		XSEGLOG2(&lc, I, "Deleting %s", rio->obj_name);
+		rados_completion_t rados_compl;
+		r = rados_aio_create_completion(pr, rados_ack_cb, NULL, &rados_compl);
+		if (r < 0){ 
+			XSEGLOG2(&lc, E, "Deletion of %s failed", rio->obj_name);
+			fail(peer, pr);
+			return 0;
+		}
+		r = rados_aio_remove(rados->ioctx, rio->obj_name, rados_compl); 
+		if (r < 0) {
+			rados_aio_release(rados_compl);
+			XSEGLOG2(&lc, E, "Deletion of %s failed", rio->obj_name);
+			fail(peer, pr);
+			return 0;
+		}
+		rio->state = PENDING;
+	}
+	else {
+		if (pr->retval < 0){
+			XSEGLOG2(&lc, E, "Deletion of %s failed", rio->obj_name);
+			fail(peer, pr);
+		} 
+		else {
+			XSEGLOG2(&lc, E, "Deletion of %s completed", rio->obj_name);
+			complete(peer, pr);
+		}
+	}
+	return 0;
+*/
 }
 
 int handle_info(struct peerd *peer, struct peer_req *pr)
