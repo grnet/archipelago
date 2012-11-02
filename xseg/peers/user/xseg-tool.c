@@ -662,6 +662,91 @@ int cmd_rndwrite(long loops, int32_t seed, uint32_t targetlen, uint32_t chunksiz
 	return 0;
 }
 
+int cmd_rnddelete(long loops, int32_t seed, uint32_t targetlen)
+{
+	if (loops < 0)
+		return help();
+	char *p = realloc(namebuf, targetlen+1);
+	if (!p) {
+		fprintf(stderr, "Cannot allocate memory\n");
+		return -1;
+	}
+	namebuf = p;
+
+	srandom(seed);
+
+	struct xseg_request *submitted = NULL, *received;
+	long nr_submitted = 0, nr_received = 0, nr_failed = 0;
+	int reported = 0, r;
+	xport port;
+	char *req_target;
+	seed = random();
+	init_local_signal();
+
+	for (;;) {
+		xseg_prepare_wait(xseg, srcport);
+		if (nr_submitted < loops &&
+		    (submitted = xseg_get_request(xseg, srcport, dstport, X_ALLOC))) {
+			xseg_cancel_wait(xseg, srcport);
+			r = xseg_prep_request(xseg, submitted, targetlen, 0);
+			if (r < 0) {
+				fprintf(stderr, "Cannot prepare request! (%u, %u)\n",
+					targetlen, 0);
+				xseg_put_request(xseg, submitted, srcport);
+				return -1;
+			}
+			
+			req_target = xseg_get_target(xseg, submitted);
+
+			reported = 0;
+			mkname(namebuf, targetlen, seed);
+			namebuf[targetlen] = 0;
+			//printf("%ld: %s\n", nr_submitted, namebuf);
+			strncpy(req_target, namebuf, targetlen);
+			submitted->offset = 0;
+			submitted->size = 0;
+			submitted->op = X_DELETE;
+			submitted->flags = 0;
+
+			port =  xseg_submit(xseg, submitted, srcport, X_ALLOC);
+			if (port == NoPort) {
+				xseg_put_request(xseg, submitted, srcport);
+			} else {
+				seed = random();
+				nr_submitted += 1;
+				xseg_signal(xseg, port);
+			}
+		}
+
+		received = xseg_receive(xseg, srcport, 0);
+		if (received) {
+			xseg_cancel_wait(xseg, srcport);
+			nr_received += 1;
+			if (!(received->state & XS_SERVED)) {
+				nr_failed += 1;
+				report_request(received);
+			}
+			if (xseg_put_request(xseg, received, srcport))
+				fprintf(stderr, "Cannot put request at port %u\n", received->src_portno);
+		}
+
+		if (!submitted && !received)
+			xseg_wait_signal(xseg, 1000000);
+
+			if (nr_submitted % 1000 == 0 && !reported) {
+				reported = 1;
+				fprintf(stderr, "submitted %ld, received %ld, failed %ld\n",
+					nr_submitted, nr_received, nr_failed);
+			}
+
+			if (nr_received >= loops)
+				break;
+	}
+
+	fprintf(stderr, "submitted %ld, received %ld, failed %ld\n",
+		nr_submitted, nr_received, nr_failed);
+	return 0;
+}
 /* note:
  * prepare/wait rhythm,
  * files are converted to independent chunk access patterns,
@@ -1290,6 +1375,15 @@ int main(int argc, char **argv)
 			unsigned long objectsize = atol(argv[i+5]);
 			ret = cmd_rndwrite(nr_loops, seed, targetlen, chunksize, objectsize);
 			i += 5;
+			continue;
+		}
+		
+		if (!strcmp(argv[i], "rnddelete") && (i + 3 < argc)) {
+			long nr_loops = atol(argv[i+1]);
+			unsigned int seed = atoi(argv[i+2]);
+			unsigned int targetlen = atoi(argv[i+3]);
+			ret = cmd_rnddelete(nr_loops, seed, targetlen);
+			i += 3;
 			continue;
 		}
 
