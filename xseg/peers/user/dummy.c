@@ -3,11 +3,9 @@
 #include <sys/types.h>
 #include <pthread.h>
 #include <xseg/xseg.h>
-#include <mpeer.h>
+#include <peer.h>
 #include <time.h>
 #include <sys/util.h>
-
-struct log_ctx lc;
 
 struct timespec delay = {0, 4000000};
 int custom_peer_init(struct peerd *peer, int argc, char *argv[])

@@ -3,7 +3,7 @@
 #include <sys/types.h>
 #include <pthread.h>
 #include <xseg/xseg.h>
-#include <speer.h>
+#include <peer.h>
 #include <time.h>
 #include <xtypes/xlock.h>
 #include <xtypes/xhash.h>
@@ -36,8 +36,6 @@ GCRY_THREAD_OPTION_PTHREAD_IMPL;
 #define MF_OBJECT_DESTROYED	(1 << 5)
 
 #define MF_OBJECT_NOT_READY	(MF_OBJECT_COPYING|MF_OBJECT_WRITING|MF_OBJECT_DELETING)
-extern struct log_ctx lc;
-extern uint32_t ta;
 
 char *magic_string = "This a magic string. Please hash me";
 unsigned char magic_sha256[SHA256_DIGEST_SIZE];	/* sha256 hash value of magic string */

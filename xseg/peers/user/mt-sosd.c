@@ -2,14 +2,12 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <xseg/xseg.h>
-#include <mpeer.h>
+#include <peer.h>
 #include <rados/librados.h>
 #include <xseg/protocol.h>
 
 #define MAX_POOL_NAME 64
 #define MAX_OBJ_NAME 256
-
-extern struct log_ctx lc;
 
 enum rados_state {
 	ACCEPTED = 0,

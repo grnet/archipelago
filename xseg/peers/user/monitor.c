@@ -3,7 +3,7 @@
 #include <sys/types.h>
 #include <pthread.h>
 #include <xseg/xseg.h>
-#include <mpeer.h>
+#include <peer.h>
 #include <sys/time.h>
 
 #define INPUT_BUF_SIZE 256

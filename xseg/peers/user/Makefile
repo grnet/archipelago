@@ -36,6 +36,9 @@ monitor: monitor.c peer.c peer.h
 mt-vlmcd: mt-vlmcd.c peer.c peer.h $(BASE)/xseg/protocol.h 
 	$(CC) $(CFLAGS) -o $@ $< peer.c $(INC) -L$(LIB) -lxseg -lpthread -DMT
 
+mt-pfiled: mt-pfiled.c peer.c peer.h $(BASE)/xseg/protocol.h 
+	$(CC) $(CFLAGS) -o $@ $< peer.c $(INC) -L$(LIB) -lxseg -lpthread -DMT
+
 st-vlmcd: mt-vlmcd.c peer.c peer.h $(BASE)/xseg/protocol.h 
 	$(CC) $(CFLAGS) -o $@ $< peer.c $(INC) -L$(LIB) -lxseg 
 
@@ -49,4 +52,4 @@ vlmc-xseg: vlmc-tool.c $(BASE)/xseg/xseg.h
 	$(CC) $(CFLAGS) -o $@ $< $(INC) -L$(LIB) -lxseg
 
 clean:
-	rm -f filed xseg sosd vlmcd mapperd mt-sosd dummy monitor mt-mapperd pfiled vlmc-xseg st-vlmcd mt-vlmcd
+	rm -f filed xseg sosd vlmcd mapperd mt-sosd dummy monitor mt-mapperd pfiled vlmc-xseg st-vlmcd mt-vlmcd mt-pfiled

@@ -61,6 +61,14 @@ static inline struct peerd * __get_peerd(void * custom_peerd)
 	return (struct peerd *) ((unsigned long) custom_peerd  - offsetof(struct peerd, priv));
 }
 
+
+/* decration of "common" variables */
+extern struct log_ctx lc;
+#ifdef ST_THREADS
+extern uint32_t ta;
+#endif
+
+
 /********************************
  *   mandatory peer functions   *
  ********************************/
@@ -69,7 +77,7 @@ static inline struct peerd * __get_peerd(void * custom_peerd)
 int custom_peer_init(struct peerd *peer, int argc, char *argv[]);
 
 /* dispatch function */
-int dispatch(struct peerd *peer, struct peer_req *pr, struct xseg_request *xseg,
+int dispatch(struct peerd *peer, struct peer_req *pr, struct xseg_request *req,
 		enum dispatch_reason reason);
 
 void usage();
