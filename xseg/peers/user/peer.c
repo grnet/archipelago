@@ -398,6 +398,7 @@ static void* thread_loop(void *arg)
 		xseg_cancel_wait(xseg, peer->portno_start);
 		XSEGLOG2(&lc, I, "Thread %u woke up\n", (unsigned int) (t- peer->thread));
 	}
+	wake_up_next_thread(peer);
 	return NULL;
 }
 
