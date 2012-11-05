@@ -7,11 +7,13 @@
 #include <xseg/protocol.h>
 
 #define MAX_POOL_NAME 64
-#define MAX_OBJ_NAME 256
+#define MAX_OBJ_NAME XSEG_MAX_TARGETLEN
 
 enum rados_state {
 	ACCEPTED = 0,
-	PENDING = 1
+	PENDING = 1,
+	READING = 2,
+	WRITING = 3
 };
 
 struct radosd {
@@ -23,6 +25,10 @@ struct radosd {
 struct rados_io{
 	char obj_name[MAX_OBJ_NAME + 1];
 	enum rados_state state;
+	uint64_t size;
+	char *src_name, *buf;
+	uint64_t read;
+
 };
 
 void rados_ack_cb(rados_completion_t c, void *arg)
@@ -96,7 +102,7 @@ int handle_delete(struct peerd *peer, struct peer_req *pr)
 	int r;
 	struct radosd *rados = (struct radosd *) peer->priv;
 	struct rados_io *rio = (struct rados_io *) pr->priv;
-	
+/*	
 	XSEGLOG2(&lc, I, "Deleting %s", rio->obj_name);
 	r = rados_remove(rados->ioctx, rio->obj_name);
 	if (r < 0) {
@@ -111,9 +117,7 @@ int handle_delete(struct peerd *peer, struct peer_req *pr)
 	}
 
 	return 0;
-
-/*
-	int r;
+*/
 	if (rio->state == ACCEPTED) {
 		XSEGLOG2(&lc, I, "Deleting %s", rio->obj_name);
 		rados_completion_t rados_compl;
@@ -143,25 +147,24 @@ int handle_delete(struct peerd *peer, struct peer_req *pr)
 		}
 	}
 	return 0;
-*/
 }
 
 int handle_info(struct peerd *peer, struct peer_req *pr)
 {
-	uint64_t size;
-	time_t pmtime;
 	int r;
 	struct xseg_request *req = pr->req;
 	struct radosd *rados = (struct radosd *) peer->priv;
 	struct rados_io *rio = (struct rados_io *) pr->priv;
 	char *req_data = xseg_get_data(peer->xseg, req);
-	struct xseg_reply_info *xinfo = req_data;
-
+	struct xseg_reply_info *xinfo = (struct xseg_reply_info *)req_data;
+/*
+	uint64_t size;
+	time_t pmtime;
 	XSEGLOG2(&lc, I, "Getting info of %s", rio->obj_name);	
 	r = rados_stat(rados->ioctx, rio->obj_name, &size, &pmtime);
 	if (r < 0) {
 		pr->retval = r;
-		XSEGLOG2(&lc, I, "Getting info of %s failed", rio->obj_name);	
+		XSEGLOG2(&lc, E, "Getting info of %s failed", rio->obj_name);	
 		fail(peer, pr);
 	}
 	else {
@@ -171,9 +174,41 @@ int handle_info(struct peerd *peer, struct peer_req *pr)
 		complete(peer,pr);
 	}
 	return 0;
+*/	
+	if (rio->state == ACCEPTED) {
+		XSEGLOG2(&lc, I, "Getting info of %s", rio->obj_name);	
+		rados_completion_t rados_compl;
+		r = rados_aio_create_completion(pr, rados_ack_cb, NULL, &rados_compl);
+		if (r < 0){ 
+			XSEGLOG2(&lc, E, "Getting info of %s failed", rio->obj_name);	
+			fail(peer, pr);
+			return 0;
+		}
+		r = rados_aio_stat(rados->ioctx, rio->obj_name, rados_compl, &rio->size, NULL); 
+		if (r < 0) {
+			rados_aio_release(rados_compl);
+			XSEGLOG2(&lc, E, "Getting info of %s failed", rio->obj_name);	
+			fail(peer, pr);
+			return 0;
+		}
+		rio->state = PENDING;
+	}
+	else {
+		if (pr->retval < 0){
+			xinfo->size = 0;
+			XSEGLOG2(&lc, E, "Getting info of %s failed", rio->obj_name);	
+			fail(peer, pr);
+		} 
+		else {
+			xinfo->size = rio->size;
+			pr->retval = sizeof(uint64_t);
+			XSEGLOG2(&lc, I, "Getting info of %s completed", rio->obj_name);	
+			complete(peer, pr);
+		}
+	}
+	return 0;
 }
 
-//FIXME req->state no longer apply
 int handle_read(struct peerd *peer, struct peer_req *pr)
 {
 	struct rados_io *rio = (struct rados_io *) (pr->priv);
@@ -297,6 +332,7 @@ int handle_write(struct peerd *peer, struct peer_req *pr)
 
 int handle_copy(struct peerd *peer, struct peer_req *pr)
 {
+	/*
 	struct radosd *rados = (struct radosd *) peer->priv;
 	struct xseg_request *req = pr->req;
 	struct rados_io *rio = (struct rados_io *) pr->priv;
@@ -348,117 +384,149 @@ out_fail:
 	XSEGLOG2(&lc, E, "Copy of object %s to object %s failed", src_name, rio->obj_name);
 	fail(peer, pr);
 	return 0;
+	*/
 
 
-
-/*
 	struct radosd *rados = (struct radosd *) peer->priv;
 	struct xseg_request *req = pr->req;
 	struct rados_io *rio = (struct rados_io *) pr->priv;
-	int r, sum;
-	char *buf, *src_name;
-	struct xseg_request_copy *xcopy = xseg_get_data(peer->xseg, req);
+	int r;
+	struct xseg_request_copy *xcopy = (struct xseg_request_copy *)xseg_get_data(peer->xseg, req);
 
 	if (rio->state == ACCEPTED){
-		XSEGLOG2(&lc, I, "Copy of object %s to object %s started", src_name, rio->obj_name);
+		XSEGLOG2(&lc, I, "Copy of object %s to object %s started", rio->src_name, rio->obj_name);
 		if (!req->size) {
 			complete(peer, pr); //or fail?
 			return 0;
 		}
-		src_name = malloc(MAX_OBJ_NAME + 1);
-		if (!src_name){
+		rio->src_name = malloc(MAX_OBJ_NAME + 1);
+		if (!rio->src_name){
 			fail(peer, pr);
 			return -1;
 		}
 		unsigned int end = (xcopy->targetlen > MAX_OBJ_NAME) ? MAX_OBJ_NAME : xcopy->targetlen;
-		strncpy(src_name, xcopy->target, end);
-		src_name[end] = 0;
+		strncpy(rio->src_name, xcopy->target, end);
+		rio->src_name[end] = 0;
 		req->serviced = 0;
-		buf = malloc(req->size);
-		if (!buf) {
-			fail(peer, pr);
-			return -1;
+		rio->buf = malloc(req->size);
+		if (!rio->buf) {
+			r = -1;
+			goto out_src;
 		}
+		XSEGLOG2(&lc, I, "Copy of object %s to object %s started", rio->src_name, rio->obj_name);
 		rio->state = READING;
-		XSEGLOG2(&lc, I, "Reading %s", rio->obj_name);
-		if (do_aio_read(peer, pr, src_name, buf) < 0) {
+		rio->read = 0;
+		XSEGLOG2(&lc, I, "Reading %s", rio->src_name);
+		if (do_aio_read(peer, pr, rio->src_name, rio->buf) < 0) {
 			XSEGLOG2(&lc, I, "Reading of %s failed on do_aio_read", rio->obj_name);
 			fail(peer, pr);
-			return 0;
+			r = -1;
+			goto out_buf;
 		}
 	}
 	else if (rio->state == READING){
 		XSEGLOG2(&lc, I, "Reading of %s callback", rio->obj_name);
 		if (pr->retval > 0) 
-			status->read += pr->retval;
+			rio->read += pr->retval;
 		else if (pr->retval == 0) {
 			XSEGLOG2(&lc, I, "Reading of %s reached end of file at %llu bytes. Zeroing out rest", 
 						rio->obj_name, (unsigned long long) req->serviced);
-			memset(buf + status->read, 0, req->size - status->read);
-			status->read = req->size ;
+			memset(rio->buf + rio->read, 0, req->size - rio->read);
+			rio->read = req->size ;
 		}
 		else {
 			XSEGLOG2(&lc, E, "Reading of %s failed", rio->obj_name);
-			fail(peer, pr);
-			return 0;
+			r = -1;
+			goto out_buf;
 		}
-		if (status->read >= req->size) {
+		if (rio->read >= req->size) {
 			XSEGLOG2(&lc, I, "Reading of %s completed", rio->obj_name);
 			//do_aio_write
 			rio->state = WRITING;
 			XSEGLOG2(&lc, I, "Writing %s", rio->obj_name);
-			if (do_aio_write(peer, pr, rio->obj_name, status->buf) < 0) {
+			if (do_aio_write(peer, pr, rio->obj_name, rio->buf) < 0) {
 				XSEGLOG2(&lc, E, "Writing of %s failed on do_aio_write", rio->obj_name);
-				fail(peer, pr);
+				r = -1;
+				goto out_buf;
 			}
 			return 0;
 		}
 
 		if (!req->size) {
-			fail(peer, pr);
-			return 0;
+			r = -1;
+			goto out_buf;
 		}
 		XSEGLOG2(&lc, I, "Resubmitting read of %s", rio->obj_name);
-		if (do_aio_read(peer, pr, src_name, status->buf+status->read ) < 0) {
+		if (do_aio_read(peer, pr, rio->src_name, rio->buf + rio->read, req->size - rio->read) < 0) {
 			XSEGLOG2(&lc, E, "Reading of %s failed on do_aio_read", rio->obj_name);
-			fail(peer, pr);
+			r = -1;
+			goto out_buf;
 		}
 	}
 	else if (rio->state == WRITING){
 		XSEGLOG2(&lc, I, "Writing of %s callback", rio->obj_name);
-		free(buf);
 		if (pr->retval == 0) {
-			XSEGLOG2(&lc, I, "Copy of object %s to object %s completed", src_name, rio->obj_name);
+			XSEGLOG2(&lc, I, "Copy of object %s to object %s completed", rio->src_name, rio->obj_name);
 			XSEGLOG2(&lc, I, "Writing of %s completed", rio->obj_name);
 			req->serviced = req->size;
-			complete(peer, pr);
-			return 0;
+			r = 0;
+			goto out_buf;
 		}
 		else {
 			XSEGLOG2(&lc, E, "Writing of %s failed", rio->obj_name);
-			XSEGLOG2(&lc, E, "Copy of object %s to object %s failed", src_name, rio->obj_name);
-			fail(peer, pr);
-			return 0;
+			XSEGLOG2(&lc, E, "Copy of object %s to object %s failed", rio->src_name, rio->obj_name);
+			r = -1;
+			goto out_buf;
 		}
 	}
 	else {
 		XSEGLOG2(&lc, E, "Unknown state");
 	}
-	*/
+	return 0;
+
+
+out_buf:
+	free(rio->buf);
+out_src:
+	free(rio->src_name);
+
+	rio->buf = NULL;
+	rio->src_name = NULL;
+	rio->read = 0;
+
+	if (r < 0)
+		fail(peer ,pr);
+	else 
+		complete(peer, pr);
+	return 0;
 }
 
 int handle_open(struct peerd *peer, struct peer_req *pr)
 {
-	/* FIXME to be implemented */
-	complete(peer, pr);
+	struct radosd *rados = (struct radosd *) peer->priv;
+	struct rados_io *rio = (struct rados_io *) (pr->priv);
+	int r = rados_lock(rados->ioctx, rio->obj_name);
+	if (r < 0){
+		fail(peer, pr);
+	}
+	else {
+		complete(peer, pr);
+	}
 	return 0;
 }
 
 
 int handle_close(struct peerd *peer, struct peer_req *pr)
 {
-	/* FIXME to be implemented */
-	complete(peer, pr);
+	struct radosd *rados = (struct radosd *) peer->priv;
+	struct rados_io *rio = (struct rados_io *) (pr->priv);
+	int r = rados_unlock(rados->ioctx, rio->obj_name);
+	if (r < 0){
+		fail(peer, pr);
+	}
+	else {
+		complete(peer, pr);
+	}
 	return 0;
 }
 
