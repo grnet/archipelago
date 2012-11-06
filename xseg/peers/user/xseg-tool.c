@@ -996,6 +996,19 @@ int cmd_reportall(void)
 
 
 	fprintf(stderr, "Heap usage: %llu / %llu\n", xseg->heap->cur, xseg->config.heap_size);
+	fprintf(stderr, "Requests handler: free: %llu, allocated: %llu, allocated space %llu\n", 
+			(unsigned long long) xseg->request_h->nr_free,
+			(unsigned long long) xseg->request_h->nr_allocated,
+			(unsigned long long) xseg->request_h->allocated_space);
+	fprintf(stderr, "Ports handler: free: %llu, allocated: %llu, allocated space %llu\n", 
+			(unsigned long long) xseg->port_h->nr_free,
+			(unsigned long long) xseg->port_h->nr_allocated,
+			(unsigned long long) xseg->port_h->allocated_space);
+	fprintf(stderr, "objects handler: free: %llu, allocated: %llu, allocated space %llu\n", 
+			(unsigned long long) xseg->object_handlers->nr_free,
+			(unsigned long long) xseg->object_handlers->nr_allocated,
+			(unsigned long long) xseg->object_handlers->allocated_space);
+	fprintf(stderr, "\n");
 	for (t = 0; t < xseg->config.nr_ports; t++)
 		cmd_report(t);
 
