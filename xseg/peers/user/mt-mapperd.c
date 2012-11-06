@@ -1330,7 +1330,7 @@ static int req2objs(struct peer_req *pr, struct map *map, int write)
 							mio->err = 1;
 						}
 						if (mio->err){
-							XSEGLOG2(&lc, I, "Mio-err, pending_copyups: %d", mio->copyups);
+							XSEGLOG2(&lc, E, "Mio-err, pending_copyups: %d", mio->copyups);
 							if (!mio->copyups){
 								r = -1;
 								goto out;
@@ -1655,8 +1655,10 @@ retry_open:
 	if (flags & MF_EXCLUSIVE){
 		r = open_map(pr, map);
 		if (r < 0) {
-			if (flags & MF_FORCE)
+			if (flags & MF_FORCE){
+
 				goto retry_open;
+			}
 		} else {
 			opened = 1;
 		}
@@ -1695,7 +1697,7 @@ struct map * get_map(struct peer_req *pr, char *name, uint32_t namelen, uint32_t
 
 }
 
-static int map_action(int (action)(struct peer_req *pr, struct map *map), 
+static int map_action(int (action)(struct peer_req *pr, struct map *map),
 		struct peer_req *pr, char *name, uint32_t namelen, uint32_t flags)
 {
 	//struct peerd *peer = pr->peer;
