@@ -113,6 +113,8 @@ void xobj_put_obj(struct xobject_h * obj_h, void *ptr)
 
 	xlock_acquire(&obj_h->lock, 1);
 	list = obj_h->list;
+	obj->magic = obj_h->magic;
+	obj->size = obj_h->obj_size;
 	obj->next = list;
 	obj_h->list = objptr;
 	obj_h->nr_free++;
