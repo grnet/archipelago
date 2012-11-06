@@ -22,7 +22,7 @@ sosd: sosd.c $(BASE)/xseg/xseg.h $(BASE)/util_libs/user/sos/sos.h
 	$(CC) $(CFLAGS) -o $@ $< $(INC) -L$(LIB) -lxseg -lsos
 
 xseg: xseg-tool.c $(BASE)/xseg/xseg.h
-	$(CC) $(CFLAGS) -o $@ $< $(INC) -L$(LIB) -lxseg
+	$(CC) $(CFLAGS) -o $@ $< $(BASE)/xtypes/xheap.c $(INC) -L$(LIB) -lxseg
 
 mt-sosd: mt-sosd.c peer.c peer.h
 	$(CC) $(CFLAGS) -o $@ $< peer.c $(INC) -L$(LIB) -lxseg -lrados -lpthread -DMT

@@ -9,6 +9,8 @@
 #include <fcntl.h>
 #include <unistd.h>
 
+#include <xtypes/xhash.h>
+#include <xtypes/xobj.h>
 #include <xseg/xseg.h>
 #include <xseg/protocol.h>
 int help(void)
@@ -194,7 +196,7 @@ void report_request(struct xseg_request *req)
 	//if (max > 128)
 	//	max = 128;
 	//data[max-1] = 0;
-	fprintf(stderr, "request %llu state %u\n", (unsigned long long)req->serial, req->state);
+	fprintf(stderr, "request %lx state %u\n", (unsigned long )req, req->state);
 }
 
 int cmd_info(char *target)
@@ -242,7 +244,6 @@ int cmd_read(char *target, uint64_t offset, uint64_t size)
 	xport p;
 	char *req_target;
 	struct xseg_request *req = xseg_get_request(xseg, srcport, dstport, X_ALLOC);
-	printf("%x\n", req);
 	if (!req) {
 		fprintf(stderr, "No request\n");
 		return -1;
@@ -963,14 +964,16 @@ int cmd_report(uint32_t portno)
 	pq = xseg_get_queue(xseg, port, reply_queue);
 	fprintf(stderr, "port %u:\n"
 		"   requests: %llu/%llu  src gw: %u  dst gw: %u\n"
-		"       free_queue [%p] count : %u\n"
-		"    request_queue [%p] count : %u\n"
-		"      reply_queue [%p] count : %u\n",
-		portno, port->alloc_reqs, port->max_alloc_reqs,
-		xseg->src_gw[portno], xseg->dst_gw[portno],
-		(void *)fq, xq_count(fq),
-		(void *)rq, xq_count(rq),
-		(void *)pq, xq_count(pq));
+		"       free_queue [%p] count : %llu\n"
+		"    request_queue [%p] count : %llu\n"
+		"      reply_queue [%p] count : %llu\n",
+		portno, (unsigned long long)port->alloc_reqs, 
+		(unsigned long long)port->max_alloc_reqs,
+		xseg->src_gw[portno],
+		xseg->dst_gw[portno],
+		(void *)fq, (unsigned long long)xq_count(fq),
+		(void *)rq, (unsigned long long)xq_count(rq),
+		(void *)pq, (unsigned long long)xq_count(pq));
 	return 0;
 }
 
@@ -986,6 +989,15 @@ int cmd_join(void)
 	}
 	return 0;
 }
+static void print_hanlder(char *name, struct xobject_h *obj_h)
+{
+	fprintf(stderr, "%20s: free: %4llu, allocated: %4llu, allocated space: %7llu (object size: %llu)\n",
+			name,
+			(unsigned long long) obj_h->nr_free,
+			(unsigned long long) obj_h->nr_allocated,
+			(unsigned long long) obj_h->allocated_space,
+			(unsigned long long) obj_h->obj_size);
+}
 
 int cmd_reportall(void)
 {
@@ -995,23 +1007,46 @@ int cmd_reportall(void)
 		return -1;
 
 
-	fprintf(stderr, "Heap usage: %llu / %llu\n", xseg->heap->cur, xseg->config.heap_size);
-	fprintf(stderr, "Requests handler: free: %llu, allocated: %llu, allocated space %llu\n", 
-			(unsigned long long) xseg->request_h->nr_free,
-			(unsigned long long) xseg->request_h->nr_allocated,
-			(unsigned long long) xseg->request_h->allocated_space);
-	fprintf(stderr, "Ports handler: free: %llu, allocated: %llu, allocated space %llu\n", 
-			(unsigned long long) xseg->port_h->nr_free,
-			(unsigned long long) xseg->port_h->nr_allocated,
-			(unsigned long long) xseg->port_h->allocated_space);
-	fprintf(stderr, "objects handler: free: %llu, allocated: %llu, allocated space %llu\n", 
-			(unsigned long long) xseg->object_handlers->nr_free,
-			(unsigned long long) xseg->object_handlers->nr_allocated,
-			(unsigned long long) xseg->object_handlers->allocated_space);
+	fprintf(stderr, "Heap usage: %llu / %llu\n",
+			(unsigned long long)xseg->heap->cur,
+			(unsigned long long)xseg->config.heap_size);
+	fprintf(stderr, "Handlers: \n");
+	print_hanlder("Requests handler", xseg->request_h);
+	print_hanlder("Ports handler", xseg->port_h);
+	print_hanlder("Objects handler", xseg->object_handlers);
 	fprintf(stderr, "\n");
+
 	for (t = 0; t < xseg->config.nr_ports; t++)
 		cmd_report(t);
 
+	return 0;
+}
+
+int cmd_showrequests(xport portno)
+{
+	if (cmd_join())
+		return -1;
+
+	struct xobject_h *obj_h = xseg->request_h;
+	void *container = XPTR(&obj_h->container);
+	xhash_t *allocated = XPTR_TAKE(obj_h->allocated, container);
+	xhash_iter_t it;
+	xhash_iter_init(allocated, &it);
+	xhashidx key, val;
+	int i;
+	while (xhash_iterate(allocated, &it, &key, &val)){
+		void *mem = XPTR_TAKE(val, container);
+		struct xseg_request *req = mem, *t;
+		for (i = 0; i < xheap_get_chunk_size(mem)/obj_h->obj_size; i++) {
+			t = req + i;
+			if (t->src_portno == portno){
+				fprintf(stderr, "%d ,req: %lx ", i, t);
+				report_request(t);
+			}
+		}
+	}
+
+	fprintf(stderr, "\n");
 	return 0;
 }
 
@@ -1304,6 +1339,12 @@ int main(int argc, char **argv)
 
 		if (!strcmp(argv[i], "bind") && (i + 1 < argc)) {
 			ret = cmd_bind(atol(argv[i+1]));
+			i += 1;
+			continue;
+		}
+
+		if (!strcmp(argv[i], "showreqs") && (i + 1 < argc)) {
+			ret = cmd_showrequests(atol(argv[i+1]));
 			i += 1;
 			continue;
 		}
