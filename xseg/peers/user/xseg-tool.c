@@ -50,6 +50,13 @@ int help(void)
 	return 1;
 }
 
+
+enum req_action {
+	REPORT = 1,
+	FAIL = 2,
+	COMPLETE = 3
+};
+
 char *namebuf;
 char *chunk;
 struct xseg_config cfg;
@@ -191,12 +198,30 @@ out:
 
 void report_request(struct xseg_request *req)
 {
-	//uint32_t max = req->datalen;
-	//char *data = xseg_get_data(xseg, req);
-	//if (max > 128)
-	//	max = 128;
-	//data[max-1] = 0;
-	fprintf(stderr, "request %lx state %u\n", (unsigned long )req, req->state);
+	char target[64], data[64];
+	char *req_target, *req_data;
+	unsigned int end = (req->targetlen> 63) ? 63 : req->targetlen;
+	req_target = xseg_get_target(xseg, req);
+	req_data = xseg_get_data(xseg, req);
+
+	strncpy(target, req_target, end);
+	target[end] = 0;
+	strncpy(data, req_data, 63);
+	data[63] = 0;
+	fprintf(stderr,
+		"Request %lx: target[%u](xptr: %llu): %s, data[%llu](xptr: %llu): %s \n\t"
+		"offset: %llu, size: %llu, serviced; %llu, op: %u, state: %u, flags: %u \n\t"
+		"src: %u, src_transit: %u, dst: %u, dst_transit: %u\n",
+		(unsigned long) req, req->targetlen, (unsigned long long)req->target,
+		xseg_get_target(xseg, req),
+		(unsigned long long) req->datalen, (unsigned long long) req->data,
+		xseg_get_data(xseg, req),
+		(unsigned long long) req->offset, (unsigned long long) req->size,
+		(unsigned long long) req->serviced, req->op, req->state, req->flags,
+		(unsigned int) req->src_portno, (unsigned int) req->src_transit_portno,
+		(unsigned int) req->dst_portno, (unsigned int) req->dst_transit_portno);
+
+
 }
 
 int cmd_info(char *target)
@@ -1022,7 +1047,22 @@ int cmd_reportall(void)
 	return 0;
 }
 
-int cmd_showrequests(xport portno)
+
+int finish_req(struct xseg_request *req, enum req_action action)
+{
+	if (action == COMPLETE){
+		req->state &= ~XS_FAILED;
+		req->state |= XS_SERVED;
+	} else {
+		req->state |= XS_FAILED;
+		req->state &= ~XS_SERVED;
+	}
+	xport p = xseg_respond(xseg, req, srcport, X_ALLOC);
+	xseg_signal(xseg, p);
+}
+
+
+int cmd_requests(xport portno, enum req_action action )
 {
 	if (cmd_join())
 		return -1;
@@ -1034,17 +1074,23 @@ int cmd_showrequests(xport portno)
 	xhash_iter_init(allocated, &it);
 	xhashidx key, val;
 	int i;
+	xlock_acquire(&obj_h->lock, 1);
 	while (xhash_iterate(allocated, &it, &key, &val)){
 		void *mem = XPTR_TAKE(val, container);
 		struct xseg_request *req = mem, *t;
 		for (i = 0; i < xheap_get_chunk_size(mem)/obj_h->obj_size; i++) {
 			t = req + i;
 			if (t->src_portno == portno){
-				fprintf(stderr, "%d ,req: %lx ", i, t);
-				report_request(t);
+				if (action == REPORT)
+					report_request(t);
+				else if (action == FAIL)
+					finish_req(t, action);
+				else if (action == COMPLETE)
+					finish_req(t, COMPLETE);
 			}
 		}
 	}
+	xlock_release(&obj_h->lock);
 
 	fprintf(stderr, "\n");
 	return 0;
@@ -1344,7 +1390,7 @@ int main(int argc, char **argv)
 		}
 
 		if (!strcmp(argv[i], "showreqs") && (i + 1 < argc)) {
-			ret = cmd_showrequests(atol(argv[i+1]));
+			ret = cmd_requests(atol(argv[i+1]), REPORT);
 			i += 1;
 			continue;
 		}
@@ -1375,6 +1421,13 @@ int main(int argc, char **argv)
 				fprintf(stderr, "destination port undefined: %s\n", argv[i]);
 			continue;
 		}
+
+		if (!strcmp(argv[i], "failreqs") && (i + 1 < argc)) {
+			ret = cmd_requests(atol(argv[i+1]), FAIL);
+			i += 1;
+			continue;
+		}
+
 
 		if (!strcmp(argv[i], "report")) {
 			ret = cmd_report(dstport);
