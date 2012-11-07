@@ -976,8 +976,20 @@ int cmd_submit_reqs(long loops, long concurrent_reqs, int op)
 	return 0;
 }
 
+static void lock_status(struct xlock *lock, char *buf, int len)
+{
+	int r;
+	if (lock->owner == Noone)
+		r = snprintf(buf, len, "Locked: No");
+	else
+		r = snprintf(buf, len, "Locked: Yes (Owner: %lu)", lock->owner);
+	if (r >= len)
+		buf[len-1] = 0;
+}
+
 int cmd_report(uint32_t portno)
 {
+	char fls[64], rls[64], pls[64]; // buffer to store lock status
 	struct xseg_port *port = xseg_get_port(xseg, portno);
 	if (!port) {
 		printf("port %u is not assigned\n", portno);
@@ -987,18 +999,21 @@ int cmd_report(uint32_t portno)
 	fq = xseg_get_queue(xseg, port, free_queue);
 	rq = xseg_get_queue(xseg, port, request_queue);
 	pq = xseg_get_queue(xseg, port, reply_queue);
+	lock_status(&fq->lock, fls, 64);
+	lock_status(&rq->lock, rls, 64);
+	lock_status(&pq->lock, pls, 64);
 	fprintf(stderr, "port %u:\n"
 		"   requests: %llu/%llu  src gw: %u  dst gw: %u\n"
-		"       free_queue [%p] count : %llu\n"
-		"    request_queue [%p] count : %llu\n"
-		"      reply_queue [%p] count : %llu\n",
+		"       free_queue [%p] count : %4llu | %s\n"
+		"    request_queue [%p] count : %4llu | %s\n"
+		"      reply_queue [%p] count : %4llu | %s\n",
 		portno, (unsigned long long)port->alloc_reqs, 
 		(unsigned long long)port->max_alloc_reqs,
 		xseg->src_gw[portno],
 		xseg->dst_gw[portno],
-		(void *)fq, (unsigned long long)xq_count(fq),
-		(void *)rq, (unsigned long long)xq_count(rq),
-		(void *)pq, (unsigned long long)xq_count(pq));
+		(void *)fq, (unsigned long long)xq_count(fq), fls,
+		(void *)rq, (unsigned long long)xq_count(rq), rls,
+		(void *)pq, (unsigned long long)xq_count(pq), pls);
 	return 0;
 }
 
@@ -1024,6 +1039,63 @@ static void print_hanlder(char *name, struct xobject_h *obj_h)
 			(unsigned long long) obj_h->obj_size);
 }
 
+//FIXME ugly
+static void print_heap(struct xseg *xseg)
+{
+	char *UNIT[4];
+	UNIT[0] = "B";
+	UNIT[1] = "KiB";
+	UNIT[2] = "MiB";
+	UNIT[3] = "GiB";
+	uint64_t MULT[4];
+	MULT[0] = 1;
+	MULT[1] = 1024;
+	MULT[2] = 1024*1024;
+	MULT[3] = 1024*1024*1024;
+
+	int u;
+	uint64_t t;
+	fprintf(stderr, "Heap usage: ");
+	u = 0;
+	t = xseg->heap->cur;
+	while (t > 0) {
+		t /= 1024;
+		u++;
+	}
+	if (!t)
+		u--;
+	t = xseg->heap->cur / MULT[u];
+	if (t < 10){
+		float tf = ((float)(xseg->heap->cur))/((float)MULT[u]);
+		fprintf(stderr, "%2.1f %s/", tf, UNIT[u]);
+	}
+	else {
+		unsigned int tu = xseg->heap->cur / MULT[u];
+		fprintf(stderr, "%3u %s/", tu, UNIT[u]);
+	}
+
+	u = 0;
+	t = xseg->config.heap_size;
+	while (t > 0) {
+		t /= 1024;
+		u++;
+	}
+	if (!t)
+		u--;
+	t = xseg->config.heap_size/MULT[u];
+	if (t < 10){
+		float tf = ((float)(xseg->config.heap_size))/(float)MULT[u];
+		fprintf(stderr, "%2.1f %s ", tf, UNIT[u]);
+	}
+	else {
+		unsigned int tu = xseg->config.heap_size / MULT[u];
+		fprintf(stderr, "%3u %s ", tu, UNIT[u]);
+	}
+	fprintf(stderr, "(%llu / %llu)\n",
+			(unsigned long long)xseg->heap->cur,
+			(unsigned long long)xseg->config.heap_size);
+}
+
 int cmd_reportall(void)
 {
 	uint32_t t;
@@ -1031,10 +1103,12 @@ int cmd_reportall(void)
 	if (cmd_join())
 		return -1;
 
-
-	fprintf(stderr, "Heap usage: %llu / %llu\n",
-			(unsigned long long)xseg->heap->cur,
-			(unsigned long long)xseg->config.heap_size);
+	fprintf(stderr, "Segment lock: %s\n",
+		(xseg->shared->flags & XSEG_F_LOCK) ? "Locked" : "Unlocked");
+	print_heap(xseg);
+	/* fprintf(stderr, "Heap usage: %llu / %llu\n", */
+	/* 		(unsigned long long)xseg->heap->cur, */
+	/* 		(unsigned long long)xseg->config.heap_size); */
 	fprintf(stderr, "Handlers: \n");
 	print_hanlder("Requests handler", xseg->request_h);
 	print_hanlder("Ports handler", xseg->port_h);
@@ -1057,8 +1131,10 @@ int finish_req(struct xseg_request *req, enum req_action action)
 		req->state |= XS_FAILED;
 		req->state &= ~XS_SERVED;
 	}
+	req->serviced = 0;
 	xport p = xseg_respond(xseg, req, srcport, X_ALLOC);
 	xseg_signal(xseg, p);
+	return (p == NoPort);
 }
 
 
@@ -1080,7 +1156,8 @@ int cmd_requests(xport portno, enum req_action action )
 		struct xseg_request *req = mem, *t;
 		for (i = 0; i < xheap_get_chunk_size(mem)/obj_h->obj_size; i++) {
 			t = req + i;
-			if (t->src_portno == portno){
+			struct xobject *obj = (struct xobject *)t;
+			if (obj->magic != MAGIC_REQ && t->src_portno == portno){
 				if (action == REPORT)
 					report_request(t);
 				else if (action == FAIL)

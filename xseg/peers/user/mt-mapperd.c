@@ -1342,6 +1342,7 @@ static int req2objs(struct peer_req *pr, struct map *map, int write)
 					//calc new_target, copy up object
 					if (copyup_object(peer, mn, pr) == NULL){
 						XSEGLOG2(&lc, E, "Error in copy up object");
+						mio->err = 1;
 					} else {
 						mio->copyups++;
 					}
