@@ -52,9 +52,9 @@ def ReadEnv():
     return None
 
   size = os.getenv("VOL_SIZE")
-  if size is None:
-    sys.stderr.write('The environment variable VOL_SIZE is missing.\n')
-    return None
+#  if size is None:
+#    sys.stderr.write('The environment variable VOL_SIZE is missing.\n')
+#    return None
 
   origin = os.getenv("EXTP_ORIGIN")
 
@@ -151,32 +151,34 @@ def attach(env):
   dev = _ParseVlmcShowmappedOutput(result.output, name)
   if dev:
     # The mapping exists. Return it.
-    return dev
+    sys.stdout.write("%s" % str(dev))
+    return 0
 
   # The mapping doesn't exist. Create it.
   map_cmd = ["vlmc", "map", name]
   result = utils.RunCmd(map_cmd)
   if result.failed:
-    sys.stderr.write("vlmc map failed (%s): %s",
-                result.fail_reason, result.output)
+    sys.stderr.write("vlmc map failed (%s): %s" %
+                (result.fail_reason, result.output))
     return 1
 
   # Find the corresponding vlmc device.
   showmap_cmd = ["vlmc", "showmapped"]
   result = utils.RunCmd(showmap_cmd)
   if result.failed:
-    sys.stderr.write("vlmc map succeeded, but showmapped failed (%s): %s",
-                result.fail_reason, result.output)
+    sys.stderr.write("vlmc map succeeded, but showmapped failed (%s): %s" %
+                (result.fail_reason, result.output))
     return 1
 
-  dev = self._ParseRbdShowmappedOutput(result.output, name)
+  dev = _ParseVlmcShowmappedOutput(result.output, name)
 
   if not dev:
     sys.stderr.write("vlmc map succeeded, but could not find the vlmc block"
-                " device in output of showmapped, for volume: %s", name)
+                " device in output of showmapped, for volume: %s" % name)
 
   # The device was successfully mapped. Return it.
-  return dev
+  sys.stdout.write("%s" % str(dev))
+  return 0
 
 def detach(env):
   """Unmap a vlmc device from the Image it is mapped to
@@ -249,13 +251,13 @@ def main():
 
   try:
     return {
-      'attach': attach(env),
-      'create': create(env),
-      'detach': detach(env),
-      'grow'  : grow(env),
-      'remove': remove(env),
-      'verify': verify(env),
-    }[os.path.basename(sys.argv[0])]
+      'attach': attach,
+      'create': create,
+      'detach': detach,
+      'grow'  : grow,
+      'remove': remove,
+      'verify': verify
+    }[os.path.basename(sys.argv[0])](env)
   except:
     sys.stderr.write("Op not supported")
     return 1
