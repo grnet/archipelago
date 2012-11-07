@@ -2,42 +2,239 @@
 #
 # archipelagos tool
 
-import os, sys, subprocess, argparse, time, psutil, signal
+import os, sys, subprocess, argparse, time, psutil, signal, socket
 from subprocess import call, check_call
 
 BIN_PATH="/usr/bin"
 PIDFILE_PATH="/var/run/archipelagos"
 
-MAPPER="mt-mapperd"
-VLMC="st-vlmcd"
-BLOCKER="pfiled"
+DEVICE_PREFIX="/dev/xsegbd"
+XSEGBD_SYSFS="/sys/bus/xsegbd/"
 
 CHARDEV_NAME="/dev/segdev"
-CHARDEV_MAJOR="60"
-CHARDEV_MINOR="0"
+CHARDEV_MAJOR=60
+
+SPEC="segdev:xsegbd:512:1024:12"
+#REQS=512
+#PORTS=512
+
+BPORT=""
+MPORT=1
+MBPORT=2
+VTOOL=3
+VPORT_START=204
+VPORT_END=403
+
+LOGS_PATH=""
+
+BLOCKER=""
+MAPPER=""
+VLMC=""
+
+NR_OPS_BLOCKERB=""
+NR_OPS_BLOCKERM=""
+NR_OPS_VLMC=""
+NR_OPS_MAPPER=""
+
+VERBOSITY_BLOCKERB=""
+VERBOSITY_BLOCKERM=""
+VERBOSITY_MAPPER=""
+VERBOSITY_VLMC=""
+
+FILED_IMAGES=""
+FILED_MAPS=""
+
+PITHOS=""
+PITHOSMAPS=""
+
+RADOS_POOL_MAPS=""
+RADOS_POOL_BLOCKS=""
+STORAGE="File"
 
 try:
     execfile(os.path.expanduser("/etc/default/archipelagos"), globals())
 except:
-    pass
+    print "Cannot open defaults"
+    sys.exit(1)
+
+HOSTNAME=socket.gethostname()
 
 #FIXME check defaults
-peer_blockerb = [BLOCKER, ["-p" , str(BPORT), "-g", str(SPEC), "-n", str(NR_OPS),
-        str(PITHOS), str(IMAGES), "-d", "-f", os.path.join(PIDFILE_PATH, "blockerd.pid")], "blockerd"]
-peer_blockerm = [BLOCKER, ["-p" , str(MBPORT), "-g", str(SPEC), "-n", str(NR_OPS),
-        str(PITHOSMAPS), str(MAPS), "-d", "-f", os.path.join(PIDFILE_PATH, "blockerm.pid")], "blockerm" ]
-peer_vlmcd = [VLMC, ["-t" , "1", "-sp",  str(VPORT_START), "-ep", str(VPORT_END), 
-        "-g", str(SPEC), "-n", str(NR_OPS), "-bp", str(BPORT), "-mp", str(MPORT),
-	    "-d", "--pidfile", os.path.join(PIDFILE_PATH, "vlmcd.pid")], "vlmcd"]
-peer_mapperd = [MAPPER, ["-t" , "1", "-p",  str(MPORT), "-mbp", str(MBPORT),
-        "-g", str(SPEC), "-n", str(NR_OPS), "-bp", str(BPORT), "-d", "--pidfile",
-	    os.path.join(PIDFILE_PATH, "mapper.pid")], "mapper"]
+if BLOCKER == "pfiled":
+    peer_blockerb = [BLOCKER,
+            ["-p" , str(BPORT), "-g", str(SPEC), "-n", str(NR_OPS_BLOCKERB),
+             str(PITHOS), str(FILED_IMAGES), "-d",
+            "-f", os.path.join(PIDFILE_PATH, "blockerb.pid")],
+            "blockerb"]
+    peer_blockerm = [BLOCKER,
+            ["-p" , str(MBPORT), "-g", str(SPEC), "-n", str(NR_OPS_BLOCKERM),
+            str(PITHOSMAPS), str(FILED_MAPS), "-d",
+            "-f", os.path.join(PIDFILE_PATH, "blockerm.pid")],
+            "blockerm" ]
+else:
+    peer_blockerb = [BLOCKER,
+            ["-p" , str(BPORT), "-g", str(SPEC), "-n", str(NR_OPS_BLOCKERB),
+             "--pool", str(RADOS_POOL_BLOCKS), "-v", str(VERBOSITY_BLOCKERB),
+             "-d", "--pidfile", os.path.join(PIDFILE_PATH, "blockerb.pid"),
+             "-l", os.path.join(str(LOGS_PATH), "blockerm-"+HOSTNAME+".log"),
+             "-t", "3"],
+             "blockerb"]
+    peer_blockerm = [BLOCKER,
+            ["-p" , str(MBPORT), "-g", str(SPEC), "-n", str(NR_OPS_BLOCKERM),
+             "--pool", str(RADOS_POOL_BLOCKS), "-v", str(VERBOSITY_BLOCKERM),
+             "-d", "--pidfile", os.path.join(PIDFILE_PATH, "blockerm.pid"),
+             "-l", os.path.join(str(LOGS_PATH), "blockerm-"+HOSTNAME+".log"),
+             "-t", "3"],
+             "blockerm"]
+
+peer_vlmcd = [VLMC,
+         ["-t" , "1", "-sp",  str(VPORT_START), "-ep", str(VPORT_END),
+          "-g", str(SPEC), "-n", str(NR_OPS_VLMC), "-bp", str(BPORT),
+          "-mp", str(MPORT), "-d", "-v", str(VERBOSITY_VLMC),
+          "--pidfile", os.path.join(PIDFILE_PATH, "vlmcd.pid"),
+          "-l", os.path.join(str(LOGS_PATH), "vlmc-"+HOSTNAME+".log")
+          ], "vlmcd"]
+peer_mapperd = [MAPPER,
+         ["-t" , "1", "-p",  str(MPORT), "-mbp", str(MBPORT),
+          "-g", str(SPEC), "-n", str(NR_OPS_MAPPER), "-bp", str(BPORT), "-d",
+          "--pidfile", os.path.join(PIDFILE_PATH, "mapperd.pid"),
+          "-v", str(VERBOSITY_MAPPER),
+          "-l", os.path.join(str(LOGS_PATH), "mapperd-"+HOSTNAME+".log")
+          ], "mapperd"]
 
 peers = [peer_blockerb, peer_blockerm, peer_vlmcd, peer_mapperd]
-#peers = [peer_vlmcd, peer_mapperd]
 modules = ["xseg", "segdev", "xseg_posix", "xseg_pthread", "xseg_segdev"]
 xsegbd = "xsegbd"
-    
+
+def check_conf():
+    def isExec(file_path):
+        return os.path.isfile(file_path) and os.access(file_path, os.X_OK)
+
+    def validExec(program):
+        for path in os.environ["PATH"].split(os.pathsep):
+            exe_file = os.path.join(path, program)
+            if isExec(exe_file):
+                return True
+        return False
+
+
+    def validPort(port, limit, name):
+        try:
+            if int(port) >= limit:
+                print str(port) + " >= " + limit
+                return False
+        except:
+            print "Invalid port "+name+" : " + str(port)
+            return False
+
+        return True
+
+
+    for p in [BLOCKER, MAPPER, VLMC]:
+        if not validExec(p):
+            print p + "is not a valid executable"
+            return False
+
+    if not LOGS_PATH:
+        print "LOGS_PATH is not set"
+        return False
+    if not PIDFILE_PATH:
+        print "PIDFILE_PATH is not set"
+        return False
+
+    try:
+        if not os.path.isdir(str(LOGS_PATH)):
+            print "LOGS_PATH "+str(LOGS_PATH)+" does not exist"
+            return False
+    except:
+        print "LOGS_PATH doesn't exist or is not set"
+        return False
+
+    try:
+        if not os.path.isdir(str(PIDFILE_PATH)):
+            print "PIDFILE_PATH "+str(PIDFILE_PATH)+" does not exist"
+            return False
+    except:
+        print "PIDFILE_PATH or is not set"
+        return False
+
+    splitted_spec = str(SPEC).split(':')
+    if len(splitted_spec) < 5:
+        "Invalid spec"
+        return False
+
+    xseg_type=splitted_spec[0]
+    xseg_name=splitted_spec[1]
+    xseg_ports=int(splitted_spec[2])
+    xseg_heapsize=int(splitted_spec[3])
+    xseg_align=int(splitted_spec[4])
+
+    if xseg_type != "segdev":
+        print "Segment type not segdev"
+        return False
+    if xseg_name != "xsegbd":
+        print "Segment name not equal xsegbd"
+        return False
+    if xseg_align != 12:
+        print "Wrong alignemt"
+        return False
+
+    for v in [VERBOSITY_BLOCKERB, VERBOSITY_BLOCKERM, VERBOSITY_MAPPER,
+                    VERBOSITY_VLMC]:
+         if v is None:
+             print "Verbosity missing"
+         try:
+             if (int(v) > 3 or int(v) < 0):
+                 print "Invalid verboisity " + str(v)
+                 return False
+         except:
+             print "Invalid verboisity " + str(v)
+             return False
+
+    for n in [NR_OPS_BLOCKERB, NR_OPS_BLOCKERM, NR_OPS_VLMC, NR_OPS_MAPPER]:
+         if n is None:
+             print "Nr ops missing"
+         try:
+             if (int(n) <= 0):
+                 print "Invalid nr_ops " + str(n)
+                 return False
+         except:
+             print "Invalid nr_ops " + str(n)
+             return False
+
+    if not validPort(VTOOL, xseg_ports, "VTOOL"):
+        return False
+    if not validPort(MPORT, xseg_ports, "MPORT"):
+        return False
+    if not validPort(BPORT, xseg_ports, "BPORT"):
+        return False
+    if not validPort(MBPORT, xseg_ports, "MBPORT"):
+        return False
+    if not validPort(VPORT_START, xseg_ports, "VPORT_START"):
+        return False
+    if not validPort(VPORT_END, xseg_ports, "VPORT_END"):
+        return False
+#if filed
+    if STORAGE == "File":
+        if FILED_IMAGES and not os.path.isdir(str(FILED_IMAGES)):
+             print "FILED_IMAGES invalid"
+             return False
+        if FILED_MAPS and not os.path.isdir(str(FILED_MAPS)):
+             print "FILED_PATH invalid"
+             return False
+        if PITHOS and not os.path.isdir(str(PITHOS)):
+             print "PITHOS invalid " 
+             return False
+        if PITHOSMAPS and not os.path.isdir(str(PITHOSMAPS)):
+             print "PITHOSMAPS invalid"
+             return False
+
+
+    return True
+
+if not check_conf():
+    sys.exit(1)
+
 def exclusive(fn):
     def exclusive_args(args):
         file = "/tmp/vlmc_map.lock"
@@ -79,15 +276,17 @@ def vlmc_showmapped(args):
     return len(devices)
 
 def loadrc(rc):
-    #FIXME
-    #check config file sanity
     try:
         if rc == None:
             execfile(os.path.expanduser("/etc/default/archipelagos"), globals())
         else:
             execfile(rc, globals())
     except:
-        pass
+        print "Cannot read config file"
+        sys.exit(1)
+
+    if not check_conf():
+        sys.exit(1)
 
 def loaded_modules():
     lines = open("/proc/modules").read().split("\n")
