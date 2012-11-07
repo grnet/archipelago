@@ -74,9 +74,10 @@ typedef uint32_t xport;
 struct xseg;
 struct xseg_port;
 
-#define MAGIC_OBJH 	1
-#define MAGIC_REQ 	2
-#define MAGIC_PORT 	3
+#define XSEG_MAGIC	(0xcafe0000)
+#define MAGIC_OBJH 	(XSEG_MAGIC | 1)
+#define MAGIC_REQ 	(XSEG_MAGIC | 2)
+#define MAGIC_PORT 	(XSEG_MAGIC | 3)
 
 struct xseg_operations {
 	void  (*mfree)(void *mem);

@@ -11,3 +11,5 @@ EXPORT_SYMBOL(xhash_freql_update);
 EXPORT_SYMBOL(xhash_delete);
 EXPORT_SYMBOL(xhash_lookup);
 EXPORT_SYMBOL(xhash_print);
+EXPORT_SYMBOL(xhash_iter_init);
+EXPORT_SYMBOL(xhash_iterate);

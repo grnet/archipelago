@@ -398,6 +398,7 @@ static void* thread_loop(void *arg)
 		xseg_cancel_wait(xseg, peer->portno_start);
 		XSEGLOG2(&lc, I, "Thread %u woke up\n", (unsigned int) (t- peer->thread));
 	}
+	wake_up_next_thread(peer);
 	return NULL;
 }
 
@@ -533,7 +534,7 @@ malloc_fail:
 	peer->portno_end= (xport) portno_end;
 	port = xseg_bind_port(peer->xseg, peer->portno_start, NULL);
 	if (!port){
-		printf("cannot bind to port %ld\n", peer->portno_start);
+		printf("cannot bind to port %u\n", (unsigned int) peer->portno_start);
 		return NULL;
 	}
 
@@ -542,7 +543,7 @@ malloc_fail:
 		struct xseg_port *tmp;
 		tmp = xseg_bind_port(peer->xseg, p, (void *)xseg_get_signal_desc(peer->xseg, port));
 		if (!tmp){
-			printf("cannot bind to port %ld\n", p);
+			printf("cannot bind to port %u\n", (unsigned int) p);
 			return NULL;
 		}
 	}
@@ -575,7 +576,7 @@ int pidfile_remove(char *path, int fd)
 int pidfile_write(int pid_fd)
 {
 	char buf[16];
-	snprintf(buf, sizeof(buf), "%d", syscall(SYS_gettid));
+	snprintf(buf, sizeof(buf), "%ld", syscall(SYS_gettid));
 	buf[15] = 0;
 	
 	lseek(pid_fd, 0, SEEK_SET);
