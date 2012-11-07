@@ -1,21 +1,19 @@
 #XSEG_HOME="/home/philipgian/archip/xseg"
 #MODULES_DIR="${XSEG_HOME}/lib/kernel"
 
+
+# xseg
+
 SPEC="segdev:xsegbd:512:1024:12"
 REQS=512
 PORTS=512
 
-IMAGES="/srv/archip/blocks"
-MAPS="/srv/archip/maps"
-
-PITHOS="/srv/pithos/data/blocks"
-PITHOSMAPS="/srv/pithos/data/maps"
-
+#do not touch
 DEVICE_PREFIX="/dev/xsegbd"
 XSEGBD_SYSFS="/sys/bus/xsegbd/"
 
-CHRDEV_NAME="/dev/segdev"
-CHRDEV_MAJOR=60
+CHARDEV_NAME="/dev/segdev"
+CHARDEV_MAJOR=60
 
 BPORT=0
 MPORT=1
@@ -24,5 +22,31 @@ VTOOL=3
 VPORT_START=204
 VPORT_END=403
 
-NR_OPS=128
+# peers
+
+LOGS_PATH="/srv/archip/logs"
+#PIDFILE_PATH="/var/run/archipelagos"
+
+BLOCKER="mt-sosd"
+MAPPER="mt-mapperd"
+VLMC="st-vlmcd"
+
+NR_OPS_BLOCKERB=128
+NR_OPS_BLOCKERM=128
+NR_OPS_VLMC=128
+NR_OPS_MAPPER=128
+
+VERBOSITY_BLOCKERB="3"
+VERBOSITY_BLOCKERM="3"
+VERBOSITY_MAPPER="3"
+VERBOSITY_VLMC="3"
+
+FILED_IMAGES="/srv/archip/blocks"
+FILED_MAPS="/srv/archip/maps"
+
+PITHOS="/srv/pithos/data/blocks"
+PITHOSMAPS="/srv/pithos/data/maps"
+
+RADOS_POOL_MAPS="maps"
+RADOS_POOL_BLOCKS="blocks"
 
