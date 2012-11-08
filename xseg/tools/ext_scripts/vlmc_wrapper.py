@@ -52,9 +52,9 @@ def ReadEnv():
     return None
 
   size = os.getenv("VOL_SIZE")
-  if size is None:
-    sys.stderr.write('The environment variable VOL_SIZE is missing.\n')
-    return None
+#  if size is None:
+#    sys.stderr.write('The environment variable VOL_SIZE is missing.\n')
+#    return None
 
   origin = os.getenv("EXTP_ORIGIN")
 
@@ -151,7 +151,7 @@ def attach(env):
   dev = _ParseVlmcShowmappedOutput(result.output, name)
   if dev:
     # The mapping exists. Return it.
-    sys.stdout.write("%s" % str(dev)))
+    sys.stdout.write("%s" % str(dev))
     return 0
 
   # The mapping doesn't exist. Create it.
@@ -177,7 +177,7 @@ def attach(env):
                 " device in output of showmapped, for volume: %s" % name)
 
   # The device was successfully mapped. Return it.
-  sys.stdout.write("%s" % str(dev)))
+  sys.stdout.write("%s" % str(dev))
   return 0
 
 def detach(env):

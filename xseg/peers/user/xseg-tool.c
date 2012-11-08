@@ -999,9 +999,9 @@ int cmd_report(uint32_t portno)
 	fq = xseg_get_queue(xseg, port, free_queue);
 	rq = xseg_get_queue(xseg, port, request_queue);
 	pq = xseg_get_queue(xseg, port, reply_queue);
-	lock_status(&fq->lock, fls, 64);
-	lock_status(&rq->lock, rls, 64);
-	lock_status(&pq->lock, pls, 64);
+	lock_status(&port->fq_lock, fls, 64);
+	lock_status(&port->rq_lock, rls, 64);
+	lock_status(&port->pq_lock, pls, 64);
 	fprintf(stderr, "port %u:\n"
 		"   requests: %llu/%llu  src gw: %u  dst gw: %u\n"
 		"       free_queue [%p] count : %4llu | %s\n"
