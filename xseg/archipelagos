@@ -59,7 +59,6 @@ except:
 
 HOSTNAME=socket.gethostname()
 
-#FIXME check defaults
 if BLOCKER == "pfiled":
     peer_blockerb = [BLOCKER,
             ["-p" , str(BPORT), "-g", str(SPEC), "-n", str(NR_OPS_BLOCKERB),
