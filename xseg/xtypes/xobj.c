@@ -25,7 +25,7 @@ int xobj_handler_init(struct xobject_h *obj_h, void *container,
 	 * allocated space. should be at least the above sizeshift
 	 */
 	//bytes = xheap_get_chunk_size(xhash);
-	
+
 	xhash_init(xhash, 3, INTEGER);
 	obj_h->allocated = XPTR_MAKE(xhash, container);
 	obj_h->list = 0;
@@ -50,7 +50,7 @@ int xobj_alloc_obj(struct xobject_h * obj_h, uint64_t nr)
 	xptr ptr, objptr;
 	xhash_t *allocated = XPTR_TAKE(obj_h->allocated, container);
 	int r;
-	
+
 	void *mem = xheap_allocate(heap, bytes);
 	if (!mem)
 		return -1;
@@ -67,8 +67,8 @@ int xobj_alloc_obj(struct xobject_h * obj_h, uint64_t nr)
 	}
 	if (!obj)
 		goto err;
-		
-	/* keep track of allocated objects. 
+
+	/* keep track of allocated objects.
 	 * Since the whole allocated space is split up into objects,
 	 * we can calculate allocated objects from the allocated heap
 	 * space and object size.
@@ -80,9 +80,9 @@ int xobj_alloc_obj(struct xobject_h * obj_h, uint64_t nr)
 		xhashidx sizeshift = xhash_grow_size_shift(allocated);
 		uint64_t size;
 		xhash_t *new;
-		size = xhash_get_alloc_size(sizeshift); 
+		size = xhash_get_alloc_size(sizeshift);
 		new = xheap_allocate(heap, size);
-		if (!new) 
+		if (!new)
 			goto err;
 		xhash_resize(allocated, sizeshift, new);
 		xheap_free(allocated);
@@ -92,7 +92,7 @@ int xobj_alloc_obj(struct xobject_h * obj_h, uint64_t nr)
 	}
 	if (r < 0)
 		goto err;
-	
+
 	obj_h->allocated_space += bytes;
 	obj_h->nr_free += bytes/obj_h->obj_size;
 	obj_h->nr_allocated += bytes/obj_h->obj_size;
@@ -141,17 +141,113 @@ retry:
 	goto out;
 
 alloc:
-	if (!(flags & X_ALLOC)) 
+	if (!(flags & X_ALLOC))
 		goto out;
 	//allocate minimum 64 objects
 	r = xobj_alloc_obj(obj_h, 64);
 	if (r<0)
 		goto out;
 	goto retry;
-out: 
+out:
 	xlock_release(&obj_h->lock);
 	return obj;
 }
+
+/* lock must be held, while using iteration on object handler
+ * or we risk hash resize and invalid memory access
+ */
+void xobj_iter_init(struct xobject_h *obj_h, struct xobject_iter *it)
+{
+	void *container = XPTR(&obj_h->container);
+
+	xhash_t *allocated = XPTR_TAKE(obj_h->allocated, container);
+	it->obj_h = obj_h;
+	xhash_iter_init(allocated, &it->xhash_it);
+	it->chunk = NULL;
+	it->cnt = 0;
+}
+
+int xobj_iterate(struct xobject_h *obj_h, struct xobject_iter *it, void **obj)
+{
+	int r = 0;
+	void *container = XPTR(&obj_h->container);
+	xhash_t *allocated = XPTR_TAKE(obj_h->allocated, container);
+	xhashidx key, val;
+
+	if (!it->chunk ||
+	     it->cnt >= xheap_get_chunk_size(it->chunk)/obj_h->obj_size){
+		r = xhash_iterate(allocated, &it->xhash_it, &key, &val);
+		if (!r)
+			return 0;
+		it->chunk = (void *)key;
+		it->cnt = 0;
+	}
+
+	*obj = (void *) ((unsigned long) it->chunk +
+			(unsigned long) it->cnt * obj_h->obj_size);
+	it->cnt++;
+
+	return 1;
+
+}
+
+/* TODO implement lock free versions */
+int xobj_check(struct xobject_h *obj_h, void *ptr)
+{
+	int r = 0;
+	void *container = XPTR(&obj_h->container);
+	xhash_iter_t it;
+	uint64_t i, nr_objs;
+
+	xlock_acquire(&obj_h->lock, 1);
+
+	xhash_t *allocated = XPTR_TAKE(obj_h->allocated, container);
+	xhash_iter_init(allocated, &it);
+	xhashidx key, val;
+	while (xhash_iterate(allocated, &it, &key, &val)){
+		void *mem = XPTR_TAKE(key, container);
+		void *obj;
+		nr_objs = xheap_get_chunk_size(mem)/obj_h->obj_size;
+		for (i = 0; i < nr_objs; i++) {
+			obj = (void *) ((unsigned long) mem +
+					(unsigned long) i * obj_h->obj_size);
+			if (obj == ptr) {
+				r = 1;
+				goto out;
+			}
+		}
+	}
+out:
+	xlock_release(&obj_h->lock);
+
+	return r;
+}
+
+int xobj_isFree(struct xobject_h *obj_h, void *ptr)
+{
+	int r = 0;
+	void *container = XPTR(&obj_h->container);
+	xptr node;
+	struct xobject *obj;
+
+	xlock_acquire(&obj_h->lock, 1);
+
+	node = obj_h->list;
+	while (node){
+		obj = XPTR_TAKE(node, container);
+		if (obj == ptr){
+			r = 1;
+			goto out;
+		}
+		node = obj->next;
+	}
+
+out:
+	xlock_release(&obj_h->lock);
+
+	return r;
+}
+
 
 #ifdef __KERNEL__
 #include <linux/module.h>
