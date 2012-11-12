@@ -91,6 +91,10 @@ void __get_current_time(struct timeval *tv) {
 int user_init_logctx(struct log_ctx *lc, char *peer_name, enum log_level log_level, char *logfile)
 {
 	FILE *file;
+	/* FIXME
+	 * copy peer_name
+	 * check logfile length
+	 */
 	lc->peer_name = peer_name;
 	lc->log_level = log_level;
 	if (!logfile) {
