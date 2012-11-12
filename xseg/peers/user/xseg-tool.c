@@ -57,6 +57,12 @@ enum req_action {
 	COMPLETE = 3
 };
 
+enum queue {
+	FREE_QUEUE = 0,
+	REQUEST_QUEUE = 1,
+	REPLY_QUEUE = 2
+};
+
 char *namebuf;
 char *chunk;
 struct xseg_config cfg;
@@ -213,9 +219,9 @@ void report_request(struct xseg_request *req)
 		"offset: %llu, size: %llu, serviced; %llu, op: %u, state: %u, flags: %u \n\t"
 		"src: %u, src_transit: %u, dst: %u, dst_transit: %u\n",
 		(unsigned long) req, req->targetlen, (unsigned long long)req->target,
-		xseg_get_target(xseg, req),
+		target,
 		(unsigned long long) req->datalen, (unsigned long long) req->data,
-		xseg_get_data(xseg, req),
+		data,
 		(unsigned long long) req->offset, (unsigned long long) req->size,
 		(unsigned long long) req->serviced, req->op, req->state, req->flags,
 		(unsigned int) req->src_portno, (unsigned int) req->src_transit_portno,
@@ -1031,12 +1037,14 @@ int cmd_join(void)
 }
 static void print_hanlder(char *name, struct xobject_h *obj_h)
 {
-	fprintf(stderr, "%20s: free: %4llu, allocated: %4llu, allocated space: %7llu (object size: %llu)\n",
+	char ls[64];
+	lock_status(&obj_h->lock, ls, 64);
+	fprintf(stderr, "%20s: free: %4llu, allocated: %4llu, allocated space: %7llu (object size: %llu), Lock %s\n",
 			name,
 			(unsigned long long) obj_h->nr_free,
 			(unsigned long long) obj_h->nr_allocated,
 			(unsigned long long) obj_h->allocated_space,
-			(unsigned long long) obj_h->obj_size);
+			(unsigned long long) obj_h->obj_size, ls);
 }
 
 //FIXME ugly
@@ -1091,9 +1099,12 @@ static void print_heap(struct xseg *xseg)
 		unsigned int tu = xseg->config.heap_size / MULT[u];
 		fprintf(stderr, "%3u %s ", tu, UNIT[u]);
 	}
-	fprintf(stderr, "(%llu / %llu)\n",
+	char ls[64];
+	lock_status(&xseg->heap->lock, ls, 64);
+	fprintf(stderr, "(%llu / %llu), %s\n",
 			(unsigned long long)xseg->heap->cur,
-			(unsigned long long)xseg->config.heap_size);
+			(unsigned long long)xseg->config.heap_size,
+			ls);
 }
 
 int cmd_reportall(void)
@@ -1133,8 +1144,169 @@ int finish_req(struct xseg_request *req, enum req_action action)
 	}
 	req->serviced = 0;
 	xport p = xseg_respond(xseg, req, srcport, X_ALLOC);
-	xseg_signal(xseg, p);
-	return (p == NoPort);
+	if (p == NoPort)
+		xseg_put_request(xseg, req, srcport);
+	else
+		xseg_signal(xseg, p);
+	return 0;
+}
+
+//FIXME this should be in xseg lib?
+static int isDangling(struct xseg_request *req)
+{
+	xport i;
+	struct xseg_port *port;
+	for (i = 0; i < xseg->config.nr_ports; i++) {
+		if (xseg->ports[i]){
+			port = xseg_get_port(xseg, i);
+			if (!port){
+				fprintf(stderr, "Inconsisten port <-> portno mapping %u", i);
+				continue;
+			}
+			struct xq *fq, *rq, *pq;
+			fq = xseg_get_queue(xseg, port, free_queue);
+			rq = xseg_get_queue(xseg, port, request_queue);
+			pq = xseg_get_queue(xseg, port, reply_queue);
+			xlock_acquire(&port->fq_lock, srcport);
+			if (__xq_check(fq, XPTR_MAKE(req, xseg->segment))){
+					xlock_release(&port->fq_lock);
+					return 0;
+			}
+			xlock_release(&port->fq_lock);
+			xlock_acquire(&port->rq_lock, srcport);
+			if (__xq_check(rq, XPTR_MAKE(req, xseg->segment))){
+					xlock_release(&port->rq_lock);
+					return 0;
+			}
+			xlock_release(&port->rq_lock);
+			xlock_acquire(&port->pq_lock, srcport);
+			if (__xq_check(pq, XPTR_MAKE(req, xseg->segment))){
+					xlock_release(&port->pq_lock);
+					return 0;
+			}
+			xlock_release(&port->pq_lock);
+		}
+	}
+	return 1;
+}
+
+//FIXME this should be in xseg lib?
+int cmd_verify(enum req_action action)
+{
+	if (cmd_join())
+		return -1;
+	//segment lock
+	if (xseg->shared->flags & XSEG_F_LOCK)
+		fprintf(stderr, "Segment lock: Locked\n");
+	//heap lock
+	if (xseg->heap->lock.owner != Noone)
+		fprintf(stderr, "Heap lock: Locked (Owner: %llu)\n",
+			(unsigned long long)xseg->heap->lock.owner);
+	//obj_h locks
+	if (xseg->request_h->lock.owner != Noone)
+		fprintf(stderr, "Requests handler lock: Locked (Owner: %llu)\n",
+			(unsigned long long)xseg->request_h->lock.owner);
+	if (xseg->port_h->lock.owner != Noone)
+		fprintf(stderr, "Ports handler lock: Locked (Owner: %llu)\n",
+			(unsigned long long)xseg->port_h->lock.owner);
+	if (xseg->object_handlers->lock.owner != Noone)
+		fprintf(stderr, "Objects handler lock: Locked (Owner: %llu)\n",
+			(unsigned long long)xseg->object_handlers->lock.owner);
+	//take segment lock?
+	xport i;
+	struct xseg_port *port;
+	for (i = 0; i < xseg->config.nr_ports; i++) {
+		if (xseg->ports[i]){
+			port = xseg_get_port(xseg, i);
+			if (!port){
+				fprintf(stderr, "Inconsisten port <-> portno mapping %u", i);
+				continue;
+			}
+			if (port->fq_lock.owner != Noone) {
+				fprintf(stderr, "Free queue lock of port %u locked (Owner %llu)\n",
+						i, (unsigned long long)port->fq_lock.owner);
+			}
+			if (port->rq_lock.owner != Noone) {
+				fprintf(stderr, "Request queue lock of port %u locked (Owner %llu)\n",
+						i, (unsigned long long)port->rq_lock.owner);
+			}
+			if (port->pq_lock.owner != Noone) {
+				fprintf(stderr, "Reply queue lock of port %u locked (Owner %llu)\n",
+						i, (unsigned long long)port->pq_lock.owner);
+			}
+		}
+	}
+
+	struct xobject_h *obj_h = xseg->request_h;
+	void *container = XPTR(&obj_h->container);
+	xhash_t *allocated = XPTR_TAKE(obj_h->allocated, container);
+	xhash_iter_t it;
+	xhash_iter_init(allocated, &it);
+	xhashidx key, val;
+	xlock_acquire(&obj_h->lock, srcport);
+	while (xhash_iterate(allocated, &it, &key, &val)){
+		void *mem = XPTR_TAKE(val, container);
+		struct xseg_request *req = mem, *t;
+		for (i = 0; i < xheap_get_chunk_size(mem)/obj_h->obj_size; i++) {
+			t = req + i;
+			struct xobject *obj = (struct xobject *)t;
+			//FIXME. obj->magic is not touched by req->serial...
+			/* if (obj->magic != MAGIC_REQ && t->src_portno == portno){ */
+			if (isDangling(t)){
+				if (action == REPORT)
+					report_request(t);
+				else if (action == FAIL)
+					finish_req(t, action);
+				else if (action == COMPLETE)
+					finish_req(t, COMPLETE);
+			}
+		}
+	}
+	xlock_release(&obj_h->lock);
+	return 0;
+}
+
+int cmd_inspectq(xport portno, enum queue qt)
+{
+	if (cmd_join())
+		return -1;
+
+	struct xq *q;
+	struct xlock *l;
+	struct xseg_port *port = xseg_get_port(xseg, portno);
+	if (!port)
+		return -1;
+	if (qt == FREE_QUEUE){
+		q = xseg_get_queue(xseg, port, free_queue);
+		l = &port->fq_lock;
+	}
+	else if (qt == REQUEST_QUEUE){
+		q = xseg_get_queue(xseg, port, request_queue);
+		l = &port->rq_lock;
+	}
+	else if (qt == REPLY_QUEUE) {
+		q = xseg_get_queue(xseg, port, reply_queue);
+		l = &port->rq_lock;
+	}
+	else
+		return -1;
+	xlock_acquire(l, srcport);
+	xqindex i,c = xq_count(q);
+	if (c) {
+		struct xseg_request *req;
+		xptr xqi;
+		for (i = 0; i < c; i++) {
+			xqi = __xq_pop_head(q);
+			req = XPTR_TAKE(xqi, xseg->segment);
+			report_request(req);
+			__xq_append_tail(q, xqi);
+		}
+	}
+	else {
+		fprintf(stderr, "Queue is empty\n\n");
+	}
+	xlock_release(l);
+	return 0;
 }
 
 
@@ -1150,14 +1322,16 @@ int cmd_requests(xport portno, enum req_action action )
 	xhash_iter_init(allocated, &it);
 	xhashidx key, val;
 	int i;
-	xlock_acquire(&obj_h->lock, 1);
+	xlock_acquire(&obj_h->lock, srcport);
 	while (xhash_iterate(allocated, &it, &key, &val)){
 		void *mem = XPTR_TAKE(val, container);
 		struct xseg_request *req = mem, *t;
 		for (i = 0; i < xheap_get_chunk_size(mem)/obj_h->obj_size; i++) {
 			t = req + i;
 			struct xobject *obj = (struct xobject *)t;
-			if (obj->magic != MAGIC_REQ && t->src_portno == portno){
+			//FIXME. obj->magic is not touched by req->serial...
+			/* if (obj->magic != MAGIC_REQ && t->src_portno == portno){ */
+			if (t->src_portno == portno){
 				if (action == REPORT)
 					report_request(t);
 				else if (action == FAIL)
@@ -1466,12 +1640,6 @@ int main(int argc, char **argv)
 			continue;
 		}
 
-		if (!strcmp(argv[i], "showreqs") && (i + 1 < argc)) {
-			ret = cmd_requests(atol(argv[i+1]), REPORT);
-			i += 1;
-			continue;
-		}
-
 		if (!strcmp(argv[i], "signal") && (i + 1 < argc)) {
 			ret = cmd_signal(atol(argv[i+1]));
 			i += 1;
@@ -1499,12 +1667,45 @@ int main(int argc, char **argv)
 			continue;
 		}
 
+		if (!strcmp(argv[i], "showreqs") && (i + 1 < argc)) {
+			ret = cmd_requests(atol(argv[i+1]), REPORT);
+			i += 1;
+			continue;
+		}
+
+		if (!strcmp(argv[i], "verify")) {
+			ret = cmd_verify(REPORT);
+			continue;
+		}
+
+		if (!strcmp(argv[i], "verify-fix")) {
+			ret = cmd_verify(FAIL);
+			continue;
+		}
+
 		if (!strcmp(argv[i], "failreqs") && (i + 1 < argc)) {
 			ret = cmd_requests(atol(argv[i+1]), FAIL);
 			i += 1;
 			continue;
 		}
 
+		if (!strcmp(argv[i], "inspect-freeq") && (i + 1 < argc)) {
+			ret = cmd_inspectq(atol(argv[i+1]), FREE_QUEUE);
+			i += 1;
+			continue;
+		}
+
+		if (!strcmp(argv[i], "inspect-requestq") && (i + 1 < argc)) {
+			ret = cmd_inspectq(atol(argv[i+1]), REQUEST_QUEUE);
+			i += 1;
+			continue;
+		}
+
+		if (!strcmp(argv[i], "inspect-replyq") && (i + 1 < argc)) {
+			ret = cmd_inspectq(atol(argv[i+1]), REPLY_QUEUE);
+			i += 1;
+			continue;
+		}
 
 		if (!strcmp(argv[i], "report")) {
 			ret = cmd_report(dstport);
