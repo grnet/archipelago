@@ -14,6 +14,7 @@ XSEGBD_SYSFS="/sys/bus/xsegbd/"
 
 CHARDEV_NAME="/dev/segdev"
 CHARDEV_MAJOR=60
+CHARDEV_MINOR=0
 
 BPORT=0
 MPORT=1
