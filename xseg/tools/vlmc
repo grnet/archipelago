@@ -167,7 +167,7 @@ def loadrc(rc):
     #FIXME
     try:
         if rc == None:
-            execfile(os.path.expanduser("~/.xsegrc"), globals())
+            execfile(os.path.expanduser("/etc/defaut/archipelago"), globals())
         else:
             execfile(rc, globals())
     except:

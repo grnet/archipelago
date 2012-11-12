@@ -13,6 +13,7 @@ XSEGBD_SYSFS="/sys/bus/xsegbd/"
 
 CHARDEV_NAME="/dev/segdev"
 CHARDEV_MAJOR=60
+CHARDEV_MINOR=0
 
 SPEC="segdev:xsegbd:512:1024:12"
 #REQS=512
@@ -80,7 +81,7 @@ else:
              "blockerb"]
     peer_blockerm = [BLOCKER,
             ["-p" , str(MBPORT), "-g", str(SPEC), "-n", str(NR_OPS_BLOCKERM),
-             "--pool", str(RADOS_POOL_BLOCKS), "-v", str(VERBOSITY_BLOCKERM),
+             "--pool", str(RADOS_POOL_MAPS), "-v", str(VERBOSITY_BLOCKERM),
              "-d", "--pidfile", os.path.join(PIDFILE_PATH, "blockerm.pid"),
              "-l", os.path.join(str(LOGS_PATH), "blockerm-"+HOSTNAME+".log"),
              "-t", "3"],
@@ -277,7 +278,7 @@ def vlmc_showmapped(args):
 def loadrc(rc):
     try:
         if rc == None:
-            execfile(os.path.expanduser("/etc/default/archipelagos"), globals())
+            execfile(os.path.expanduser("/etc/default/archipelago"), globals())
         else:
             execfile(rc, globals())
     except:
