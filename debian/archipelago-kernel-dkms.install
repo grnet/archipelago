@@ -37,8 +37,7 @@ xseg/peers/user/monitor.c usr/src/archipelagos-kernel-dkms-0.1.1/xseg/peers/user
 xseg/peers/user/mpeer.c usr/src/archipelagos-kernel-dkms-0.1.1/xseg/peers/user
 xseg/peers/user/mpeer.h usr/src/archipelagos-kernel-dkms-0.1.1/xseg/peers/user
 xseg/peers/user/mt-mapperd.c usr/src/archipelagos-kernel-dkms-0.1.1/xseg/peers/user
-xseg/peers/user/mt-mapperd.c usr/src/archipelagos-kernel-dkms-0.1.1/xseg/peers/user
-xseg/peers/user/mt-mapperd.c usr/src/archipelagos-kernel-dkms-0.1.1/xseg/peers/user
+xseg/peers/user/mt-pfiled.c usr/src/archipelagos-kernel-dkms-0.1.1/xseg/peers/user
 xseg/peers/user/mt-sosd.c usr/src/archipelagos-kernel-dkms-0.1.1/xseg/peers/user
 xseg/peers/user/mt-vlmcd.c usr/src/archipelagos-kernel-dkms-0.1.1/xseg/peers/user
 xseg/peers/user/peer.c usr/src/archipelagos-kernel-dkms-0.1.1/xseg/peers/user
