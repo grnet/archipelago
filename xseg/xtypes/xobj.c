@@ -191,6 +191,8 @@ int xobj_iterate(struct xobject_h *obj_h, struct xobject_iter *it, void **obj)
 
 }
 
+//FIXME make it smarter. aka check if ptr in mem chunk range and offset is
+//consistent wit obj_size
 int __xobj_check(struct xobject_h *obj_h, void *ptr)
 {
 	void *container = XPTR(&obj_h->container);

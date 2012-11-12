@@ -372,7 +372,7 @@ static void* thread_loop(void *arg)
 	pid_t pid =syscall(SYS_gettid);
 	uint64_t loops;
 	uint64_t threshold=1000/(1 + portno_end - portno_start);
-	
+
 	XSEGLOG2(&lc, D, "thread %u\n",  (unsigned int) (t- peer->thread));
 
 	XSEGLOG2(&lc, I, "Thread %u has tid %u.\n", (unsigned int) (t- peer->thread), pid);
@@ -444,7 +444,7 @@ static int peerd_loop(struct peerd *peer)
 	uint64_t threshold=1000/(1 + portno_end - portno_start);
 	pid_t pid =syscall(SYS_gettid);
 	uint64_t loops;
-	
+
 	XSEGLOG2(&lc, I, "Peer has tid %u.\n", pid);
 	xseg_init_local_signal(xseg, peer->portno_start);
 	for (;!(isTerminate() && xq_count(&peer->free_reqs) == peer->nr_ops);) {
@@ -639,7 +639,8 @@ int main(int argc, char *argv[])
 	// -dp xseg_portno to defer blocking requests
 	// -l log file ?
 	//TODO print messages on arg parsing error
-	
+	//TODO string checking 
+
 	for (i = 1; i < argc; i++) {
 		if (!strcmp(argv[i], "-g") && i + 1 < argc) {
 			spec = argv[i+1];
@@ -652,7 +653,7 @@ int main(int argc, char *argv[])
 			i += 1;
 			continue;
 		}
-		
+
 		if (!strcmp(argv[i], "-ep") && i + 1 < argc) {
 			portno_end = strtoul(argv[i+1], NULL, 10);
 			i += 1;
@@ -701,9 +702,18 @@ int main(int argc, char *argv[])
 		}
 
 	}
-	init_logctx(&lc, argv[0], debug_level, logfile);
+	r = init_logctx(&lc, argv[0], debug_level, logfile);
+	if (r < 0){
+		XSEGLOG("Cannot initialize logging to logfile");
+		return -1;
+	}
+	//hack
+	if (logfile){
+		dup2(fileno(lc.logfile), 1);
+		dup2(fileno(lc.logfile), 2);
+	}
 	XSEGLOG2(&lc, D, "Main thread has tid %ld.\n", syscall(SYS_gettid));
-	
+
 	if (pidfile){
 		pid_fd = pidfile_open(pidfile, &old_pid);
 		if (pid_fd < 0) {
@@ -715,7 +725,7 @@ int main(int argc, char *argv[])
 			return -1;
 		}
 	}
-	
+
 	if (daemonize){
 		if (daemon(0, 1) < 0){
 			XSEGLOG2(&lc, E, "Cannot daemonize");
@@ -725,7 +735,7 @@ int main(int argc, char *argv[])
 	}
 
 	pidfile_write(pid_fd);
-	
+
 	//TODO perform argument sanity checks
 	verbose = debug_level;
 	if (portno != -1) {
