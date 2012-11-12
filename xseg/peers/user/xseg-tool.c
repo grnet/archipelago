@@ -1238,28 +1238,22 @@ int cmd_verify(enum req_action action)
 	}
 
 	struct xobject_h *obj_h = xseg->request_h;
-	void *container = XPTR(&obj_h->container);
-	xhash_t *allocated = XPTR_TAKE(obj_h->allocated, container);
-	xhash_iter_t it;
-	xhash_iter_init(allocated, &it);
-	xhashidx key, val;
+	struct xobject_iter it;
+	xobj_iter_init(obj_h, &it);
+
+	struct xseg_request *req;
 	xlock_acquire(&obj_h->lock, srcport);
-	while (xhash_iterate(allocated, &it, &key, &val)){
-		void *mem = XPTR_TAKE(val, container);
-		struct xseg_request *req = mem, *t;
-		for (i = 0; i < xheap_get_chunk_size(mem)/obj_h->obj_size; i++) {
-			t = req + i;
-			struct xobject *obj = (struct xobject *)t;
-			//FIXME. obj->magic is not touched by req->serial...
-			/* if (obj->magic != MAGIC_REQ && t->src_portno == portno){ */
-			if (isDangling(t)){
-				if (action == REPORT)
-					report_request(t);
-				else if (action == FAIL)
-					finish_req(t, action);
-				else if (action == COMPLETE)
-					finish_req(t, COMPLETE);
-			}
+	while (xobj_iterate(obj_h, &it, (void **)&req)){
+		//FIXME this will not work cause obj->magic - req->serial is not
+		//touched when a request is get
+		/* if (obj->magic != MAGIC_REQ && t->src_portno == portno){ */
+		if (isDangling(req) && !__xobj_isFree(obj_h, req)){
+			if (action == REPORT)
+				report_request(req);
+			else if (action == FAIL)
+				finish_req(req, action);
+			else if (action == COMPLETE)
+				finish_req(req, COMPLETE);
 		}
 	}
 	xlock_release(&obj_h->lock);

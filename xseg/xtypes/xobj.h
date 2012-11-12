@@ -44,10 +44,13 @@ int xobj_alloc_obj(struct xobject_h * obj_h, uint64_t nr);
 int xobj_handler_init(struct xobject_h *obj_h, void *container,
 		uint32_t magic,	uint64_t size, struct xheap *heap);
 
-void xobj_init_iter(struct xobject_h *obj_h, struct xobject_iter *it);
+void xobj_iter_init(struct xobject_h *obj_h, struct xobject_iter *it);
 int xobj_iterate(struct xobject_h *obj_h, struct xobject_iter *it, void **obj);
 int xobj_check(struct xobject_h *obj_h, void *obj);
 int xobj_isFree(struct xobject_h *obj_h, void *obj);
+
+int __xobj_check(struct xobject_h *obj_h, void *obj);
+int __xobj_isFree(struct xobject_h *obj_h, void *obj);
 
 //TODO 
 //xobj_handler_destroy()

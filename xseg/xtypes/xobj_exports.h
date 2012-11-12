@@ -1,3 +1,9 @@
 EXPORT_SYMBOL(xobj_get_obj);
 EXPORT_SYMBOL(xobj_put_obj);
 EXPORT_SYMBOL(xobj_handler_init);
+EXPORT_SYMBOL(xobj_iter_init);
+EXPORT_SYMBOL(xobj_iterate);
+EXPORT_SYMBOL(__xobj_check);
+EXPORT_SYMBOL(xobj_check);
+EXPORT_SYMBOL(__xobj_isFree);
+EXPORT_SYMBOL(xobj_isFree);

@@ -179,7 +179,7 @@ int xobj_iterate(struct xobject_h *obj_h, struct xobject_iter *it, void **obj)
 		r = xhash_iterate(allocated, &it->xhash_it, &key, &val);
 		if (!r)
 			return 0;
-		it->chunk = (void *)key;
+		it->chunk = XPTR_TAKE(key, container);
 		it->cnt = 0;
 	}
 
@@ -191,16 +191,11 @@ int xobj_iterate(struct xobject_h *obj_h, struct xobject_iter *it, void **obj)
 
 }
 
-/* TODO implement lock free versions */
-int xobj_check(struct xobject_h *obj_h, void *ptr)
+int __xobj_check(struct xobject_h *obj_h, void *ptr)
 {
-	int r = 0;
 	void *container = XPTR(&obj_h->container);
 	xhash_iter_t it;
 	uint64_t i, nr_objs;
-
-	xlock_acquire(&obj_h->lock, 1);
-
 	xhash_t *allocated = XPTR_TAKE(obj_h->allocated, container);
 	xhash_iter_init(allocated, &it);
 	xhashidx key, val;
@@ -212,39 +207,49 @@ int xobj_check(struct xobject_h *obj_h, void *ptr)
 			obj = (void *) ((unsigned long) mem +
 					(unsigned long) i * obj_h->obj_size);
 			if (obj == ptr) {
-				r = 1;
-				goto out;
+				return 1;
 			}
 		}
 	}
-out:
-	xlock_release(&obj_h->lock);
+	return 0;
+}
 
+int xobj_check(struct xobject_h *obj_h, void *ptr)
+{
+	int r;
+	xlock_acquire(&obj_h->lock, 1);
+	r = __xobj_check(obj_h, ptr);
+	xlock_release(&obj_h->lock);
 	return r;
 }
 
-int xobj_isFree(struct xobject_h *obj_h, void *ptr)
+int __xobj_isFree(struct xobject_h *obj_h, void *ptr)
 {
 	int r = 0;
 	void *container = XPTR(&obj_h->container);
 	xptr node;
 	struct xobject *obj;
 
-	xlock_acquire(&obj_h->lock, 1);
 
 	node = obj_h->list;
 	while (node){
 		obj = XPTR_TAKE(node, container);
 		if (obj == ptr){
-			r = 1;
-			goto out;
+			return 1;
 		}
 		node = obj->next;
 	}
 
-out:
-	xlock_release(&obj_h->lock);
 
+	return 0;
+}
+
+int xobj_isFree(struct xobject_h *obj_h, void *ptr)
+{
+	int r;
+	xlock_acquire(&obj_h->lock, 1);
+	r = __xobj_isFree(obj_h, ptr);
+	xlock_release(&obj_h->lock);
 	return r;
 }
 
