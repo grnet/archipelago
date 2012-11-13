@@ -396,16 +396,110 @@ int cmd_delete(char *target)
 
 int cmd_acquire(char *target)
 {
+	uint32_t targetlen = strlen(target);
+	int r;
+	xport p;
+	char *req_target;
+	struct xseg_request *req = xseg_get_request(xseg, srcport, dstport, X_ALLOC);
+	if (!req) {
+		fprintf(stderr, "No request\n");
+		return -1;
+	}
+
+	r = xseg_prep_request(xseg, req, targetlen, 0);
+	if (r < 0) {
+		fprintf(stderr, "Cannot prepare request! (%lu, 0)\n",
+			(unsigned long)targetlen);
+		xseg_put_request(xseg, req, srcport);
+		return -1;
+	}
+
+	req_target = xseg_get_target(xseg, req);
+	strncpy(req_target, target, targetlen);
+	req->offset = 0;
+	req->size = 0;
+	req->op = X_OPEN;
+	p = xseg_submit(xseg, req, srcport, X_ALLOC);
+	if (p == NoPort)
+		return -1;
+
+	xseg_signal(xseg, p);
 	return 0;
 }
 
 int cmd_release(char *target)
 {
+	uint32_t targetlen = strlen(target);
+	int r;
+	xport p;
+	char *req_target;
+	struct xseg_request *req = xseg_get_request(xseg, srcport, dstport, X_ALLOC);
+	if (!req) {
+		fprintf(stderr, "No request\n");
+		return -1;
+	}
+
+	r = xseg_prep_request(xseg, req, targetlen, 0);
+	if (r < 0) {
+		fprintf(stderr, "Cannot prepare request! (%lu, 0)\n",
+			(unsigned long)targetlen);
+		xseg_put_request(xseg, req, srcport);
+		return -1;
+	}
+
+	req_target = xseg_get_target(xseg, req);
+	strncpy(req_target, target, targetlen);
+	req->offset = 0;
+	req->size = 0;
+	req->op = X_CLOSE;
+	p = xseg_submit(xseg, req, srcport, X_ALLOC);
+	if (p == NoPort)
+		return -1;
+
+	xseg_signal(xseg, p);
+	return 0;
 	return 0;
 }
 
 int cmd_copy(char *src, char *dst)
 {
+        uint32_t targetlen = strlen(dst);
+	uint32_t parentlen = strlen(src);
+        struct xseg_request *req;
+        struct xseg_request_copy *xcopy;
+	req = xseg_get_request(xseg, srcport, dstport, X_ALLOC);
+        if (!req) {
+                fprintf(stderr, "No request\n");
+                return -1;
+        }
+
+	int r = xseg_prep_request(xseg, req, targetlen,
+			sizeof(struct xseg_request_copy));
+        if (r < 0) {
+                fprintf(stderr, "Cannot prepare request!\n");
+                xseg_put_request(xseg, req, srcport);
+                return -1;
+        }
+
+	char *target = xseg_get_target(xseg, req);
+	char *data = xseg_get_data(xseg, req);
+
+	strncpy(target, dst, targetlen);
+        xcopy = (struct xseg_request_copy *) data;
+        strncpy(xcopy->target, src, parentlen);
+	xcopy->targetlen = parentlen;
+        req->offset = 0;
+        req->size = sizeof(struct xseg_request_copy);
+        req->op = X_COPY;
+
+	xport p = xseg_submit(xseg, req, srcport, X_ALLOC);
+	if (p == NoPort){
+		fprintf(stderr, "Cannot submit request\n");
+		return -1;
+	}
+	xseg_signal(xseg, p);
+
+	return 0;
 	return 0;
 }
 
@@ -1461,6 +1555,13 @@ void handle_reply(struct xseg_request *req)
 	case X_INFO:
 		fprintf(stderr, "size: %llu\n", (unsigned long long)*((uint64_t *)req_data));
 		break;
+	case X_COPY:
+		fprintf(stderr, "copied %s\n", ((struct xseg_request_copy *)req_data)->target);
+		break;
+	case X_CLOSE:
+		fprintf(stderr, "Closed %s\n", req_target);
+	case X_OPEN:
+		fprintf(stderr, "Opened %s\n", req_target);
 
 	default:
 		break;
