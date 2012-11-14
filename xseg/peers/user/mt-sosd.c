@@ -476,7 +476,7 @@ void * lock_op(void *arg)
 	}
 
 	while(rados_lock(rados->ioctx, rio->obj_name) < 0){
-		if (!(pr->req->flags & XF_NOSYNC)){
+		if (pr->req->flags & XF_NOSYNC){
 			XSEGLOG2(&lc, E, "Rados lock failed for %s",
 					rio->obj_name);
 			fail(pr->peer, pr);
