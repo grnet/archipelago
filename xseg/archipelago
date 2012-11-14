@@ -6,7 +6,7 @@ import os, sys, subprocess, argparse, time, psutil, signal, socket
 from subprocess import call, check_call
 
 BIN_PATH="/usr/bin"
-PIDFILE_PATH="/var/run/archipelagos"
+PIDFILE_PATH="/var/run/archipelago"
 
 DEVICE_PREFIX="/dev/xsegbd"
 XSEGBD_SYSFS="/sys/bus/xsegbd/"
@@ -53,7 +53,7 @@ RADOS_POOL_BLOCKS=""
 STORAGE="File"
 
 try:
-    execfile(os.path.expanduser("/etc/default/archipelagos"), globals())
+    execfile(os.path.expanduser("/etc/default/archipelago"), globals())
 except:
     print "Cannot open defaults"
     sys.exit(1)
@@ -512,16 +512,16 @@ if __name__ == "__main__":
     parser.add_argument('-c', '--config', type=str, nargs='?', help='config file')
     subparsers = parser.add_subparsers()
 
-    start_parser = subparsers.add_parser('start', help='Start archipelagos')
+    start_parser = subparsers.add_parser('start', help='Start archipelago')
     start_parser.set_defaults(func=start)
     
-    stop_parser = subparsers.add_parser('stop', help='Stop archipelagos')
+    stop_parser = subparsers.add_parser('stop', help='Stop archipelago')
     stop_parser.set_defaults(func=stop)
     
-    status_parser = subparsers.add_parser('status', help='Archipelagos status')
+    status_parser = subparsers.add_parser('status', help='Archipelago status')
     status_parser.set_defaults(func=status)
     
-    restart_parser = subparsers.add_parser('restart', help='Restart archipelagos')
+    restart_parser = subparsers.add_parser('restart', help='Restart archipelago')
     restart_parser.set_defaults(func=restart)
 
     args = parser.parse_args()

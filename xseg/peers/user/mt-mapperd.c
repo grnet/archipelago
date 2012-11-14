@@ -742,7 +742,8 @@ static int load_map(struct peer_req *pr, struct map *map)
 	return r;
 }
 
-static struct xseg_request * __open_map(struct peer_req *pr, struct map *m)
+static struct xseg_request * __open_map(struct peer_req *pr, struct map *m,
+						uint32_t flags)
 {
 	int r;
 	xport p;
@@ -774,6 +775,8 @@ static struct xseg_request * __open_map(struct peer_req *pr, struct map *m)
 	req->op = X_OPEN;
 	req->size = block_size;
 	req->offset = 0;
+	if (!(flags & MF_FORCE))
+		req->flags = XF_NOSYNC;
 	r = xseg_set_req_data(peer->xseg, req, pr);
 	if (r < 0){
 		XSEGLOG2(&lc, E, "Cannot set request data for map %s",
@@ -799,14 +802,14 @@ out_fail:
 	return NULL;
 }
 
-static int open_map(struct peer_req *pr, struct map *map)
+static int open_map(struct peer_req *pr, struct map *map, uint32_t flags)
 {
 	int err;
 	struct xseg_request *req;
 	struct peerd *peer = pr->peer;
 
 	map->flags |= MF_MAP_OPENING;
-	req = __open_map(pr, map);
+	req = __open_map(pr, map, flags);
 	if (!req)
 		return -1;
 	wait_on_pr(pr, (!((req->state & XS_FAILED)||(req->state & XS_SERVED))));
@@ -1652,13 +1655,11 @@ out_err:
 static int open_load_map(struct peer_req *pr, struct map *map, uint32_t flags)
 {
 	int r, opened = 0;
-retry_open:
 	if (flags & MF_EXCLUSIVE){
-		r = open_map(pr, map);
+		r = open_map(pr, map, flags);
 		if (r < 0) {
 			if (flags & MF_FORCE){
-
-				goto retry_open;
+				return -1;
 			}
 		} else {
 			opened = 1;
