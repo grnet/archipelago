@@ -1284,28 +1284,63 @@ static int isDangling(struct xseg_request *req)
 	return 1;
 }
 
+int prompt_user(char *msg)
+{
+	int c = 0, r = -1;
+	printf("%s [y/n]: ", msg);
+	while (1) {
+		c = fgetc(stdin);
+		if (c == 'y' || c == 'Y')
+			r = 1;
+		else if (c == 'n' || c == 'N')
+			r = 0;
+		else if (c == '\n'){
+			if (r == -1)
+				printf("%s [y/n]: ", msg);
+			else
+				break;
+		}
+	}
+	return r;
+}
+
 //FIXME this should be in xseg lib?
-int cmd_verify(enum req_action action)
+int cmd_verify(int fix)
 {
 	if (cmd_join())
 		return -1;
 	//segment lock
-	if (xseg->shared->flags & XSEG_F_LOCK)
+	if (xseg->shared->flags & XSEG_F_LOCK){
 		fprintf(stderr, "Segment lock: Locked\n");
+		if (fix && prompt_user("Unlock it ?"))
+			xseg->shared->flags &= ~XSEG_F_LOCK;
+	}
 	//heap lock
-	if (xseg->heap->lock.owner != Noone)
+	if (xseg->heap->lock.owner != Noone){
 		fprintf(stderr, "Heap lock: Locked (Owner: %llu)\n",
 			(unsigned long long)xseg->heap->lock.owner);
+		if (fix && prompt_user("Unlock it ?"))
+			xlock_release(&xseg->heap->lock);
+	}
 	//obj_h locks
-	if (xseg->request_h->lock.owner != Noone)
+	if (xseg->request_h->lock.owner != Noone){
 		fprintf(stderr, "Requests handler lock: Locked (Owner: %llu)\n",
 			(unsigned long long)xseg->request_h->lock.owner);
-	if (xseg->port_h->lock.owner != Noone)
+		if (fix && prompt_user("Unlock it ?"))
+			xlock_release(&xseg->request_h->lock);
+	}
+	if (xseg->port_h->lock.owner != Noone){
 		fprintf(stderr, "Ports handler lock: Locked (Owner: %llu)\n",
 			(unsigned long long)xseg->port_h->lock.owner);
-	if (xseg->object_handlers->lock.owner != Noone)
+		if (fix && prompt_user("Unlock it ?"))
+			xlock_release(&xseg->port_h->lock);
+	}
+	if (xseg->object_handlers->lock.owner != Noone){
 		fprintf(stderr, "Objects handler lock: Locked (Owner: %llu)\n",
 			(unsigned long long)xseg->object_handlers->lock.owner);
+		if (fix && prompt_user("Unlock it ?"))
+			xlock_release(&xseg->object_handlers->lock);
+	}
 	//take segment lock?
 	xport i;
 	struct xseg_port *port;
@@ -1319,35 +1354,40 @@ int cmd_verify(enum req_action action)
 			if (port->fq_lock.owner != Noone) {
 				fprintf(stderr, "Free queue lock of port %u locked (Owner %llu)\n",
 						i, (unsigned long long)port->fq_lock.owner);
+				if (fix && prompt_user("Unlock it ?"))
+					xlock_release(&port->fq_lock);
 			}
 			if (port->rq_lock.owner != Noone) {
 				fprintf(stderr, "Request queue lock of port %u locked (Owner %llu)\n",
 						i, (unsigned long long)port->rq_lock.owner);
+				if (fix && prompt_user("Unlock it ?"))
+					xlock_release(&port->rq_lock);
 			}
 			if (port->pq_lock.owner != Noone) {
 				fprintf(stderr, "Reply queue lock of port %u locked (Owner %llu)\n",
 						i, (unsigned long long)port->pq_lock.owner);
+				if (fix && prompt_user("Unlock it ?"))
+					xlock_release(&port->pq_lock);
 			}
 		}
 	}
 
 	struct xobject_h *obj_h = xseg->request_h;
 	struct xobject_iter it;
-	xobj_iter_init(obj_h, &it);
 
 	struct xseg_request *req;
 	xlock_acquire(&obj_h->lock, srcport);
+	xobj_iter_init(obj_h, &it);
 	while (xobj_iterate(obj_h, &it, (void **)&req)){
 		//FIXME this will not work cause obj->magic - req->serial is not
 		//touched when a request is get
 		/* if (obj->magic != MAGIC_REQ && t->src_portno == portno){ */
 		if (isDangling(req) && !__xobj_isFree(obj_h, req)){
-			if (action == REPORT)
-				report_request(req);
-			else if (action == FAIL)
-				finish_req(req, action);
-			else if (action == COMPLETE)
-				finish_req(req, COMPLETE);
+			report_request(req);
+			if (fix && prompt_user("Fail it ?")){
+				printf("Finishing ...\n");
+				finish_req(req, FAIL);
+			}
 		}
 	}
 	xlock_release(&obj_h->lock);
@@ -1398,40 +1438,31 @@ int cmd_inspectq(xport portno, enum queue qt)
 }
 
 
-int cmd_requests(xport portno, enum req_action action )
+int cmd_request(struct xseg_request *req, enum req_action action)
 {
 	if (cmd_join())
 		return -1;
 
 	struct xobject_h *obj_h = xseg->request_h;
-	void *container = XPTR(&obj_h->container);
-	xhash_t *allocated = XPTR_TAKE(obj_h->allocated, container);
-	xhash_iter_t it;
-	xhash_iter_init(allocated, &it);
-	xhashidx key, val;
-	int i;
-	xlock_acquire(&obj_h->lock, srcport);
-	while (xhash_iterate(allocated, &it, &key, &val)){
-		void *mem = XPTR_TAKE(val, container);
-		struct xseg_request *req = mem, *t;
-		for (i = 0; i < xheap_get_chunk_size(mem)/obj_h->obj_size; i++) {
-			t = req + i;
-			struct xobject *obj = (struct xobject *)t;
-			//FIXME. obj->magic is not touched by req->serial...
-			/* if (obj->magic != MAGIC_REQ && t->src_portno == portno){ */
-			if (t->src_portno == portno){
-				if (action == REPORT)
-					report_request(t);
-				else if (action == FAIL)
-					finish_req(t, action);
-				else if (action == COMPLETE)
-					finish_req(t, COMPLETE);
-			}
+	if (!xobj_check(obj_h, req))
+		return -1;
+
+	if (action == REPORT)
+		report_request(req);
+	else if (action == FAIL){
+		report_request(req);
+		if (prompt_user("fail it ?")){
+			printf("Finishing ...\n");
+			finish_req(req, FAIL);
 		}
 	}
-	xlock_release(&obj_h->lock);
-
-	fprintf(stderr, "\n");
+	else if (action == COMPLETE){
+		report_request(req);
+		if (prompt_user("Complete it ?")){
+			printf("Finishing ...\n");
+			finish_req(req, COMPLETE);
+		}
+	}
 	return 0;
 }
 
@@ -1762,24 +1793,20 @@ int main(int argc, char **argv)
 			continue;
 		}
 
-		if (!strcmp(argv[i], "showreqs") && (i + 1 < argc)) {
-			ret = cmd_requests(atol(argv[i+1]), REPORT);
-			i += 1;
-			continue;
-		}
-
 		if (!strcmp(argv[i], "verify")) {
-			ret = cmd_verify(REPORT);
+			ret = cmd_verify(0);
 			continue;
 		}
 
 		if (!strcmp(argv[i], "verify-fix")) {
-			ret = cmd_verify(FAIL);
+			ret = cmd_verify(1);
 			continue;
 		}
 
-		if (!strcmp(argv[i], "failreqs") && (i + 1 < argc)) {
-			ret = cmd_requests(atol(argv[i+1]), FAIL);
+		if (!strcmp(argv[i], "failreq") && (i + 1 < argc)) {
+			struct xseg_request *req;
+			sscanf(argv[i+1], "%lx", &req);
+			ret = cmd_request(req, FAIL);
 			i += 1;
 			continue;
 		}
