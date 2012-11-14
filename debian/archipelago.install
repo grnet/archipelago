@@ -5,4 +5,4 @@ xseg/peers/user/mt-sosd usr/bin
 xseg/peers/user/xseg usr/bin
 xseg/peers/user/vlmc-xseg usr/bin
 xseg/tools/vlmc usr/bin
-xseg/archipelagos usr/bin
+xseg/archipelago usr/bin
