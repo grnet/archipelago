@@ -5,6 +5,7 @@
 #include <peer.h>
 #include <rados/librados.h>
 #include <xseg/protocol.h>
+#include <pthread.h>
 
 #define MAX_POOL_NAME 64
 #define MAX_OBJ_NAME XSEG_MAX_TARGETLEN
@@ -28,7 +29,10 @@ struct rados_io{
 	uint64_t size;
 	char *src_name, *buf;
 	uint64_t read;
-
+	uint64_t watch_handle;
+	pthread_t tid;
+	pthread_cond_t cond;
+	pthread_mutex_t m;
 };
 
 void rados_ack_cb(rados_completion_t c, void *arg)
@@ -113,7 +117,6 @@ static int do_aio_write(struct peerd *peer, struct peer_req *pr)
 	struct xseg_request *req = pr->req;
 	struct rados_io *rio = (struct rados_io *) pr->priv;
 	char *data = xseg_get_data(peer->xseg, pr->req);
-	int r;
 
 	return do_aio_generic(peer, pr, X_WRITE, rio->obj_name,
 			data + req->serviced,
@@ -124,7 +127,7 @@ static int do_aio_write(struct peerd *peer, struct peer_req *pr)
 int handle_delete(struct peerd *peer, struct peer_req *pr)
 {
 	int r;
-	struct radosd *rados = (struct radosd *) peer->priv;
+	//struct radosd *rados = (struct radosd *) peer->priv;
 	struct rados_io *rio = (struct rados_io *) pr->priv;
 
 	if (rio->state == ACCEPTED) {
@@ -153,7 +156,7 @@ int handle_info(struct peerd *peer, struct peer_req *pr)
 {
 	int r;
 	struct xseg_request *req = pr->req;
-	struct radosd *rados = (struct radosd *) peer->priv;
+	//struct radosd *rados = (struct radosd *) peer->priv;
 	struct rados_io *rio = (struct rados_io *) pr->priv;
 	char *req_data = xseg_get_data(peer->xseg, req);
 	struct xseg_reply_info *xinfo = (struct xseg_reply_info *)req_data;
@@ -308,7 +311,7 @@ int handle_write(struct peerd *peer, struct peer_req *pr)
 
 int handle_copy(struct peerd *peer, struct peer_req *pr)
 {
-	struct radosd *rados = (struct radosd *) peer->priv;
+	//struct radosd *rados = (struct radosd *) peer->priv;
 	struct xseg_request *req = pr->req;
 	struct rados_io *rio = (struct rados_io *) pr->priv;
 	int r;
@@ -427,32 +430,116 @@ out_src:
 	return 0;
 }
 
-int handle_open(struct peerd *peer, struct peer_req *pr)
+int spawnthread(struct peerd *peer, struct peer_req *pr,
+			void *(*func)(void *arg))
 {
-	struct radosd *rados = (struct radosd *) peer->priv;
+	//struct radosd *rados = (struct radosd *) peer->priv;
 	struct rados_io *rio = (struct rados_io *) (pr->priv);
-	int r = rados_lock(rados->ioctx, rio->obj_name);
+
+	pthread_attr_t attr;
+	pthread_attr_init(&attr);
+	pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
+
+	return (pthread_create(&rio->tid, &attr, func, (void *) pr));
+}
+
+void watch_cb(uint8_t opcode, uint64_t ver, void *arg)
+{
+	//assert pr valid
+	struct peer_req *pr = (struct peer_req *)arg;
+	//struct radosd *rados = (struct radosd *) pr->peer->priv;
+	struct rados_io *rio = (struct rados_io *) (pr->priv);
+
+	if (pr->req->op == X_OPEN){
+		XSEGLOG2(&lc, I, "watch cb signaling rio of %s", rio->obj_name);
+		pthread_cond_signal(&rio->cond);
+	}
+	else
+		XSEGLOG2(&lc, E, "Invalid req op in watch_cb");
+}
+
+void * lock_op(void *arg)
+{
+	struct peer_req *pr = (struct peer_req *)arg;
+	struct radosd *rados = (struct radosd *) pr->peer->priv;
+	struct rados_io *rio = (struct rados_io *) (pr->priv);
+
+	XSEGLOG2(&lc, I, "Starting lock op for %s", rio->obj_name);
+	if (!(pr->req->flags & XF_NOSYNC)){
+		if (rados_watch(rados->ioctx, rio->obj_name, 0,
+				&rio->watch_handle, watch_cb, pr) < 0){
+			XSEGLOG2(&lc, E, "Rados watch failed for %s",
+					rio->obj_name);
+			fail(pr->peer, pr);
+			return NULL;
+		}
+	}
+
+	while(rados_lock(rados->ioctx, rio->obj_name) < 0){
+		if (!(pr->req->flags & XF_NOSYNC)){
+			XSEGLOG2(&lc, E, "Rados lock failed for %s",
+					rio->obj_name);
+			fail(pr->peer, pr);
+			return NULL;
+		}
+		else{
+			XSEGLOG2(&lc, D, "rados lock for %s sleeping",
+					rio->obj_name);
+			pthread_mutex_lock(&rio->m);
+			pthread_cond_wait(&rio->cond, &rio->m);
+			pthread_mutex_unlock(&rio->m);
+			XSEGLOG2(&lc, D, "rados lock for %s woke up",
+					rio->obj_name);
+		}
+	}
+	if (!(pr->req->flags & XF_NOSYNC)){
+		if (rados_unwatch(rados->ioctx, rio->obj_name,
+					rio->watch_handle) < 0){
+			XSEGLOG2(&lc, E, "Rados unwatch failed");
+		}
+	}
+	XSEGLOG2(&lc, I, "Successfull lock op for %s", rio->obj_name);
+	complete(pr->peer, pr);
+	return NULL;
+}
+
+void * unlock_op(void *arg)
+{
+	struct peer_req *pr = (struct peer_req *)arg;
+	struct radosd *rados = (struct radosd *) pr->peer->priv;
+	struct rados_io *rio = (struct rados_io *) (pr->priv);
+	int r;
+	XSEGLOG2(&lc, I, "Starting unlock op for %s", rio->obj_name);
+	r = rados_unlock(rados->ioctx, rio->obj_name);
 	if (r < 0){
-		fail(peer, pr);
+		XSEGLOG2(&lc, E, "Rados unlock failed for %s", rio->obj_name);
+		fail(pr->peer, pr);
 	}
 	else {
-		complete(peer, pr);
+		if (rados_notify(rados->ioctx, rio->obj_name, 
+					0, NULL, 0) < 0) {
+			XSEGLOG2(&lc, E, "rados notify failed");
+		}
+		XSEGLOG2(&lc, I, "Successfull unlock op for %s", rio->obj_name);
+		complete(pr->peer, pr);
 	}
+	return NULL;
+}
+
+int handle_open(struct peerd *peer, struct peer_req *pr)
+{
+	int r = spawnthread(peer, pr, lock_op);
+	if (r < 0)
+		fail(pr->peer, pr);
 	return 0;
 }
 
 
 int handle_close(struct peerd *peer, struct peer_req *pr)
 {
-	struct radosd *rados = (struct radosd *) peer->priv;
-	struct rados_io *rio = (struct rados_io *) (pr->priv);
-	int r = rados_unlock(rados->ioctx, rio->obj_name);
-	if (r < 0){
-		fail(peer, pr);
-	}
-	else {
-		complete(peer, pr);
-	}
+	int r = spawnthread(peer, pr, unlock_op);
+	if (r < 0)
+		fail(pr->peer, pr);
 	return 0;
 }
 
@@ -523,6 +610,13 @@ int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 			perror("malloc");
 			return -1;
 		}
+		rio->buf = 0;
+		rio->read = 0;
+		rio->size = 0;
+		rio->src_name = 0;
+		rio->watch_handle = 0;
+		pthread_cond_init(&rio->cond, NULL);
+		pthread_mutex_init(&rio->m, NULL);
 		peer->peer_reqs[i].priv = (void *) rio;
 	}
 	return 0;
