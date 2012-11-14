@@ -76,7 +76,7 @@ else:
             ["-p" , str(BPORT), "-g", str(SPEC), "-n", str(NR_OPS_BLOCKERB),
              "--pool", str(RADOS_POOL_BLOCKS), "-v", str(VERBOSITY_BLOCKERB),
              "-d", "--pidfile", os.path.join(PIDFILE_PATH, "blockerb.pid"),
-             "-l", os.path.join(str(LOGS_PATH), "blockerm-"+HOSTNAME+".log"),
+             "-l", os.path.join(str(LOGS_PATH), "blockerb-"+HOSTNAME+".log"),
              "-t", "3"],
              "blockerb"]
     peer_blockerm = [BLOCKER,
@@ -246,10 +246,11 @@ def exclusive(fn):
                 print >> sys.stderr, reason
                 time.sleep(0.05)
         try:
-            fn(args)
+            r = fn(args)
         finally:
             os.close(fd)
             os.unlink(file)
+        return r
 
     return exclusive_args
 
@@ -464,8 +465,8 @@ def start(args):
 
 def stop(args):
     #check devices
-    if vlmc_showmapped(args) >= 0:
-        print "Cannot stop archipelagos. Mapped volumes exist"
+    if vlmc_showmapped(args) > 0:
+        print "Cannot stop archipelago. Mapped volumes exist"
         return -1
     if unload_module(xsegbd):
         return -1
