@@ -235,7 +235,7 @@ static int xsegbd_dev_init(struct xsegbd_device *xsegbd_dev)
 	snprintf(disk->disk_name, 32, "xsegbd%u", xsegbd_dev->id);
 
 	ret = 0;
-	
+
 	/* allow a non-zero sector_size parameter to override the disk size */
 	if (sector_size)
 		xsegbd_dev->sectors = sector_size;
@@ -263,10 +263,10 @@ static void xsegbd_dev_release(struct device *dev)
 	if (xsegbd_dev->gd) {
 		if (xsegbd_dev->gd->flags & GENHD_FL_UP)
 			del_gendisk(xsegbd_dev->gd);
-		
+
 		xsegbd_mapclose(xsegbd_dev);
 	}
-	
+
 	spin_lock(&xsegbd_devices_lock);
 	BUG_ON(xsegbd_devices[xsegbd_dev->src_portno] != xsegbd_dev);
 	xsegbd_devices[xsegbd_dev->src_portno] = NULL;
@@ -368,14 +368,14 @@ static void xseg_request_fn(struct request_queue *rq)
 						xsegbd_dev->src_portno);
 		if (blkreq_idx == Noneidx)
 			break;
-		
+
 		if (blkreq_idx >= xsegbd_dev->nr_requests) {
 			XSEGLOG("blkreq_idx >= xsegbd_dev->nr_requests");
 			BUG_ON(1);
 			break;
 		}
 
-		
+
 		spin_lock_irqsave(&xsegbd_dev->rqlock, flags);
 		blkreq = blk_fetch_request(rq);
 		if (!blkreq){
@@ -420,7 +420,7 @@ static void xseg_request_fn(struct request_queue *rq)
 		pending->dev = xsegbd_dev;
 		pending->request = blkreq;
 		pending->comp = NULL;
-		
+
 		xreq->size = datalen;
 		xreq->offset = blk_rq_pos(blkreq) << 9;
 		xreq->priv = (uint64_t) blkreq_idx;
@@ -518,13 +518,13 @@ static int xsegbd_get_size(struct xsegbd_device *xsegbd_dev)
 	blkreq_idx = xq_pop_head(&xsegbd_dev->blk_queue_pending, 1);
 	if (blkreq_idx == Noneidx)
 		goto out_put;
-	
+
 	pending = &xsegbd_dev->blk_req_pending[blkreq_idx];
 	pending->dev = xsegbd_dev;
 	pending->request = NULL;
 	pending->comp = &comp;
 
-	
+
 	xreq->priv = (uint64_t) blkreq_idx;
 
 	target = xseg_get_target(xsegbd_dev->xseg, xreq);
@@ -579,13 +579,13 @@ static int xsegbd_mapclose(struct xsegbd_device *xsegbd_dev)
 	blkreq_idx = xq_pop_head(&xsegbd_dev->blk_queue_pending, 1);
 	if (blkreq_idx == Noneidx)
 		goto out_put;
-	
+
 	pending = &xsegbd_dev->blk_req_pending[blkreq_idx];
 	pending->dev = xsegbd_dev;
 	pending->request = NULL;
 	pending->comp = &comp;
 
-	
+
 	xreq->priv = (uint64_t) blkreq_idx;
 
 	target = xseg_get_target(xsegbd_dev->xseg, xreq);
@@ -666,14 +666,14 @@ static void xseg_callback(xport portno)
 		if (xsegbd_dev != pending->dev) {
 			//FIXME maybe put request?
 			XSEGLOG("xsegbd_dev != pending->dev");
-			BUG_ON(1);
+			WARN_ON(1);
 			continue;
 		}
 		pending->dev = NULL;
 		if (!blkreq){
 			//FIXME maybe put request?
 			XSEGLOG("blkreq does not exist");
-			BUG_ON(1);
+			WARN_ON(1);
 			continue;
 		}
 
@@ -687,10 +687,10 @@ static void xseg_callback(xport portno)
 		err = 0;
 		if (!rq_data_dir(blkreq)){
 			xseg_to_blk(xsegbd_dev->xseg, xreq, blkreq);
-		}	
+		}
 blk_end:
 		blk_end_request_all(blkreq, err);
-		
+
 		ridx = xq_append_head(&xsegbd_dev->blk_queue_pending, 
 					blkreq_idx, xsegbd_dev->src_portno);
 		if (ridx == Noneidx) {
