@@ -151,8 +151,16 @@ def check_conf():
         return False
 
     try:
-        if not os.path.isdir(str(PIDFILE_PATH)):
-            print "PIDFILE_PATH "+str(PIDFILE_PATH)+" does not exist"
+        os.makedirs(str(PIDFILE_PATH))
+    except OSError as e:
+        if e.errno == errno.EEXIST:
+            if os.path.isdir(str(PIDFILE_PATH)):
+                pass
+            else:
+                print str(PIDFILE_PATH) + " is not a directory"
+                return False
+        else:
+            print "Cannot create " + str(PIDFILE_PATH)
             return False
     except:
         print "PIDFILE_PATH or is not set"
@@ -387,7 +395,7 @@ def stop_peer(peer):
     while check_running(peer[0], pid) > 0:
         time.sleep(0.1)
         i += 1
-        if i > 100:
+        if i > 150:
             print "process did not die in 10 secs"
             return -1
     return 0
