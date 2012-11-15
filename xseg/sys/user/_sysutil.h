@@ -7,9 +7,11 @@
 #include <string.h>
 #include <sys/time.h>
 
+#define MAX_PEER_NAME 64
+
 struct log_ctx {
 	FILE *logfile;
-	char *peer_name;
+	char peer_name[MAX_PEER_NAME];
 	unsigned int log_level; 
 };
 
