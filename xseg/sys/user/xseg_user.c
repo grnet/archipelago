@@ -92,7 +92,7 @@ int user_init_logctx(struct log_ctx *lc, char *peer_name, enum log_level log_lev
 {
 	FILE *file;
 	char safe_logfile[1024];
-	strncpy(lc->peer_name, MAX_PEER_NAME, peer_name);
+	strncpy(lc->peer_name, peer_name, MAX_PEER_NAME);
 	lc->peer_name[MAX_PEER_NAME -1] = 0;
 	lc->log_level = log_level;
 	if (!logfile) {
@@ -100,7 +100,7 @@ int user_init_logctx(struct log_ctx *lc, char *peer_name, enum log_level log_lev
 		return 0;
 	}
 
-	strncpy(safe_logfile, 1024, logfile);
+	strncpy(safe_logfile, logfile, 1024);
 	safe_logfile[1023] = 0;
 	file = fopen(safe_logfile, "a");
 	if (!file) {
@@ -136,10 +136,13 @@ void __xseg_log2(struct log_ctx *lc, enum log_level level, char *fmt, ...)
 	time(&timeval);
 	ctime_r(&timeval, timebuf);
 	*strchr(timebuf, '\n') = '\0';
-	//FIXME buffer overflow
+
 	buf += sprintf(buf, "%s: %s: ", t, lc->peer_name);
 	buf += sprintf(buf, "%s (%ld):\n\t", timebuf, timeval);
-	buf += vsprintf(buf, fmt, ap);
+	unsigned long rem = buf - buffer;
+	buf += vsnprintf(buf, rem, fmt, ap);
+	if (buf >= buffer + sizeof(buffer))
+		buf = buffer + sizeof(buffer) - 2;/* enough to hold \n and \0 */
 	buf += sprintf(buf, "\n");
 
 	fprintf(lc->logfile, "%s", buffer);
