@@ -2,7 +2,7 @@
 #
 # archipelagos tool
 
-import os, sys, subprocess, argparse, time, psutil, signal, socket
+import os, sys, subprocess, argparse, time, psutil, signal, socket, errno
 from subprocess import call, check_call
 
 BIN_PATH="/usr/bin"
