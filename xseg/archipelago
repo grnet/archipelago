@@ -486,6 +486,7 @@ def stop(args):
     
     for m in reversed(modules):
         unload_module(m)
+    return 0
 
 def status(args):
     r = 0
@@ -533,4 +534,4 @@ if __name__ == "__main__":
     restart_parser.set_defaults(func=restart)
 
     args = parser.parse_args()
-    args.func(args)
+    return args.func(args)
