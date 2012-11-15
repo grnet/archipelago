@@ -91,23 +91,24 @@ void __get_current_time(struct timeval *tv) {
 int user_init_logctx(struct log_ctx *lc, char *peer_name, enum log_level log_level, char *logfile)
 {
 	FILE *file;
-	/* FIXME
-	 * copy peer_name
-	 * check logfile length
-	 */
-	lc->peer_name = peer_name;
+	char safe_logfile[1024];
+	strncpy(lc->peer_name, peer_name, MAX_PEER_NAME);
+	lc->peer_name[MAX_PEER_NAME -1] = 0;
 	lc->log_level = log_level;
 	if (!logfile) {
 		lc->logfile = stderr;
 		return 0;
 	}
 
-	file = fopen(logfile, "a");
+	strncpy(safe_logfile, logfile, 1024);
+	safe_logfile[1023] = 0;
+	file = fopen(safe_logfile, "a");
 	if (!file) {
 		lc->logfile = stderr;
 		return -1;
 	}
 	lc->logfile = file;
+
 	return 0;
 }
 int (*init_logctx)(struct log_ctx *lc, char *peer_name, enum log_level log_level, char *logfile) = user_init_logctx;
@@ -135,10 +136,13 @@ void __xseg_log2(struct log_ctx *lc, enum log_level level, char *fmt, ...)
 	time(&timeval);
 	ctime_r(&timeval, timebuf);
 	*strchr(timebuf, '\n') = '\0';
-	
+
 	buf += sprintf(buf, "%s: %s: ", t, lc->peer_name);
 	buf += sprintf(buf, "%s (%ld):\n\t", timebuf, timeval);
-	buf += vsprintf(buf, fmt, ap);
+	unsigned long rem = buf - buffer;
+	buf += vsnprintf(buf, rem, fmt, ap);
+	if (buf >= buffer + sizeof(buffer))
+		buf = buffer + sizeof(buffer) - 2;/* enough to hold \n and \0 */
 	buf += sprintf(buf, "\n");
 
 	fprintf(lc->logfile, "%s", buffer);
