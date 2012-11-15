@@ -25,7 +25,7 @@ VPORT_END=403
 
 # peers
 
-LOGS_PATH="/srv/archip/logs"
+LOGS_PATH="/var/log/archipelago"
 #PIDFILE_PATH="/var/run/archipelago"
 
 BLOCKER="mt-sosd"
