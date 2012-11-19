@@ -40,7 +40,7 @@ SCRIPTNAME=/etc/init.d/$NAME
 #
 do_start()
 {
-	$DAEMON start && return 0
+	$DAEMON start > /dev/null && return 0
 }
 
 #
@@ -48,7 +48,7 @@ do_start()
 #
 do_stop()
 {
-	$DAEMON stop && return 0
+	$DAEMON stop > /dev/null && return 0
 }
 
 
