@@ -87,31 +87,86 @@ void __get_current_time(struct timeval *tv) {
 	gettimeofday(tv, NULL);
 }
 
-
-int user_init_logctx(struct log_ctx *lc, char *peer_name, enum log_level log_level, char *logfile)
+int __renew_logctx(struct log_ctx *lc, char *peer_name,
+		enum log_level log_level, char *logfile, uint32_t flags)
 {
 	FILE *file;
-	char safe_logfile[1024];
-	strncpy(lc->peer_name, peer_name, MAX_PEER_NAME);
-	lc->peer_name[MAX_PEER_NAME -1] = 0;
+
+	if (peer_name){
+		strncpy(lc->peer_name, peer_name, MAX_PEER_NAME);
+		lc->peer_name[MAX_PEER_NAME -1] = 0;
+	}
+
+	lc->log_level = log_level;
+	if (logfile) {
+		strncpy(lc->filename, logfile, MAX_LOGFILE_LEN);
+		lc->filename[MAX_LOGFILE_LEN - 1] = 0;
+	}
+	else if (!(flags & REOPEN_FILE) || lc->logfile == stderr)
+		return 0;
+
+	if (lc->logfile == stderr)
+		file = fopen(lc->filename, "a");
+	else
+		file = freopen(lc->filename, "a", lc->logfile);
+	if (!file) {
+		return -1;
+	}
+
+	flags &= ~REOPEN_FILE;
+	if ((flags|lc->flags) & REDIRECT_STDOUT)
+		if (!freopen(lc->filename, "a", stdout))
+			return -1;
+	if ((flags|lc->flags) & REDIRECT_STDERR)
+		if (!freopen(lc->filename, "a", stderr))
+			return -1;
+	lc->flags |= flags;
+
+	return 0;
+}
+int (*renew_logctx)(struct log_ctx *lc, char *peer_name,
+	enum log_level log_level, char *logfile, uint32_t flags) = __renew_logctx;
+
+int __init_logctx(struct log_ctx *lc, char *peer_name,
+		enum log_level log_level, char *logfile, uint32_t flags)
+{
+	FILE *file;
+
+	if (peer_name){
+		strncpy(lc->peer_name, peer_name, MAX_PEER_NAME);
+		lc->peer_name[MAX_PEER_NAME -1] = 0;
+	}
+	else {
+		return -1;
+	}
+
 	lc->log_level = log_level;
 	if (!logfile) {
 		lc->logfile = stderr;
 		return 0;
 	}
 
-	strncpy(safe_logfile, logfile, 1024);
-	safe_logfile[1023] = 0;
-	file = fopen(safe_logfile, "a");
+	strncpy(lc->filename, logfile, MAX_LOGFILE_LEN);
+	lc->filename[MAX_LOGFILE_LEN - 1] = 0;
+	file = fopen(lc->filename, "a");
 	if (!file) {
 		lc->logfile = stderr;
 		return -1;
 	}
 	lc->logfile = file;
 
+	if (flags & REDIRECT_STDOUT)
+		if (!freopen(lc->filename, "a", stdout))
+			return -1;
+	if (flags & REDIRECT_STDERR)
+		if (!freopen(lc->filename, "a", stderr))
+			return -1;
+	lc->flags = flags;
+
 	return 0;
 }
-int (*init_logctx)(struct log_ctx *lc, char *peer_name, enum log_level log_level, char *logfile) = user_init_logctx;
+int (*init_logctx)(struct log_ctx *lc, char *peer_name,
+	enum log_level log_level, char *logfile, uint32_t flags) = __init_logctx;
 
 void __xseg_log2(struct log_ctx *lc, enum log_level level, char *fmt, ...)
 {
@@ -137,7 +192,8 @@ void __xseg_log2(struct log_ctx *lc, enum log_level level, char *fmt, ...)
 	ctime_r(&timeval, timebuf);
 	*strchr(timebuf, '\n') = '\0';
 
-	buf += sprintf(buf, "%s: %s: ", t, lc->peer_name);
+	buf += sprintf(buf, "%s: ", t);
+	buf += snprintf(buf, MAX_PEER_NAME + 2, "%s: ", lc->peer_name);
 	buf += sprintf(buf, "%s (%ld):\n\t", timebuf, timeval);
 	unsigned long rem = buf - buffer;
 	buf += vsnprintf(buf, rem, fmt, ap);

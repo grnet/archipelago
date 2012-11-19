@@ -95,6 +95,12 @@ void signal_handler(int signal)
 	terminated = 1;
 }
 
+void renew_logfile(int signal)
+{
+	XSEGLOG2(&lc, I, "Caught signal. Renewing logfile");
+	renew_logctx(&lc, NULL, lc.log_level, NULL, REOPEN_FILE);
+}
+
 static int setup_signals()
 {
 	int r;
@@ -111,6 +117,12 @@ static int setup_signals()
 	r = sigaction(SIGQUIT, &sa, NULL);
 	if (r < 0)
 		return r;
+
+	sa.sa_handler = renew_logfile;
+	r = sigaction(SIGUSR1, &sa, NULL);
+	if (r < 0)
+		return r;
+
 	return r;
 }
 
@@ -702,15 +714,11 @@ int main(int argc, char *argv[])
 		}
 
 	}
-	r = init_logctx(&lc, argv[0], debug_level, logfile);
+	r = init_logctx(&lc, argv[0], debug_level, logfile,
+			REDIRECT_STDOUT|REDIRECT_STDERR);
 	if (r < 0){
 		XSEGLOG("Cannot initialize logging to logfile");
 		return -1;
-	}
-	//hack
-	if (logfile){
-		dup2(fileno(lc.logfile), 1);
-		dup2(fileno(lc.logfile), 2);
 	}
 	XSEGLOG2(&lc, D, "Main thread has tid %ld.\n", syscall(SYS_gettid));
 
