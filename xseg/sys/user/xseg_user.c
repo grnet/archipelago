@@ -195,7 +195,7 @@ void __xseg_log2(struct log_ctx *lc, enum log_level level, char *fmt, ...)
 	buf += sprintf(buf, "%s: ", t);
 	buf += snprintf(buf, MAX_PEER_NAME + 2, "%s: ", lc->peer_name);
 	buf += sprintf(buf, "%s (%ld):\n\t", timebuf, timeval);
-	unsigned long rem = buf - buffer;
+	unsigned long rem = sizeof(buffer) - (buf - buffer);
 	buf += vsnprintf(buf, rem, fmt, ap);
 	if (buf >= buffer + sizeof(buffer))
 		buf = buffer + sizeof(buffer) - 2;/* enough to hold \n and \0 */
