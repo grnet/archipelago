@@ -1,0 +1,51 @@
+/var/log/archipelago/blockerb.log {
+	daily
+	rotate 10
+	compress
+	delaycompress
+	missingok
+	notifempty
+	create 664 root root
+	postrotate
+		kill -USR1 $(cat /var/run/archipelago/blockerb.pid)
+	endscript
+}
+
+/var/log/archipelago/blockerm.log {
+	daily
+	rotate 10
+	compress
+	delaycompress
+	missingok
+	notifempty
+	create 664 root root
+	postrotate
+		kill -USR1 $(cat /var/run/archipelago/blockerm.pid)
+	endscript
+}
+
+/var/log/archipelago/mapperd.log {
+	daily
+	rotate 10
+	compress
+	delaycompress
+	missingok
+	notifempty
+	create 664 root root
+	postrotate
+		kill -USR1 $(cat /var/run/archipelago/mapperd.pid)
+	endscript
+}
+
+/var/log/archipelago/vlmcd.log {
+	daily
+	rotate 10
+	compress
+	delaycompress
+	missingok
+	notifempty
+	create 664 root root
+	postrotate
+		kill -USR1 $(cat /var/run/archipelago/vlmcd.pid)
+	endscript
+}
