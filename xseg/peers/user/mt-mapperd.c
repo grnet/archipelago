@@ -234,9 +234,19 @@ static struct map * find_map(struct mapperd *mapper, char *volume)
 }
 
 static struct map * find_map_len(struct mapperd *mapper, char *target,
-					uint32_t targetlen)
+					uint32_t targetlen, uint32_t flags)
 {
 	char buf[XSEG_MAX_TARGETLEN+1];
+	if (flags & MF_ARCHIP){
+		strncpy(buf, MAPPER_PREFIX, MAPPER_PREFIX_LEN);
+		strncpy(buf + MAPPER_PREFIX_LEN, target, targetlen);
+		buf[MAPPER_PREFIX_LEN + targetlen] = 0;
+		targetlen += MAPPER_PREFIX_LEN;
+	}
+	else {
+		strncpy(buf, target, targetlen);
+		buf[targetlen] = 0;
+	}
 
 	if (targetlen > MAX_VOLUME_LEN){
 		XSEGLOG2(&lc, E, "Namelen %u too long. Max: %d",
@@ -244,8 +254,6 @@ static struct map * find_map_len(struct mapperd *mapper, char *target,
 		return NULL;
 	}
 
-	strncpy(buf, target, targetlen);
-	buf[targetlen] = 0;
 	XSEGLOG2(&lc, D, "looking up map %s, len %u",
 			buf, targetlen);
 	return find_map(mapper, buf);
@@ -1712,7 +1720,7 @@ struct map * get_map(struct peer_req *pr, char *name, uint32_t namelen,
 	int r;
 	struct peerd *peer = pr->peer;
 	struct mapperd *mapper = __get_mapperd(peer);
-	struct map *map = find_map_len(mapper, name, namelen);
+	struct map *map = find_map_len(mapper, name, namelen, flags);
 	if (!map){
 		if (flags & MF_LOAD){
 			map = create_map(mapper, name, namelen, flags);
