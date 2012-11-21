@@ -554,6 +554,8 @@ static void handle_open(struct peerd *peer, struct peer_req *pr)
 	strncpy(buf, target, req->targetlen);
 	strncpy(buf+req->targetlen, LOCK_SUFFIX, strlen(LOCK_SUFFIX));
 
+	XSEGLOG2(&lc, I, "Trying to acquire lock %s", buf);
+
 	if (create_path(pathname, pfiled->vpath, buf, req->targetlen + strlen(LOCK_SUFFIX), 1) < 0) {
 		XSEGLOG2(&lc, E, "Create path failed for %s", buf);
 		goto out;
@@ -562,7 +564,7 @@ static void handle_open(struct peerd *peer, struct peer_req *pr)
 	//nfs v >= 3
 	while ((fd = open(pathname, O_CREAT | O_EXCL, S_IRWXU | S_IRUSR)) < 0){
 		//actual error
-		if (errno != -EEXIST){
+		if (errno != EEXIST){
 			XSEGLOG2(&lc, W, "Error opening %s", pathname);
 			goto out;
 		}
@@ -574,10 +576,14 @@ static void handle_open(struct peerd *peer, struct peer_req *pr)
 out:
 	free(buf);
 	free(pathname);
-	if (fd < 0)
+	if (fd < 0){
+		XSEGLOG2(&lc, I, "Failed to acquire lock %s", buf);
 		pfiled_fail(peer, pr);
-	else
+	}
+	else{
+		XSEGLOG2(&lc, I, "Acquired lock %s", buf);
 		pfiled_complete(peer, pr);
+	}
 	return;
 }
 
