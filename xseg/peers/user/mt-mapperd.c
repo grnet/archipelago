@@ -1760,10 +1760,7 @@ start:
 	//always drop cache if map not read exclusively
 	if (!(map->flags & MF_MAP_EXCLUSIVE))
 		do_dropcache(pr, map);
-	//maybe capture ref before and compare here?
-	if (map->ref > 1){
-		signal_map(map);
-	}
+	signal_map(map);
 	put_map(map);
 	return r;
 }
