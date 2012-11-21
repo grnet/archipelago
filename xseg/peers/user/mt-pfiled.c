@@ -559,12 +559,15 @@ static void handle_open(struct peerd *peer, struct peer_req *pr)
 	}
 
 	//nfs v >= 3
-	fd = open(pathname, O_CREAT | O_EXCL, S_IRWXU | S_IRUSR);
-	if (fd < 0){
+	while ((fd = open(pathname, O_CREAT | O_EXCL, S_IRWXU | S_IRUSR)) < 0){
 		//actual error
-		if (errno != -EEXIST)
+		if (errno != -EEXIST){
 			XSEGLOG2(&lc, W, "Error opening %s", pathname);
-		goto out;
+			goto out;
+		}
+		if (req->flags & XF_NOSYNC)
+			goto out;
+		sleep(1);
 	}
 	close(fd);
 out:

@@ -29,6 +29,8 @@ uint32_t ta = 0;
 #endif
 
 #ifdef MT
+struct peerd *global_peer;
+
 struct thread {
 	struct peerd *peer;
 	pthread_t tid;
@@ -79,7 +81,8 @@ static inline int isTerminate()
 {
 /* ta doesn't need to be taken into account, because the main loops
  * doesn't check the terminated flag if ta is not 0.
- *
+ */
+	/*
 #ifdef ST_THREADS
 	return (!ta & terminated);
 #else
@@ -93,6 +96,9 @@ void signal_handler(int signal)
 {
 	XSEGLOG2(&lc, I, "Caught signal. Terminating gracefully");
 	terminated = 1;
+#ifdef MT
+	wake_up_next_thread(global_peer);
+#endif
 }
 
 void renew_logfile(int signal)
@@ -101,10 +107,13 @@ void renew_logfile(int signal)
 	renew_logctx(&lc, NULL, lc.log_level, NULL, REOPEN_FILE);
 }
 
-static int setup_signals()
+static int setup_signals(struct peerd *peer)
 {
 	int r;
 	struct sigaction sa;
+#ifdef MT
+	global_peer = peer;
+#endif
 	sigemptyset(&sa.sa_mask);
 	sa.sa_flags = 0;
 	sa.sa_handler = signal_handler;
@@ -651,7 +660,7 @@ int main(int argc, char *argv[])
 	// -dp xseg_portno to defer blocking requests
 	// -l log file ?
 	//TODO print messages on arg parsing error
-	//TODO string checking 
+	//TODO string checking
 
 	for (i = 1; i < argc; i++) {
 		if (!strcmp(argv[i], "-g") && i + 1 < argc) {
@@ -751,13 +760,13 @@ int main(int argc, char *argv[])
 		portno_end = portno;
 	}
 
-	setup_signals();
 	//TODO err check
 	peer = peerd_init(nr_ops, spec, portno_start, portno_end, nr_threads, defer_portno);
 	if (!peer){
 		r = -1;
 		goto out;
 	}
+	setup_signals(peer);
 	r = custom_peer_init(peer, argc, argv);
 	if (r < 0)
 		goto out;
