@@ -42,7 +42,8 @@
 void usage(char *argv0)
 {
 	fprintf(stderr,
-			"Usage: %s <PATH> <VPATH> [-p PORT] [-g XSEG_SPEC] [-n NR_OPS] [-v]\n\n"
+			"Usage: %s [-p PORT] [-g XSEG_SPEC] [-n NR_OPS] [-v] "
+			"--pithos PATH --archip VPATH \n\n"
 			"where:\n"
 			"\tPATH: path to pithos data blocks\n"
 			"\tVPATH: path to modified volume blocks\n"
@@ -676,15 +677,17 @@ int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 		}
 	}
 
+	pfiled->vpath[0] = 0;
+	pfiled->path[0] = 0;
 	pfiled->handled_reqs = 0;
 	for (i = 0; i < argc; i++) {
-		if (!strcmp(argv[i], "--path") && (i+1) < argc){
+		if (!strcmp(argv[i], "--pithos") && (i+1) < argc){
 			strncpy(pfiled->path, argv[i+1], MAX_PATH_SIZE);
 			pfiled->path[MAX_PATH_SIZE] = 0;
 			i += 1;
 			continue;
 		}
-		if (!strcmp(argv[i], "--vpath") && (i+1) < argc){
+		if (!strcmp(argv[i], "--archip") && (i+1) < argc){
 			strncpy(pfiled->vpath, argv[i+1], MAX_PATH_SIZE);
 			pfiled->vpath[MAX_PATH_SIZE] = 0;
 			i += 1;
@@ -692,13 +695,22 @@ int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 		}
 	}
 
+
 	pfiled->path_len = strlen(pfiled->path);
+	if (!pfiled->path_len){
+		XSEGLOG2(&lc, E, "Pithos path was not provided");
+		return -1;
+	}
 	if (pfiled->path[pfiled->path_len -1] != '/'){
 		pfiled->path[pfiled->path_len] = '/';
 		pfiled->path[++pfiled->path_len]= 0;
 	}
 
 	pfiled->vpath_len = strlen(pfiled->vpath);
+	if (!pfiled->vpath_len){
+		XSEGLOG2(&lc, E, "Archipelagos path was not provided");
+		return -1;
+	}
 	if (pfiled->vpath[pfiled->vpath_len -1] != '/'){
 		pfiled->vpath[pfiled->vpath_len] = '/';
 		pfiled->vpath[++pfiled->vpath_len]= 0;
