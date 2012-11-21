@@ -69,7 +69,7 @@ if BLOCKER == "pfiled":
             str(PITHOSMAPS), str(FILED_MAPS), "-d",
             "-f", os.path.join(PIDFILE_PATH, "blockerm.pid")],
             "blockerm" ]
-else:
+elif BLOCKER == "mt-sosd":
     peer_blockerb = [BLOCKER,
             ["-p" , str(BPORT), "-g", str(SPEC), "-n", str(NR_OPS_BLOCKERB),
              "--pool", str(RADOS_POOL_BLOCKS), "-v", str(VERBOSITY_BLOCKERB),
@@ -84,6 +84,25 @@ else:
              "-l", os.path.join(str(LOGS_PATH), "blockerm.log"),
              "-t", "3"],
              "blockerm"]
+elif BLOCKER == "mt-pfiled":
+    peer_blockerb = [BLOCKER,
+            ["-p" , str(BPORT), "-g", str(SPEC), "-n", str(NR_OPS_BLOCKERB),
+             "--pithos", str(PITHOS), "--archip", str(FILED_IMAGES),
+	     "-v", str(VERBOSITY_BLOCKERB),
+             "-d", "--pidfile", os.path.join(PIDFILE_PATH, "blockerb.pid"),
+             "-l", os.path.join(str(LOGS_PATH), "blockerb.log"),
+             "-t", "3"],
+             "blockerb"]
+    peer_blockerm = [BLOCKER,
+            ["-p" , str(MBPORT), "-g", str(SPEC), "-n", str(NR_OPS_BLOCKERM),
+             "--pithos", str(PITHOSMAPS), "--archip", str(FILED_MAPS),
+	     "-v", str(VERBOSITY_BLOCKERM),
+             "-d", "--pidfile", os.path.join(PIDFILE_PATH, "blockerm.pid"),
+             "-l", os.path.join(str(LOGS_PATH), "blockerm.log"),
+             "-t", "3"],
+             "blockerm"]
+else:
+        sys.exit(-1)
 
 peer_vlmcd = [VLMC,
          ["-t" , "1", "-sp",  str(VPORT_START), "-ep", str(VPORT_END),
