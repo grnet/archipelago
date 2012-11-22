@@ -605,7 +605,7 @@ int pidfile_write(int pid_fd)
 	char buf[16];
 	snprintf(buf, sizeof(buf), "%ld", syscall(SYS_gettid));
 	buf[15] = 0;
-	
+
 	lseek(pid_fd, 0, SEEK_SET);
 	int ret = write(pid_fd, buf, strlen(buf));
 	return ret;
@@ -639,7 +639,7 @@ int pidfile_open(char *path, pid_t *old_pid)
 	//nfs version > 3
 	int fd = open(path, O_CREAT|O_EXCL|O_WRONLY);
 	if (fd < 0){
-		if (errno == -EEXIST)
+		if (errno == EEXIST)
 			pidfile_read(path, old_pid);
 	}
 	return fd;
