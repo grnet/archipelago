@@ -91,7 +91,7 @@ elif BLOCKER == "mt-pfiled":
 	     "-v", str(VERBOSITY_BLOCKERB),
              "-d", "--pidfile", os.path.join(PIDFILE_PATH, "blockerb.pid"),
              "-l", os.path.join(str(LOGS_PATH), "blockerb.log"),
-             "-t", "3"],
+             "-t", str(NR_OPS_BLOCKERB), "--prefix", "archip_"],
              "blockerb"]
     peer_blockerm = [BLOCKER,
             ["-p" , str(MBPORT), "-g", str(SPEC), "-n", str(NR_OPS_BLOCKERM),
@@ -99,7 +99,7 @@ elif BLOCKER == "mt-pfiled":
 	     "-v", str(VERBOSITY_BLOCKERM),
              "-d", "--pidfile", os.path.join(PIDFILE_PATH, "blockerm.pid"),
              "-l", os.path.join(str(LOGS_PATH), "blockerm.log"),
-             "-t", "3"],
+             "-t", str(NR_OPS_BLOCKERM), "--prefix", "archip_"],
              "blockerm"]
 else:
         sys.exit(-1)
