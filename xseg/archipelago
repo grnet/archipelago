@@ -2,7 +2,7 @@
 #
 # archipelagos tool
 
-import os, sys, subprocess, argparse, time, psutil, signal, socket, errno
+import os, sys, subprocess, argparse, time, psutil, signal, errno
 from subprocess import call, check_call
 
 BIN_PATH="/usr/bin"
@@ -58,8 +58,6 @@ except:
     print "Cannot open defaults"
     sys.exit(1)
 
-HOSTNAME=socket.gethostname()
-
 if BLOCKER == "pfiled":
     peer_blockerb = [BLOCKER,
             ["-p" , str(BPORT), "-g", str(SPEC), "-n", str(NR_OPS_BLOCKERB),
@@ -71,35 +69,54 @@ if BLOCKER == "pfiled":
             str(PITHOSMAPS), str(FILED_MAPS), "-d",
             "-f", os.path.join(PIDFILE_PATH, "blockerm.pid")],
             "blockerm" ]
-else:
+elif BLOCKER == "mt-sosd":
     peer_blockerb = [BLOCKER,
             ["-p" , str(BPORT), "-g", str(SPEC), "-n", str(NR_OPS_BLOCKERB),
              "--pool", str(RADOS_POOL_BLOCKS), "-v", str(VERBOSITY_BLOCKERB),
              "-d", "--pidfile", os.path.join(PIDFILE_PATH, "blockerb.pid"),
-             "-l", os.path.join(str(LOGS_PATH), "blockerb-"+HOSTNAME+".log"),
+             "-l", os.path.join(str(LOGS_PATH), "blockerb.log"),
              "-t", "3"],
              "blockerb"]
     peer_blockerm = [BLOCKER,
             ["-p" , str(MBPORT), "-g", str(SPEC), "-n", str(NR_OPS_BLOCKERM),
              "--pool", str(RADOS_POOL_MAPS), "-v", str(VERBOSITY_BLOCKERM),
              "-d", "--pidfile", os.path.join(PIDFILE_PATH, "blockerm.pid"),
-             "-l", os.path.join(str(LOGS_PATH), "blockerm-"+HOSTNAME+".log"),
+             "-l", os.path.join(str(LOGS_PATH), "blockerm.log"),
              "-t", "3"],
              "blockerm"]
+elif BLOCKER == "mt-pfiled":
+    peer_blockerb = [BLOCKER,
+            ["-p" , str(BPORT), "-g", str(SPEC), "-n", str(NR_OPS_BLOCKERB),
+             "--pithos", str(PITHOS), "--archip", str(FILED_IMAGES),
+	     "-v", str(VERBOSITY_BLOCKERB),
+             "-d", "--pidfile", os.path.join(PIDFILE_PATH, "blockerb.pid"),
+             "-l", os.path.join(str(LOGS_PATH), "blockerb.log"),
+             "-t", str(NR_OPS_BLOCKERB), "--prefix", "archip_"],
+             "blockerb"]
+    peer_blockerm = [BLOCKER,
+            ["-p" , str(MBPORT), "-g", str(SPEC), "-n", str(NR_OPS_BLOCKERM),
+             "--pithos", str(PITHOSMAPS), "--archip", str(FILED_MAPS),
+	     "-v", str(VERBOSITY_BLOCKERM),
+             "-d", "--pidfile", os.path.join(PIDFILE_PATH, "blockerm.pid"),
+             "-l", os.path.join(str(LOGS_PATH), "blockerm.log"),
+             "-t", str(NR_OPS_BLOCKERM), "--prefix", "archip_"],
+             "blockerm"]
+else:
+        sys.exit(-1)
 
 peer_vlmcd = [VLMC,
          ["-t" , "1", "-sp",  str(VPORT_START), "-ep", str(VPORT_END),
           "-g", str(SPEC), "-n", str(NR_OPS_VLMC), "-bp", str(BPORT),
           "-mp", str(MPORT), "-d", "-v", str(VERBOSITY_VLMC),
           "--pidfile", os.path.join(PIDFILE_PATH, "vlmcd.pid"),
-          "-l", os.path.join(str(LOGS_PATH), "vlmc-"+HOSTNAME+".log")
+          "-l", os.path.join(str(LOGS_PATH), "vlmcd.log")
           ], "vlmcd"]
 peer_mapperd = [MAPPER,
          ["-t" , "1", "-p",  str(MPORT), "-mbp", str(MBPORT),
           "-g", str(SPEC), "-n", str(NR_OPS_MAPPER), "-bp", str(BPORT), "-d",
           "--pidfile", os.path.join(PIDFILE_PATH, "mapperd.pid"),
           "-v", str(VERBOSITY_MAPPER),
-          "-l", os.path.join(str(LOGS_PATH), "mapperd-"+HOSTNAME+".log")
+          "-l", os.path.join(str(LOGS_PATH), "mapperd.log")
           ], "mapperd"]
 
 peers = [peer_blockerb, peer_blockerm, peer_vlmcd, peer_mapperd]
@@ -396,7 +413,7 @@ def stop_peer(peer):
         time.sleep(0.1)
         i += 1
         if i > 150:
-            print "process did not die in 10 secs"
+            print "process did not die in 15 secs"
             return -1
     return 0
 

@@ -72,14 +72,33 @@ static void __exit xsegmod_exit(void)
 	return;
 }
 
-int kernel_init_logctx(struct log_ctx *lc, char *peer_name, enum log_level log_level, char *logfile)
+
+int __renew_logctx(struct log_ctx *lc, char *peer_name,
+                enum log_level log_level, char *logfile, uint32_t flags)
 {
-	lc->peer_name = peer_name;
+	return 0;
+}
+
+int (*renew_logctx)(struct log_ctx *lc, char *peer_name,
+        enum log_level log_level, char *logfile, uint32_t flags) = __renew_logctx;
+
+int __init_logctx(struct log_ctx *lc, char *peer_name,
+		enum log_level log_level, char *logfile, uint32_t flags)
+{
+	if (peer_name){
+		strncpy(lc->peer_name, peer_name, MAX_PEER_NAME);
+		lc->peer_name[MAX_PEER_NAME -1] = 0;
+	}
+	else {
+		return -1;
+	}
+
 	lc->log_level = log_level;
 	lc->logfile = NULL;
 	return 0;
 }
-int (*init_logctx)(struct log_ctx *lc, char *peer_name, enum log_level log_level, char *logfile) = kernel_init_logctx;
+int (*init_logctx)(struct log_ctx *lc, char *peer_name,
+	enum log_level log_level, char *logfile, uint32_t flags) = __init_logctx;
 
 void __xseg_log2(struct log_ctx *lc, unsigned int level, char *fmt, ...)
 {
@@ -104,7 +123,7 @@ void __xseg_log2(struct log_ctx *lc, unsigned int level, char *fmt, ...)
 
 	do_gettimeofday(&t);
 	time_to_tm(t.tv_sec, 0, &broken);	
-	
+
 	buf += sprintf(buf, "%s: %s: ", type, lc->peer_name);
 	buf += sprintf(buf, "%d:%d:%d:%ld\n\t", broken.tm_hour, broken.tm_min, 
                          broken.tm_sec, t.tv_usec);

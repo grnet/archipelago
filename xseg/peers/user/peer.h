@@ -5,6 +5,40 @@
 #include <st.h>
 #endif
 
+
+#define BEGIN_READ_ARGS(__ac, __av)					\
+	int __argc = __ac;						\
+	char **__argv = __av;						\
+	int __i;							\
+	for (__i = 0; __i < __argc; __i++) {
+
+#define END_READ_ARGS()							\
+	}
+
+#define READ_ARG_ULONG(__name, __var)					\
+	if (!strcmp(__argv[__i], __name) && __i + 1 < __argc){	\
+		__var = strtoul(__argv[__i+1], NULL, 10);		\
+		__i += 1;						\
+		continue;						\
+	}
+
+#define READ_ARG_STRING(__name, __var, __max_len)			\
+	if (!strcmp(__argv[__i], __name) && __i + 1 < __argc){	\
+		strncpy(__var, __argv[__i+1], __max_len);		\
+		__var[__max_len] = 0;				\
+		__i += 1;						\
+		continue;						\
+	}
+
+#define READ_ARG_BOOL(__name, __var)					\
+	if (!strcmp(__argv[__i], __name)){				\
+		__var = 1;						\
+		continue;						\
+	}
+
+
+
+
 /* main peer structs */
 struct peer_req {
 	struct peerd *peer;
@@ -80,4 +114,4 @@ int custom_peer_init(struct peerd *peer, int argc, char *argv[]);
 int dispatch(struct peerd *peer, struct peer_req *pr, struct xseg_request *req,
 		enum dispatch_reason reason);
 
-void usage();
+void custom_peer_usage();

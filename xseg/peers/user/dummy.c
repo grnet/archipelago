@@ -8,6 +8,12 @@
 #include <sys/util.h>
 
 struct timespec delay = {0, 4000000};
+
+void custom_peer_usage()
+{
+	fprintf(stderr, "Custom peer options: \n"
+			"none \n\n");
+}
 int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 {
 	return 0;

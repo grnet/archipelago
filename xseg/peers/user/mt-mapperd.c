@@ -10,23 +10,34 @@
 #include <xseg/protocol.h>
 #include <sys/stat.h>
 #include <fcntl.h>
-#include <gcrypt.h>
+//#include <gcrypt.h>
 #include <errno.h>
 #include <sched.h>
 #include <sys/syscall.h>
 
-GCRY_THREAD_OPTION_PTHREAD_IMPL;
+//GCRY_THREAD_OPTION_PTHREAD_IMPL;
 #define MF_LOAD 	(1 << 0)
 #define MF_EXCLUSIVE 	(1 << 1)
 #define MF_FORCE 	(1 << 2)
+#define MF_ARCHIP	(1 << 3)
 
 #define SHA256_DIGEST_SIZE 32
 /* hex representation of sha256 value takes up double the sha256 size */
 #define HEXLIFIED_SHA256_DIGEST_SIZE (SHA256_DIGEST_SIZE << 1)
 
+#define MAPPER_PREFIX "archip_"
+#define MAPPER_PREFIX_LEN 7
+
 #define block_size (1<<22) //FIXME this should be defined here?
-#define objectsize_in_map (1 + XSEG_MAX_TARGETLEN) /* transparency byte + max object len */
-#define mapheader_size (SHA256_DIGEST_SIZE + (sizeof(uint64_t)) ) /* magic hash value  + volume size */
+
+/* transparency byte + max object len */
+#define objectsize_in_map (1 + XSEG_MAX_TARGETLEN)
+
+/* volume size */
+#define mapheader_size (sizeof(uint64_t))
+
+/* reserve enough space to hold _%u object idx */
+#define MAX_VOLUME_LEN (XSEG_MAX_TARGETLEN - 20)
 
 #define MF_OBJECT_EXIST		(1 << 0)
 #define MF_OBJECT_COPYING	(1 << 1)
@@ -37,9 +48,12 @@ GCRY_THREAD_OPTION_PTHREAD_IMPL;
 
 #define MF_OBJECT_NOT_READY	(MF_OBJECT_COPYING|MF_OBJECT_WRITING|MF_OBJECT_DELETING)
 
-char *magic_string = "This a magic string. Please hash me";
-unsigned char magic_sha256[SHA256_DIGEST_SIZE];	/* sha256 hash value of magic string */
-char zero_block[HEXLIFIED_SHA256_DIGEST_SIZE + 1]; /* hexlified sha256 hash value of a block full of zeros */
+//char *magic_string = "This a magic string. Please hash me";
+//unsigned char magic_sha256[SHA256_DIGEST_SIZE];	/* sha256 hash value of magic string */
+//char zero_block[HEXLIFIED_SHA256_DIGEST_SIZE + 1]; /* hexlified sha256 hash value of a block full of zeros */
+
+char *zero_block="zeroblock";
+#define ZERO_BLOCK_LEN 9 /* strlen(zero_block) */
 
 //dispatch_internal mapper states
 enum mapper_state {
@@ -165,6 +179,16 @@ struct mapperd *mapper;
 
 void print_map(struct map *m);
 
+
+void custom_peer_usage()
+{
+	fprintf(stderr, "Custom peer options: \n"
+			"-bp  : port for block blocker(!)\n"
+			"-mbp : port for map blocker\n"
+			"\n");
+}
+
+
 /*
  * Helper functions
  */
@@ -208,30 +232,49 @@ static uint32_t calc_nr_obj(struct xseg_request *req)
 /*
  * Maps handling functions
  */
-//FIXME assert targetlen > 0
 
-
-static struct map * find_map(struct mapperd *mapper, char *target, uint32_t targetlen)
+static struct map * find_map(struct mapperd *mapper, char *volume)
 {
-	int r;
 	struct map *m = NULL;
-	char buf[XSEG_MAX_TARGETLEN+1];
-	//assert targetlen <= XSEG_MAX_TARGETLEN
-	strncpy(buf, target, targetlen);
-	buf[targetlen] = 0;
-	XSEGLOG2(&lc, D, "looking up map %s, len %u", buf, targetlen);
-	r = xhash_lookup(mapper->hashmaps, (xhashidx) buf, (xhashidx *) &m);
+	int r = xhash_lookup(mapper->hashmaps, (xhashidx) volume,
+				(xhashidx *) &m);
 	if (r < 0)
 		return NULL;
 	return m;
+}
+
+static struct map * find_map_len(struct mapperd *mapper, char *target,
+					uint32_t targetlen, uint32_t flags)
+{
+	char buf[XSEG_MAX_TARGETLEN+1];
+	if (flags & MF_ARCHIP){
+		strncpy(buf, MAPPER_PREFIX, MAPPER_PREFIX_LEN);
+		strncpy(buf + MAPPER_PREFIX_LEN, target, targetlen);
+		buf[MAPPER_PREFIX_LEN + targetlen] = 0;
+		targetlen += MAPPER_PREFIX_LEN;
+	}
+	else {
+		strncpy(buf, target, targetlen);
+		buf[targetlen] = 0;
+	}
+
+	if (targetlen > MAX_VOLUME_LEN){
+		XSEGLOG2(&lc, E, "Namelen %u too long. Max: %d",
+					targetlen, MAX_VOLUME_LEN);
+		return NULL;
+	}
+
+	XSEGLOG2(&lc, D, "looking up map %s, len %u",
+			buf, targetlen);
+	return find_map(mapper, buf);
 }
 
 
 static int insert_map(struct mapperd *mapper, struct map *map)
 {
 	int r = -1;
-	
-	if (find_map(mapper, map->volume, map->volumelen)){
+
+	if (find_map(mapper, map->volume)){
 		XSEGLOG2(&lc, W, "Map %s found in hash maps", map->volume);
 		goto out;
 	}
@@ -257,9 +300,9 @@ out:
 static int remove_map(struct mapperd *mapper, struct map *map)
 {
 	int r = -1;
-	
+
 	//assert no pending pr on map
-	
+
 	r = xhash_delete(mapper->hashmaps, (xhashidx) map->volume);
 	while (r == -XHASH_ERESIZE) {
 		xhashidx shift = xhash_shrink_size_shift(mapper->hashmaps);
@@ -315,13 +358,13 @@ static struct xseg_request * __close_map(struct peer_req *pr, struct map *map)
 		goto out_put;
 	}
 	p = xseg_submit(peer->xseg, req, pr->portno, X_ALLOC);
-	if (p == NoPort){ 
+	if (p == NoPort){
 		XSEGLOG2(&lc, E, "Cannot submit request for map %s",
 				map->volume);
 		goto out_unset;
 	}
 	r = xseg_signal(peer->xseg, p);
-	
+
 	XSEGLOG2(&lc, I, "Map %s closing", map->volume);
 	return req;
 
@@ -438,14 +481,15 @@ static inline void object_to_map(char* buf, struct map_node *mn)
 {
 	buf[0] = (mn->flags & MF_OBJECT_EXIST)? 1 : 0;
 	memcpy(buf+1, mn->object, mn->objectlen);
-	memset(buf+1+mn->objectlen, 0, XSEG_MAX_TARGETLEN - mn->objectlen); //zero out the rest of the buffer
+	/* zero out the rest of the buffer */
+	memset(buf+1+mn->objectlen, 0, XSEG_MAX_TARGETLEN - mn->objectlen);
 }
 
 static inline void mapheader_to_map(struct map *m, char *buf)
 {
 	uint64_t pos = 0;
-	memcpy(buf + pos, magic_sha256, SHA256_DIGEST_SIZE);
-	pos += SHA256_DIGEST_SIZE;
+//	memcpy(buf + pos, magic_sha256, SHA256_DIGEST_SIZE);
+//	pos += SHA256_DIGEST_SIZE;
 	memcpy(buf + pos, &m->size, sizeof(m->size));
 	pos += sizeof(m->size);
 }
@@ -521,14 +565,14 @@ static struct xseg_request * __write_map(struct peer_req* pr, struct map *map)
 	struct mapperd *mapper = __get_mapperd(peer);
 	struct map_node *mn;
 	uint64_t i, pos, max_objidx = calc_map_obj(map);
-	struct xseg_request *req = xseg_get_request(peer->xseg, pr->portno, 
+	struct xseg_request *req = xseg_get_request(peer->xseg, pr->portno,
 							mapper->mbportno, X_ALLOC);
 	if (!req){
 		XSEGLOG2(&lc, E, "Cannot allocate request for map %s", map->volume);
 		goto out_err;
 	}
-	int r = xseg_prep_request(peer->xseg, req, map->volumelen, 
-					mapheader_size + max_objidx * objectsize_in_map);
+	int r = xseg_prep_request(peer->xseg, req, map->volumelen,
+			mapheader_size + max_objidx * objectsize_in_map);
 	if (r < 0){
 		XSEGLOG2(&lc, E, "Cannot prepare request for map %s", map->volume);
 		goto out_put;
@@ -668,13 +712,13 @@ static int read_map (struct map *map, char *buf)
 		return -1;
 	}
 	//type 1, our type, type 0 pithos map
-	int type = !memcmp(buf, magic_sha256, SHA256_DIGEST_SIZE);
+	int type = !memcmp(map->volume, MAPPER_PREFIX, MAPPER_PREFIX_LEN);
 	XSEGLOG2(&lc, I, "Type %d detected for map %s", type, map->volume);
 	uint64_t pos;
 	uint64_t i, nr_objs;
 	struct map_node *map_node;
 	if (type) {
-		pos = SHA256_DIGEST_SIZE;
+		uint64_t pos = 0;
 		map->size = *(uint64_t *) (buf + pos);
 		pos += sizeof(uint64_t);
 		nr_objs = map->size / block_size;
@@ -709,10 +753,10 @@ static int read_map (struct map *map, char *buf)
 			map_node[i].ref = 1;
 			map_node[i].cond = st_cond_new(); //FIXME err check;
 			pithosmap_to_object(&map_node[i], buf + pos);
-			pos += SHA256_DIGEST_SIZE; 
+			pos += SHA256_DIGEST_SIZE;
 			r = insert_object(map, &map_node[i]); //FIXME error check
 		}
-		map->size = i * block_size; 
+		map->size = i * block_size;
 	}
 	print_map(map);
 	XSEGLOG2(&lc, I, "Map read for map %s completed", map->volume);
@@ -871,28 +915,21 @@ static struct xseg_request * copyup_object(struct peerd *peer, struct map_node *
 	struct mapper_io *mio = __get_mapper_io(pr);
 	struct map *map = mn->map;
 	void *dummy;
-	int r = -1, i;
+	int r = -1;
 	xport p;
 
-	//struct sha256_ctx sha256ctx;
 	uint32_t newtargetlen;
-	char new_target[XSEG_MAX_TARGETLEN + 1]; 
-	unsigned char buf[SHA256_DIGEST_SIZE];	//assert sha256_digest_size(32) <= MAXTARGETLEN 
-	char new_object[XSEG_MAX_TARGETLEN + 20]; //20 is an arbitrary padding able to hold string representation of objectidx
-	strncpy(new_object, map->volume, map->volumelen);
-	sprintf(new_object + map->volumelen, "%u", mn->objectidx); //sprintf adds null termination
-	new_object[XSEG_MAX_TARGETLEN + 19] = 0;
+	char new_target[XSEG_MAX_TARGETLEN + 1];
+	strncpy(new_target, map->volume, map->volumelen);
+	sprintf(new_target + map->volumelen, "_%u", mn->objectidx);
+	new_target[XSEG_MAX_TARGETLEN] = 0;
+	newtargetlen = strlen(new_target);
 
-	gcry_md_hash_buffer(GCRY_MD_SHA256, buf, new_object, strlen(new_object));
-	for (i = 0; i < SHA256_DIGEST_SIZE; ++i)
-		sprintf (new_target + 2*i, "%02x", buf[i]);
-	newtargetlen = SHA256_DIGEST_SIZE  * 2;
-
-	if (!strncmp(mn->object, zero_block, (mn->objectlen < HEXLIFIED_SHA256_DIGEST_SIZE)? mn->objectlen : HEXLIFIED_SHA256_DIGEST_SIZE)) 
+	if (!strncmp(mn->object, zero_block, ZERO_BLOCK_LEN))
 		goto copyup_zeroblock;
 
-	struct xseg_request *req = xseg_get_request(peer->xseg, pr->portno, 
-							mapper->bportno, X_ALLOC);
+	struct xseg_request *req = xseg_get_request(peer->xseg, pr->portno,
+						mapper->bportno, X_ALLOC);
 	if (!req){
 		XSEGLOG2(&lc, E, "Cannot get request for object %s", mn->object);
 		goto out_err;
@@ -1112,18 +1149,32 @@ static inline void put_map(struct map *map)
 	}
 }
 
-static struct map * create_map(struct mapperd *mapper, char *name, uint32_t namelen)
+static struct map * create_map(struct mapperd *mapper, char *name,
+				uint32_t namelen, uint32_t flags)
 {
 	int r;
+	if (namelen + MAPPER_PREFIX_LEN > MAX_VOLUME_LEN){
+		XSEGLOG2(&lc, E, "Namelen %u too long. Max: %d",
+					namelen, MAX_VOLUME_LEN);
+		return NULL;
+	}
 	struct map *m = malloc(sizeof(struct map));
 	if (!m){
 		XSEGLOG2(&lc, E, "Cannot allocate map ");
 		goto out_err;
 	}
 	m->size = -1;
-	strncpy(m->volume, name, namelen);
-	m->volume[namelen] = 0;
-	m->volumelen = namelen;
+	if (flags & MF_ARCHIP){
+		strncpy(m->volume, MAPPER_PREFIX, MAPPER_PREFIX_LEN);
+		strncpy(m->volume + MAPPER_PREFIX_LEN, name, namelen);
+		m->volume[MAPPER_PREFIX_LEN + namelen] = 0;
+		m->volumelen = MAPPER_PREFIX_LEN + namelen;
+	}
+	else {
+		strncpy(m->volume, name, namelen);
+		m->volume[namelen] = 0;
+		m->volumelen = namelen;
+	}
 	m->flags = 0;
 	m->objects = xhash_new(3, INTEGER); 
 	if (!m->objects){
@@ -1196,7 +1247,7 @@ void copyup_cb(struct peer_req *pr, struct xseg_request *req)
 		__set_copyup_node(mio, req, NULL);
 		//assert mn->flags & MF_OBJECT_WRITING
 		mn->flags &= ~MF_OBJECT_WRITING;
-		
+
 		struct map_node tmp;
 		char *data = xseg_get_data(peer->xseg, req);
 		map_to_object(&tmp, data);
@@ -1591,7 +1642,8 @@ static int do_clone(struct peer_req *pr, struct map *map)
 	char *target = xseg_get_target(peer->xseg, pr->req);
 	struct xseg_request_clone *xclone = (struct xseg_request_clone *) xseg_get_data(peer->xseg, pr->req);
 	XSEGLOG2(&lc, I, "Cloning map %s", map->volume);
-	struct map *clonemap = create_map(mapper, target, pr->req->targetlen);
+	struct map *clonemap = create_map(mapper, target, pr->req->targetlen,
+						MF_ARCHIP);
 	if (!clonemap) 
 		return -1;
 
@@ -1609,7 +1661,7 @@ static int do_clone(struct peer_req *pr, struct map *map)
 				(unsigned long long) map->size, buf);
 		goto out_err;
 	}
-	
+
 	//alloc and init map_nodes
 	unsigned long c = clonemap->size/block_size + 1;
 	struct map_node *map_nodes = calloc(c, sizeof(struct map_node));
@@ -1624,8 +1676,8 @@ static int do_clone(struct peer_req *pr, struct map *map)
 			map_nodes[i].objectlen = mn->objectlen;
 			put_mapnode(mn);
 		} else {
-			strncpy(map_nodes[i].object, zero_block, strlen(zero_block)); //this should be SHA256_DIGEST_SIZE *2
-			map_nodes[i].objectlen = strlen(zero_block);
+			strncpy(map_nodes[i].object, zero_block, ZERO_BLOCK_LEN);
+			map_nodes[i].objectlen = ZERO_BLOCK_LEN;
 		}
 		map_nodes[i].object[map_nodes[i].objectlen] = 0; //NULL terminate
 		map_nodes[i].flags = 0;
@@ -1672,15 +1724,16 @@ static int open_load_map(struct peer_req *pr, struct map *map, uint32_t flags)
 	return r;
 }
 
-struct map * get_map(struct peer_req *pr, char *name, uint32_t namelen, uint32_t flags)
+struct map * get_map(struct peer_req *pr, char *name, uint32_t namelen,
+			uint32_t flags)
 {
 	int r;
 	struct peerd *peer = pr->peer;
 	struct mapperd *mapper = __get_mapperd(peer);
-	struct map *map = find_map(mapper, name, namelen);
+	struct map *map = find_map_len(mapper, name, namelen, flags);
 	if (!map){
 		if (flags & MF_LOAD){
-			map = create_map(mapper, name, namelen);
+			map = create_map(mapper, name, namelen, flags);
 			if (!map)
 				return NULL;
 			r = open_load_map(pr, map, flags);
@@ -1717,10 +1770,7 @@ start:
 	//always drop cache if map not read exclusively
 	if (!(map->flags & MF_MAP_EXCLUSIVE))
 		do_dropcache(pr, map);
-	//maybe capture ref before and compare here?
-	if (map->ref > 1){
-		signal_map(map);
-	}
+	signal_map(map);
 	put_map(map);
 	return r;
 }
@@ -1729,7 +1779,8 @@ void * handle_info(struct peer_req *pr)
 {
 	struct peerd *peer = pr->peer;
 	char *target = xseg_get_target(peer->xseg, pr->req);
-	int r = map_action(do_info, pr, target, pr->req->targetlen, MF_LOAD);
+	int r = map_action(do_info, pr, target, pr->req->targetlen,
+				MF_ARCHIP|MF_LOAD);
 	if (r < 0)
 		fail(peer, pr);
 	else
@@ -1748,15 +1799,19 @@ void * handle_clone(struct peer_req *pr)
 		goto out;
 	}
 	if (xclone->targetlen){
-		r = map_action(do_clone, pr, xclone->target, xclone->targetlen, MF_LOAD);
+		//support clone only from pithos
+		r = map_action(do_clone, pr, xclone->target, xclone->targetlen,
+					MF_LOAD);
 	} else {
 		if (!xclone->size){
 			r = -1;
 		} else {
+			//FIXME
 			struct map *map;
 			char *target = xseg_get_target(peer->xseg, pr->req);
 			XSEGLOG2(&lc, I, "Creating volume");
-			map = get_map(pr, target, pr->req->targetlen, MF_LOAD);
+			map = get_map(pr, target, pr->req->targetlen,
+						MF_ARCHIP|MF_LOAD);
 			if (map){
 				XSEGLOG2(&lc, E, "Volume %s exists", map->volume);
 				if (map->ref <= 2) //initial one + one ref from __get_map
@@ -1766,7 +1821,8 @@ void * handle_clone(struct peer_req *pr)
 				goto out;
 			}
 			//create a new empty map of size
-			map = create_map(mapper, target, pr->req->targetlen);
+			map = create_map(mapper, target, pr->req->targetlen,
+						MF_ARCHIP);
 			if (!map){
 				r = -1;
 				goto out;
@@ -1776,7 +1832,7 @@ void * handle_clone(struct peer_req *pr)
 			uint64_t nr_objs = xclone->size / block_size;
 			if (xclone->size % block_size)
 				nr_objs++;
-				
+
 			struct map_node *map_nodes = calloc(nr_objs, sizeof(struct map_node));
 			if (!map_nodes){
 				do_dropcache(pr, map); //Since we just created the map, dropping cache should be sufficient.
@@ -1785,8 +1841,8 @@ void * handle_clone(struct peer_req *pr)
 			}
 			uint64_t i;
 			for (i = 0; i < nr_objs; i++) {
-				strncpy(map_nodes[i].object, zero_block, strlen(zero_block)); //this should be SHA256_DIGEST_SIZE *2
-				map_nodes[i].objectlen = strlen(zero_block);
+				strncpy(map_nodes[i].object, zero_block, ZERO_BLOCK_LEN);
+				map_nodes[i].objectlen = ZERO_BLOCK_LEN;
 				map_nodes[i].object[map_nodes[i].objectlen] = 0; //NULL terminate
 				map_nodes[i].flags = 0;
 				map_nodes[i].objectidx = i;
@@ -1825,7 +1881,8 @@ void * handle_mapr(struct peer_req *pr)
 {
 	struct peerd *peer = pr->peer;
 	char *target = xseg_get_target(peer->xseg, pr->req);
-	int r = map_action(do_mapr, pr, target, pr->req->targetlen, MF_LOAD|MF_EXCLUSIVE);
+	int r = map_action(do_mapr, pr, target, pr->req->targetlen,
+				MF_ARCHIP|MF_LOAD|MF_EXCLUSIVE);
 	if (r < 0)
 		fail(peer, pr);
 	else
@@ -1838,7 +1895,8 @@ void * handle_mapw(struct peer_req *pr)
 {
 	struct peerd *peer = pr->peer;
 	char *target = xseg_get_target(peer->xseg, pr->req);
-	int r = map_action(do_mapw, pr, target, pr->req->targetlen, MF_LOAD|MF_EXCLUSIVE|MF_FORCE);
+	int r = map_action(do_mapw, pr, target, pr->req->targetlen,
+				MF_ARCHIP|MF_LOAD|MF_EXCLUSIVE|MF_FORCE);
 	if (r < 0)
 		fail(peer, pr);
 	else
@@ -1852,7 +1910,8 @@ void * handle_destroy(struct peer_req *pr)
 {
 	struct peerd *peer = pr->peer;
 	char *target = xseg_get_target(peer->xseg, pr->req);
-	int r = map_action(do_destroy, pr, target, pr->req->targetlen, MF_LOAD|MF_EXCLUSIVE|MF_FORCE);
+	int r = map_action(do_destroy, pr, target, pr->req->targetlen,
+				MF_ARCHIP|MF_LOAD|MF_EXCLUSIVE|MF_FORCE);
 	if (r < 0)
 		fail(peer, pr);
 	else
@@ -1866,7 +1925,8 @@ void * handle_close(struct peer_req *pr)
 	struct peerd *peer = pr->peer;
 	char *target = xseg_get_target(peer->xseg, pr->req);
 	//here we do not want to load
-	int r = map_action(do_close, pr, target, pr->req->targetlen, MF_EXCLUSIVE|MF_FORCE);
+	int r = map_action(do_close, pr, target, pr->req->targetlen,
+				MF_ARCHIP|MF_EXCLUSIVE|MF_FORCE);
 	if (r < 0)
 		fail(peer, pr);
 	else
@@ -1929,33 +1989,33 @@ int dispatch(struct peerd *peer, struct peer_req *pr, struct xseg_request *req,
 int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 {
 	int i;
-	unsigned char buf[SHA256_DIGEST_SIZE];
-	unsigned char *zero;
+//	unsigned char buf[SHA256_DIGEST_SIZE];
+//	unsigned char *zero;
 
-	gcry_control (GCRYCTL_SET_THREAD_CBS, &gcry_threads_pthread);
+	//gcry_control (GCRYCTL_SET_THREAD_CBS, &gcry_threads_pthread);
 
        	/* Version check should be the very first call because it
           makes sure that important subsystems are intialized. */
-       	gcry_check_version (NULL);
-     
+//       	gcry_check_version (NULL);
+
        	/* Disable secure memory.  */
-       	gcry_control (GCRYCTL_DISABLE_SECMEM, 0);
-     
+//     	gcry_control (GCRYCTL_DISABLE_SECMEM, 0);
+
        	/* Tell Libgcrypt that initialization has completed. */
-       	gcry_control (GCRYCTL_INITIALIZATION_FINISHED, 0);
+//     	gcry_control (GCRYCTL_INITIALIZATION_FINISHED, 0);
 
 	/* calculate out magic sha hash value */
-	gcry_md_hash_buffer(GCRY_MD_SHA256, magic_sha256, magic_string, strlen(magic_string));
+//	gcry_md_hash_buffer(GCRY_MD_SHA256, magic_sha256, magic_string, strlen(magic_string));
 
 	/* calculate zero block */
 	//FIXME check hash value
-	zero = malloc(block_size);
-	memset(zero, 0, block_size);
-	gcry_md_hash_buffer(GCRY_MD_SHA256, buf, zero, block_size);
-	for (i = 0; i < SHA256_DIGEST_SIZE; ++i)
-		sprintf(zero_block + 2*i, "%02x", buf[i]);
-	printf("%s \n", zero_block);
-	free(zero);
+//	zero = malloc(block_size);
+//	memset(zero, 0, block_size);
+//	gcry_md_hash_buffer(GCRY_MD_SHA256, buf, zero, block_size);
+//	for (i = 0; i < SHA256_DIGEST_SIZE; ++i)
+//		sprintf(zero_block + 2*i, "%02x", buf[i]);
+//	printf("%s \n", zero_block);
+//	free(zero);
 
 	//FIXME error checks
 	struct mapperd *mapperd = malloc(sizeof(struct mapperd));
