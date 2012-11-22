@@ -3,23 +3,29 @@
 #include <stdlib.h>
 #include <sys/types.h>
 #include <unistd.h>
-#include <xseg/xseg.h>
-#include <peer.h>
 #include <sys/syscall.h>
 #include <sys/time.h>
 #include <signal.h>
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <errno.h>
+
 #ifdef MT
 #include <pthread.h>
 #endif
+
+#include <xseg/xseg.h>
+#include <peer.h>
 
 #ifdef MT
 #define PEER_TYPE "pthread"
 #else
 #define PEER_TYPE "posix"
 #endif
+
+//FIXME this should not be defined here probably
+#define MAX_SPEC_LEN 128
+#define MAX_PIDFILE_LEN 512
 
 volatile unsigned int terminated = 0;
 unsigned int verbose = 0;
@@ -104,7 +110,7 @@ void signal_handler(int signal)
 void renew_logfile(int signal)
 {
 	XSEGLOG2(&lc, I, "Caught signal. Renewing logfile");
-	renew_logctx(&lc, NULL, lc.log_level, NULL, REOPEN_FILE);
+	renew_logctx(&lc, NULL, verbose, NULL, REOPEN_FILE);
 }
 
 static int setup_signals(struct peerd *peer)
@@ -639,22 +645,52 @@ int pidfile_open(char *path, pid_t *old_pid)
 	return fd;
 }
 
+void usage(char *argv0)
+{
+	fprintf(stderr, "Usage: %s [general options] [custom peer options]\n\n", argv0);
+	fprintf(stderr, "General peer options:\n"
+		"  Option      | Default | \n"
+		"  --------------------------------------------\n"
+		"    -g        | None    | Segment spec to join\n"
+		"    -sp       | NoPort  | Start portno to bind\n"
+		"    -ep       | NoPort  | End portno to bind\n"
+		"    -p        | NoPort  | Portno to bind\n"
+		"    -n        | 16      | Number of ops\n"
+		"    -v        | 0       | Verbosity level\n"
+		"    -l        | None    | Logfile \n"
+		"    -d        | No      | Daemonize \n"
+		"    --pidfile | None    | Pidfile \n"
+#ifdef MT
+		"    -t        | No      | Number of threads \n"
+#endif
+		"\n"
+	       );
+	custom_peer_usage();
+}
+
 int main(int argc, char *argv[])
 {
 	struct peerd *peer = NULL;
 	//parse args
-	char *spec = "";
-	int i, r, daemonize = 0;
+	int r;
 	long portno_start = -1, portno_end = -1, portno = -1;
+
 	//set defaults here
+	int daemonize = 0, help = 0;
 	uint32_t nr_ops = 16;
-	uint32_t nr_threads = 16 ;
+	uint32_t nr_threads = 1;
 	unsigned int debug_level = 0;
 	uint32_t defer_portno = NoPort;
-	char *logfile = NULL;
-	char *pidfile = NULL;
 	pid_t old_pid;
 	int pid_fd = -1;
+
+	char spec[MAX_SPEC_LEN + 1];
+	char logfile[MAX_LOGFILE_LEN + 1];
+	char pidfile[MAX_PIDFILE_LEN + 1];
+
+	logfile[0] = 0;
+	pidfile[0] = 0;
+	spec[0] = 0;
 
 	//capture here -g spec, -n nr_ops, -p portno, -t nr_threads -v verbose level
 	// -dp xseg_portno to defer blocking requests
@@ -662,6 +698,7 @@ int main(int argc, char *argv[])
 	//TODO print messages on arg parsing error
 	//TODO string checking
 
+	/*
 	for (i = 1; i < argc; i++) {
 		if (!strcmp(argv[i], "-g") && i + 1 < argc) {
 			spec = argv[i+1];
@@ -723,6 +760,30 @@ int main(int argc, char *argv[])
 		}
 
 	}
+	*/
+	BEGIN_READ_ARGS(argc, argv);
+	READ_ARG_STRING("-g", spec, MAX_SPEC_LEN);
+	READ_ARG_ULONG("-sp", portno_start);
+	READ_ARG_ULONG("-ep", portno_end);
+	READ_ARG_ULONG("-p", portno);
+	READ_ARG_ULONG("-n", nr_ops);
+	READ_ARG_ULONG("-v", debug_level);
+#ifdef MT
+	READ_ARG_ULONG("-t", nr_threads);
+#endif
+//	READ_ARG_ULONG("-dp", defer_portno);
+	READ_ARG_STRING("-l", logfile, MAX_LOGFILE_LEN);
+	READ_ARG_BOOL("-d", daemonize);
+	READ_ARG_BOOL("-h", help);
+	READ_ARG_BOOL("--help", help);
+	READ_ARG_STRING("--pidfile", pidfile, MAX_PIDFILE_LEN);
+	END_READ_ARGS();
+
+	if (help){
+		usage(argv[0]);
+		return 0;
+	}
+
 	r = init_logctx(&lc, argv[0], debug_level, logfile,
 			REDIRECT_STDOUT|REDIRECT_STDERR);
 	if (r < 0){
@@ -731,7 +792,7 @@ int main(int argc, char *argv[])
 	}
 	XSEGLOG2(&lc, D, "Main thread has tid %ld.\n", syscall(SYS_gettid));
 
-	if (pidfile){
+	if (pidfile[0]){
 		pid_fd = pidfile_open(pidfile, &old_pid);
 		if (pid_fd < 0) {
 			if (old_pid) {
@@ -760,7 +821,6 @@ int main(int argc, char *argv[])
 		portno_end = portno;
 	}
 
-	//TODO err check
 	peer = peerd_init(nr_ops, spec, portno_start, portno_end, nr_threads, defer_portno);
 	if (!peer){
 		r = -1;
@@ -771,6 +831,7 @@ int main(int argc, char *argv[])
 	if (r < 0)
 		goto out;
 #ifdef MT
+	//TODO err check
 	peerd_start_threads(peer);
 #endif
 

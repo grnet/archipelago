@@ -98,7 +98,7 @@ int __renew_logctx(struct log_ctx *lc, char *peer_name,
 	}
 
 	lc->log_level = log_level;
-	if (logfile) {
+	if (logfile && logfile[0]) {
 		strncpy(lc->filename, logfile, MAX_LOGFILE_LEN);
 		lc->filename[MAX_LOGFILE_LEN - 1] = 0;
 	}
@@ -141,7 +141,7 @@ int __init_logctx(struct log_ctx *lc, char *peer_name,
 	}
 
 	lc->log_level = log_level;
-	if (!logfile) {
+	if (!logfile || !logfile[0]) {
 		lc->logfile = stderr;
 		return 0;
 	}

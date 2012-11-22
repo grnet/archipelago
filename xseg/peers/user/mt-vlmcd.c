@@ -28,6 +28,14 @@ struct vlmc_io {
 	unsigned long breq_len, breq_cnt;
 };
 
+void custom_peer_usage()
+{
+	fprintf(stderr, "Custom peer options: \n"
+			"-mp : mapper port\n"
+			"-bp : blocker port for blocks\n"
+			"\n");
+}
+
 static inline void __set_vio_state(struct vlmc_io *vio, enum io_state_enum state)
 {
 //	xlock_acquire(&vio->lock, 1);

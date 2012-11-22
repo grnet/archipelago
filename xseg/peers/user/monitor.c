@@ -18,7 +18,10 @@ struct monitor_io {
 	void *src_priv;
 };
 
-
+void custom_peer_usage()
+{
+	return;
+}
 
 static int forward(struct peerd *peer, struct peer_req *pr)
 {

@@ -10,6 +10,13 @@
 #define MAX_POOL_NAME 64
 #define MAX_OBJ_NAME XSEG_MAX_TARGETLEN
 
+void custom_peer_usage()
+{
+	fprintf(stderr, "Custom peer options:\n"
+		"--pool: Rados pool to connect\n"
+		"\n");
+}
+
 enum rados_state {
 	ACCEPTED = 0,
 	PENDING = 1,

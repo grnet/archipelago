@@ -40,23 +40,16 @@
  * Globals, holding command-line arguments
  */
 
-void usage(char *argv0)
+void custom_peer_usage(char *argv0)
 {
-	fprintf(stderr,
-			"Usage: %s [-p PORT] [-g XSEG_SPEC] [-n NR_OPS] [-v] "
-			"--pithos PATH --archip VPATH --prefix PREFIX\n\n"
-			"where:\n"
-			"\tPATH: path to pithos data blocks\n"
-			"\tVPATH: path to modified volume blocks\n"
-			"\tPREFIX: Common prefix of Archipelagos objects to be"
-			"striped during filesystem hierarchy creation\n"
-			"\tPORT: xseg port to listen for requests on\n"
-			"\tXSEG_SPEC: xseg spec as 'type:name:nr_ports:nr_requests:"
-			"request_size:extra_size:page_shift'\n"
-			"\tNR_OPS: number of outstanding xseg requests\n"
-			"\t-v: verbose mode\n",
-			argv0);
-
+	fprintf(stderr, "Custom peer options:\n"
+		"--pithos PATH --archip VPATH --prefix PREFIX\n\n"
+		"where:\n"
+		"\tPATH: path to pithos data blocks\n"
+		"\tVPATH: path to modified volume blocks\n"
+		"\tPREFIX: Common prefix of Archipelagos objects to be"
+		"striped during filesystem hierarchy creation\n"
+	       );
 }
 
 /* fdcache_node flags */
@@ -700,6 +693,7 @@ int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 	pfiled->vpath[0] = 0;
 	pfiled->path[0] = 0;
 	pfiled->handled_reqs = 0;
+	/*
 	for (i = 0; i < argc; i++) {
 		if (!strcmp(argv[i], "--pithos") && (i+1) < argc){
 			strncpy(pfiled->path, argv[i+1], MAX_PATH_SIZE);
@@ -720,9 +714,17 @@ int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 			continue;
 		}
 	}
+	*/
+	BEGIN_READ_ARGS(argc, argv);
+	READ_ARG_STRING("--pithos", pfiled->path, MAX_PATH_SIZE);
+	READ_ARG_STRING("--archip", pfiled->vpath, MAX_PATH_SIZE);
+	READ_ARG_STRING("--prefix", pfiled->prefix, MAX_PREFIX_LEN);
+	END_READ_ARGS();
+
 
 	pfiled->prefix_len = strlen(pfiled->prefix);
 
+	//TODO test path exist
 	pfiled->path_len = strlen(pfiled->path);
 	if (!pfiled->path_len){
 		XSEGLOG2(&lc, E, "Pithos path was not provided");

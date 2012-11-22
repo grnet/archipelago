@@ -179,6 +179,16 @@ struct mapperd *mapper;
 
 void print_map(struct map *m);
 
+
+void custom_peer_usage()
+{
+	fprintf(stderr, "Custom peer options: \n"
+			"-bp  : port for block blocker(!)\n"
+			"-mbp : port for map blocker\n"
+			"\n");
+}
+
+
 /*
  * Helper functions
  */
