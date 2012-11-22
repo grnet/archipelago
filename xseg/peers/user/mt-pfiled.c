@@ -25,6 +25,7 @@
 #define LOCK_SUFFIX		"_lock"
 #define MAX_PATH_SIZE		1024
 #define MAX_FILENAME_SIZE 	(XSEG_MAX_TARGETLEN + 5) //strlen(LOCK_SUFFIX)
+#define MAX_PREFIX_LEN		10
 
 /* default concurrency level (number of threads) */
 #define DEFAULT_NR_OPS		 16
@@ -43,10 +44,12 @@ void usage(char *argv0)
 {
 	fprintf(stderr,
 			"Usage: %s [-p PORT] [-g XSEG_SPEC] [-n NR_OPS] [-v] "
-			"--pithos PATH --archip VPATH \n\n"
+			"--pithos PATH --archip VPATH --prefix PREFIX\n\n"
 			"where:\n"
 			"\tPATH: path to pithos data blocks\n"
 			"\tVPATH: path to modified volume blocks\n"
+			"\tPREFIX: Common prefix of Archipelagos objects to be"
+			"striped during filesystem hierarchy creation\n"
 			"\tPORT: xseg port to listen for requests on\n"
 			"\tXSEG_SPEC: xseg spec as 'type:name:nr_ports:nr_requests:"
 			"request_size:extra_size:page_shift'\n"
@@ -73,12 +76,14 @@ struct fdcache_node {
 struct pfiled {
 	uint32_t path_len;
 	uint32_t vpath_len;
+	uint32_t prefix_len;
 	uint64_t handled_reqs;
 	long maxfds;
 	struct fdcache_node *fdcache;
 	pthread_mutex_t cache_lock;
 	char path[MAX_PATH_SIZE + 1];
 	char vpath[MAX_PATH_SIZE + 1];
+	char prefix[MAX_PREFIX_LEN];
 };
 
 /*
@@ -141,7 +146,8 @@ static void handle_unknown(struct peerd *peer, struct peer_req *pr)
 	pfiled_fail(peer, pr);
 }
 
-static int create_path(char *buf, char *path, char *target, uint32_t targetlen, int mkdirs)
+static int create_path(char *buf, char *path, char *target, uint32_t targetlen,
+		uint32_t prefixlen, int mkdirs)
 {
 	int i;
 	struct stat st;
@@ -150,8 +156,8 @@ static int create_path(char *buf, char *path, char *target, uint32_t targetlen, 
 	strncpy(buf, path, pathlen);
 
 	for (i = 0; i < 9; i+= 3) {
-		buf[pathlen + i] = target[i - (i/3)];
-		buf[pathlen + i +1] = target[i + 1 - (i/3)];
+		buf[pathlen + i] = target[prefixlen + i - (i/3)];
+		buf[pathlen + i +1] = target[prefixlen + i + 1 - (i/3)];
 		buf[pathlen + i + 2] = '/';
 		if (mkdirs == 1) {
 			buf[pathlen + i + 3] = '\0';
@@ -254,7 +260,7 @@ start_locked:
 	}
 
 	/* try opening it from pithos blocker dir */
-	if (create_path(tmp, pfiled->path, target, targetlen, 0) < 0) {
+	if (create_path(tmp, pfiled->path, target, targetlen, 0, 0) < 0) {
 		fd = -1;
 		goto new_entry;
 	}
@@ -262,12 +268,14 @@ start_locked:
 	fd = open(tmp, O_RDWR);
 	if (fd < 0) {
 		/* try opening it from the tmp dir */
-		if (create_path(tmp, pfiled->vpath, target, targetlen, 0) < 0)
+		if (create_path(tmp, pfiled->vpath, target, targetlen,
+						pfiled->prefix_len,  0) < 0)
 			goto new_entry;
 
 		fd = open(tmp, O_RDWR);
 		if (fd < 0)  {
-			if (create_path(tmp, pfiled->vpath, target, targetlen, 1) < 0) {
+			if (create_path(tmp, pfiled->vpath, target, targetlen,
+						pfiled->prefix_len, 1) < 0) {
 				fd = -1;
 				goto new_entry;
 			}
@@ -451,7 +459,8 @@ static void handle_copy(struct peerd *peer, struct peer_req *pr)
 		goto out;
 	}
 
-	if (create_path(buf, pfiled->path, xcopy->target, xcopy->targetlen, 0) < 0)  {
+	if (create_path(buf, pfiled->path, xcopy->target,
+					xcopy->targetlen, 0, 0) < 0)  {
 		XSEGLOG2(&lc, E, "Create path failed");
 		r = -1;
 		goto out;
@@ -520,7 +529,8 @@ static void handle_delete(struct peerd *peer, struct peer_req *pr)
 		pthread_mutex_unlock(&pfiled->cache_lock);
 	}
 
-	r = create_path(buf, pfiled->vpath, target, req->targetlen, 0);
+	r = create_path(buf, pfiled->vpath, target, req->targetlen,
+				pfiled->prefix_len, 0);
 	if (r< 0) {
 		XSEGLOG2(&lc, E, "Create path failed");
 		goto out;
@@ -556,7 +566,9 @@ static void handle_open(struct peerd *peer, struct peer_req *pr)
 
 	XSEGLOG2(&lc, I, "Trying to acquire lock %s", buf);
 
-	if (create_path(pathname, pfiled->vpath, buf, req->targetlen + strlen(LOCK_SUFFIX), 1) < 0) {
+	if (create_path(pathname, pfiled->vpath, buf, 
+			req->targetlen + strlen(LOCK_SUFFIX),
+			pfiled->prefix_len, 1) < 0) {
 		XSEGLOG2(&lc, E, "Create path failed for %s", buf);
 		goto out;
 	}
@@ -606,7 +618,9 @@ static void handle_close(struct peerd *peer, struct peer_req *pr)
 	strncpy(buf, target, req->targetlen);
 	strncpy(buf+req->targetlen, LOCK_SUFFIX, strlen(LOCK_SUFFIX));
 
-	r = create_path(pathname, pfiled->vpath, buf, req->targetlen + strlen(LOCK_SUFFIX), 0);
+	r = create_path(pathname, pfiled->vpath, buf,
+			req->targetlen + strlen(LOCK_SUFFIX),
+			pfiled->prefix_len, 0);
 	if (r < 0) {
 		XSEGLOG2(&lc, E, "Create path failed for %s", buf);
 		goto out;
@@ -699,8 +713,15 @@ int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 			i += 1;
 			continue;
 		}
+		if (!strcmp(argv[i], "--prefix") && (i+1) < argc){
+			strncpy(pfiled->prefix, argv[i+1], MAX_PREFIX_LEN);
+			pfiled->prefix[MAX_PREFIX_LEN] = 0;
+			i += 1;
+			continue;
+		}
 	}
 
+	pfiled->prefix_len = strlen(pfiled->prefix);
 
 	pfiled->path_len = strlen(pfiled->path);
 	if (!pfiled->path_len){
