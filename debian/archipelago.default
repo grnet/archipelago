@@ -1,20 +1,12 @@
-#XSEG_HOME="/home/philipgian/archip/xseg"
-#MODULES_DIR="${XSEG_HOME}/lib/kernel"
-
-
-# xseg
-
-SPEC="segdev:xsegbd:512:1024:12"
-REQS=512
-PORTS=512
-
 #do not touch
 DEVICE_PREFIX="/dev/xsegbd"
 XSEGBD_SYSFS="/sys/bus/xsegbd/"
 
-CHARDEV_NAME="/dev/segdev"
-CHARDEV_MAJOR=60
-CHARDEV_MINOR=0
+
+
+# xseg
+SPEC="segdev:xsegbd:512:1024:12"
+REQS=512
 
 BPORT=0
 MPORT=1
@@ -23,31 +15,34 @@ VTOOL=3
 VPORT_START=204
 VPORT_END=403
 
-# peers
-
-LOGS_PATH="/var/log/archipelago"
-#PIDFILE_PATH="/var/run/archipelago"
-
-BLOCKER="mt-sosd"
-MAPPER="mt-mapperd"
-VLMC="st-vlmcd"
-
+#Max number of flying operations
 NR_OPS_BLOCKERB=128
 NR_OPS_BLOCKERM=128
 NR_OPS_VLMC=128
 NR_OPS_MAPPER=128
 
+#verbosity levels for each xseg peer
+#0 Error
+#1 Warnings
+#2 Info
+#3 Debug
 VERBOSITY_BLOCKERB="3"
 VERBOSITY_BLOCKERM="3"
 VERBOSITY_MAPPER="3"
 VERBOSITY_VLMC="3"
 
-FILED_IMAGES="/srv/archip/blocks"
-FILED_MAPS="/srv/archip/maps"
+# Choose between rados or files STORAGE
+# For the selected storage method, the appropriate config options must be set
+#STORAGE="files"
+STORAGE="rados"
 
-PITHOS="/srv/pithos/data/blocks"
-PITHOSMAPS="/srv/pithos/data/maps"
+#options for STORAGE="files"
+#FILED_IMAGES="/srv/archip/blocks"
+#FILED_MAPS="/srv/archip/maps"
+#PITHOS="/srv/pithos/data/blocks"
+#PITHOSMAPS="/srv/pithos/data/maps"
 
+#options for STORAGE="rados"
 RADOS_POOL_MAPS="maps"
 RADOS_POOL_BLOCKS="blocks"
 
