@@ -33,9 +33,10 @@
 #define objectsize_in_map (1 + SHA256_DIGEST_SIZE)
 
 /* Map header contains:
+ * 	map version
  * 	volume size
  */
-#define mapheader_size (sizeof(uint64_t))
+#define mapheader_size (sizeof (uint32_t) + sizeof(uint64_t))
 
 
 #define MAPPER_PREFIX "archip_"
@@ -168,6 +169,7 @@ struct map_node {
 					MF_MAP_DROPPING_CACHE|MF_MAP_OPENING)
 
 struct map {
+	uint32_t version;
 	uint32_t flags;
 	uint64_t size;
 	uint32_t volumelen;
@@ -564,6 +566,8 @@ static inline void object_to_map(char* buf, struct map_node *mn)
 static inline void mapheader_to_map(struct map *m, char *buf)
 {
 	uint64_t pos = 0;
+	memcpy(buf + pos, &m->version, sizeof(m->version));
+	pos += sizeof(m->version);
 	memcpy(buf + pos, &m->size, sizeof(m->size));
 	pos += sizeof(m->size);
 }
@@ -785,7 +789,7 @@ static int read_map (struct map *map, unsigned char *buf)
 		//read error;
 		return -1;
 	}
-	//type 1, our type, type 0 pithos map
+	//type 1, archip type, type 0 pithos map
 	int type = !memcmp(map->volume, MAPPER_PREFIX, MAPPER_PREFIX_LEN);
 	XSEGLOG2(&lc, I, "Type %d detected for map %s", type, map->volume);
 	uint64_t pos;
@@ -793,6 +797,8 @@ static int read_map (struct map *map, unsigned char *buf)
 	struct map_node *map_node;
 	if (type) {
 		uint64_t pos = 0;
+		map->version = *(uint32_t *) (buf + pos);
+		pos += sizeof(uint32_t);
 		map->size = *(uint64_t *) (buf + pos);
 		pos += sizeof(uint64_t);
 		nr_objs = map->size / block_size;
@@ -1253,11 +1259,13 @@ static struct map * create_map(struct mapperd *mapper, char *name,
 		strncpy(m->volume + MAPPER_PREFIX_LEN, name, namelen);
 		m->volume[MAPPER_PREFIX_LEN + namelen] = 0;
 		m->volumelen = MAPPER_PREFIX_LEN + namelen;
+		m->version = 1; /* keep this hardcoded for now */
 	}
 	else {
 		strncpy(m->volume, name, namelen);
 		m->volume[namelen] = 0;
 		m->volumelen = namelen;
+		m->version = 0; /* version 0 should be pithos maps */
 	}
 	m->flags = 0;
 	m->objects = xhash_new(3, INTEGER); 
@@ -2135,10 +2143,11 @@ void print_map(struct map *m)
 	uint64_t nr_objs = m->size/block_size;
 	if (m->size % block_size)
 		nr_objs++;
-	fprintf(stderr, "Volume name: %s[%u], size: %llu, nr_objs: %llu\n", 
+	fprintf(stderr, "Volume name: %s[%u], size: %llu, nr_objs: %llu, version: %u\n", 
 			m->volume, m->volumelen, 
 			(unsigned long long) m->size, 
-			(unsigned long long) nr_objs);
+			(unsigned long long) nr_objs,
+			m->version);
 	uint64_t i;
 	struct map_node *mn;
 	if (nr_objs > 1000000) //FIXME to protect against invalid volume size
