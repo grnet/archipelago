@@ -9,7 +9,7 @@ DEFAULTS='/etc/default/archipelago'
 
 #system defaults
 PIDFILE_PATH="/var/run/archipelago"
-LOGS_PATH="/var/run/archipelago"
+LOGS_PATH="/var/log/archipelago"
 DEVICE_PREFIX="/dev/xsegbd"
 XSEGBD_SYSFS="/sys/bus/xsegbd/"
 
@@ -203,7 +203,7 @@ def check_conf():
 
     return True
 
-def contruct_peers():
+def construct_peers():
     if BLOCKER == "pfiled":
         peer_blockerb = [BLOCKER,
                 ["-p" , str(BPORT), "-g", str(SPEC), "-n", str(NR_OPS_BLOCKERB),
@@ -567,5 +567,5 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
     loadrc(args.config)
-    peers = contruct_peers()
+    peers = construct_peers()
     sys.exit(args.func(args))
