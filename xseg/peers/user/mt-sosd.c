@@ -10,7 +10,8 @@
 #define MAX_POOL_NAME 64
 #define MAX_OBJ_NAME XSEG_MAX_TARGETLEN
 #define RADOS_LOCK_NAME "RadosLock"
-#define RADOS_LOCK_COOKIE "Cookie"
+//#define RADOS_LOCK_COOKIE "Cookie"
+#define RADOS_LOCK_COOKIE "foo"
 
 void custom_peer_usage()
 {
@@ -520,10 +521,14 @@ void * unlock_op(void *arg)
 	struct rados_io *rio = (struct rados_io *) (pr->priv);
 	int r;
 	XSEGLOG2(&lc, I, "Starting unlock op for %s", rio->obj_name);
-	r = rados_unlock(rados->ioctx, rio->obj_name, RADOS_LOCK_NAME,
+	if (pr->req->flags & XF_FORCE)
+		r = rados_break_lock(rados->ioctx, rio->obj_name, RADOS_LOCK_NAME,
+			RADOS_LOCK_COOKIE);
+	else
+		r = rados_unlock(rados->ioctx, rio->obj_name, RADOS_LOCK_NAME,
 			RADOS_LOCK_COOKIE);
 	if (r < 0){
-		XSEGLOG2(&lc, E, "Rados unlock failed for %s", rio->obj_name);
+		XSEGLOG2(&lc, E, "Rados unlock failed for %s (r: %d)", rio->obj_name, r);
 		fail(pr->peer, pr);
 	}
 	else {
