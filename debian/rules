@@ -1,11 +1,16 @@
 #!/usr/bin/make -f
 # -*- makefile -*-
 
+.PHONY: override_dh_dkms override_dh_strip
+
 %:
 	dh $@ --with dkms
 
 override_dh_dkms:
 	dh_dkms -V
+
+override_dh_strip:
+	dh_strip -plibxseg0 --dbg-package=libxseg0-dbg
 
 
 
