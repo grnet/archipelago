@@ -16,7 +16,7 @@ Architecture: amd64
 Depends: ${misc:Depends}, ${python:Depends}, ${shlibs:Depends},
 	 libxseg0(=${binary:Version}), libgcrypt11(>=1.4.5-2), libst1(>=1.9-3),
 	 librados2(>=0.54-1-grnet), python-psutil(>=0.1.3), python-argparse,
-	 archipelago-kernel-dkms(=${binary:Version})
+	 libssl0.9.8,  archipelago-kernel-dkms(=${binary:Version})
 Description:  Provides archipelago infrastructure
  Extended Description here
 
