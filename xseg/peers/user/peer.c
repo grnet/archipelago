@@ -841,6 +841,7 @@ int main(int argc, char *argv[])
 #else
 	r = peerd_loop(peer);
 #endif
+	custom_peer_finalize(peer);
 out:
 	if (pid_fd > 0)
 		pidfile_remove(pidfile, pid_fd);

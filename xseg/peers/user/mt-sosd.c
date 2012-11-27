@@ -635,6 +635,11 @@ int custom_arg_parse(int argc, const char *argv[])
 	return 0;
 }
 
+void custom_peer_finalize(struct peerd *peer)
+{
+	return;
+}
+
 int dispatch(struct peerd *peer, struct peer_req *pr, struct xseg_request *req,
 		enum dispatch_reason reason)
 {

@@ -408,7 +408,7 @@ static struct xseg_request * __close_map(struct peer_req *pr, struct map *map)
 		goto out_err;
 	}
 
-	r = xseg_prep_request(peer->xseg, req, map->volumelen, block_size);
+	r = xseg_prep_request(peer->xseg, req, map->volumelen, 0);
 	if (r < 0){
 		XSEGLOG2(&lc, E, "Cannot prepare request for map %s",
 				map->volume);
@@ -420,7 +420,7 @@ static struct xseg_request * __close_map(struct peer_req *pr, struct map *map)
 		goto out_put;
 	strncpy(reqtarget, map->volume, req->targetlen);
 	req->op = X_CLOSE;
-	req->size = block_size;
+	req->size = 0;
 	req->offset = 0;
 	r = xseg_set_req_data(peer->xseg, req, pr);
 	if (r < 0){
@@ -2128,6 +2128,31 @@ int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 //	test_map(peer);
 
 	return 0;
+}
+
+void custom_peer_finalize(struct peerd *peer)
+{
+	struct mapperd *mapper = __get_mapperd(peer);
+	struct peer_req *pr = alloc_peer_req(peer);
+	if (!pr){
+		XSEGLOG2(&lc, E, "Cannot get peer request");
+		return;
+	}
+	int r;
+	struct map *map;
+	xhash_iter_t it;
+	xhashidx key, val;
+	xhash_iter_init(mapper->hashmaps, &it);
+	while (xhash_iterate(mapper->hashmaps, &it, &key, &val)){
+		map = (struct map *)val;
+		if (!(map->flags & MF_MAP_EXCLUSIVE))
+			continue;
+		if (close_map(pr, map) < 0)
+			XSEGLOG2(&lc, E, "Couldn't close map %s", map->volume);
+	}
+	return;
+
+
 }
 
 void print_obj(struct map_node *mn)

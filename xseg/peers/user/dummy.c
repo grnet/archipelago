@@ -19,6 +19,11 @@ int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 	return 0;
 }
 
+void custom_peer_finalize(struct peerd *peer)
+{
+	return;
+}
+
 int dispatch(struct peerd *peer, struct peer_req *pr, struct xseg_request *req,
 		enum dispatch_reason reason)
 {

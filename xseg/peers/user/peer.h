@@ -109,6 +109,7 @@ extern uint32_t ta;
 
 /* peer main function */
 int custom_peer_init(struct peerd *peer, int argc, char *argv[]);
+void custom_peer_finalize(struct peerd *peer);
 
 /* dispatch function */
 int dispatch(struct peerd *peer, struct peer_req *pr, struct xseg_request *req,
