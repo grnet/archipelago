@@ -2130,6 +2130,49 @@ int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 	return 0;
 }
 
+/* FIXME this should not be here */
+int wait_reply(struct peerd *peer, struct xseg_request *expected_req)
+{
+	struct xseg *xseg = peer->xseg;
+	xport portno_start = peer->portno_start;
+	xport portno_end = peer->portno_end;
+	struct peer_req *pr;
+	xport i;
+	int  r, c = 0;
+	struct xseg_request *req, *received;
+	xseg_prepare_wait(xseg, portno_start);
+	while(1) {
+		XSEGLOG2(&lc, D, "Attempting to check for reply");
+		c = 1;
+		while (c){
+			c = 0;
+			for (i = portno_start; i <= portno_end; i++) {
+				received = xseg_receive(xseg, i, 0);
+				if (received) {
+					c = 1;
+					r =  xseg_get_req_data(xseg, received, (void **) &pr);
+					if (r < 0 || !pr || received != expected_req){
+						XSEGLOG2(&lc, W, "Received request with no pr data\n");
+						xport p = xseg_respond(peer->xseg, received, peer->portno_start, X_ALLOC);
+						if (p == NoPort){
+							XSEGLOG2(&lc, W, "Could not respond stale request");
+							xseg_put_request(xseg, received, portno_start);
+							continue;
+						} else {
+							xseg_signal(xseg, p);
+						}
+					} else {
+						xseg_cancel_wait(xseg, portno_start);
+						return 0;
+					}
+				}
+			}
+		}
+		xseg_wait_signal(xseg, 1000000UL);
+	}
+}
+
+
 void custom_peer_finalize(struct peerd *peer)
 {
 	struct mapperd *mapper = __get_mapperd(peer);
@@ -2140,6 +2183,7 @@ void custom_peer_finalize(struct peerd *peer)
 	}
 	int r;
 	struct map *map;
+	struct xseg_request *req;
 	xhash_iter_t it;
 	xhashidx key, val;
 	xhash_iter_init(mapper->hashmaps, &it);
@@ -2147,8 +2191,15 @@ void custom_peer_finalize(struct peerd *peer)
 		map = (struct map *)val;
 		if (!(map->flags & MF_MAP_EXCLUSIVE))
 			continue;
-		if (close_map(pr, map) < 0)
+		map->flags |= MF_MAP_CLOSING;
+		req = __close_map(pr, map);
+		if (!req)
+			continue;
+		wait_reply(peer, req);
+		if (!(req->state & XS_SERVED))
 			XSEGLOG2(&lc, E, "Couldn't close map %s", map->volume);
+		map->flags &= ~MF_MAP_CLOSING;
+		xseg_put_request(peer->xseg, req, pr->portno);
 	}
 	return;
 
