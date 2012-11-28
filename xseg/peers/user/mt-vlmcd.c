@@ -374,3 +374,8 @@ int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 
 	return 0;
 }
+
+void custom_peer_finalize(struct peerd *peer)
+{
+	return;
+}

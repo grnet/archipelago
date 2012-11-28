@@ -426,6 +426,7 @@ static void* thread_loop(void *arg)
 		XSEGLOG2(&lc, I, "Thread %u woke up\n", (unsigned int) (t- peer->thread));
 	}
 	wake_up_next_thread(peer);
+	custom_peer_finalize(peer);
 	return NULL;
 }
 
@@ -446,6 +447,7 @@ int peerd_start_threads(struct peerd *peer)
 	return 0;
 }
 #endif
+
 
 void defer_request(struct peerd *peer, struct peer_req *pr)
 {
@@ -494,6 +496,7 @@ static int peerd_loop(struct peerd *peer)
 		}
 #endif
 	}
+	custom_peer_finalize(peer);
 	xseg_quit_local_signal(xseg, peer->portno_start);
 #endif
 	return 0;

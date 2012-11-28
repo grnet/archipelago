@@ -176,6 +176,7 @@ struct xseg_task {
 #define XF_NOSYNC (1 << 0)
 #define XF_FLUSH  (1 << 1)
 #define XF_FUA    (1 << 2)
+#define XF_FORCE  (1 << 3)
 
 /* STATES */
 #define XS_SERVED	(1 << 0)

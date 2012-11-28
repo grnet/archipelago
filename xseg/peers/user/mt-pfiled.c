@@ -755,6 +755,11 @@ out:
 	return ret;
 }
 
+void custom_peer_finalize(struct peerd *peer)
+{
+	return;
+}
+
 static int safe_atoi(char *s)
 {
 	long l;

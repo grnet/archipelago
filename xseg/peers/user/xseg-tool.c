@@ -452,6 +452,7 @@ int cmd_release(char *target)
 	req->offset = 0;
 	req->size = 0;
 	req->op = X_CLOSE;
+	req->flags = XF_FORCE;
 	p = xseg_submit(xseg, req, srcport, X_ALLOC);
 	if (p == NoPort)
 		return -1;
