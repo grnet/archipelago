@@ -12,8 +12,9 @@ Description: Xseg library
  Extended Description here
 
 Package: libxseg0-dbg
+Section: debug
 Architecture: amd64
-Depends: ${misc:Depends}, libxseg0(=${binary:Version})
+Depends: libxseg0(=${binary:Version}), ${misc:Depends}
 Description: Xseg library
  Extended Description here
 
