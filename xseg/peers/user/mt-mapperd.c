@@ -79,7 +79,6 @@ typedef void (*cb_t)(struct peer_req *pr, struct xseg_request *req);
 #define MF_OBJECT_COPYING	(1 << 1)
 #define MF_OBJECT_WRITING	(1 << 2)
 #define MF_OBJECT_DELETING	(1 << 3)
-#define MF_OBJECT_DELETED	(1 << 4)
 #define MF_OBJECT_DESTROYED	(1 << 5)
 
 #define MF_OBJECT_NOT_READY	(MF_OBJECT_COPYING|MF_OBJECT_WRITING|\
@@ -164,6 +163,7 @@ struct map_node {
 #define MF_MAP_EXCLUSIVE	(1 << 5)
 #define MF_MAP_OPENING		(1 << 6)
 #define MF_MAP_CLOSING		(1 << 7)
+#define MF_MAP_DELETED		(1 << 8)
 
 #define MF_MAP_NOT_READY	(MF_MAP_LOADING|MF_MAP_WRITING|MF_MAP_DELETING|\
 					MF_MAP_DROPPING_CACHE|MF_MAP_OPENING)
@@ -934,8 +934,10 @@ static int open_map(struct peer_req *pr, struct map *map, uint32_t flags)
 
 	map->flags |= MF_MAP_OPENING;
 	req = __open_map(pr, map, flags);
-	if (!req)
+	if (!req){
+		map->flags &= ~MF_MAP_OPENING;
 		return -1;
+	}
 	wait_on_pr(pr, (!((req->state & XS_FAILED)||(req->state & XS_SERVED))));
 	map->flags &= ~MF_MAP_OPENING;
 	err = req->state & XS_FAILED;
@@ -955,6 +957,8 @@ static int __set_copyup_node(struct mapper_io *mio, struct xseg_request *req, st
 {
 	int r = 0;
 	if (mn){
+		XSEGLOG2(&lc, D, "Inserting (req: %lx, mapnode: %lx) on mio %lx",
+				req, mn, mio);
 		r = xhash_insert(mio->copyups_nodes, (xhashidx) req, (xhashidx) mn);
 		if (r == -XHASH_ERESIZE) {
 			xhashidx shift = xhash_grow_size_shift(mio->copyups_nodes);
@@ -964,8 +968,13 @@ static int __set_copyup_node(struct mapper_io *mio, struct xseg_request *req, st
 			mio->copyups_nodes = new_hashmap;
 			r = xhash_insert(mio->copyups_nodes, (xhashidx) req, (xhashidx) mn);
 		}
+		if (r < 0)
+			XSEGLOG2(&lc, E, "Insertion of (%lx, %lx) on mio %lx failed",
+					req, mn, mio);
 	}
 	else {
+		XSEGLOG2(&lc, D, "Deleting req: %lx from mio %lx",
+				req, mio);
 		r = xhash_delete(mio->copyups_nodes, (xhashidx) req);
 		if (r == -XHASH_ERESIZE) {
 			xhashidx shift = xhash_shrink_size_shift(mio->copyups_nodes);
@@ -975,6 +984,9 @@ static int __set_copyup_node(struct mapper_io *mio, struct xseg_request *req, st
 			mio->copyups_nodes = new_hashmap;
 			r = xhash_delete(mio->copyups_nodes, (xhashidx) req);
 		}
+		if (r < 0)
+			XSEGLOG2(&lc, E, "Deletion of %lx on mio %lx failed",
+					req, mio);
 	}
 out:
 	return r;
@@ -984,8 +996,11 @@ static struct map_node * __get_copyup_node(struct mapper_io *mio, struct xseg_re
 {
 	struct map_node *mn;
 	int r = xhash_lookup(mio->copyups_nodes, (xhashidx) req, (xhashidx *) &mn);
-	if (r < 0)
+	if (r < 0){
+		XSEGLOG2(&lc, W, "Cannot find req %lx on mio %lx", req, mio);
 		return NULL;
+	}
+	XSEGLOG2(&lc, I, "Found mapnode %lx req %lx on mio %lx", mn, req, mio);
 	return mn;
 }
 
@@ -1047,10 +1062,12 @@ static struct xseg_request * copyup_object(struct peerd *peer, struct map_node *
 		goto out_put;
 	}
 	r = __set_copyup_node(mio, req, mn);
+	if (r < 0)
+		goto out_unset;
 	p = xseg_submit(peer->xseg, req, pr->portno, X_ALLOC);
 	if (p == NoPort) {
 		XSEGLOG2(&lc, E, "Cannot submit for object %s", mn->object);
-		goto out_unset;
+		goto out_mapper_unset;
 	}
 	xseg_signal(peer->xseg, p);
 //	mio->copyups++;
@@ -1059,8 +1076,9 @@ static struct xseg_request * copyup_object(struct peerd *peer, struct map_node *
 	XSEGLOG2(&lc, I, "Copying up object %s \n\t to %s", mn->object, new_target);
 	return req;
 
+out_mapper_unset:
+	__set_copyup_node(mio, req, NULL);
 out_unset:
-	r = __set_copyup_node(mio, req, NULL);
 	xseg_get_req_data(peer->xseg, req, &dummy);
 out_put:
 	xseg_put_request(peer->xseg, req, pr->portno);
@@ -1080,6 +1098,8 @@ copyup_zeroblock:
 	newmn.objectidx = mn->objectidx; 
 	req = object_write(peer, pr, map, &newmn);
 	r = __set_copyup_node(mio, req, mn);
+	if (r < 0)
+		return NULL;
 	if (!req){
 		XSEGLOG2(&lc, E, "Object write returned error for object %s"
 				"\n\t of map %s [%llu]",
@@ -1119,16 +1139,20 @@ static struct xseg_request * delete_object(struct peer_req *pr, struct map_node 
 		XSEGLOG2(&lc, E, "Cannot set req data for object %s", mn->object);
 		goto out_put;
 	}
-	__set_copyup_node(mio, req, mn);
+	r = __set_copyup_node(mio, req, mn);
+	if (r < 0)
+		goto out_unset;
 	xport p = xseg_submit(peer->xseg, req, pr->portno, X_ALLOC);
 	if (p == NoPort){
 		XSEGLOG2(&lc, E, "Cannot submit request for object %s", mn->object);
-		goto out_unset;
+		goto out_mapper_unset;
 	}
 	r = xseg_signal(peer->xseg, p);
 	XSEGLOG2(&lc, I, "Object %s deletion pending", mn->object);
 	return req;
 
+out_mapper_unset:
+	__set_copyup_node(mio, req, NULL);
 out_unset:
 	xseg_get_req_data(peer->xseg, req, &dummy);
 out_put:
@@ -1166,6 +1190,7 @@ static struct xseg_request * delete_map(struct peer_req *pr, struct map *map)
 		XSEGLOG2(&lc, E, "Cannot set req data for map %s", map->volume);
 		goto out_put;
 	}
+	/* do not check return value. just make sure there is no node set */
 	__set_copyup_node(mio, req, NULL);
 	xport p = xseg_submit(peer->xseg, req, pr->portno, X_ALLOC);
 	if (p == NoPort){
@@ -1304,11 +1329,22 @@ void deletion_cb(struct peer_req *pr, struct xseg_request *req)
 	struct mapper_io *mio = __get_mapper_io(pr);
 	struct map_node *mn = __get_copyup_node(mio, req);
 
+	__set_copyup_node(mio, req, NULL);
+
+	XSEGLOG2(&lc, D, "mio: %lx, del_pending: %llu", mio, mio->del_pending);
 	mio->del_pending--;
 	if (req->state & XS_FAILED){
 		mio->err = 1;
 	}
-	signal_mapnode(mn);
+	if (mn){
+		XSEGLOG2(&lc, D, "Found mapnode %lx %s for mio: %lx, req: %lx",
+				mn, mn->object, mio, req);
+		signal_mapnode(mn);
+	}
+	else {
+		XSEGLOG2(&lc, E, "Cannot get map node for mio: %lx, req: %lx",
+				mio, req);
+	}
 	xseg_put_request(peer->xseg, req, pr->portno);
 	signal_pr(pr);
 }
@@ -1472,7 +1508,7 @@ static int req2objs(struct peer_req *pr, struct map *map, int write)
 				if (mn->flags & MF_OBJECT_NOT_READY) {
 					if (can_wait){
 						wait_on_mapnode(mn, mn->flags & MF_OBJECT_NOT_READY);
-						if (mn->flags & MF_OBJECT_DELETED){
+						if (mn->flags & MF_OBJECT_DESTROYED){
 							mio->err = 1;
 						}
 						if (mio->err){
@@ -1583,10 +1619,11 @@ static int do_info(struct peer_req *pr, struct map *map)
 
 static int do_close(struct peer_req *pr, struct map *map)
 {
-//	struct peerd *peer = pr->peer;
-//	struct xseg_request *req;
-	if (map->flags & MF_MAP_EXCLUSIVE) 
-		close_map(pr, map);
+	if (map->flags & MF_MAP_EXCLUSIVE){
+		/* do not drop cache if close failed and map not deleted */
+		if (close_map(pr, map) < 0 && !(map->flags & MF_MAP_DELETED))
+			return -1;
+	}
 	return do_dropcache(pr, map);
 }
 
@@ -1647,6 +1684,7 @@ wait_pending:
 	}
 	mio->cb = NULL;
 	map->flags &= ~MF_MAP_DELETING;
+	map->flags |= MF_MAP_DELETED;
 	XSEGLOG2(&lc, I, "Destroyed map %s", map->volume);
 	return do_close(pr, map);
 }
