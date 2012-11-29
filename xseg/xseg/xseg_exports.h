@@ -38,6 +38,10 @@ EXPORT_SYMBOL(xseg_quit_local_signal);
 EXPORT_SYMBOL(xseg_resize_request);
 EXPORT_SYMBOL(xseg_get_objh);
 EXPORT_SYMBOL(xseg_put_objh);
+EXPORT_SYMBOL(xseg_set_max_requests);
+EXPORT_SYMBOL(xseg_get_max_requests);
+EXPORT_SYMBOL(xseg_get_allocated_requests);
+EXPORT_SYMBOL(xseg_set_freequeue_size);
 
 EXPORT_SYMBOL(xseg_snprintf);
 EXPORT_SYMBOL(__xseg_errbuf);

@@ -1000,7 +1000,7 @@ static struct map_node * __get_copyup_node(struct mapper_io *mio, struct xseg_re
 		XSEGLOG2(&lc, W, "Cannot find req %lx on mio %lx", req, mio);
 		return NULL;
 	}
-	XSEGLOG2(&lc, I, "Found mapnode %lx req %lx on mio %lx", mn, req, mio);
+	XSEGLOG2(&lc, D, "Found mapnode %lx req %lx on mio %lx", mn, req, mio);
 	return mn;
 }
 
