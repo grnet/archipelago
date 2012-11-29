@@ -2161,6 +2161,11 @@ int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 
 	const struct sched_param param = { .sched_priority = 99 };
 	sched_setscheduler(syscall(SYS_gettid), SCHED_FIFO, &param);
+	/* FIXME maybe place it in peer
+	 * should be done for each port (sportno to eportno)
+	 */
+	xseg_set_max_requests(peer->xseg, peer->portno_start, 5000);
+	xseg_set_freequeue_size(peer->xseg, peer->portno_start, 3000, 0);
 
 
 //	test_map(peer);

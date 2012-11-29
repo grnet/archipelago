@@ -1654,6 +1654,8 @@ out:
  * this limit should be greater than the number of requests a port can cache
  * locally on its free_queue, and less than the hard limit imposed by the
  * segment.
+ *
+ * maybe make it drop excess requests
  */
 int xseg_set_max_requests(struct xseg *xseg, xport portno, uint64_t nr_reqs)
 {
