@@ -1396,6 +1396,7 @@ void copyup_cb(struct peer_req *pr, struct xseg_request *req)
 		XSEGLOG2(&lc, I, "Object write of %s completed successfully", mn->object);
 		mio->copyups--;
 		signal_mapnode(mn);
+		signal_pr(pr);
 	} else if (req->op == X_COPY) {
 	//	issue write_object;
 		mn->flags &= ~MF_OBJECT_COPYING;
@@ -1439,6 +1440,7 @@ out_err:
 	mio->err = 1;
 	if (mn)
 		signal_mapnode(mn);
+	signal_pr(pr);
 	goto out;
 
 }
@@ -1509,7 +1511,8 @@ static int req2objs(struct peer_req *pr, struct map *map, int write)
 		 * this could be done better, since now we wait also on the
 		 * pending copyups
 		 */
-		while (!can_wait){
+		int j;
+		for (j = 0; j < 2 && !mio->err; j++) {
 			for (i = 0; i < (idx+1); i++) {
 				mn = mns[i].mn;
 				//do copyups
@@ -1631,6 +1634,9 @@ static int do_destroy(struct peer_req *pr, struct map *map)
 	struct mapper_io *mio = __get_mapper_io(pr);
 	struct map_node *mn;
 	struct xseg_request *req;
+
+	if (!(map->flags & MF_MAP_EXCLUSIVE))
+		return -1;
 
 	XSEGLOG2(&lc, I, "Destroying map %s", map->volume);
 	req = __delete_map(pr, map);
@@ -2061,8 +2067,11 @@ void * handle_destroy(struct peer_req *pr)
 {
 	struct peerd *peer = pr->peer;
 	char *target = xseg_get_target(peer->xseg, pr->req);
+	/* request EXCLUSIVE access, but do not force it.
+	 * check if succeeded on do_destroy
+	 */
 	int r = map_action(do_destroy, pr, target, pr->req->targetlen,
-				MF_ARCHIP|MF_LOAD|MF_EXCLUSIVE|MF_FORCE);
+				MF_ARCHIP|MF_LOAD|MF_EXCLUSIVE);
 	if (r < 0)
 		fail(peer, pr);
 	else
