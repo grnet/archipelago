@@ -30,8 +30,6 @@ Description:  Provides archipelago infrastructure
 Package: archipelago-dbg
 Architecture: amd64
 Depends: ${misc:Depends}, archipelago(=${binary:Version})
-Description:  Provides archipelago infrastructure
- Extended Description here
 
 Package: archipelago-ganeti
 Architecture: any
