@@ -1145,7 +1145,7 @@ static struct xseg_request * delete_object(struct peer_req *pr, struct map_node 
 	xport p = xseg_submit(peer->xseg, req, pr->portno, X_ALLOC);
 	if (p == NoPort){
 		XSEGLOG2(&lc, E, "Cannot submit request for object %s", mn->object);
-		oto out_mapper_unset;
+		goto out_mapper_unset;
 	}
 	r = xseg_signal(peer->xseg, p);
 	XSEGLOG2(&lc, I, "Object %s deletion pending", mn->object);
@@ -1456,7 +1456,7 @@ static int req2objs(struct peer_req *pr, struct map *map, int write)
 	uint32_t nr_objs = calc_nr_obj(pr->req);
 	uint64_t size = sizeof(struct xseg_reply_map) + 
 			nr_objs * sizeof(struct xseg_reply_map_scatterlist);
-	uint32_t idx, i, ready;
+	uint32_t idx, i;
 	uint64_t rem_size, obj_index, obj_offset, obj_size; 
 	struct map_node *mn;
 	mio->copyups = 0;
@@ -1500,30 +1500,28 @@ static int req2objs(struct peer_req *pr, struct map *map, int write)
 		mns[idx].size = obj_size;
 	}
 	if (write) {
-		ready = 0;
 		int can_wait = 0;
 		mio->cb=copyup_cb;
-		while (ready < (idx + 1)){
-			ready = 0;
+		/* do a first scan and issue as many copyups as we can.
+		 * then retry and wait when an object is not ready.
+		 * this could be done better, since now we wait also on the
+		 * pending copyups
+		 */
+		while (!can_wait){
 			for (i = 0; i < (idx+1); i++) {
 				mn = mns[i].mn;
 				//do copyups
-				if (mn->flags & MF_OBJECT_NOT_READY) {
-					if (can_wait){
-						wait_on_mapnode(mn, mn->flags & MF_OBJECT_NOT_READY);
-						if (mn->flags & MF_OBJECT_DESTROYED){
-							mio->err = 1;
-						}
-						if (mio->err){
-							XSEGLOG2(&lc, E, "Mio-err, pending_copyups: %d", mio->copyups);
-							if (!mio->copyups){
-								r = -1;
-								goto out;
-							}
-						}
+				if (mn->flags & MF_OBJECT_NOT_READY){
+					if (!can_wait)
+						continue;
+					wait_on_mapnode(mn, mn->flags & MF_OBJECT_NOT_READY);
+					if (mn->flags & MF_OBJECT_DESTROYED){
+						mio->err = 1;
+						continue;
 					}
 				}
-				else if (!(mn->flags & MF_OBJECT_EXIST)) {
+
+				if (!(mn->flags & MF_OBJECT_EXIST)) {
 					//calc new_target, copy up object
 					if (copyup_object(peer, mn, pr) == NULL){
 						XSEGLOG2(&lc, E, "Error in copy up object");
@@ -1531,21 +1529,16 @@ static int req2objs(struct peer_req *pr, struct map *map, int write)
 					} else {
 						mio->copyups++;
 					}
-				} else {
-					ready++;
+				}
+
+				if (mio->err){
+					XSEGLOG2(&lc, E, "Mio-err, pending_copyups: %d", mio->copyups);
+					break;
 				}
 			}
 			can_wait = 1;
 		}
-		/*
-pending_copyups:
-		while(mio->copyups > 0){
-			mio->cb = copyup_cb;
-			wait_on_pr(pr, 0);
-			ta--;
-			st_cond_wait(pr->cond);
-		}
-		*/
+		wait_on_pr(pr, mio->copyups > 0);
 	}
 
 	if (mio->err){
@@ -1579,6 +1572,7 @@ out:
 		put_mapnode(mns[i].mn);
 	}
 	free(mns);
+	mio->cb = NULL;
 	return r;
 }
 
@@ -1661,7 +1655,7 @@ static int do_destroy(struct peer_req *pr, struct map *map)
 		 * this should be nr_ops of the blocker, but since we don't know
 		 * that, we assume based on our own nr_ops
 		 */
-		wait_on_pr(mio->del_pending >= nr_ops);
+		wait_on_pr(pr, mio->del_pending >= peer->nr_ops);
 
 		mn = get_mapnode(map, i);
 
