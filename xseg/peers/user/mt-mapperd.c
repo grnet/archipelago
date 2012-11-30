@@ -1245,10 +1245,8 @@ static inline void put_map(struct map *map)
 			mn = get_mapnode(map, i);
 			if (mn) {
 				//make sure all pending operations on all objects are completed
-				if (mn->flags & MF_OBJECT_NOT_READY){
-					//this should never happen...
-					wait_on_mapnode(mn, mn->flags & MF_OBJECT_NOT_READY);
-				}
+				//this should never happen...
+				wait_on_mapnode(mn, mn->flags & MF_OBJECT_NOT_READY);
 				mn->flags |= MF_OBJECT_DESTROYED;
 				put_mapnode(mn); //matchin mn->ref = 1 on mn init
 				put_mapnode(mn); //matcing get_mapnode;
@@ -1760,26 +1758,33 @@ static int do_mapw(struct peer_req *pr, struct map *map)
 //here map is the parent map
 static int do_clone(struct peer_req *pr, struct map *map)
 {
-	/*
-	FIXME check if clone map exists
-	clonemap = get_map(pr, target, targetlen, MF_LOAD);
-	if (clonemap)
-		do_dropcache(pr, clonemap); // drop map here, rely on get_map_function to drop
-					//	cache on non-exclusive opens or declare a NO_CACHE flag ?
-		return -1;
-	*/
-
 	int r;
 	char buf[XSEG_MAX_TARGETLEN];
 	struct peerd *peer = pr->peer;
 	struct mapperd *mapper = __get_mapperd(peer);
 	char *target = xseg_get_target(peer->xseg, pr->req);
-	struct xseg_request_clone *xclone = (struct xseg_request_clone *) xseg_get_data(peer->xseg, pr->req);
+	struct map *clonemap;
+	struct xseg_request_clone *xclone =
+		(struct xseg_request_clone *) xseg_get_data(peer->xseg, pr->req);
+
 	XSEGLOG2(&lc, I, "Cloning map %s", map->volume);
-	struct map *clonemap = create_map(mapper, target, pr->req->targetlen,
-						MF_ARCHIP);
-	if (!clonemap) 
+
+	clonemap = create_map(mapper, target, pr->req->targetlen, MF_ARCHIP);
+	if (!clonemap)
 		return -1;
+
+	/* open map to get exclusive access to map */
+	r = open_map(pr, clonemap, 0);
+	if (r < 0){
+		XSEGLOG2(&lc, E, "Cannot open map %s", clonemap->volume);
+		XSEGLOG2(&lc, E, "Target volume %s exists", clonemap->volume);
+		goto out_err;
+	}
+	r = load_map(pr, clonemap);
+	if (r >= 0) {
+		XSEGLOG2(&lc, E, "Target volume %s exists", clonemap->volume);
+		goto out_err;
+	}
 
 	if (xclone->size == -1)
 		clonemap->size = map->size;
@@ -1826,15 +1831,17 @@ static int do_clone(struct peer_req *pr, struct map *map)
 			goto out_err;
 		}
 	}
+
 	r = write_map(pr, clonemap);
 	if (r < 0){
 		XSEGLOG2(&lc, E, "Cannot write map %s", clonemap->volume);
 		goto out_err;
 	}
+	do_close(pr, clonemap);
 	return 0;
 
 out_err:
-	put_map(clonemap);
+	do_close(pr, clonemap);
 	return -1;
 }
 
@@ -1932,75 +1939,85 @@ void * handle_clone(struct peer_req *pr)
 		r = -1;
 		goto out;
 	}
+
 	if (xclone->targetlen){
+		/* if snap was defined */
 		//support clone only from pithos
 		r = map_action(do_clone, pr, xclone->target, xclone->targetlen,
 					MF_LOAD);
 	} else {
+		/* else try to create a new volume */
 		if (!xclone->size){
 			r = -1;
-		} else {
-			//FIXME
-			struct map *map;
-			char *target = xseg_get_target(peer->xseg, pr->req);
-			XSEGLOG2(&lc, I, "Creating volume");
-			map = get_map(pr, target, pr->req->targetlen,
-						MF_ARCHIP|MF_LOAD);
-			if (map){
-				XSEGLOG2(&lc, E, "Volume %s exists", map->volume);
-				if (map->ref <= 2) //initial one + one ref from __get_map
-					do_dropcache(pr, map); //we are the only ones usining this map. Drop the cache. 
-				put_map(map); //matches get_map
-				r = -1;
-				goto out;
-			}
-			//create a new empty map of size
-			map = create_map(mapper, target, pr->req->targetlen,
-						MF_ARCHIP);
-			if (!map){
-				r = -1;
-				goto out;
-			}
-			map->size = xclone->size;
-			//populate_map with zero objects;
-			uint64_t nr_objs = xclone->size / block_size;
-			if (xclone->size % block_size)
-				nr_objs++;
-
-			struct map_node *map_nodes = calloc(nr_objs, sizeof(struct map_node));
-			if (!map_nodes){
-				do_dropcache(pr, map); //Since we just created the map, dropping cache should be sufficient.
-				r = -1;
-				goto out;
-			}
-			uint64_t i;
-			for (i = 0; i < nr_objs; i++) {
-				strncpy(map_nodes[i].object, zero_block, ZERO_BLOCK_LEN);
-				map_nodes[i].objectlen = ZERO_BLOCK_LEN;
-				map_nodes[i].object[map_nodes[i].objectlen] = 0; //NULL terminate
-				map_nodes[i].flags = 0;
-				map_nodes[i].objectidx = i;
-				map_nodes[i].map = map;
-				map_nodes[i].ref = 1;
-				map_nodes[i].waiters = 0;
-				map_nodes[i].cond = st_cond_new(); //FIXME errcheck;
-				r = insert_object(map, &map_nodes[i]);
-				if (r < 0){
-					do_dropcache(pr, map);
-					r = -1;
-					goto out;
-				}
-			}
-			r = write_map(pr, map);
-			if (r < 0){
-				XSEGLOG2(&lc, E, "Cannot write map %s", map->volume);
-				do_dropcache(pr, map);
-				goto out;
-			}
-			XSEGLOG2(&lc, I, "Volume %s created", map->volume);
-			r = 0;
-			do_dropcache(pr, map); //drop cache here for consistency
+			goto out;
 		}
+
+		struct map *map;
+		char *target = xseg_get_target(peer->xseg, pr->req);
+
+		XSEGLOG2(&lc, I, "Creating volume");
+		//create a new empty map of size
+		map = create_map(mapper, target, pr->req->targetlen, MF_ARCHIP);
+		if (!map){
+			r = -1;
+			goto out;
+		}
+		/* open map to get exclusive access to map */
+		r = open_map(pr, map, 0);
+		if (r < 0){
+			XSEGLOG2(&lc, E, "Cannot open map %s", map->volume);
+			XSEGLOG2(&lc, E, "Target volume %s exists", map->volume);
+			do_dropcache(pr, map);
+			r = -1;
+			goto out;
+		}
+		r = load_map(pr, map);
+		if (r >= 0) {
+			XSEGLOG2(&lc, E, "Map exists %s", map->volume);
+			do_close(pr, map);
+			r = -1;
+			goto out;
+		}
+		map->size = xclone->size;
+		//populate_map with zero objects;
+		uint64_t nr_objs = xclone->size / block_size;
+		if (xclone->size % block_size)
+			nr_objs++;
+
+		struct map_node *map_nodes = calloc(nr_objs, sizeof(struct map_node));
+		if (!map_nodes){
+			do_close(pr, map);
+			r = -1;
+			goto out;
+		}
+
+		uint64_t i;
+		for (i = 0; i < nr_objs; i++) {
+			strncpy(map_nodes[i].object, zero_block, ZERO_BLOCK_LEN);
+			map_nodes[i].objectlen = ZERO_BLOCK_LEN;
+			map_nodes[i].object[map_nodes[i].objectlen] = 0; //NULL terminate
+			map_nodes[i].flags = 0;
+			map_nodes[i].objectidx = i;
+			map_nodes[i].map = map;
+			map_nodes[i].ref = 1;
+			map_nodes[i].waiters = 0;
+			map_nodes[i].cond = st_cond_new(); //FIXME errcheck;
+			r = insert_object(map, &map_nodes[i]);
+			if (r < 0){
+				do_close(pr, map);
+				r = -1;
+				goto out;
+			}
+		}
+		r = write_map(pr, map);
+		if (r < 0){
+			XSEGLOG2(&lc, E, "Cannot write map %s", map->volume);
+			do_close(pr, map);
+			goto out;
+		}
+		XSEGLOG2(&lc, I, "Volume %s created", map->volume);
+		r = 0;
+		do_close(pr, map); //drop cache here for consistency
 	}
 out:
 	if (r < 0)
