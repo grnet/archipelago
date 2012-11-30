@@ -1331,6 +1331,9 @@ void deletion_cb(struct peer_req *pr, struct xseg_request *req)
 
 	__set_copyup_node(mio, req, NULL);
 
+	//assert req->op = X_DELETE;
+	//assert pr->req->op = X_DELETE only map deletions make delete requests
+	//assert mio->del_pending > 0
 	XSEGLOG2(&lc, D, "mio: %lx, del_pending: %llu", mio, mio->del_pending);
 	mio->del_pending--;
 
@@ -1344,6 +1347,8 @@ void deletion_cb(struct peer_req *pr, struct xseg_request *req)
 		mn->flags &= ~MF_OBJECT_DELETING;
 		mn->flags |= MF_OBJECT_DESTROYED;
 		signal_mapnode(mn);
+		/* put mapnode here, matches get_mapnode on do_destroy */
+		put_mapnode(mn);
 	} else {
 		XSEGLOG2(&lc, E, "Cannot get map node for mio: %lx, req: %lx",
 				mio, req);
@@ -1658,8 +1663,9 @@ static int do_destroy(struct peer_req *pr, struct map *map)
 		wait_on_pr(pr, mio->del_pending >= peer->nr_ops);
 
 		mn = get_mapnode(map, i);
-
-		if (!mn || mn->flags & MF_OBJECT_DESTROYED){
+		if (!mn)
+			continue;
+		if (mn->flags & MF_OBJECT_DESTROYED){
 			put_mapnode(mn);
 			continue;
 		}
@@ -1677,9 +1683,11 @@ static int do_destroy(struct peer_req *pr, struct map *map)
 		if (!req){
 			mio->err = 1;
 			mn->flags &= ~MF_OBJECT_DELETING;
+			put_mapnode(mn);
 			continue;
 		}
 		mio->del_pending++;
+		/* do not put_mapnode here. cb does that */
 	}
 
 	wait_on_pr(pr, mio->del_pending > 0);
