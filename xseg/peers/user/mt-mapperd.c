@@ -1145,7 +1145,7 @@ static struct xseg_request * delete_object(struct peer_req *pr, struct map_node 
 	xport p = xseg_submit(peer->xseg, req, pr->portno, X_ALLOC);
 	if (p == NoPort){
 		XSEGLOG2(&lc, E, "Cannot submit request for object %s", mn->object);
-		goto out_mapper_unset;
+		oto out_mapper_unset;
 	}
 	r = xseg_signal(peer->xseg, p);
 	XSEGLOG2(&lc, I, "Object %s deletion pending", mn->object);
@@ -1333,15 +1333,18 @@ void deletion_cb(struct peer_req *pr, struct xseg_request *req)
 
 	XSEGLOG2(&lc, D, "mio: %lx, del_pending: %llu", mio, mio->del_pending);
 	mio->del_pending--;
+
 	if (req->state & XS_FAILED){
 		mio->err = 1;
 	}
 	if (mn){
 		XSEGLOG2(&lc, D, "Found mapnode %lx %s for mio: %lx, req: %lx",
 				mn, mn->object, mio, req);
+		// assert mn->flags & MF_OBJECT_DELETING
+		mn->flags &= ~MF_OBJECT_DELETING;
+		mn->flags |= MF_OBJECT_DESTROYED;
 		signal_mapnode(mn);
-	}
-	else {
+	} else {
 		XSEGLOG2(&lc, E, "Cannot get map node for mio: %lx, req: %lx",
 				mio, req);
 	}
@@ -1634,7 +1637,7 @@ static int do_destroy(struct peer_req *pr, struct map *map)
 	struct mapper_io *mio = __get_mapper_io(pr);
 	struct map_node *mn;
 	struct xseg_request *req;
-	
+
 	XSEGLOG2(&lc, I, "Destroying map %s", map->volume);
 	map->flags |= MF_MAP_DELETING;
 	req = delete_map(pr, map);
@@ -1647,41 +1650,46 @@ static int do_destroy(struct peer_req *pr, struct map *map)
 		return -1;
 	}
 	xseg_put_request(peer->xseg, req, pr->portno);
-	//FIXME
+
 	uint64_t nr_obj = calc_map_obj(map);
-	uint64_t deleted = 0;
-	while (deleted < nr_obj){ 
-		deleted = 0;
-		for (i = 0; i < nr_obj; i++){
-			mn = get_mapnode(map, i);
-			if (mn) {
-				if (!(mn->flags & MF_OBJECT_DESTROYED)){
-					if (mn->flags & MF_OBJECT_EXIST){
-						//make sure all pending operations on all objects are completed
-						if (mn->flags & MF_OBJECT_NOT_READY){
-							wait_on_mapnode(mn, mn->flags & MF_OBJECT_NOT_READY);
-						}
-						req = delete_object(pr, mn);
-						if (!req)
-							if (mio->del_pending){
-								goto wait_pending;
-							} else {
-								continue;
-							}
-						else {
-							mio->del_pending++;
-						}
-					}
-					mn->flags &= MF_OBJECT_DESTROYED;
-				}
-				put_mapnode(mn);
-			}
-			deleted++;
+	mio->cb = deletion_cb;
+	mio->del_pending = 0;
+	mio->err = 0;
+	for (i = 0; i < nr_obj; i++){
+
+		/* throttle pending deletions
+		 * this should be nr_ops of the blocker, but since we don't know
+		 * that, we assume based on our own nr_ops
+		 */
+		wait_on_pr(mio->del_pending >= nr_ops);
+
+		mn = get_mapnode(map, i);
+
+		if (!mn || mn->flags & MF_OBJECT_DESTROYED){
+			put_mapnode(mn);
+			continue;
 		}
-wait_pending:
-		mio->cb = deletion_cb;
-		wait_on_pr(pr, mio->del_pending > 0);
+		if (!(mn->flags & MF_OBJECT_EXIST)){
+			mn->flags |= MF_OBJECT_DESTROYED;
+			put_mapnode(mn);
+			continue;
+		}
+
+		// make sure all pending operations on all objects are completed
+		wait_on_mapnode(mn, mn->flags & MF_OBJECT_NOT_READY);
+
+		mn->flags |=  MF_OBJECT_DELETING;
+		req = delete_object(pr, mn);
+		if (!req){
+			mio->err = 1;
+			mn->flags &= ~MF_OBJECT_DELETING;
+			continue;
+		}
+		mio->del_pending++;
 	}
+
+	wait_on_pr(pr, mio->del_pending > 0);
+
 	mio->cb = NULL;
 	map->flags &= ~MF_MAP_DELETING;
 	map->flags |= MF_MAP_DELETED;
