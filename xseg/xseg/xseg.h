@@ -33,6 +33,25 @@ typedef uint32_t xport;
 #define XSEG_DEF_REQS 256
 #endif
 
+#ifndef XSEG_DEF_MAX_ALLOCATED_REQS
+#define XSEG_DEF_MAX_ALLOCATED_REQS 1024
+#endif
+
+/* hard limit on max allocated requests per port */
+//FIXME make this a dynamicly calculated value based
+//on heap_size and request_h->size
+#ifndef	XSEG_MAX_ALLOCATED_REQS
+#define XSEG_MAX_ALLOCATED_REQS 10000
+#endif
+
+#if XSEG_DEF_MAX_ALLOCATED_REQS > XSEG_MAX_ALLOCATED_REQS
+#error "XSEG_DEF_MAX_ALLOCATED_REQS should be less than XSEG_MAX_ALLOCATED_REQS"
+#endif
+
+#if XSEG_DEF_REQS > XSEG_MAX_ALLOCATED_REQS
+#error	"XSEG_DEF_REQS should me less than XSEG_MAX_ALLOCATED_REQS"
+#endif
+
 #ifndef MAX_PATH_LEN
 #define MAX_PATH_LEN 32
 #endif
@@ -416,4 +435,11 @@ void xseg_quit_local_signal(struct xseg *xseg, xport portno);
 
 int xseg_resize_request (struct xseg *xseg, struct xseg_request *req,
 			uint32_t new_targetlen, uint64_t new_datalen);
+
+int xseg_set_max_requests(struct xseg *xseg, xport portno, uint64_t nr_reqs);
+uint64_t xseg_get_max_requests(struct xseg *xseg, xport portno);
+uint64_t xseg_get_allocated_requests(struct xseg *xseg, xport portno);
+int xseg_set_freequeue_size(struct xseg *xseg, xport portno, xqindex size,
+				uint32_t flags);
+
 

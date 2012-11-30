@@ -435,6 +435,7 @@ static struct xseg_request * __close_map(struct peer_req *pr, struct map *map)
 		goto out_unset;
 	}
 	r = xseg_signal(peer->xseg, p);
+	map->flags |= MF_MAP_CLOSING;
 
 	XSEGLOG2(&lc, I, "Map %s closing", map->volume);
 	return req;
@@ -453,7 +454,6 @@ static int close_map(struct peer_req *pr, struct map *map)
 	struct xseg_request *req;
 	struct peerd *peer = pr->peer;
 
-	map->flags |= MF_MAP_CLOSING;
 	req = __close_map(pr, map);
 	if (!req)
 		return -1;
@@ -709,7 +709,6 @@ static int write_map(struct peer_req* pr, struct map *map)
 {
 	int r = 0;
 	struct peerd *peer = pr->peer;
-	map->flags |= MF_MAP_WRITING;
 	struct xseg_request *req = __write_map(pr, map);
 	if (!req)
 		return -1;
@@ -766,7 +765,8 @@ static struct xseg_request * __load_map(struct peer_req *pr, struct map *m)
 		goto out_unset;
 	}
 	r = xseg_signal(peer->xseg, p);
-	
+
+	m->flags |= MF_MAP_LOADING;
 	XSEGLOG2(&lc, I, "Map %s loading", m->volume);
 	return req;
 
@@ -850,7 +850,6 @@ static int load_map(struct peer_req *pr, struct map *map)
 	int r = 0;
 	struct xseg_request *req;
 	struct peerd *peer = pr->peer;
-	map->flags |= MF_MAP_LOADING;
 	req = __load_map(pr, map);
 	if (!req)
 		return -1;
@@ -914,7 +913,8 @@ static struct xseg_request * __open_map(struct peer_req *pr, struct map *m,
 		goto out_unset;
 	}
 	r = xseg_signal(peer->xseg, p);
-	
+
+	m->flags |= MF_MAP_OPENING;
 	XSEGLOG2(&lc, I, "Map %s opening", m->volume);
 	return req;
 
@@ -932,10 +932,8 @@ static int open_map(struct peer_req *pr, struct map *map, uint32_t flags)
 	struct xseg_request *req;
 	struct peerd *peer = pr->peer;
 
-	map->flags |= MF_MAP_OPENING;
 	req = __open_map(pr, map, flags);
 	if (!req){
-		map->flags &= ~MF_MAP_OPENING;
 		return -1;
 	}
 	wait_on_pr(pr, (!((req->state & XS_FAILED)||(req->state & XS_SERVED))));
@@ -1000,7 +998,7 @@ static struct map_node * __get_copyup_node(struct mapper_io *mio, struct xseg_re
 		XSEGLOG2(&lc, W, "Cannot find req %lx on mio %lx", req, mio);
 		return NULL;
 	}
-	XSEGLOG2(&lc, I, "Found mapnode %lx req %lx on mio %lx", mn, req, mio);
+	XSEGLOG2(&lc, D, "Found mapnode %lx req %lx on mio %lx", mn, req, mio);
 	return mn;
 }
 
@@ -1111,7 +1109,7 @@ copyup_zeroblock:
 	return req;
 }
 
-static struct xseg_request * delete_object(struct peer_req *pr, struct map_node *mn)
+static struct xseg_request * __delete_object(struct peer_req *pr, struct map_node *mn)
 {
 	void *dummy;
 	struct peerd *peer = pr->peer;
@@ -1148,6 +1146,7 @@ static struct xseg_request * delete_object(struct peer_req *pr, struct map_node 
 		goto out_mapper_unset;
 	}
 	r = xseg_signal(peer->xseg, p);
+	mn->flags |= MF_OBJECT_DELETING;
 	XSEGLOG2(&lc, I, "Object %s deletion pending", mn->object);
 	return req;
 
@@ -1162,7 +1161,7 @@ out_err:
 	return NULL;
 }
 
-static struct xseg_request * delete_map(struct peer_req *pr, struct map *map)
+static struct xseg_request * __delete_map(struct peer_req *pr, struct map *map)
 {
 	void *dummy;
 	struct peerd *peer = pr->peer;
@@ -1246,11 +1245,9 @@ static inline void put_map(struct map *map)
 			mn = get_mapnode(map, i);
 			if (mn) {
 				//make sure all pending operations on all objects are completed
-				if (mn->flags & MF_OBJECT_NOT_READY){
-					//this should never happen...
-					wait_on_mapnode(mn, mn->flags & MF_OBJECT_NOT_READY);
-				}
-				mn->flags &= MF_OBJECT_DESTROYED;
+				//this should never happen...
+				wait_on_mapnode(mn, mn->flags & MF_OBJECT_NOT_READY);
+				mn->flags |= MF_OBJECT_DESTROYED;
 				put_mapnode(mn); //matchin mn->ref = 1 on mn init
 				put_mapnode(mn); //matcing get_mapnode;
 				//assert mn->ref == 0;
@@ -1331,17 +1328,25 @@ void deletion_cb(struct peer_req *pr, struct xseg_request *req)
 
 	__set_copyup_node(mio, req, NULL);
 
+	//assert req->op = X_DELETE;
+	//assert pr->req->op = X_DELETE only map deletions make delete requests
+	//assert mio->del_pending > 0
 	XSEGLOG2(&lc, D, "mio: %lx, del_pending: %llu", mio, mio->del_pending);
 	mio->del_pending--;
+
 	if (req->state & XS_FAILED){
 		mio->err = 1;
 	}
 	if (mn){
 		XSEGLOG2(&lc, D, "Found mapnode %lx %s for mio: %lx, req: %lx",
 				mn, mn->object, mio, req);
+		// assert mn->flags & MF_OBJECT_DELETING
+		mn->flags &= ~MF_OBJECT_DELETING;
+		mn->flags |= MF_OBJECT_DESTROYED;
 		signal_mapnode(mn);
-	}
-	else {
+		/* put mapnode here, matches get_mapnode on do_destroy */
+		put_mapnode(mn);
+	} else {
 		XSEGLOG2(&lc, E, "Cannot get map node for mio: %lx, req: %lx",
 				mio, req);
 	}
@@ -1391,6 +1396,7 @@ void copyup_cb(struct peer_req *pr, struct xseg_request *req)
 		XSEGLOG2(&lc, I, "Object write of %s completed successfully", mn->object);
 		mio->copyups--;
 		signal_mapnode(mn);
+		signal_pr(pr);
 	} else if (req->op == X_COPY) {
 	//	issue write_object;
 		mn->flags &= ~MF_OBJECT_COPYING;
@@ -1434,6 +1440,7 @@ out_err:
 	mio->err = 1;
 	if (mn)
 		signal_mapnode(mn);
+	signal_pr(pr);
 	goto out;
 
 }
@@ -1453,7 +1460,7 @@ static int req2objs(struct peer_req *pr, struct map *map, int write)
 	uint32_t nr_objs = calc_nr_obj(pr->req);
 	uint64_t size = sizeof(struct xseg_reply_map) + 
 			nr_objs * sizeof(struct xseg_reply_map_scatterlist);
-	uint32_t idx, i, ready;
+	uint32_t idx, i;
 	uint64_t rem_size, obj_index, obj_offset, obj_size; 
 	struct map_node *mn;
 	mio->copyups = 0;
@@ -1497,30 +1504,29 @@ static int req2objs(struct peer_req *pr, struct map *map, int write)
 		mns[idx].size = obj_size;
 	}
 	if (write) {
-		ready = 0;
 		int can_wait = 0;
 		mio->cb=copyup_cb;
-		while (ready < (idx + 1)){
-			ready = 0;
+		/* do a first scan and issue as many copyups as we can.
+		 * then retry and wait when an object is not ready.
+		 * this could be done better, since now we wait also on the
+		 * pending copyups
+		 */
+		int j;
+		for (j = 0; j < 2 && !mio->err; j++) {
 			for (i = 0; i < (idx+1); i++) {
 				mn = mns[i].mn;
 				//do copyups
-				if (mn->flags & MF_OBJECT_NOT_READY) {
-					if (can_wait){
-						wait_on_mapnode(mn, mn->flags & MF_OBJECT_NOT_READY);
-						if (mn->flags & MF_OBJECT_DESTROYED){
-							mio->err = 1;
-						}
-						if (mio->err){
-							XSEGLOG2(&lc, E, "Mio-err, pending_copyups: %d", mio->copyups);
-							if (!mio->copyups){
-								r = -1;
-								goto out;
-							}
-						}
+				if (mn->flags & MF_OBJECT_NOT_READY){
+					if (!can_wait)
+						continue;
+					wait_on_mapnode(mn, mn->flags & MF_OBJECT_NOT_READY);
+					if (mn->flags & MF_OBJECT_DESTROYED){
+						mio->err = 1;
+						continue;
 					}
 				}
-				else if (!(mn->flags & MF_OBJECT_EXIST)) {
+
+				if (!(mn->flags & MF_OBJECT_EXIST)) {
 					//calc new_target, copy up object
 					if (copyup_object(peer, mn, pr) == NULL){
 						XSEGLOG2(&lc, E, "Error in copy up object");
@@ -1528,21 +1534,16 @@ static int req2objs(struct peer_req *pr, struct map *map, int write)
 					} else {
 						mio->copyups++;
 					}
-				} else {
-					ready++;
+				}
+
+				if (mio->err){
+					XSEGLOG2(&lc, E, "Mio-err, pending_copyups: %d", mio->copyups);
+					break;
 				}
 			}
 			can_wait = 1;
 		}
-		/*
-pending_copyups:
-		while(mio->copyups > 0){
-			mio->cb = copyup_cb;
-			wait_on_pr(pr, 0);
-			ta--;
-			st_cond_wait(pr->cond);
-		}
-		*/
+		wait_on_pr(pr, mio->copyups > 0);
 	}
 
 	if (mio->err){
@@ -1576,6 +1577,7 @@ out:
 		put_mapnode(mns[i].mn);
 	}
 	free(mns);
+	mio->cb = NULL;
 	return r;
 }
 
@@ -1592,10 +1594,8 @@ static int do_dropcache(struct peer_req *pr, struct map *map)
 		if (mn) {
 			if (!(mn->flags & MF_OBJECT_DESTROYED)){
 				//make sure all pending operations on all objects are completed
-				if (mn->flags & MF_OBJECT_NOT_READY){
-					wait_on_mapnode(mn, mn->flags & MF_OBJECT_NOT_READY);
-				}
-				mn->flags &= MF_OBJECT_DESTROYED;
+				wait_on_mapnode(mn, mn->flags & MF_OBJECT_NOT_READY);
+				mn->flags |= MF_OBJECT_DESTROYED;
 			}
 			put_mapnode(mn);
 		}
@@ -1634,10 +1634,12 @@ static int do_destroy(struct peer_req *pr, struct map *map)
 	struct mapper_io *mio = __get_mapper_io(pr);
 	struct map_node *mn;
 	struct xseg_request *req;
-	
+
+	if (!(map->flags & MF_MAP_EXCLUSIVE))
+		return -1;
+
 	XSEGLOG2(&lc, I, "Destroying map %s", map->volume);
-	map->flags |= MF_MAP_DELETING;
-	req = delete_map(pr, map);
+	req = __delete_map(pr, map);
 	if (!req)
 		return -1;
 	wait_on_pr(pr, (!((req->state & XS_FAILED)||(req->state & XS_SERVED))));
@@ -1647,41 +1649,47 @@ static int do_destroy(struct peer_req *pr, struct map *map)
 		return -1;
 	}
 	xseg_put_request(peer->xseg, req, pr->portno);
-	//FIXME
+
 	uint64_t nr_obj = calc_map_obj(map);
-	uint64_t deleted = 0;
-	while (deleted < nr_obj){ 
-		deleted = 0;
-		for (i = 0; i < nr_obj; i++){
-			mn = get_mapnode(map, i);
-			if (mn) {
-				if (!(mn->flags & MF_OBJECT_DESTROYED)){
-					if (mn->flags & MF_OBJECT_EXIST){
-						//make sure all pending operations on all objects are completed
-						if (mn->flags & MF_OBJECT_NOT_READY){
-							wait_on_mapnode(mn, mn->flags & MF_OBJECT_NOT_READY);
-						}
-						req = delete_object(pr, mn);
-						if (!req)
-							if (mio->del_pending){
-								goto wait_pending;
-							} else {
-								continue;
-							}
-						else {
-							mio->del_pending++;
-						}
-					}
-					mn->flags &= MF_OBJECT_DESTROYED;
-				}
-				put_mapnode(mn);
-			}
-			deleted++;
+	mio->cb = deletion_cb;
+	mio->del_pending = 0;
+	mio->err = 0;
+	for (i = 0; i < nr_obj; i++){
+
+		/* throttle pending deletions
+		 * this should be nr_ops of the blocker, but since we don't know
+		 * that, we assume based on our own nr_ops
+		 */
+		wait_on_pr(pr, mio->del_pending >= peer->nr_ops);
+
+		mn = get_mapnode(map, i);
+		if (!mn)
+			continue;
+		if (mn->flags & MF_OBJECT_DESTROYED){
+			put_mapnode(mn);
+			continue;
 		}
-wait_pending:
-		mio->cb = deletion_cb;
-		wait_on_pr(pr, mio->del_pending > 0);
+		if (!(mn->flags & MF_OBJECT_EXIST)){
+			mn->flags |= MF_OBJECT_DESTROYED;
+			put_mapnode(mn);
+			continue;
+		}
+
+		// make sure all pending operations on all objects are completed
+		wait_on_mapnode(mn, mn->flags & MF_OBJECT_NOT_READY);
+
+		req = __delete_object(pr, mn);
+		if (!req){
+			mio->err = 1;
+			put_mapnode(mn);
+			continue;
+		}
+		mio->del_pending++;
+		/* do not put_mapnode here. cb does that */
 	}
+
+	wait_on_pr(pr, mio->del_pending > 0);
+
 	mio->cb = NULL;
 	map->flags &= ~MF_MAP_DELETING;
 	map->flags |= MF_MAP_DELETED;
@@ -1756,26 +1764,33 @@ static int do_mapw(struct peer_req *pr, struct map *map)
 //here map is the parent map
 static int do_clone(struct peer_req *pr, struct map *map)
 {
-	/*
-	FIXME check if clone map exists
-	clonemap = get_map(pr, target, targetlen, MF_LOAD);
-	if (clonemap)
-		do_dropcache(pr, clonemap); // drop map here, rely on get_map_function to drop
-					//	cache on non-exclusive opens or declare a NO_CACHE flag ?
-		return -1;
-	*/
-
 	int r;
 	char buf[XSEG_MAX_TARGETLEN];
 	struct peerd *peer = pr->peer;
 	struct mapperd *mapper = __get_mapperd(peer);
 	char *target = xseg_get_target(peer->xseg, pr->req);
-	struct xseg_request_clone *xclone = (struct xseg_request_clone *) xseg_get_data(peer->xseg, pr->req);
+	struct map *clonemap;
+	struct xseg_request_clone *xclone =
+		(struct xseg_request_clone *) xseg_get_data(peer->xseg, pr->req);
+
 	XSEGLOG2(&lc, I, "Cloning map %s", map->volume);
-	struct map *clonemap = create_map(mapper, target, pr->req->targetlen,
-						MF_ARCHIP);
-	if (!clonemap) 
+
+	clonemap = create_map(mapper, target, pr->req->targetlen, MF_ARCHIP);
+	if (!clonemap)
 		return -1;
+
+	/* open map to get exclusive access to map */
+	r = open_map(pr, clonemap, 0);
+	if (r < 0){
+		XSEGLOG2(&lc, E, "Cannot open map %s", clonemap->volume);
+		XSEGLOG2(&lc, E, "Target volume %s exists", clonemap->volume);
+		goto out_err;
+	}
+	r = load_map(pr, clonemap);
+	if (r >= 0) {
+		XSEGLOG2(&lc, E, "Target volume %s exists", clonemap->volume);
+		goto out_err;
+	}
 
 	if (xclone->size == -1)
 		clonemap->size = map->size;
@@ -1822,15 +1837,17 @@ static int do_clone(struct peer_req *pr, struct map *map)
 			goto out_err;
 		}
 	}
+
 	r = write_map(pr, clonemap);
 	if (r < 0){
 		XSEGLOG2(&lc, E, "Cannot write map %s", clonemap->volume);
 		goto out_err;
 	}
+	do_close(pr, clonemap);
 	return 0;
 
 out_err:
-	put_map(clonemap);
+	do_close(pr, clonemap);
 	return -1;
 }
 
@@ -1928,75 +1945,85 @@ void * handle_clone(struct peer_req *pr)
 		r = -1;
 		goto out;
 	}
+
 	if (xclone->targetlen){
+		/* if snap was defined */
 		//support clone only from pithos
 		r = map_action(do_clone, pr, xclone->target, xclone->targetlen,
 					MF_LOAD);
 	} else {
+		/* else try to create a new volume */
 		if (!xclone->size){
 			r = -1;
-		} else {
-			//FIXME
-			struct map *map;
-			char *target = xseg_get_target(peer->xseg, pr->req);
-			XSEGLOG2(&lc, I, "Creating volume");
-			map = get_map(pr, target, pr->req->targetlen,
-						MF_ARCHIP|MF_LOAD);
-			if (map){
-				XSEGLOG2(&lc, E, "Volume %s exists", map->volume);
-				if (map->ref <= 2) //initial one + one ref from __get_map
-					do_dropcache(pr, map); //we are the only ones usining this map. Drop the cache. 
-				put_map(map); //matches get_map
-				r = -1;
-				goto out;
-			}
-			//create a new empty map of size
-			map = create_map(mapper, target, pr->req->targetlen,
-						MF_ARCHIP);
-			if (!map){
-				r = -1;
-				goto out;
-			}
-			map->size = xclone->size;
-			//populate_map with zero objects;
-			uint64_t nr_objs = xclone->size / block_size;
-			if (xclone->size % block_size)
-				nr_objs++;
-
-			struct map_node *map_nodes = calloc(nr_objs, sizeof(struct map_node));
-			if (!map_nodes){
-				do_dropcache(pr, map); //Since we just created the map, dropping cache should be sufficient.
-				r = -1;
-				goto out;
-			}
-			uint64_t i;
-			for (i = 0; i < nr_objs; i++) {
-				strncpy(map_nodes[i].object, zero_block, ZERO_BLOCK_LEN);
-				map_nodes[i].objectlen = ZERO_BLOCK_LEN;
-				map_nodes[i].object[map_nodes[i].objectlen] = 0; //NULL terminate
-				map_nodes[i].flags = 0;
-				map_nodes[i].objectidx = i;
-				map_nodes[i].map = map;
-				map_nodes[i].ref = 1;
-				map_nodes[i].waiters = 0;
-				map_nodes[i].cond = st_cond_new(); //FIXME errcheck;
-				r = insert_object(map, &map_nodes[i]);
-				if (r < 0){
-					do_dropcache(pr, map);
-					r = -1;
-					goto out;
-				}
-			}
-			r = write_map(pr, map);
-			if (r < 0){
-				XSEGLOG2(&lc, E, "Cannot write map %s", map->volume);
-				do_dropcache(pr, map);
-				goto out;
-			}
-			XSEGLOG2(&lc, I, "Volume %s created", map->volume);
-			r = 0;
-			do_dropcache(pr, map); //drop cache here for consistency
+			goto out;
 		}
+
+		struct map *map;
+		char *target = xseg_get_target(peer->xseg, pr->req);
+
+		XSEGLOG2(&lc, I, "Creating volume");
+		//create a new empty map of size
+		map = create_map(mapper, target, pr->req->targetlen, MF_ARCHIP);
+		if (!map){
+			r = -1;
+			goto out;
+		}
+		/* open map to get exclusive access to map */
+		r = open_map(pr, map, 0);
+		if (r < 0){
+			XSEGLOG2(&lc, E, "Cannot open map %s", map->volume);
+			XSEGLOG2(&lc, E, "Target volume %s exists", map->volume);
+			do_dropcache(pr, map);
+			r = -1;
+			goto out;
+		}
+		r = load_map(pr, map);
+		if (r >= 0) {
+			XSEGLOG2(&lc, E, "Map exists %s", map->volume);
+			do_close(pr, map);
+			r = -1;
+			goto out;
+		}
+		map->size = xclone->size;
+		//populate_map with zero objects;
+		uint64_t nr_objs = xclone->size / block_size;
+		if (xclone->size % block_size)
+			nr_objs++;
+
+		struct map_node *map_nodes = calloc(nr_objs, sizeof(struct map_node));
+		if (!map_nodes){
+			do_close(pr, map);
+			r = -1;
+			goto out;
+		}
+
+		uint64_t i;
+		for (i = 0; i < nr_objs; i++) {
+			strncpy(map_nodes[i].object, zero_block, ZERO_BLOCK_LEN);
+			map_nodes[i].objectlen = ZERO_BLOCK_LEN;
+			map_nodes[i].object[map_nodes[i].objectlen] = 0; //NULL terminate
+			map_nodes[i].flags = 0;
+			map_nodes[i].objectidx = i;
+			map_nodes[i].map = map;
+			map_nodes[i].ref = 1;
+			map_nodes[i].waiters = 0;
+			map_nodes[i].cond = st_cond_new(); //FIXME errcheck;
+			r = insert_object(map, &map_nodes[i]);
+			if (r < 0){
+				do_close(pr, map);
+				r = -1;
+				goto out;
+			}
+		}
+		r = write_map(pr, map);
+		if (r < 0){
+			XSEGLOG2(&lc, E, "Cannot write map %s", map->volume);
+			do_close(pr, map);
+			goto out;
+		}
+		XSEGLOG2(&lc, I, "Volume %s created", map->volume);
+		r = 0;
+		do_close(pr, map); //drop cache here for consistency
 	}
 out:
 	if (r < 0)
@@ -2040,8 +2067,11 @@ void * handle_destroy(struct peer_req *pr)
 {
 	struct peerd *peer = pr->peer;
 	char *target = xseg_get_target(peer->xseg, pr->req);
+	/* request EXCLUSIVE access, but do not force it.
+	 * check if succeeded on do_destroy
+	 */
 	int r = map_action(do_destroy, pr, target, pr->req->targetlen,
-				MF_ARCHIP|MF_LOAD|MF_EXCLUSIVE|MF_FORCE);
+				MF_ARCHIP|MF_LOAD|MF_EXCLUSIVE);
 	if (r < 0)
 		fail(peer, pr);
 	else
@@ -2161,6 +2191,11 @@ int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 
 	const struct sched_param param = { .sched_priority = 99 };
 	sched_setscheduler(syscall(SYS_gettid), SCHED_FIFO, &param);
+	/* FIXME maybe place it in peer
+	 * should be done for each port (sportno to eportno)
+	 */
+	xseg_set_max_requests(peer->xseg, peer->portno_start, 5000);
+	xseg_set_freequeue_size(peer->xseg, peer->portno_start, 3000, 0);
 
 
 //	test_map(peer);
@@ -2229,7 +2264,6 @@ void custom_peer_finalize(struct peerd *peer)
 		map = (struct map *)val;
 		if (!(map->flags & MF_MAP_EXCLUSIVE))
 			continue;
-		map->flags |= MF_MAP_CLOSING;
 		req = __close_map(pr, map);
 		if (!req)
 			continue;

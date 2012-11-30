@@ -5,6 +5,26 @@
 import os, sys, subprocess, argparse, time
 from subprocess import call, check_call
 
+def exclusive(fn):
+    def exclusive_args(args):
+        file = "/tmp/vlmc_map.lock"
+        while True:
+            try:
+                fd = os.open(file, os.O_CREAT|os.O_EXCL|os.O_WRONLY)
+                break;
+            except Exception, reason:
+                print >> sys.stderr, reason
+                time.sleep(0.05)
+        try:
+            r = fn(args)
+        finally:
+            os.close(fd)
+            os.unlink(file)
+        return r
+
+    return exclusive_args
+
+@exclusive
 def vlmc_create(args):
     name = args.name[0]
     size = args.size 
@@ -32,7 +52,7 @@ def vlmc_create(args):
     except Exception:
             sys.stderr.write("vlmc creation failed\n")
             sys.exit(-1)
-    
+
 
 def vlmc_snapshot(args):
     # snapshot
@@ -42,8 +62,23 @@ def vlmc_list(args):
     # list
     return
 
+@exclusive
 def vlmc_remove(args):
     name = args.name[0]
+
+    try:
+        for f in os.listdir(XSEGBD_SYSFS + "devices/"):
+            d_id = open(XSEGBD_SYSFS + "devices/" + f + "/id").read().strip()
+            target = open(XSEGBD_SYSFS + "devices/"+ f + "/target").read().strip()
+            if target == name:
+                sys.stderr.write("Volume mapped on device %s%s\n" % (DEVICE_PREFIX,
+								d_id))
+                sys.exit(-1)
+
+    except Exception, reason:
+        print >> sys.stderr, reason
+        sys.exit(-1)
+
     cmd = ["vlmc-xseg", "%s" % SPEC, "remove", "--name", "%s" % name]
     cmd.extend(["-mp", "%s" % MPORT])
     cmd.extend(["-p", "%s" % VTOOL])
@@ -62,23 +97,6 @@ def xsegbd_loaded():
         print >> sys.stderr, reason
         sys.exit(-1)
 
-def exclusive(fn):
-    def exclusive_args(args):
-        file = "/tmp/vlmc_map.lock"
-        while True:
-            try:
-                fd = os.open(file, os.O_CREAT|os.O_EXCL|os.O_WRONLY)
-                break;
-            except Exception, reason:
-                print >> sys.stderr, reason
-                time.sleep(0.05)
-        try:
-            fn(args)
-        finally:
-            os.close(fd)
-            os.unlink(file)
-
-    return exclusive_args
 
 @exclusive
 def vlmc_map(args):

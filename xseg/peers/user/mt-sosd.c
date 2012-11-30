@@ -7,8 +7,11 @@
 #include <xseg/protocol.h>
 #include <pthread.h>
 
+#define LOCK_SUFFIX "_lock"
+#define LOCK_SUFFIX_LEN 5
+
 #define MAX_POOL_NAME 64
-#define MAX_OBJ_NAME XSEG_MAX_TARGETLEN
+#define MAX_OBJ_NAME (XSEG_MAX_TARGETLEN + LOCK_SUFFIX_LEN + 1)
 #define RADOS_LOCK_NAME "RadosLock"
 //#define RADOS_LOCK_COOKIE "Cookie"
 #define RADOS_LOCK_COOKIE "foo"
@@ -473,6 +476,9 @@ void * lock_op(void *arg)
 	struct peer_req *pr = (struct peer_req *)arg;
 	struct radosd *rados = (struct radosd *) pr->peer->priv;
 	struct rados_io *rio = (struct rados_io *) (pr->priv);
+	uint32_t len = strlen(rio->obj_name);
+	strncpy(rio->obj_name + len, LOCK_SUFFIX, LOCK_SUFFIX_LEN);
+	rio->obj_name[len + LOCK_SUFFIX_LEN] = 0;
 
 	XSEGLOG2(&lc, I, "Starting lock op for %s", rio->obj_name);
 	if (!(pr->req->flags & XF_NOSYNC)){
@@ -519,6 +525,9 @@ void * unlock_op(void *arg)
 	struct peer_req *pr = (struct peer_req *)arg;
 	struct radosd *rados = (struct radosd *) pr->peer->priv;
 	struct rados_io *rio = (struct rados_io *) (pr->priv);
+	uint32_t len = strlen(rio->obj_name);
+	strncpy(rio->obj_name + len, LOCK_SUFFIX, LOCK_SUFFIX_LEN);
+	rio->obj_name[len + LOCK_SUFFIX_LEN] = 0;
 	int r;
 	XSEGLOG2(&lc, I, "Starting unlock op for %s", rio->obj_name);
 	if (pr->req->flags & XF_FORCE)
