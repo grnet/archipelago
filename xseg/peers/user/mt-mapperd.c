@@ -435,6 +435,7 @@ static struct xseg_request * __close_map(struct peer_req *pr, struct map *map)
 		goto out_unset;
 	}
 	r = xseg_signal(peer->xseg, p);
+	map->flags |= MF_MAP_CLOSING;
 
 	XSEGLOG2(&lc, I, "Map %s closing", map->volume);
 	return req;
@@ -453,7 +454,6 @@ static int close_map(struct peer_req *pr, struct map *map)
 	struct xseg_request *req;
 	struct peerd *peer = pr->peer;
 
-	map->flags |= MF_MAP_CLOSING;
 	req = __close_map(pr, map);
 	if (!req)
 		return -1;
@@ -709,7 +709,6 @@ static int write_map(struct peer_req* pr, struct map *map)
 {
 	int r = 0;
 	struct peerd *peer = pr->peer;
-	map->flags |= MF_MAP_WRITING;
 	struct xseg_request *req = __write_map(pr, map);
 	if (!req)
 		return -1;
@@ -766,7 +765,8 @@ static struct xseg_request * __load_map(struct peer_req *pr, struct map *m)
 		goto out_unset;
 	}
 	r = xseg_signal(peer->xseg, p);
-	
+
+	m->flags |= MF_MAP_LOADING;
 	XSEGLOG2(&lc, I, "Map %s loading", m->volume);
 	return req;
 
@@ -850,7 +850,6 @@ static int load_map(struct peer_req *pr, struct map *map)
 	int r = 0;
 	struct xseg_request *req;
 	struct peerd *peer = pr->peer;
-	map->flags |= MF_MAP_LOADING;
 	req = __load_map(pr, map);
 	if (!req)
 		return -1;
@@ -914,7 +913,8 @@ static struct xseg_request * __open_map(struct peer_req *pr, struct map *m,
 		goto out_unset;
 	}
 	r = xseg_signal(peer->xseg, p);
-	
+
+	m->flags |= MF_MAP_OPENING;
 	XSEGLOG2(&lc, I, "Map %s opening", m->volume);
 	return req;
 
@@ -932,10 +932,8 @@ static int open_map(struct peer_req *pr, struct map *map, uint32_t flags)
 	struct xseg_request *req;
 	struct peerd *peer = pr->peer;
 
-	map->flags |= MF_MAP_OPENING;
 	req = __open_map(pr, map, flags);
 	if (!req){
-		map->flags &= ~MF_MAP_OPENING;
 		return -1;
 	}
 	wait_on_pr(pr, (!((req->state & XS_FAILED)||(req->state & XS_SERVED))));
@@ -1111,7 +1109,7 @@ copyup_zeroblock:
 	return req;
 }
 
-static struct xseg_request * delete_object(struct peer_req *pr, struct map_node *mn)
+static struct xseg_request * __delete_object(struct peer_req *pr, struct map_node *mn)
 {
 	void *dummy;
 	struct peerd *peer = pr->peer;
@@ -1148,6 +1146,7 @@ static struct xseg_request * delete_object(struct peer_req *pr, struct map_node 
 		goto out_mapper_unset;
 	}
 	r = xseg_signal(peer->xseg, p);
+	mn->flags |= MF_OBJECT_DELETING;
 	XSEGLOG2(&lc, I, "Object %s deletion pending", mn->object);
 	return req;
 
@@ -1162,7 +1161,7 @@ out_err:
 	return NULL;
 }
 
-static struct xseg_request * delete_map(struct peer_req *pr, struct map *map)
+static struct xseg_request * __delete_map(struct peer_req *pr, struct map *map)
 {
 	void *dummy;
 	struct peerd *peer = pr->peer;
@@ -1250,7 +1249,7 @@ static inline void put_map(struct map *map)
 					//this should never happen...
 					wait_on_mapnode(mn, mn->flags & MF_OBJECT_NOT_READY);
 				}
-				mn->flags &= MF_OBJECT_DESTROYED;
+				mn->flags |= MF_OBJECT_DESTROYED;
 				put_mapnode(mn); //matchin mn->ref = 1 on mn init
 				put_mapnode(mn); //matcing get_mapnode;
 				//assert mn->ref == 0;
@@ -1594,10 +1593,8 @@ static int do_dropcache(struct peer_req *pr, struct map *map)
 		if (mn) {
 			if (!(mn->flags & MF_OBJECT_DESTROYED)){
 				//make sure all pending operations on all objects are completed
-				if (mn->flags & MF_OBJECT_NOT_READY){
-					wait_on_mapnode(mn, mn->flags & MF_OBJECT_NOT_READY);
-				}
-				mn->flags &= MF_OBJECT_DESTROYED;
+				wait_on_mapnode(mn, mn->flags & MF_OBJECT_NOT_READY);
+				mn->flags |= MF_OBJECT_DESTROYED;
 			}
 			put_mapnode(mn);
 		}
@@ -1638,8 +1635,7 @@ static int do_destroy(struct peer_req *pr, struct map *map)
 	struct xseg_request *req;
 
 	XSEGLOG2(&lc, I, "Destroying map %s", map->volume);
-	map->flags |= MF_MAP_DELETING;
-	req = delete_map(pr, map);
+	req = __delete_map(pr, map);
 	if (!req)
 		return -1;
 	wait_on_pr(pr, (!((req->state & XS_FAILED)||(req->state & XS_SERVED))));
@@ -1678,11 +1674,9 @@ static int do_destroy(struct peer_req *pr, struct map *map)
 		// make sure all pending operations on all objects are completed
 		wait_on_mapnode(mn, mn->flags & MF_OBJECT_NOT_READY);
 
-		mn->flags |=  MF_OBJECT_DELETING;
-		req = delete_object(pr, mn);
+		req = __delete_object(pr, mn);
 		if (!req){
 			mio->err = 1;
-			mn->flags &= ~MF_OBJECT_DELETING;
 			put_mapnode(mn);
 			continue;
 		}
@@ -2244,7 +2238,6 @@ void custom_peer_finalize(struct peerd *peer)
 		map = (struct map *)val;
 		if (!(map->flags & MF_MAP_EXCLUSIVE))
 			continue;
-		map->flags |= MF_MAP_CLOSING;
 		req = __close_map(pr, map);
 		if (!req)
 			continue;
