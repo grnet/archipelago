@@ -2175,27 +2175,21 @@ int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 		peer->peer_reqs[i].priv = mio;
 	}
 
-	for (i = 0; i < argc; i++) {
-		if (!strcmp(argv[i], "-bp") && (i+1) < argc){
-			mapper->bportno = atoi(argv[i+1]);
-			i += 1;
-			continue;
-		}
-		if (!strcmp(argv[i], "-mbp") && (i+1) < argc){
-			mapper->mbportno = atoi(argv[i+1]);
-			i += 1;
-			continue;
-		}
-		/* enforce only one thread */
-		if (!strcmp(argv[i], "-t") && (i+1) < argc){
-			int t = atoi(argv[i+1]);
-			if (t != 1) {
-				printf("ERROR: mapperd supports only one thread for the moment\nExiting ...\n");
-				return -1;
-			}
-			i += 1;
-			continue;
-		}
+	mapper->bportno = -1;
+	mapper->mbportno = -1;
+	BEGIN_READ_ARGS(argc, argv);
+	READ_ARG_ULONG("-bp", mapper->bportno);
+	READ_ARG_ULONG("-mbp", mapper->mbportno);
+	END_READ_ARGS();
+	if (mapper->bportno == -1){
+		XSEGLOG2(&lc, E, "Portno for blocker must be provided");
+		usage(argv[0]);
+		return -1;
+	}
+	if (mapper->mbportno == -1){
+		XSEGLOG2(&lc, E, "Portno for mblocker must be provided");
+		usage(argv[0]);
+		return -1;
 	}
 
 	const struct sched_param param = { .sched_priority = 99 };
