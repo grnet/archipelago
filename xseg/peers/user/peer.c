@@ -699,71 +699,6 @@ int main(int argc, char *argv[])
 	// -dp xseg_portno to defer blocking requests
 	// -l log file ?
 	//TODO print messages on arg parsing error
-	//TODO string checking
-
-	/*
-	for (i = 1; i < argc; i++) {
-		if (!strcmp(argv[i], "-g") && i + 1 < argc) {
-			spec = argv[i+1];
-			i += 1;
-			continue;
-		}
-
-		if (!strcmp(argv[i], "-sp") && i + 1 < argc) {
-			portno_start = strtoul(argv[i+1], NULL, 10);
-			i += 1;
-			continue;
-		}
-
-		if (!strcmp(argv[i], "-ep") && i + 1 < argc) {
-			portno_end = strtoul(argv[i+1], NULL, 10);
-			i += 1;
-			continue;
-		}
-
-		if (!strcmp(argv[i], "-p") && i + 1 < argc) {
-			portno = strtoul(argv[i+1], NULL, 10);
-			i += 1;
-			continue;
-		}
-
-		if (!strcmp(argv[i], "-n") && i + 1 < argc) {
-			nr_ops = strtoul(argv[i+1], NULL, 10);
-			i += 1;
-			continue;
-		}
-		if (!strcmp(argv[i], "-v") && i + 1 < argc ) {
-			debug_level = atoi(argv[i+1]);
-			i += 1;
-			continue;
-		}
-		if (!strcmp(argv[i], "-t") && i + 1 < argc ) {
-			nr_threads = strtoul(argv[i+1], NULL, 10);
-			i += 1;
-			continue;
-		}
-		if (!strcmp(argv[i], "-dp") && i + 1 < argc ) {
-			defer_portno = strtoul(argv[i+1], NULL, 10);
-			i += 1;
-			continue;
-		}
-		if (!strcmp(argv[i], "-l") && i + 1 < argc ) {
-			logfile = argv[i+1];
-			i += 1;
-			continue;
-		}
-		if (!strcmp(argv[i], "-d")) {
-			daemonize = 1;
-			continue;
-		}
-		if (!strcmp(argv[i], "--pidfile") && i + 1 < argc ) {
-			pidfile = argv[i+1];
-			i += 1;
-			continue;
-		}
-
-	}
-	*/
 	BEGIN_READ_ARGS(argc, argv);
 	READ_ARG_STRING("-g", spec, MAX_SPEC_LEN);
 	READ_ARG_ULONG("-sp", portno_start);
@@ -822,6 +757,12 @@ int main(int argc, char *argv[])
 	if (portno != -1) {
 		portno_start = portno;
 		portno_end = portno;
+	}
+	if (portno_start == -1 || portno_end == -1){
+		XSEGLOG2(&lc, E, "Portno or {portno_start, portno_end} must be supplied");
+		usage(argv[0]);
+		r = -1;
+		goto out;
 	}
 
 	peer = peerd_init(nr_ops, spec, portno_start, portno_end, nr_threads, defer_portno);
