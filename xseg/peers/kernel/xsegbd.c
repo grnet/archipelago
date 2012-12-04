@@ -534,7 +534,7 @@ static int xsegbd_get_size(struct xsegbd_device *xsegbd_dev)
 	xreq->op = X_INFO;
 
 	xseg_prepare_wait(xsegbd_dev->xseg, xsegbd_dev->src_portno);
-	p = xseg_submit(xsegbd_dev->xseg, xreq, 
+	p = xseg_submit(xsegbd_dev->xseg, xreq,
 				xsegbd_dev->src_portno, X_ALLOC);
 	if ( p == NoPort) {
 		XSEGLOG("couldn't submit request");

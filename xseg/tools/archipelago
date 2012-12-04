@@ -17,6 +17,8 @@ CHARDEV_NAME="/dev/segdev"
 CHARDEV_MAJOR=60
 CHARDEV_MINOR=0
 
+REQS=512
+
 FILE_BLOCKER='mt-pfiled'
 RADOS_BLOCKER='mt-sosd'
 MAPPER='mt-mapperd'
@@ -29,15 +31,18 @@ peers = []
 modules = ["xseg", "segdev", "xseg_posix", "xseg_pthread", "xseg_segdev"]
 xsegbd = "xsegbd"
 
-BPORT=0
-MPORT=1
-MBPORT=2
-VTOOL=3
-VPORT_START=204
-VPORT_END=403
+XSEGBD_START=0
+XSEGBD_END=199
+VPORT_START=200
+VPORT_END=399
+BPORT=500
+MPORT=501
+MBPORT=502
+VTOOL=503
+#RESERVED 511
 
 #default config
-SPEC="segdev:xsegbd:512:1024:12"
+SPEC="segdev:xsegbd:512:2048:12"
 
 NR_OPS_BLOCKERB=""
 NR_OPS_BLOCKERM=""
@@ -187,6 +192,18 @@ def check_conf():
         return False
     if not validPort(VPORT_END, xseg_ports, "VPORT_END"):
         return False
+    if not validPort(XSEGBD_START, xseg_ports, "XSEGBD_START"):
+        return False
+    if not validPort(XSEGBD_END, xseg_ports, "XSEGBD_END"):
+        return False
+
+    if not XSEGBD_START < XSEGBD_END:
+        print red("XSEGBD_START should be less than XSEGBD_END")
+        return False
+    if not VPORT_START < VPORT_END:
+        print red("VPORT_START should be less than VPORT_END")
+        return False
+#TODO check than no other port is set in the above ranges
 
     global BLOCKER
     try:
@@ -290,7 +307,7 @@ def construct_peers():
 
 def exclusive(fn):
     def exclusive_args(args):
-        file = "/tmp/vlmc_map.lock"
+        file = "/tmp/vlmc.lock"
         while True:
             try:
                 fd = os.open(file, os.O_CREAT|os.O_EXCL|os.O_WRONLY)
@@ -608,10 +625,10 @@ def vlmc_list(args):
             if output.startswith('archip_') and not output.endswith('_lock\n'):
                 print output.lstrip('archip_'),
     elif STORAGE == "files":
-        print >> sys.stderr "Vlmc list not supported for files yet"
-        return 0
+        print >> sys.stderr, "Vlmc list not supported for files yet"
+	return 0
     else:
-        print >> sys.stderr "Invalid storage"
+        print >> sys.stderr, "Invalid storage"
         sys.exit(-1)
 
     return
@@ -650,7 +667,7 @@ def vlmc_map(args):
         sys.stderr.write("Xsegbd module not loaded\n")
         sys.exit(-1)
     name = args.name[0]
-    prev = 3
+    prev = XSEGBD_START
     try:
         result = [int(open(XSEGBD_SYSFS + "devices/" + f + "/srcport").read().strip()) for f in os.listdir(XSEGBD_SYSFS + "devices/")]
         result.sort()
@@ -662,9 +679,13 @@ def vlmc_map(args):
                prev = p
 
         port = prev + 1
+        if port > XSEGBD_END:
+            print >> sys.stderr, "Max xsegbd devices reached"
+            sys.exit(-1)
         fd = os.open(XSEGBD_SYSFS + "add", os.O_WRONLY)
-        print >> sys.stderr, "write to %s : %s %d:%d:%d" %( XSEGBD_SYSFS + "add", name, port, port + VPORT_START -4, REQS )
-        os.write(fd, "%s %d:%d:%d" % (name, port, port + VPORT_START-4, REQS))
+        print >> sys.stderr, "write to %s : %s %d:%d:%d" %( XSEGBD_SYSFS +
+			"add", name, port, port - XSEGBD_START + VPORT_START, REQS )
+        os.write(fd, "%s %d:%d:%d" % (name, port, port - XSEGBD_START + VPORT_START, REQS))
         os.close(fd)
     except Exception, reason:
         print >> sys.stderr, reason
