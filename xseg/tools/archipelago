@@ -3,7 +3,7 @@
 # archipelagos tool
 
 import os, sys, subprocess, argparse, time, psutil, signal, errno
-from subprocess import call, check_call
+from subprocess import call, check_call, Popen, PIPE
 
 DEFAULTS='/etc/default/archipelago'
 
@@ -600,7 +600,20 @@ def vlmc_snapshot(args):
     return
 
 def vlmc_list(args):
-    # list
+    if STORAGE == "rados":
+        cmd = [ 'rados', '-p', '%s' % RADOS_POOL_MAPS, 'ls' ]
+        proc = Popen(cmd, stdout = PIPE)
+        while proc.poll() is None:
+            output = proc.stdout.readline()
+            if output.startswith('archip_') and not output.endswith('_lock\n'):
+                print output.lstrip('archip_'),
+    elif STORAGE == "files":
+        print >> sys.stderr "Vlmc list not supported for files yet"
+        return 0
+    else:
+        print >> sys.stderr "Invalid storage"
+        sys.exit(-1)
+
     return
 
 @exclusive
