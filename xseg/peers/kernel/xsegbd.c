@@ -1047,6 +1047,7 @@ out_dev:
 	kfree(xsegbd_dev);
 
 out:
+	module_put(THIS_MODULE);
 	return ret;
 }
 
