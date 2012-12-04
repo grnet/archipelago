@@ -568,6 +568,9 @@ def vlmc_create(args):
     size = args.size 
     snap = args.snap
 
+    if len(name) < 6:
+	print >> sys.stderr, "Name should have at least len 6"
+	sys.exit(-1)
     if size == None and snap == None:
         print >> sys.stderr, "At least one of the size/snap args must be provided"
         sys.exit(-1)
