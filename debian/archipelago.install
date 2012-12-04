@@ -6,4 +6,4 @@ xseg/peers/user/mt-pfiled usr/bin
 xseg/peers/user/xseg usr/bin
 xseg/peers/user/vlmc-xseg usr/bin
 xseg/tools/vlmc usr/bin
-xseg/archipelago usr/bin
+xseg/tools/archipelago usr/bin
