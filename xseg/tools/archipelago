@@ -65,6 +65,8 @@ PITHOSMAPS=""
 RADOS_POOL_MAPS=""
 RADOS_POOL_BLOCKS=""
 
+FIRST_COLUMN_WIDTH = 23
+SECOND_COLUMN_WIDTH = 23
 
 def green(s):
     return '\x1b[32m' + s + '\x1b[0m'
@@ -76,8 +78,8 @@ def yellow(s):
     return '\x1b[33m' + s + '\x1b[0m'
 
 def pretty_print(cid, status):
-    sys.stdout.write(cid.ljust(15))
-    sys.stdout.write(status.ljust(15))
+    sys.stdout.write(cid.ljust(FIRST_COLUMN_WIDTH))
+    sys.stdout.write(status.ljust(SECOND_COLUMN_WIDTH))
     sys.stdout.write('\n')
     return
 
@@ -346,28 +348,41 @@ def loaded_module(name):
     return name in loaded_modules()
 
 def load_module(name):
+    s = "Loading %s " % name
+    sys.stdout.write(s.ljust(FIRST_COLUMN_WIDTH))
     modules = loaded_modules()
     if name in modules:
+        sys.stdout.write(yellow("Already loaded".ljust(SECOND_COLUMN_WIDTH)))
+        sys.stdout.write("\n")
         return 0
     cmd = ["modprobe %s" % name]
     try:
         check_call(cmd, shell=True);
     except Exception:
-            sys.stderr.write(red("Module %s failed to load. \n" % name))
-            return -1
+        sys.stdout.write(red("FAILED".ljust(SECOND_COLUMN_WIDTH)))
+        sys.stdout.write("\n")
+        return -1
+    sys.stdout.write(green("OK".ljust(SECOND_COLUMN_WIDTH)))
+    sys.stdout.write("\n")
     return 0
 
 def unload_module(name):
+    s = "Unloading %s " % name
+    sys.stdout.write(s.ljust(FIRST_COLUMN_WIDTH))
     modules = loaded_modules()
     if name not in modules:
-        pretty_print(name, yellow("wasn't loaded"))
+        sys.stdout.write(yellow("Not loaded".ljust(SECOND_COLUMN_WIDTH)))
+        sys.stdout.write("\n")
         return 0
     cmd = ["modprobe -r %s" % name]
     try:
         check_call(cmd, shell=True);
     except Exception:
-            sys.stderr.write(red("Module %s failed to unload. \n" % name))
-            return -1
+        sys.stdout.write(red("FAILED".ljust(SECOND_COLUMN_WIDTH)))
+        sys.stdout.write("\n")
+        return -1
+    sys.stdout.write(green("OK".ljust(SECOND_COLUMN_WIDTH)))
+    sys.stdout.write("\n")
     return 0
 
 def create_segment():
@@ -416,11 +431,16 @@ def check_pidfile(name):
 
 def start_peer(peer):
     cmd = [peer[0]] + peer[1]
+    s = "Starting %s " % peer[2]
+    sys.stdout.write(s.ljust(FIRST_COLUMN_WIDTH))
     try:
         check_call(cmd, shell=False);
     except Exception:
-        sys.stderr.write(red("Peer %s start failed.\n" % peer[0]))
+        sys.stdout.write(red("FAILED".ljust(SECOND_COLUMN_WIDTH)))
+        sys.stdout.write("\n")
         return -1
+    sys.stdout.write(green("OK".ljust(SECOND_COLUMN_WIDTH)))
+    sys.stdout.write("\n")
     return 0
 
 def stop_peer(peer):
@@ -429,14 +449,19 @@ def stop_peer(peer):
         pretty_print(peer[2], yellow("not running"))
         return -1
 
+    s = "Stopping %s " % peer[2]
+    sys.stdout.write(s.ljust(FIRST_COLUMN_WIDTH))
     os.kill(pid, signal.SIGTERM)
     i = 0
     while check_running(peer[0], pid) > 0:
         time.sleep(0.1)
         i += 1
         if i > 150:
-            print red("process did not die in 15 secs")
+            sys.stdout.write(red("FAILED".ljust(SECOND_COLUMN_WIDTH)))
+            sys.stdout.write("\n")
             return -1
+    sys.stdout.write(green("OK".ljust(SECOND_COLUMN_WIDTH)))
+    sys.stdout.write("\n")
     return 0
 
 def peer_running(peer):
@@ -476,8 +501,25 @@ def remove_segdev():
         sys.stderr.write(red("Segdev device removal failed.\n"))
         return -1
 
+def start_peers(peers):
+    for m in modules:
+        if not loaded_module(m):
+            print red("Cannot start userspace peers. " + m + " module not loaded")
+            return -1
+    for p in peers:
+        if start_peer(p) < 0:
+            return -1
+    return 0
+
+def stop_peers(peers):
+    for p in reversed(peers):
+        stop_peer(p)
+    return 0
 
 def start(args):
+    if args.user:
+        return start_peers(peers)
+
     if status(args) > 0:
         return -1
 
@@ -499,10 +541,9 @@ def start(args):
 
     time.sleep(0.5)
 
-    for p in peers:
-        if start_peer(p) < 0:
-            stop(args)
-            return -1
+    if start_peers(peers) < 0:
+        stop(args)
+        return -1
 
 
     if load_module(xsegbd) < 0:
@@ -511,6 +552,8 @@ def start(args):
     return 0
 
 def stop(args):
+    if args.user:
+        return stop_peers(peers)
     #check devices
     if vlmc_showmapped(args) > 0:
         print "Cannot stop archipelago. Mapped volumes exist"
@@ -518,8 +561,8 @@ def stop(args):
     if unload_module(xsegbd):
         return -1
     r = 0
-    for p in reversed(peers):
-        stop_peer(p)
+
+    stop_peers(peers)
 
     remove_segdev()
 
@@ -740,6 +783,7 @@ def vlmc_resize(args):
 def archipelago():
     parser = argparse.ArgumentParser(description='Archipelago tool')
     parser.add_argument('-c', '--config', type=str, nargs='?', help='config file')
+    parser.add_argument('-u', '--user',  action='store_true', default=False , help='affect only userspace peers')
     subparsers = parser.add_subparsers()
 
     start_parser = subparsers.add_parser('start', help='Start archipelago')
