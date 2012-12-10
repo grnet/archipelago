@@ -92,7 +92,7 @@ libxseg.so.$(MAJOR).$(MINOR): xseg.pic.o xseg_user.o libxseg.map \
 			xheap/xheap.pic.o xobj/xobj.pic.o \
 			 _initialize.o $(DRVOBJS) \
                         -Wl,--version-script=libxseg.map \
-                        -ldl -lrt
+                        -ldl -lrt -pthread
 	cp -vaf $@ $(LIB)
 
 libxseg.a: xseg.o xq/xq.o drivers _initialize.o
