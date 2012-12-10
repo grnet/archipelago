@@ -1,0 +1,8 @@
+Format: http://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
+Upstream-Name: libxseg0
+Source: https://code.grnet.gr/projects
+
+Files: *
+Copyright: Copyright (C) 2012 GRNET SA
+License: BSD-3-clause
+
