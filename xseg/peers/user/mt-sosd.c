@@ -607,7 +607,11 @@ int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 		return 0;
 	}
 	if (rados_pool_lookup(rados->cluster, rados->pool) < 0) {
-		XSEGLOG2(&lc, I, "Pool does not exists. I will try to create it");
+		XSEGLOG2(&lc, E, "Pool does not exists. Try creating it first");
+		rados_shutdown(rados->cluster);
+		free(rados);
+		return -1;
+		/*
 		if (rados_pool_create(rados->cluster, rados->pool) < 0){
 			XSEGLOG2(&lc, E, "Couldn't create pool %s", rados->pool);
 			rados_shutdown(rados->cluster);
@@ -615,6 +619,8 @@ int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 			return -1;
 		}
 		XSEGLOG2(&lc, I, "Pool created.");
+		*/
+
 	}
 	if (rados_ioctx_create(rados->cluster, rados->pool, &(rados->ioctx)) < 0){
 		XSEGLOG2(&lc, E, "ioctx create problem.");
