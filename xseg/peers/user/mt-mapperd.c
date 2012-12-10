@@ -94,7 +94,12 @@
 ((uint64_t) (((block_size-mapheader_size)/objectsize_in_map)* block_size))
 
 
-char *zero_block="0000000000000000000000000000000000000000000000000000000000000000";
+//char *zero_block="0000000000000000000000000000000000000000000000000000000000000000";
+
+/* pithos considers this a block full of zeros, so should we.
+ * it is actually the sha256 hash of nothing.
+ */
+char *zero_block="e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
 #define ZERO_BLOCK_LEN (64) /* strlen(zero_block) */
 
 /* dispatch_internal mapper states */
@@ -115,9 +120,10 @@ typedef void (*cb_t)(struct peer_req *pr, struct xseg_request *req);
 #define MF_OBJECT_WRITING	(1 << 2)
 #define MF_OBJECT_DELETING	(1 << 3)
 #define MF_OBJECT_DESTROYED	(1 << 5)
+#define MF_OBJECT_SNAPSHOTTING	(1 << 6)
 
 #define MF_OBJECT_NOT_READY	(MF_OBJECT_COPYING|MF_OBJECT_WRITING|\
-					MF_OBJECT_DELETING)
+				MF_OBJECT_DELETING|MF_OBJECT_SNAPSHOTTING)
 struct map_node {
 	uint32_t flags;
 	uint32_t objectidx;
@@ -199,9 +205,11 @@ struct map_node {
 #define MF_MAP_OPENING		(1 << 6)
 #define MF_MAP_CLOSING		(1 << 7)
 #define MF_MAP_DELETED		(1 << 8)
+#define MF_MAP_SNAPSHOTTING	(1 << 9)
 
 #define MF_MAP_NOT_READY	(MF_MAP_LOADING|MF_MAP_WRITING|MF_MAP_DELETING|\
-					MF_MAP_DROPPING_CACHE|MF_MAP_OPENING)
+				MF_MAP_DROPPING_CACHE|MF_MAP_OPENING|	       \
+				MF_MAP_SNAPSHOTTING)
 
 struct map {
 	uint32_t version;
@@ -227,6 +235,7 @@ struct mapper_io {
 	struct map_node *copyup_node;
 	volatile int err;			/* error flag */
 	volatile uint64_t del_pending;
+	volatile uint64_t snap_pending;
 	uint64_t delobj;
 	uint64_t dcobj;
 	cb_t cb;
@@ -557,8 +566,309 @@ static int insert_object(struct map *map, struct map_node *mn)
 
 
 /*
- * map read/write functions 
+ * map read/write functions
+ *
+ * version 0 -> pithos map
+ * version 1 -> archipelago version 1
+ *
+ *
+ * functions
+ * 	int read_object(struct map_node *mn, unsigned char *buf)
+ * 	int prepare_write_object(struct peer_req *pr, struct map *map,
+ * 				struct map_node *mn, struct xseg_request *req)
+ * 	int read_map(struct map *m, unsigned char * data)
+ * 	int prepare_write_map(struct peer_req *pr, struct map *map,
+ * 	 				struct xseg_request *req)
  */
+
+struct map_functions {
+	int (*read_object)(struct map_node *mn, unsigned char *buf);
+  	int (*prepare_write_object)(struct peer_req *pr, struct map *map,
+  				struct map_node *mn, struct xseg_request *req);
+  	int (*read_map)(struct map *m, unsigned char * data);
+ 	int (*prepare_write_map)(struct peer_req *pr, struct map *map,
+  	 				struct xseg_request *req);
+};
+
+/* version 0 functions */
+
+/* no header */
+#define v0_mapheader_size 0
+/* just the unhexlified name */
+#define v0_objectsize_in_map SHA256_DIGEST_SIZE
+
+static inline int read_object_v0(struct map_node *mn, unsigned char *buf)
+{
+	hexlify(buf, mn->object);
+	mn->object[HEXLIFIED_SHA256_DIGEST_SIZE] = 0;
+	mn->objectlen = HEXLIFIED_SHA256_DIGEST_SIZE;
+	mn->flags = MF_OBJECT_EXIST;
+
+	return 0;
+}
+
+static void v0_object_to_map(struct map_node *mn, unsigned char *data)
+{
+	unhexlify(mn->object, data);
+}
+
+static int prepare_write_object_v0(struct peer_req *pr, struct map *map,
+			struct map_node *mn, struct xseg_request *req)
+{
+	struct peerd *peer = pr->peer;
+	int r = xseg_prep_request(peer->xseg, req, map->volumelen, v0_objectsize_in_map);
+	if (r < 0){
+		XSEGLOG2(&lc, E, "Cannot allocate request for object %s. \n\t"
+				"(Map: %s [%llu]",
+				mn->object, map->volume, (unsigned long long) mn->objectidx);
+		return -1;
+	}
+	char *target = xseg_get_target(peer->xseg, req);
+	strncpy(target, map->volume, req->targetlen);
+	req->size = req->datalen;
+	req->offset = v0_mapheader_size + mn->objectidx * v0_objectsize_in_map;
+
+	unsigned char *data = xseg_get_data(pr->peer->xseg, req);
+	v0_object_to_map(mn, data);
+	return -1;
+}
+
+static int read_map_v0(struct map *m, unsigned char * data)
+{
+	int r;
+	struct map_node *map_node;
+	uint64_t i;
+	uint64_t pos = 0;
+	uint64_t max_nr_objs = block_size/SHA256_DIGEST_SIZE;
+	XSEGLOG2(&lc, D, "Max nr_objs %llu", max_nr_objs);
+	char nulls[SHA256_DIGEST_SIZE];
+	memset(nulls, 0, SHA256_DIGEST_SIZE);
+	map_node = calloc(max_nr_objs, sizeof(struct map_node));
+	if (!map_node)
+		return -1;
+	for (i = 0; i < max_nr_objs; i++) {
+		if (!memcmp(data+pos, nulls, v0_objectsize_in_map))
+			break;
+		map_node[i].objectidx = i;
+		map_node[i].map = m;
+		map_node[i].waiters = 0;
+		map_node[i].ref = 1;
+		map_node[i].cond = st_cond_new(); //FIXME err check;
+		read_object_v0(&map_node[i], data+pos);
+		pos += v0_objectsize_in_map;
+		r = insert_object(m, &map_node[i]); //FIXME error check
+	}
+	XSEGLOG2(&lc, D, "Found %llu objects", i);
+	m->size = i * block_size;
+	return 0;
+}
+
+static int prepare_write_map_v0(struct peer_req *pr, struct map *map,
+				struct xseg_request *req)
+{
+	struct peerd *peer = pr->peer;
+	uint64_t i, pos = 0, max_objidx = calc_map_obj(map);
+	struct map_node *mn;
+	int r = xseg_prep_request(peer->xseg, req, map->volumelen,
+			v0_mapheader_size + max_objidx * v0_objectsize_in_map);
+	if (r < 0){
+		XSEGLOG2(&lc, E, "Cannot prepare request for map %s", map->volume);
+		return -1;
+	}
+	char *target = xseg_get_target(peer->xseg, req);
+	strncpy(target, map->volume, req->targetlen);
+	char *data = xseg_get_data(peer->xseg, req);
+
+	req->op = X_WRITE;
+	req->size = req->datalen;
+	req->offset = 0;
+
+	for (i = 0; i < max_objidx; i++) {
+		mn = find_object(map, i);
+		if (!mn){
+			XSEGLOG2(&lc, E, "Cannot find object %llu for map %s",
+					(unsigned long long) i, map->volume);
+			return -1;
+		}
+		v0_object_to_map(mn, (unsigned char *)(data+pos));
+		pos += v0_objectsize_in_map;
+	}
+	XSEGLOG2(&lc, D, "Prepared %llu objects", i);
+	return 0;
+}
+
+/* static struct map_functions map_functions_v0 =	{ */
+/* 			.read_object = read_object_v0, */
+/* 			.read_map = read_map_v0, */
+/* 			.prepare_write_object = prepare_write_object_v0, */
+/* 			.prepare_write_map = prepare_write_map_v0 */
+/* }; */
+#define map_functions_v0 {				\
+			.read_object = read_object_v0,	\
+			.read_map = read_map_v0,	\
+			.prepare_write_object = prepare_write_object_v0,\
+			.prepare_write_map = prepare_write_map_v0	\
+			}
+/* v1 functions */
+
+/* transparency byte + max object len in disk */
+#define v1_objectsize_in_map (1 + SHA256_DIGEST_SIZE)
+
+/* Map header contains:
+ * 	map version
+ * 	volume size
+ */
+#define v1_mapheader_size (sizeof (uint32_t) + sizeof(uint64_t))
+
+static inline int read_object_v1(struct map_node *mn, unsigned char *buf)
+{
+	char c = buf[0];
+	mn->flags = 0;
+	if (c){
+		mn->flags |= MF_OBJECT_EXIST;
+		strcpy(mn->object, MAPPER_PREFIX);
+		hexlify(buf+1, mn->object + MAPPER_PREFIX_LEN);
+		mn->object[MAX_OBJECT_LEN] = 0;
+		mn->objectlen = strlen(mn->object);
+	}
+	else {
+		mn->flags &= ~MF_OBJECT_EXIST;
+		hexlify(buf+1, mn->object);
+		mn->object[HEXLIFIED_SHA256_DIGEST_SIZE] = 0;
+		mn->objectlen = strlen(mn->object);
+	}
+	return 0;
+}
+
+static inline void v1_object_to_map(char* buf, struct map_node *mn)
+{
+	buf[0] = (mn->flags & MF_OBJECT_EXIST)? 1 : 0;
+	if (buf[0]){
+		/* strip common prefix */
+		unhexlify(mn->object+MAPPER_PREFIX_LEN, (unsigned char *)(buf+1));
+	}
+	else {
+		unhexlify(mn->object, (unsigned char *)(buf+1));
+	}
+}
+
+static int prepare_write_object_v1(struct peer_req *pr, struct map *map,
+				struct map_node *mn, struct xseg_request *req)
+{
+	struct peerd *peer = pr->peer;
+	int r = xseg_prep_request(peer->xseg, req, map->volumelen, v1_objectsize_in_map);
+	if (r < 0){
+		XSEGLOG2(&lc, E, "Cannot allocate request for object %s. \n\t"
+				"(Map: %s [%llu]",
+				mn->object, map->volume, (unsigned long long) mn->objectidx);
+		return -1;
+	}
+	char *target = xseg_get_target(peer->xseg, req);
+	strncpy(target, map->volume, req->targetlen);
+	req->size = req->datalen;
+	req->offset = v1_mapheader_size + mn->objectidx * v1_objectsize_in_map;
+
+	char *data = xseg_get_data(pr->peer->xseg, req);
+	v1_object_to_map(data, mn);
+	return 0;
+}
+
+static int read_map_v1(struct map *m, unsigned char * data)
+{
+	int r;
+	struct map_node *map_node;
+	uint64_t i;
+	uint64_t pos = 0;
+	uint64_t nr_objs;
+
+	/* read header */
+	m->version = *(uint32_t *) (data + pos);
+	pos += sizeof(uint32_t);
+	m->size = *(uint64_t *) (data + pos);
+	pos += sizeof(uint64_t);
+
+	/* read objects */
+	nr_objs = m->size / block_size;
+	if (m->size % block_size)
+		nr_objs++;
+	map_node = calloc(nr_objs, sizeof(struct map_node));
+	if (!map_node)
+		return -1;
+
+	for (i = 0; i < nr_objs; i++) {
+		map_node[i].map = m;
+		map_node[i].objectidx = i;
+		map_node[i].waiters = 0;
+		map_node[i].ref = 1;
+		map_node[i].cond = st_cond_new(); //FIXME err check;
+		read_object_v1(&map_node[i], data+pos);
+		pos += objectsize_in_map;
+		r = insert_object(m, &map_node[i]); //FIXME error check
+	}
+	return 0;
+}
+
+static int prepare_write_map_v1(struct peer_req *pr, struct map *m,
+				struct xseg_request *req)
+{
+	struct peerd *peer = pr->peer;
+	uint64_t i, pos = 0, max_objidx = calc_map_obj(m);
+	struct map_node *mn;
+
+	int r = xseg_prep_request(peer->xseg, req, m->volumelen,
+			v1_mapheader_size + max_objidx * v1_objectsize_in_map);
+	if (r < 0){
+		XSEGLOG2(&lc, E, "Cannot prepare request for map %s", m->volume);
+		return -1;
+	}
+	char *target = xseg_get_target(peer->xseg, req);
+	strncpy(target, m->volume, req->targetlen);
+	char *data = xseg_get_data(peer->xseg, req);
+
+	memcpy(data + pos, &m->version, sizeof(m->version));
+	pos += sizeof(m->version);
+	memcpy(data + pos, &m->size, sizeof(m->size));
+	pos += sizeof(m->size);
+
+	req->op = X_WRITE;
+	req->size = req->datalen;
+	req->offset = 0;
+
+	for (i = 0; i < max_objidx; i++) {
+		mn = find_object(m, i);
+		if (!mn){
+			XSEGLOG2(&lc, E, "Cannot find object %lli for map %s",
+					(unsigned long long) i, m->volume);
+			return -1;
+		}
+		v1_object_to_map(data+pos, mn);
+		pos += v1_objectsize_in_map;
+	}
+	return 0;
+}
+
+/* static struct map_functions map_functions_v1 =	{ */
+/* 			.read_object = read_object_v1, */
+/* 			.read_map = read_map_v1, */
+/* 			.prepare_write_object = prepare_write_object_v1, */
+/* 			.prepare_write_map = prepare_write_map_v1 */
+/* }; */
+#define map_functions_v1 {				\
+			.read_object = read_object_v1,	\
+			.read_map = read_map_v1,	\
+			.prepare_write_object = prepare_write_object_v1,\
+			.prepare_write_map = prepare_write_map_v1	\
+			}
+
+static struct map_functions map_functions[] = { map_functions_v0,
+						map_functions_v1 };
+#define MAP_LATEST_VERSION 1
+/* end of functions */
+
+
+
+
+
 static inline void pithosmap_to_object(struct map_node *mn, unsigned char *buf)
 {
 	hexlify(buf, mn->object);
@@ -611,6 +921,7 @@ static inline void mapheader_to_map(struct map *m, char *buf)
 static struct xseg_request * object_write(struct peerd *peer, struct peer_req *pr,
 				struct map *map, struct map_node *mn)
 {
+	int r;
 	void *dummy;
 	struct mapperd *mapper = __get_mapperd(peer);
 	struct xseg_request *req = xseg_get_request(peer->xseg, pr->portno,
@@ -621,20 +932,13 @@ static struct xseg_request * object_write(struct peerd *peer, struct peer_req *p
 				mn->object, map->volume, (unsigned long long) mn->objectidx);
 		goto out_err;
 	}
-	int r = xseg_prep_request(peer->xseg, req, map->volumelen, objectsize_in_map);
+
+	r = map_functions[map->version].prepare_write_object(pr, map, mn, req);
 	if (r < 0){
-		XSEGLOG2(&lc, E, "Cannot allocate request for object %s. \n\t"
-				"(Map: %s [%llu]",
-				mn->object, map->volume, (unsigned long long) mn->objectidx);
+		XSEGLOG2(&lc, E, "Cannot prepare write object");
 		goto out_put;
 	}
-	char *target = xseg_get_target(peer->xseg, req);
-	strncpy(target, map->volume, req->targetlen);
-	req->size = objectsize_in_map;
-	req->offset = mapheader_size + mn->objectidx * objectsize_in_map;
 	req->op = X_WRITE;
-	char *data = xseg_get_data(peer->xseg, req);
-	object_to_map(data, mn);
 
 	r = xseg_set_req_data(peer->xseg, req, pr);
 	if (r < 0){
@@ -673,44 +977,25 @@ out_err:
 
 static struct xseg_request * __write_map(struct peer_req* pr, struct map *map)
 {
+	int r;
 	void *dummy;
 	struct peerd *peer = pr->peer;
 	struct mapperd *mapper = __get_mapperd(peer);
-	struct map_node *mn;
-	uint64_t i, pos, max_objidx = calc_map_obj(map);
 	struct xseg_request *req = xseg_get_request(peer->xseg, pr->portno,
 							mapper->mbportno, X_ALLOC);
 	if (!req){
 		XSEGLOG2(&lc, E, "Cannot allocate request for map %s", map->volume);
 		goto out_err;
 	}
-	int r = xseg_prep_request(peer->xseg, req, map->volumelen,
-			mapheader_size + max_objidx * objectsize_in_map);
+
+	r = map_functions[map->version].prepare_write_map(pr, map, req);
 	if (r < 0){
-		XSEGLOG2(&lc, E, "Cannot prepare request for map %s", map->volume);
+		XSEGLOG2(&lc, E, "Cannot prepare write map");
 		goto out_put;
 	}
-	char *target = xseg_get_target(peer->xseg, req);
-	strncpy(target, map->volume, req->targetlen);
-	char *data = xseg_get_data(peer->xseg, req);
-	mapheader_to_map(map, data);
-	pos = mapheader_size;
-	req->op = X_WRITE;
-	req->size = req->datalen;
-	req->offset = 0;
 
-	if (map->size % block_size)
-		max_objidx++;
-	for (i = 0; i < max_objidx; i++) {
-		mn = find_object(map, i);
-		if (!mn){
-			XSEGLOG2(&lc, E, "Cannot find object %lli for map %s",
-					(unsigned long long) i, map->volume);
-			goto out_put;
-		}
-		object_to_map(data+pos, mn);
-		pos += objectsize_in_map;
-	}
+	req->op = X_WRITE;
+
 	r = xseg_set_req_data(peer->xseg, req, pr);
 	if (r < 0){
 		XSEGLOG2(&lc, E, "Cannot set request data for map %s",
@@ -794,7 +1079,7 @@ static struct xseg_request * __load_map(struct peer_req *pr, struct map *m)
 		goto out_put;
 	}
 	p = xseg_submit(peer->xseg, req, pr->portno, X_ALLOC);
-	if (p == NoPort){ 
+	if (p == NoPort){
 		XSEGLOG2(&lc, E, "Cannot submit request for map %s",
 				m->volume);
 		goto out_unset;
@@ -820,64 +1105,33 @@ static int read_map (struct map *map, unsigned char *buf)
 
 	int r = !memcmp(buf, nulls, SHA256_DIGEST_SIZE);
 	if (r) {
-		XSEGLOG2(&lc, D, "Read zeros");
-		//read error;
+		XSEGLOG2(&lc, E, "Read zeros");
 		return -1;
 	}
 	//type 1, archip type, type 0 pithos map
 	int type = !memcmp(map->volume, MAPPER_PREFIX, MAPPER_PREFIX_LEN);
 	XSEGLOG2(&lc, I, "Type %d detected for map %s", type, map->volume);
-	uint64_t pos;
-	uint64_t i, nr_objs;
-	struct map_node *map_node;
-	if (type) {
-		uint64_t pos = 0;
-		map->version = *(uint32_t *) (buf + pos);
-		pos += sizeof(uint32_t);
-		map->size = *(uint64_t *) (buf + pos);
-		pos += sizeof(uint64_t);
-		nr_objs = map->size / block_size;
-		if (map->size % block_size)
-			nr_objs++;
-		map_node = calloc(nr_objs, sizeof(struct map_node));
-		if (!map_node)
-			return -1;
-
-		for (i = 0; i < nr_objs; i++) {
-			map_node[i].map = map;
-			map_node[i].objectidx = i;
-			map_node[i].waiters = 0;
-			map_node[i].ref = 1;
-			map_node[i].cond = st_cond_new(); //FIXME err check;
-			map_to_object(&map_node[i], buf + pos);
-			pos += objectsize_in_map;
-			r = insert_object(map, &map_node[i]); //FIXME error check
-		}
-	} else {
-		pos = 0;
-		uint64_t max_nr_objs = block_size/SHA256_DIGEST_SIZE;
-		map_node = calloc(max_nr_objs, sizeof(struct map_node));
-		if (!map_node)
-			return -1;
-		for (i = 0; i < max_nr_objs; i++) {
-			if (!memcmp(buf+pos, nulls, SHA256_DIGEST_SIZE))
-				break;
-			map_node[i].objectidx = i;
-			map_node[i].map = map;
-			map_node[i].waiters = 0;
-			map_node[i].ref = 1;
-			map_node[i].cond = st_cond_new(); //FIXME err check;
-			pithosmap_to_object(&map_node[i], buf + pos);
-			pos += SHA256_DIGEST_SIZE;
-			r = insert_object(map, &map_node[i]); //FIXME error check
-		}
-		map->size = i * block_size;
+	uint32_t version;
+	if (type)
+		version = *(uint32_t *) (buf); //version should always be the first uint32_t
+	else
+		version = 0;
+	if (version > MAP_LATEST_VERSION){
+		XSEGLOG2(&lc, E, "Map read for map %s failed. Invalid version %u",
+				map->volume, version);
+		return -1;
 	}
+
+	r = map_functions[version].read_map(map, buf);
+	if (r < 0){
+		XSEGLOG2(&lc, E, "Map read for map %s failed", map->volume);
+		return -1;
+	}
+
 	print_map(map);
 	XSEGLOG2(&lc, I, "Map read for map %s completed", map->volume);
 	return 0;
 
-	//FIXME cleanup on error
 }
 
 static int load_map(struct peer_req *pr, struct map *map)
@@ -977,7 +1231,7 @@ static int open_map(struct peer_req *pr, struct map *map, uint32_t flags)
 	xseg_put_request(peer->xseg, req, pr->portno);
 	if (err)
 		return -1;
-	else 
+	else
 		map->flags |= MF_MAP_EXCLUSIVE;
 	return 0;
 }
@@ -1035,6 +1289,72 @@ static struct map_node * __get_copyup_node(struct mapper_io *mio, struct xseg_re
 	}
 	XSEGLOG2(&lc, D, "Found mapnode %lx req %lx on mio %lx", mn, req, mio);
 	return mn;
+}
+
+static struct xseg_request * __snapshot_object(struct peer_req *pr,
+						struct map_node *mn)
+{
+	struct peerd *peer = pr->peer;
+	struct mapperd *mapper = __get_mapperd(peer);
+	struct mapper_io *mio = __get_mapper_io(pr);
+	//struct map *map = mn->map;
+	void *dummy;
+	int r = -1;
+	xport p;
+
+	//assert mn->volume != zero_block
+	//assert mn->flags & MF_OBJECT_EXIST
+	struct xseg_request *req = xseg_get_request(peer->xseg, pr->portno,
+						mapper->bportno, X_ALLOC);
+	if (!req){
+		XSEGLOG2(&lc, E, "Cannot get request for object %s", mn->object);
+		goto out_err;
+	}
+	r = xseg_prep_request(peer->xseg, req, mn->objectlen,
+				sizeof(struct xseg_request_snapshot));
+	if (r < 0){
+		XSEGLOG2(&lc, E, "Cannot prepare request for object %s", mn->object);
+		goto out_put;
+	}
+
+	char *target = xseg_get_target(peer->xseg, req);
+	strncpy(target, mn->object, req->targetlen);
+
+	struct xseg_request_snapshot *xsnapshot = (struct xseg_request_snapshot *) xseg_get_data(peer->xseg, req);
+	xsnapshot->target[0] = 0;
+	xsnapshot->targetlen = 0;
+
+	req->offset = 0;
+	req->size = block_size;
+	req->op = X_SNAPSHOT;
+	r = xseg_set_req_data(peer->xseg, req, pr);
+	if (r<0){
+		XSEGLOG2(&lc, E, "Cannot set request data for object %s", mn->object);
+		goto out_put;
+	}
+	r = __set_copyup_node(mio, req, mn);
+	if (r < 0)
+		goto out_unset;
+	p = xseg_submit(peer->xseg, req, pr->portno, X_ALLOC);
+	if (p == NoPort) {
+		XSEGLOG2(&lc, E, "Cannot submit for object %s", mn->object);
+		goto out_mapper_unset;
+	}
+	xseg_signal(peer->xseg, p);
+
+	mn->flags |= MF_OBJECT_SNAPSHOTTING;
+	XSEGLOG2(&lc, I, "Snapshotting up object %s", mn->object);
+	return req;
+
+out_mapper_unset:
+	__set_copyup_node(mio, req, NULL);
+out_unset:
+	xseg_get_req_data(peer->xseg, req, &dummy);
+out_put:
+	xseg_put_request(peer->xseg, req, pr->portno);
+out_err:
+	XSEGLOG2(&lc, E, "Snapshotting object %s failed", mn->object);
+	return NULL;
 }
 
 static struct xseg_request * copyup_object(struct peerd *peer, struct map_node *mn, struct peer_req *pr)
@@ -1389,6 +1709,133 @@ void deletion_cb(struct peer_req *pr, struct xseg_request *req)
 	signal_pr(pr);
 }
 
+void snapshot_cb(struct peer_req *pr, struct xseg_request *req)
+{
+	struct peerd *peer = pr->peer;
+	struct mapperd *mapper = __get_mapperd(peer);
+	(void)mapper;
+	struct mapper_io *mio = __get_mapper_io(pr);
+	struct map_node *mn = __get_copyup_node(mio, req);
+	if (!mn){
+		XSEGLOG2(&lc, E, "Cannot get map node");
+		goto out_err;
+	}
+	__set_copyup_node(mio, req, NULL);
+
+	if (req->state & XS_FAILED){
+		if (req->op == X_DELETE){
+			XSEGLOG2(&lc, E, "Delete req failed");
+			goto out_ok;
+		}
+		XSEGLOG2(&lc, E, "Req failed");
+		mn->flags &= ~MF_OBJECT_SNAPSHOTTING;
+		mn->flags &= ~MF_OBJECT_WRITING;
+		goto out_err;
+	}
+
+	if (req->op == X_WRITE) {
+		char old_object_name[MAX_OBJECT_LEN + 1];
+		uint32_t old_objectlen;
+
+		char *target = xseg_get_target(peer->xseg, req);
+		(void)target;
+		//assert mn->flags & MF_OBJECT_WRITING
+		mn->flags &= ~MF_OBJECT_WRITING;
+		strncpy(old_object_name, mn->object, mn->objectlen);
+		old_objectlen = mn->objectlen;
+
+		struct map_node tmp;
+		char *data = xseg_get_data(peer->xseg, req);
+		map_to_object(&tmp, (unsigned char *) data);
+		mn->flags &= ~MF_OBJECT_EXIST;
+
+		strncpy(mn->object, tmp.object, tmp.objectlen);
+		mn->object[tmp.objectlen] = 0;
+		mn->objectlen = tmp.objectlen;
+		XSEGLOG2(&lc, I, "Object write of %s completed successfully", mn->object);
+		//signal_mapnode since Snapshot was successfull
+		signal_mapnode(mn);
+		/*
+		//do delete old object
+		strncpy(tmp.object, old_object_name, old_objectlen);
+		tmp.object[old_objectlen] = 0;
+		tmp.objectlen = old_objectlen;
+		tmp.flags = MF_OBJECT_EXIST;
+		struct xseg_request *xreq = __delete_object(pr, &tmp);
+		if (!xreq){
+			//just a warning. Snapshot was successfull
+			XSEGLOG2(&lc, W, "Cannot delete old object %s", tmp.object);
+			goto out_ok;
+		}
+		//overwrite copyup node, since tmp is a stack dummy variable
+		__set_copyup_node (mio, xreq, mn);
+		XSEGLOG2(&lc, I, "Deletion of %s pending", tmp.object);
+		*/
+		goto out_ok;
+	} else if (req->op == X_SNAPSHOT) {
+		//issue write_object;
+		mn->flags &= ~MF_OBJECT_SNAPSHOTTING;
+		struct map *map = mn->map;
+		if (!map){
+			XSEGLOG2(&lc, E, "Object %s has not map back pointer", mn->object);
+			goto out_err;
+		}
+
+		/* construct a tmp map_node for writing purposes */
+		//char *target = xseg_get_target(peer->xseg, req);
+		struct map_node newmn = *mn;
+		newmn.flags = 0;
+		struct xseg_reply_snapshot *xreply;
+		xreply = (struct xseg_reply_snapshot *) xseg_get_data(peer->xseg, req);
+		//assert xreply->targetlen !=0
+		//assert xreply->targetlen < XSEG_MAX_TARGETLEN
+		//xreply->target[xreply->targetlen] = 0;
+		//assert xreply->target valid
+		strncpy(newmn.object, xreply->target, xreply->targetlen);
+		newmn.object[req->targetlen] = 0;
+		newmn.objectlen = req->targetlen;
+		newmn.objectidx = mn->objectidx;
+		struct xseg_request *xreq = object_write(peer, pr, map, &newmn);
+		if (!xreq){
+			XSEGLOG2(&lc, E, "Object write returned error for object %s"
+					"\n\t of map %s [%llu]",
+					mn->object, map->volume, (unsigned long long) mn->objectidx);
+			goto out_err;
+		}
+		mn->flags |= MF_OBJECT_WRITING;
+		__set_copyup_node (mio, xreq, mn);
+
+		XSEGLOG2(&lc, I, "Object %s snapshot completed. Pending writing.", mn->object);
+	} else if (req->op == X_DELETE){
+		//deletion of the old block completed
+		XSEGLOG2(&lc, I, "Deletion of completed");
+		goto out_ok;
+		;
+	} else {
+		//wtf??
+		;
+	}
+
+out:
+	xseg_put_request(peer->xseg, req, pr->portno);
+	return;
+
+out_err:
+	mio->snap_pending--;
+	XSEGLOG2(&lc, D, "Mio->snap_pending: %u", mio->snap_pending);
+	mio->err = 1;
+	if (mn)
+		signal_mapnode(mn);
+	signal_pr(pr);
+	goto out;
+
+out_ok:
+	mio->snap_pending--;
+	signal_pr(pr);
+	goto out;
+
+
+}
 void copyup_cb(struct peer_req *pr, struct xseg_request *req)
 {
 	struct peerd *peer = pr->peer;
@@ -1672,6 +2119,119 @@ static int do_close(struct peer_req *pr, struct map *map)
 	return do_dropcache(pr, map);
 }
 
+static int do_snapshot(struct peer_req *pr, struct map *map)
+{
+	uint64_t i;
+	struct peerd *peer = pr->peer;
+	struct mapper_io *mio = __get_mapper_io(pr);
+	struct map_node *mn;
+	struct xseg_request *req;
+
+	if (!(map->flags & MF_MAP_EXCLUSIVE)){
+		XSEGLOG2(&lc, E, "Map was not opened exclusively");
+		return -1;
+	}
+	XSEGLOG2(&lc, I, "Starting snapshot for map %s", map->volume);
+	map->flags |= MF_MAP_SNAPSHOTTING;
+
+	uint64_t nr_obj = calc_map_obj(map);
+	mio->cb = snapshot_cb;
+	mio->snap_pending = 0;
+	mio->err = 0;
+	for (i = 0; i < nr_obj; i++){
+
+		/* throttle pending snapshots
+		 * this should be nr_ops of the blocker, but since we don't know
+		 * that, we assume based on our own nr_ops
+		 */
+		wait_on_pr(pr, mio->snap_pending >= peer->nr_ops);
+
+		mn = get_mapnode(map, i);
+		if (!mn)
+			//warning?
+			continue;
+		if (!(mn->flags & MF_OBJECT_EXIST)){
+			put_mapnode(mn);
+			continue;
+		}
+		// make sure all pending operations on all objects are completed
+		wait_on_mapnode(mn, mn->flags & MF_OBJECT_NOT_READY);
+
+		/* TODO will this ever happen?? */
+		if (mn->flags & MF_OBJECT_DESTROYED){
+			put_mapnode(mn);
+			continue;
+		}
+
+		req = __snapshot_object(pr, mn);
+		if (!req){
+			mio->err = 1;
+			put_mapnode(mn);
+			break;
+		}
+		mio->snap_pending++;
+		/* do not put_mapnode here. cb does that */
+	}
+
+	wait_on_pr(pr, mio->snap_pending > 0);
+	mio->cb = NULL;
+
+	if (mio->err)
+		goto out_err;
+
+	/* calculate name of snapshot */
+	struct map tmp_map = *map;
+	unsigned char sha[SHA256_DIGEST_SIZE];
+	unsigned char *buf = malloc(block_size);
+	char newvolumename[MAX_VOLUME_LEN];
+	uint32_t newvolumenamelen = HEXLIFIED_SHA256_DIGEST_SIZE;
+	uint64_t pos = 0;
+	uint64_t max_objidx = calc_map_obj(map);
+	int r;
+
+	for (i = 0; i < max_objidx; i++) {
+		mn = find_object(map, i);
+		if (!mn){
+			XSEGLOG2(&lc, E, "Cannot find object %llu for map %s",
+					(unsigned long long) i, map->volume);
+			goto out_err;
+		}
+		v0_object_to_map(mn, buf+pos);
+		pos += v0_objectsize_in_map;
+	}
+	SHA256(buf, pos, sha);
+	hexlify(sha, newvolumename);
+	strncpy(tmp_map.volume, newvolumename, newvolumenamelen);
+	tmp_map.volumelen = newvolumenamelen;
+	free(buf);
+	tmp_map.version = 0; // set volume version to pithos image
+
+	/* write the map of the Snapshot */
+	r = write_map(pr, &tmp_map);
+	if (r < 0)
+		goto out_err;
+
+	r = xseg_resize_request(peer->xseg, pr->req, pr->req->targetlen,
+			sizeof(struct xseg_reply_snapshot));
+	if (r < 0){
+		XSEGLOG2(&lc, E, "Cannot resize request");
+		goto out_err;
+	}
+	struct xseg_reply_snapshot *xreply = (struct xseg_reply_snapshot *)
+						xseg_get_data(peer->xseg, pr->req);
+	strncpy(xreply->target, newvolumename, newvolumenamelen);
+	xreply->targetlen = newvolumenamelen;
+	map->flags &= ~MF_MAP_SNAPSHOTTING;
+	XSEGLOG2(&lc, I, "Snapshot for map %s completed", map->volume);
+	return 0;
+
+out_err:
+	map->flags &= ~MF_MAP_SNAPSHOTTING;
+	XSEGLOG2(&lc, E, "Snapshot for map %s failed", map->volume);
+	return -1;
+}
+
+
 static int do_destroy(struct peer_req *pr, struct map *map)
 {
 	uint64_t i;
@@ -1810,7 +2370,6 @@ static int do_mapw(struct peer_req *pr, struct map *map)
 static int do_clone(struct peer_req *pr, struct map *map)
 {
 	int r;
-//	char buf[XSEG_MAX_TARGETLEN];
 	struct peerd *peer = pr->peer;
 	struct mapperd *mapper = __get_mapperd(peer);
 	char *target = xseg_get_target(peer->xseg, pr->req);
@@ -2167,7 +2726,24 @@ void * handle_close(struct peer_req *pr)
 	return NULL;
 }
 
-int dispatch_accepted(struct peerd *peer, struct peer_req *pr, 
+void * handle_snapshot(struct peer_req *pr)
+{
+	struct peerd *peer = pr->peer;
+	char *target = xseg_get_target(peer->xseg, pr->req);
+	/* request EXCLUSIVE access, but do not force it.
+	 * check if succeeded on do_destroy
+	 */
+	int r = map_action(do_snapshot, pr, target, pr->req->targetlen,
+				MF_ARCHIP|MF_LOAD|MF_EXCLUSIVE);
+	if (r < 0)
+		fail(peer, pr);
+	else
+		complete(peer, pr);
+	ta--;
+	return NULL;
+}
+
+int dispatch_accepted(struct peerd *peer, struct peer_req *pr,
 			struct xseg_request *req)
 {
 	//struct mapperd *mapper = __get_mapperd(peer);
@@ -2182,7 +2758,7 @@ int dispatch_accepted(struct peerd *peer, struct peer_req *pr,
 		case X_CLONE: action = handle_clone; break;
 		case X_MAPR: action = handle_mapr; break;
 		case X_MAPW: action = handle_mapw; break;
-//		case X_SNAPSHOT: handle_snap(peer, pr, req); break;
+		case X_SNAPSHOT: action = handle_snapshot; break;
 		case X_INFO: action = handle_info; break;
 		case X_DELETE: action = handle_destroy; break;
 		case X_OPEN: action = handle_open; break;
