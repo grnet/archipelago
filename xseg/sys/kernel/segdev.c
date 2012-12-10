@@ -350,5 +350,5 @@ module_exit(segdev_mod_exit);
 
 MODULE_DESCRIPTION("segdev");
 MODULE_AUTHOR("XSEG");
-MODULE_LICENSE("GPL");
+MODULE_LICENSE("BSD");
 

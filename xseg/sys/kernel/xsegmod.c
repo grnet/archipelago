@@ -146,5 +146,5 @@ module_exit(xsegmod_exit);
 
 MODULE_DESCRIPTION("xseg");
 MODULE_AUTHOR("XSEG");
-MODULE_LICENSE("GPL");
+MODULE_LICENSE("BSD");
 

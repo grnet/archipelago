@@ -26,7 +26,7 @@
 #include <peers/kernel/xsegbd.h>
 MODULE_DESCRIPTION("xseg_segdev");
 MODULE_AUTHOR("XSEG");
-MODULE_LICENSE("GPL");
+MODULE_LICENSE("BSD");
 
 /* FIXME */
 static struct xseg *xsegments[65536];
