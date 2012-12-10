@@ -644,6 +644,9 @@ int handle_snapshot(struct peerd *peer, struct peer_req *pr)
 		else {
 			XSEGLOG2(&lc, I, "Stating %s completed Successfully."
 					"No need to write.", rio->second_name);
+			XSEGLOG2(&lc, I, "Snapshot of object %s to object %s completed",
+					rio->obj_name, rio->second_name);
+			req->serviced = req->size;
 			r = 0;
 			goto out_buf;
 		}
