@@ -1797,13 +1797,16 @@ static int do_clone(struct peer_req *pr, struct map *map)
 	else
 		clonemap->size = xclone->size;
 	if (clonemap->size < map->size){
-		target = xseg_get_target(peer->xseg, pr->req);
-		strncpy(buf, target, pr->req->targetlen);
-		buf[pr->req->targetlen] = 0;
 		XSEGLOG2(&lc, W, "Requested clone size (%llu) < map size (%llu)"
 				"\n\t for requested clone %s",
 				(unsigned long long) xclone->size,
-				(unsigned long long) map->size, buf);
+				(unsigned long long) map->size, clonemap->volume);
+		goto out_err;
+	}
+	if (clonemap->size > MAX_VOLUME_SIZE) {
+		XSEGLOG2(&lc, E, "Requested size %llu > max volume size %llu"
+				"\n\t for volume %s",
+				clonemap->size, MAX_VOLUME_SIZE, clonemap->volume);
 		goto out_err;
 	}
 
@@ -1953,7 +1956,15 @@ void * handle_clone(struct peer_req *pr)
 					MF_LOAD);
 	} else {
 		/* else try to create a new volume */
+		XSEGLOG2(&lc, I, "Creating volume");
 		if (!xclone->size){
+			XSEGLOG2(&lc, E, "Cannot create volume. Size not specified");
+			r = -1;
+			goto out;
+		}
+		if (xclone->size > MAX_VOLUME_SIZE) {
+			XSEGLOG2(&lc, E, "Requested size %llu > max volume "
+					"size %llu", xclone->size, MAX_VOLUME_SIZE);
 			r = -1;
 			goto out;
 		}
@@ -1961,7 +1972,6 @@ void * handle_clone(struct peer_req *pr)
 		struct map *map;
 		char *target = xseg_get_target(peer->xseg, pr->req);
 
-		XSEGLOG2(&lc, I, "Creating volume");
 		//create a new empty map of size
 		map = create_map(mapper, target, pr->req->targetlen, MF_ARCHIP);
 		if (!map){
@@ -2156,7 +2166,6 @@ int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 	mapper = mapperd;
 	mapper->hashmaps = xhash_new(3, STRING);
 
-	printf("%llu \n", MAX_VOLUME_SIZE);
 	for (i = 0; i < peer->nr_ops; i++) {
 		struct mapper_io *mio = malloc(sizeof(struct mapper_io));
 		mio->copyups_nodes = xhash_new(3, INTEGER);
@@ -2166,27 +2175,21 @@ int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 		peer->peer_reqs[i].priv = mio;
 	}
 
-	for (i = 0; i < argc; i++) {
-		if (!strcmp(argv[i], "-bp") && (i+1) < argc){
-			mapper->bportno = atoi(argv[i+1]);
-			i += 1;
-			continue;
-		}
-		if (!strcmp(argv[i], "-mbp") && (i+1) < argc){
-			mapper->mbportno = atoi(argv[i+1]);
-			i += 1;
-			continue;
-		}
-		/* enforce only one thread */
-		if (!strcmp(argv[i], "-t") && (i+1) < argc){
-			int t = atoi(argv[i+1]);
-			if (t != 1) {
-				printf("ERROR: mapperd supports only one thread for the moment\nExiting ...\n");
-				return -1;
-			}
-			i += 1;
-			continue;
-		}
+	mapper->bportno = -1;
+	mapper->mbportno = -1;
+	BEGIN_READ_ARGS(argc, argv);
+	READ_ARG_ULONG("-bp", mapper->bportno);
+	READ_ARG_ULONG("-mbp", mapper->mbportno);
+	END_READ_ARGS();
+	if (mapper->bportno == -1){
+		XSEGLOG2(&lc, E, "Portno for blocker must be provided");
+		usage(argv[0]);
+		return -1;
+	}
+	if (mapper->mbportno == -1){
+		XSEGLOG2(&lc, E, "Portno for mblocker must be provided");
+		usage(argv[0]);
+		return -1;
 	}
 
 	const struct sched_param param = { .sched_priority = 99 };

@@ -85,6 +85,7 @@ struct peer_req *alloc_peer_req(struct peerd *peer);
 void free_peer_req(struct peerd *peer, struct peer_req *pr);
 void get_submits_stats();
 void get_responds_stats();
+void usage();
 
 #ifdef MT
 int thread_execute(struct peerd *peer, void (*func)(void *arg), void *arg);
