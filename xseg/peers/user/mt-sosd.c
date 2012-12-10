@@ -117,7 +117,8 @@ enum rados_state {
 	ACCEPTED = 0,
 	PENDING = 1,
 	READING = 2,
-	WRITING = 3
+	WRITING = 3,
+	STATING = 4
 };
 
 struct radosd {
@@ -590,9 +591,10 @@ int handle_snapshot(struct peerd *peer, struct peer_req *pr)
 			XSEGLOG2(&lc, D, "Read %llu, Trainling zeros %llu",
 					rio->read, trailing_zeros);
 
+			rio->read -= trailing_zeros;
 			//calculate snapshot name
 			unsigned char sha[SHA256_DIGEST_SIZE];
-			SHA256((unsigned char *) rio->buf, rio->read-trailing_zeros, sha);
+			SHA256((unsigned char *) rio->buf, rio->read, sha);
 			r = xseg_resize_request(peer->xseg, pr->req, pr->req->targetlen,
 					sizeof(struct xseg_reply_snapshot));
 
@@ -601,25 +603,21 @@ int handle_snapshot(struct peerd *peer, struct peer_req *pr)
 			hexlify(sha, xreply->target);
 			xreply->targetlen = HEXLIFIED_SHA256_DIGEST_SIZE;
 
-			//TODO aio_stat
-			//write
-			rio->state = WRITING;
-
-			//FIXME
 			strncpy(rio->second_name, xreply->target, xreply->targetlen);
 			rio->second_name[xreply->targetlen] = 0;
 			XSEGLOG2(&lc, I, "Calculated %s as snapshot of %s",
 					rio->second_name, rio->obj_name);
-			XSEGLOG2(&lc, I, "Writing %s", rio->second_name);
-			if (do_aio_generic(peer, pr, X_WRITE, rio->second_name,
-					rio->buf, rio->read - trailing_zeros, 0) < 0) {
-				XSEGLOG2(&lc, E, "Writing of %s failed on do_aio_write", rio->second_name);
+
+			//aio_stat
+			rio->state = STATING;
+			r = do_aio_generic(peer, pr, X_INFO, rio->second_name, NULL, 0, 0);
+			if (r < 0){
+				XSEGLOG2(&lc, E, "Stating %s failed", rio->second_name_name);
 				r = -1;
 				goto out_buf;
 			}
 			return 0;
 		}
-
 		XSEGLOG2(&lc, I, "Resubmitting read of %s", rio->obj_name);
 		if (do_aio_generic(peer, pr, X_READ, rio->obj_name, rio->buf + rio->read,
 			req->size - rio->read, req->offset + rio->read) < 0) {
@@ -628,6 +626,28 @@ int handle_snapshot(struct peerd *peer, struct peer_req *pr)
 			r = -1;
 			goto out_buf;
 		}
+		return 0;
+	} else if (rio->state == STATING){
+		if (pr->retval < 0){
+			//write
+			XSEGLOG2(&lc, I, "Stating %s failed. Writing.",
+							rio->second_name);
+			rio->state = WRITING;
+			if (do_aio_generic(peer, pr, X_WRITE, rio->second_name,
+						rio->buf, rio->read, 0) < 0) {
+				XSEGLOG2(&lc, E, "Writing of %s failed on do_aio_write", rio->second_name);
+				r = -1;
+				goto out_buf;
+			}
+			return 0;
+		}
+		else {
+			XSEGLOG2(&lc, I, "Stating %s completed Successfully."
+					"No need to write.", rio->second_name);
+			r = 0;
+			goto out_buf;
+		}
+
 	}
 	else if (rio->state == WRITING){
 		struct xseg_reply_snapshot *xreply;
