@@ -606,10 +606,10 @@ def vlmc_showmapped(args):
     except:
         return -1
 
+    print "id\tpool\timage\tsnap\tdevice"
     if not devices:
         print "No volumes mapped\n"
         return -1
-    print "id\tpool\timage\tsnap\tdevice"
     try:
         for f in devices:
             d_id = open(XSEGBD_SYSFS + "devices/" + f + "/id").read().strip()
