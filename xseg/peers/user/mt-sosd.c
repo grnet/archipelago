@@ -612,7 +612,7 @@ int handle_snapshot(struct peerd *peer, struct peer_req *pr)
 			rio->state = STATING;
 			r = do_aio_generic(peer, pr, X_INFO, rio->second_name, NULL, 0, 0);
 			if (r < 0){
-				XSEGLOG2(&lc, E, "Stating %s failed", rio->second_name_name);
+				XSEGLOG2(&lc, E, "Stating %s failed", rio->second_name);
 				r = -1;
 				goto out_buf;
 			}

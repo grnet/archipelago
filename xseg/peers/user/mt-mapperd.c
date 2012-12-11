@@ -1755,7 +1755,7 @@ void snapshot_cb(struct peer_req *pr, struct xseg_request *req)
 		XSEGLOG2(&lc, I, "Object write of %s completed successfully", mn->object);
 		//signal_mapnode since Snapshot was successfull
 		signal_mapnode(mn);
-		/*
+
 		//do delete old object
 		strncpy(tmp.object, old_object_name, old_objectlen);
 		tmp.object[old_objectlen] = 0;
@@ -1770,8 +1770,6 @@ void snapshot_cb(struct peer_req *pr, struct xseg_request *req)
 		//overwrite copyup node, since tmp is a stack dummy variable
 		__set_copyup_node (mio, xreq, mn);
 		XSEGLOG2(&lc, I, "Deletion of %s pending", tmp.object);
-		*/
-		goto out_ok;
 	} else if (req->op == X_SNAPSHOT) {
 		//issue write_object;
 		mn->flags &= ~MF_OBJECT_SNAPSHOTTING;
