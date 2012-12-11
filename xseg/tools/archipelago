@@ -642,7 +642,7 @@ def vlmc_showmapped(args):
     print "id\tpool\timage\tsnap\tdevice"
     if not devices:
         print "No volumes mapped\n"
-        return -1
+        return 0
     try:
         for f in devices:
             d_id = open(XSEGBD_SYSFS + "devices/" + f + "/id").read().strip()
@@ -654,6 +654,12 @@ def vlmc_showmapped(args):
         print >> sys.stderr, reason
         return -2
     return len(devices)
+
+def vlmc_showmapped_wrapper(args):
+    r = vlmc_showmapped(args)
+    if r < 0:
+        return r
+    return 0
 
 @exclusive
 def vlmc_create(args):
@@ -867,7 +873,7 @@ def vlmc():
     unmap_parser.add_argument('-p', '--pool', type=str, nargs='?', help='for backwards compatiblity with rbd')
 
     showmapped_parser = subparsers.add_parser('showmapped', help='Show mapped volumes')
-    showmapped_parser.set_defaults(func=vlmc_showmapped)
+    showmapped_parser.set_defaults(func=vlmc_showmapped_wrapper)
     showmapped_parser.add_argument('-p', '--pool', type=str, nargs='?', help='for backwards compatiblity with rbd')
 
     list_parser = subparsers.add_parser('list', help='List volumes')

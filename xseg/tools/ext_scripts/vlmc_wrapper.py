@@ -109,7 +109,7 @@ def _ParseVlmcShowmappedOutput(output, volume_name):
   if field_cnt != allfields:
     sys.stderr.write("Cannot parse vlmc showmapped output because its format"
                 " seems to have changed; expected %s fields, found %s" % 
-		(allfields, field_cnt)
+		(allfields, field_cnt))
     sys.exit(1)
 
   matched_lines = \
