@@ -48,6 +48,7 @@
 #include <sched.h>
 #include <sys/syscall.h>
 #include <openssl/sha.h>
+#include <ctype.h>
 
 /* general mapper flags */
 #define MF_LOAD 	(1 << 0)
@@ -1799,7 +1800,7 @@ static int do_mapw(struct peer_req *pr, struct map *map)
 static int do_clone(struct peer_req *pr, struct map *map)
 {
 	int r;
-	char buf[XSEG_MAX_TARGETLEN];
+//	char buf[XSEG_MAX_TARGETLEN];
 	struct peerd *peer = pr->peer;
 	struct mapperd *mapper = __get_mapperd(peer);
 	char *target = xseg_get_target(peer->xseg, pr->req);
@@ -2249,7 +2250,7 @@ int wait_reply(struct peerd *peer, struct xseg_request *expected_req)
 	struct peer_req *pr;
 	xport i;
 	int  r, c = 0;
-	struct xseg_request *req, *received;
+	struct xseg_request *received;
 	xseg_prepare_wait(xseg, portno_start);
 	while(1) {
 		XSEGLOG2(&lc, D, "Attempting to check for reply");
@@ -2291,7 +2292,6 @@ void custom_peer_finalize(struct peerd *peer)
 		XSEGLOG2(&lc, E, "Cannot get peer request");
 		return;
 	}
-	int r;
 	struct map *map;
 	struct xseg_request *req;
 	xhash_iter_t it;

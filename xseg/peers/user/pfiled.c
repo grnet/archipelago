@@ -212,7 +212,7 @@ static void log_io(char *msg, struct io *io)
 	data[dend] = 0;
 
 	fprintf(stderr,
-			"%s: fd:%u, op:%u offset: %llu size: %lu retval: %lu, reqstate: %u, serviced: %u\n"
+			"%s: fd:%u, op:%u offset: %llu size: %lu retval: %lu, reqstate: %u, serviced: %lu\n"
 			"target[%u]: '%s', data[%llu]:\n%s------------------\n\n",
 			msg,
 			(unsigned int)io->fdcacheidx, /* this is cacheidx not fd */
@@ -806,6 +806,7 @@ static int pfiled_loop(struct pfiled *pfiled)
 	uint32_t portno = pfiled->portno;
 	/* GCC + pthreads glitch? */
 	struct io *io;
+	(void)io;
 
 	for (;!(isTerminate() && xq_count(&pfiled->free_ops) == pfiled->nr_ops);) {
 		io = wake_up_next_iothread(pfiled);

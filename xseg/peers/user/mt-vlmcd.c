@@ -37,7 +37,7 @@
 #include <unistd.h>
 #include <xseg/xseg.h>
 #include <xseg/protocol.h>
-#include <speer.h>
+#include <peer.h>
 #include <sched.h>
 #include <sys/syscall.h>
 
@@ -181,13 +181,16 @@ static int handle_mapping(struct peerd *peer, struct peer_req *pr,
 	
 	//assert vio>mreq == req 
 	if (vio->mreq != req){
-		printf("vio->mreq %lx, req: %lx state: %d breq[0]: %lx\n", vio->mreq, req, vio->state, vio->breqs[0]);
+		printf("vio->mreq %lx, req: %lx state: %d breq[0]: %lx\n",
+				(unsigned long)vio->mreq, (unsigned long)req,
+				vio->state, (unsigned long)vio->breqs[0]);
 		r = *(volatile int *)0;
 		return -1;
 	}
 	/* FIXME shouldn's XS_FAILED be sufficient ?? */
 	if (vio->mreq->state & XS_FAILED && !(vio->mreq->state & XS_SERVED)){
-		fprintf(stderr, "req %lx (op: %d) failed\n", vio->mreq, vio->mreq->op);
+		fprintf(stderr, "req %lx (op: %d) failed\n",
+				(unsigned long)vio->mreq, vio->mreq->op);
 		xseg_put_request(peer->xseg, vio->mreq, pr->portno);
 		vio->mreq = NULL;
 		__set_vio_state(vio, CONCLUDED);
@@ -301,10 +304,13 @@ static int handle_serving(struct peerd *peer, struct peer_req *pr,
 {
 	struct vlmc_io *vio = __get_vlmcio(pr);
 	struct vlmcd *vlmc = __get_vlmcd(peer);
+	(void)vlmc;
 	struct xseg_request *breq = req;
 
 	if (breq->state & XS_FAILED && !(breq->state & XS_SERVED)) {
-		fprintf(stderr, "req %lx (op: %d) failed at offset \n", req, req->op, req->offset);
+		fprintf(stderr, "req %lx (op: %d) failed at offset %llu\n",
+				(unsigned long)req, req->op,
+				(unsigned long long)req->offset);
 		vio->err = 1;
 	} else {
 		//assert breq->serviced == breq->size
@@ -331,6 +337,7 @@ int dispatch(struct peerd *peer, struct peer_req *pr, struct xseg_request *req,
 {
 	struct vlmc_io *vio = __get_vlmcio(pr);
 	struct vlmcd *vlmc = __get_vlmcd(peer);
+	(void)vlmc;
 
 	xlock_acquire(&vio->lock,1);
 	if (pr->req == req)
@@ -371,6 +378,25 @@ int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 	}
 	peer->priv = (void *) vlmc;
 
+	vlmc->mportno = NoPort;
+	vlmc->bportno = NoPort;
+
+        BEGIN_READ_ARGS(argc, argv);
+	READ_ARG_ULONG("-mp", vlmc->mportno);
+	READ_ARG_ULONG("-bp", vlmc->bportno);
+	END_READ_ARGS();
+
+	if (vlmc->bportno == NoPort) {
+		XSEGLOG2(&lc, E, "bportno must be provided");
+		usage(argv[0]);
+		return -1;
+	}
+	if (vlmc->mportno == NoPort) {
+		XSEGLOG2(&lc, E, "mportno must be provided");
+		usage(argv[0]);
+		return -1;
+	}
+
 	for (i = 0; i < peer->nr_ops; i++) {
 		vio = malloc(sizeof(struct vlmc_io));
 		if (!vio) {
@@ -390,18 +416,6 @@ int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 		return -1;
 	}
 
-	for (i = 0; i < argc; i++) {
-		if (!strcmp(argv[i], "-mp") && (i+1) < argc){
-			vlmc->mportno = atoi(argv[i+1]);
-			i += 1;
-			continue;
-		}
-		if (!strcmp(argv[i], "-bp") && (i+1) < argc){
-			vlmc->bportno = atoi(argv[i+1]);
-			i += 1;
-			continue;
-		}
-	}
 
 	const struct sched_param param = { .sched_priority = 99 };
 	sched_setscheduler(syscall(SYS_gettid), SCHED_FIFO, &param);

@@ -196,10 +196,12 @@ static void fail(struct store *store, struct io *io)
 	}
 }
 
+/*
 static void pending(struct store *store, struct io *io)
 {
 	io->req->state = XS_PENDING;
 }
+*/
 
 static void handle_unknown(struct store *store, struct io *io)
 {
@@ -636,6 +638,7 @@ static int filed_loop(struct store *store)
 
 	for (;;) {
 		io = wake_up_next_iothread(store);
+		(void)io;
 		xseg_prepare_wait(xseg, portno);
 		xseg_wait_signal(xseg, 1000000UL);
 	}

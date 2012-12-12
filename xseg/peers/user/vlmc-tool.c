@@ -323,7 +323,7 @@ int main(int argc, char *argv[])
 	char *snap = NULL;
 	uint64_t size = -1;
 	//char *pool = NULL;
-	char *config = NULL;
+//	char *config = NULL;
 
 	for (i = 3; i < argc; i++) {
 		if ((!strcmp(argv[i], "-s") || !strcmp(argv[i], "--size")) && i+1 < argc){
@@ -333,6 +333,7 @@ int main(int argc, char *argv[])
 				size = atol(argv[i+1]);
 				i++;
 			}
+/*
 		}else if ((!strcmp(argv[i], "-c") || !strcmp(argv[i], "--config")) && i+1 < argc){
 			if (!validate_alphanumeric(argv[i+1])){
 				err_in_arg(i, argv[i]);
@@ -340,6 +341,7 @@ int main(int argc, char *argv[])
 				config = argv[i+1];
 				i++;
 			}
+*/
 		} else if (!strcmp(argv[i], "--snap") && i+1 < argc){
 			if (!validate_alphanumeric(argv[i+1])){
 				err_in_arg(i, argv[i]);

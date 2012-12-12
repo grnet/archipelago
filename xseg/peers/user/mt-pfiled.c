@@ -762,6 +762,7 @@ int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 	pfiled->path_len = strlen(pfiled->path);
 	if (!pfiled->path_len){
 		XSEGLOG2(&lc, E, "Pithos path was not provided");
+		usage(argv[0]);
 		return -1;
 	}
 	if (pfiled->path[pfiled->path_len -1] != '/'){
@@ -772,6 +773,7 @@ int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 	pfiled->vpath_len = strlen(pfiled->vpath);
 	if (!pfiled->vpath_len){
 		XSEGLOG2(&lc, E, "Archipelagos path was not provided");
+		usage(argv[0]);
 		return -1;
 	}
 	if (pfiled->vpath[pfiled->vpath_len -1] != '/'){
@@ -794,6 +796,7 @@ void custom_peer_finalize(struct peerd *peer)
 	return;
 }
 
+/*
 static int safe_atoi(char *s)
 {
 	long l;
@@ -805,3 +808,4 @@ static int safe_atoi(char *s)
 	else
 		return -1;
 }
+*/

@@ -612,17 +612,15 @@ int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 		return -1;
 	}
 	rados->pool[0] = 0;
-	for (i = 0; i < argc; i++) {
-		if (!strcmp(argv[i], "--pool") && (i+1) < argc){
-			strncpy(rados->pool, argv[i+1], MAX_POOL_NAME);
-			rados->pool[MAX_POOL_NAME] = 0;
-			i += 1;
-			continue;
-		}
-	}
+
+	BEGIN_READ_ARGS(argc, argv);
+	READ_ARG_STRING("--pool", rados->pool, MAX_POOL_NAME);
+	END_READ_ARGS();
+
 	if (!rados->pool[0]){
 		XSEGLOG2(&lc, E , "Pool must be provided");
 		free(rados);
+		usage(argv[0]);
 		return -1;
 	}
 
