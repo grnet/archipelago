@@ -61,6 +61,7 @@ all: libxseg.a libxseg.so
 	make -C xhash all
 	make -C xheap all
 	make -C xobj all
+	make -C python all
 
 COMMA=,
 _initialize.c: drivers
