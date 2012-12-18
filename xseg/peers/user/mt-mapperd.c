@@ -454,7 +454,7 @@ static struct xseg_request * __close_map(struct peer_req *pr, struct map *map)
 	if (!reqtarget)
 		goto out_put;
 	strncpy(reqtarget, map->volume, req->targetlen);
-	req->op = X_CLOSE;
+	req->op = X_RELEASE;
 	req->size = 0;
 	req->offset = 0;
 	r = xseg_set_req_data(peer->xseg, req, pr);
@@ -930,7 +930,7 @@ static struct xseg_request * __open_map(struct peer_req *pr, struct map *m,
 	if (!reqtarget)
 		goto out_put;
 	strncpy(reqtarget, m->volume, req->targetlen);
-	req->op = X_OPEN;
+	req->op = X_ACQUIRE;
 	req->size = block_size;
 	req->offset = 0;
 	if (!(flags & MF_FORCE))
@@ -1652,6 +1652,16 @@ static int do_info(struct peer_req *pr, struct map *map)
 }
 
 
+static int do_open(struct peer_req *pr, struct map *map)
+{
+	if (map->flags & MF_MAP_EXCLUSIVE){
+		return 0;
+	}
+	else {
+		return -1;
+	}
+}
+
 static int do_close(struct peer_req *pr, struct map *map)
 {
 	if (map->flags & MF_MAP_EXCLUSIVE){
@@ -2116,6 +2126,21 @@ void * handle_destroy(struct peer_req *pr)
 	 * check if succeeded on do_destroy
 	 */
 	int r = map_action(do_destroy, pr, target, pr->req->targetlen,
+				MF_ARCHIP|MF_LOAD|MF_EXCLUSIVE);
+	if (r < 0)
+		fail(peer, pr);
+	else
+		complete(peer, pr);
+	ta--;
+	return NULL;
+}
+
+void * handle_open(struct peer_req *pr)
+{
+	struct peerd *peer = pr->peer;
+	char *target = xseg_get_target(peer->xseg, pr->req);
+	//here we do not want to load
+	int r = map_action(do_open, pr, target, pr->req->targetlen,
 				MF_ARCHIP|MF_LOAD|MF_EXCLUSIVE);
 	if (r < 0)
 		fail(peer, pr);
