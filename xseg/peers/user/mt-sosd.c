@@ -497,7 +497,7 @@ void watch_cb(uint8_t opcode, uint64_t ver, void *arg)
 	//struct radosd *rados = (struct radosd *) pr->peer->priv;
 	struct rados_io *rio = (struct rados_io *) (pr->priv);
 
-	if (pr->req->op == X_OPEN){
+	if (pr->req->op == X_ACQUIRE){
 		XSEGLOG2(&lc, I, "watch cb signaling rio of %s", rio->obj_name);
 		pthread_cond_signal(&rio->cond);
 	}
@@ -585,7 +585,7 @@ void * unlock_op(void *arg)
 	return NULL;
 }
 
-int handle_open(struct peerd *peer, struct peer_req *pr)
+int handle_acquire(struct peerd *peer, struct peer_req *pr)
 {
 	int r = spawnthread(peer, pr, lock_op);
 	if (r < 0)
@@ -594,7 +594,7 @@ int handle_open(struct peerd *peer, struct peer_req *pr)
 }
 
 
-int handle_close(struct peerd *peer, struct peer_req *pr)
+int handle_release(struct peerd *peer, struct peer_req *pr)
 {
 	int r = spawnthread(peer, pr, unlock_op);
 	if (r < 0)
@@ -731,10 +731,10 @@ int dispatch(struct peerd *peer, struct peer_req *pr, struct xseg_request *req,
 			else
 				handle_copy(peer, pr);
 			break;
-		case X_OPEN:
-			handle_open(peer, pr); break;
-		case X_CLOSE:
-			handle_close(peer, pr); break;
+		case X_ACQUIRE:
+			handle_acquire(peer, pr); break;
+		case X_RELEASE:
+			handle_release(peer, pr); break;
 
 		default:
 			fail(peer, pr);
