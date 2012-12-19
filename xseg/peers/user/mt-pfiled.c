@@ -572,7 +572,7 @@ out:
 	return;
 }
 
-static void handle_open(struct peerd *peer, struct peer_req *pr)
+static void handle_acquire(struct peerd *peer, struct peer_req *pr)
 {
 	struct pfiled *pfiled = __get_pfiled(peer);
 //	struct fio *fio = __get_fio(pr);
@@ -626,7 +626,7 @@ out:
 	return;
 }
 
-static void handle_close(struct peerd *peer, struct peer_req *pr)
+static void handle_release(struct peerd *peer, struct peer_req *pr)
 {
 	struct pfiled *pfiled = __get_pfiled(peer);
 //	struct fio *fio = __get_fio(pr);
@@ -683,10 +683,10 @@ int dispatch(struct peerd *peer, struct peer_req *pr, struct xseg_request *req,
 			handle_copy(peer, pr); break;
 		case X_DELETE:
 			handle_delete(peer, pr); break;
-		case X_OPEN:
-			handle_open(peer, pr); break;
+		case X_ACQUIRE:
+			handle_acquire(peer, pr); break;
 		case X_CLOSE:
-			handle_close(peer, pr); break;
+			handle_release(peer, pr); break;
 			//	case X_SNAPSHOT:
 		case X_SYNC:
 		default:
