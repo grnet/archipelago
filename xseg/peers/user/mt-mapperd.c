@@ -1856,13 +1856,15 @@ static int do_clone(struct peer_req *pr, struct map *map)
 	}
 
 	//alloc and init map_nodes
-	unsigned long c = clonemap->size/block_size + 1;
+	//unsigned long c = clonemap->size/block_size + 1;
+	unsigned long c = calc_map_obj(clonemap);
 	struct map_node *map_nodes = calloc(c, sizeof(struct map_node));
 	if (!map_nodes){
 		goto out_err;
 	}
 	int i;
-	for (i = 0; i < clonemap->size/block_size + 1; i++) {
+	//for (i = 0; i < clonemap->size/block_size + 1; i++) {
+	for (i = 0; i < c; i++) {
 		struct map_node *mn = get_mapnode(map, i);
 		if (mn) {
 			strncpy(map_nodes[i].object, mn->object, mn->objectlen);
@@ -2183,6 +2185,7 @@ int dispatch_accepted(struct peerd *peer, struct peer_req *pr,
 //		case X_SNAPSHOT: handle_snap(peer, pr, req); break;
 		case X_INFO: action = handle_info; break;
 		case X_DELETE: action = handle_destroy; break;
+		case X_OPEN: action = handle_open; break;
 		case X_CLOSE: action = handle_close; break;
 		default: fprintf(stderr, "mydispatch: unknown up\n"); break;
 	}
