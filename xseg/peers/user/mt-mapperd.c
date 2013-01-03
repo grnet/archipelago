@@ -2208,13 +2208,18 @@ static int do_snapshot(struct peer_req *pr, struct map *map)
 	r = write_map(pr, &tmp_map);
 	if (r < 0)
 		goto out_err;
-
+	char targetbuf[XSEG_MAX_TARGETLEN];
+	char *target = xseg_get_target(peer->xseg, pr->req);
+	strncpy(targetbuf, target, pr->req->targetlen);
 	r = xseg_resize_request(peer->xseg, pr->req, pr->req->targetlen,
 			sizeof(struct xseg_reply_snapshot));
 	if (r < 0){
 		XSEGLOG2(&lc, E, "Cannot resize request");
 		goto out_err;
 	}
+	target = xseg_get_target(peer->xseg, pr->req);
+	strncpy(target, targetbuf, pr->req->targetlen);
+
 	struct xseg_reply_snapshot *xreply = (struct xseg_reply_snapshot *)
 						xseg_get_data(peer->xseg, pr->req);
 	strncpy(xreply->target, newvolumename, newvolumenamelen);
