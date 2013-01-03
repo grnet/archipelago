@@ -193,7 +193,52 @@ int vlmc_create(char *name, uint64_t size, char *snap)
 
 int vlmc_snapshot(char *name)
 {
-	return -1;
+	int targetlen = safe_strlen(name);
+	if (targetlen <= 0) {
+		fprintf(stderr, "Invalid name\n");
+		return -1;
+	}
+
+	struct xseg_request *req = xseg_get_request(xseg, srcport, mportno, X_ALLOC);
+	if (!req) {
+		fprintf(stderr, "Couldn't allocate xseg request\n");
+		return -1;
+	}
+	int r = xseg_prep_request(xseg, req, targetlen, sizeof(struct xseg_request_snapshot));
+	if (r < 0){
+		fprintf(stderr, "Couldn't prep xseg request\n");
+		xseg_put_request(xseg, req, srcport);
+		return -1;
+	}
+	char *target = xseg_get_target(xseg, req);
+	strncpy(target, name, targetlen);
+	struct xseg_request_snapshot *xsnapshot = (struct xseg_request_snapshot *) xseg_get_data(xseg, req);
+	xsnapshot->target[0] = 0;
+	xsnapshot->targetlen = 0;
+	req->offset = 0;
+	req->size = req->datalen;
+	req->op = X_SNAPSHOT;
+
+	xport p = xseg_submit(xseg, req, srcport, X_ALLOC);
+	if (p == NoPort){
+		fprintf(stderr, "couldn't submit req\n");
+		xseg_put_request(xseg, req, srcport);
+		return -1;
+	}
+	xseg_signal(xseg, p);
+
+	r = wait_reply(req);
+	if (!r){
+		struct xseg_reply_snapshot *xreply = (struct xseg_reply_snapshot *) xseg_get_data(xseg, req);
+		char buf[XSEG_MAX_TARGETLEN + 1];
+		strncpy(buf, xreply->target, xreply->targetlen);
+		buf[xreply->targetlen] = 0;
+		fprintf(stdout, "Snapshot name: %s\n", buf);
+	}
+
+	xseg_put_request(xseg, req, srcport);
+
+	return r;
 }
 
 int vlmc_remove(char *name)
@@ -404,6 +449,8 @@ int main(int argc, char *argv[])
 */
 	else if (!strcmp(argv[2], "resize"))
 		ret = vlmc_resize(name, size);
+	else if (!strcmp(argv[2], "snapshot"))
+		ret = vlmc_snapshot(name);
 	else
 		fprintf(stderr, "unknown action (%s)\n", argv[2]);
 
