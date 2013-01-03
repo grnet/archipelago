@@ -646,8 +646,8 @@ static int handle_mapping(struct peerd *peer, struct peer_req *pr,
 		case X_OPEN:
 			mapping_open(peer, pr);
 			break;
-		case X_READ:
-		case X_WRITE:
+		case X_MAPR:
+		case X_MAPW:
 			mapping_readwrite(peer, pr);
 			break;
 		default:
