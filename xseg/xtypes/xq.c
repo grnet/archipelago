@@ -449,7 +449,7 @@ xqindex __xq_resize(struct xq *xq, struct xq *newxq)
 		val = XPTR(&xq->queue)[(head + i) & mask];
 		XPTR(&newxq->queue)[(tail - i) & mask_new] = val;
 	}
-	
+
 	return nr;
 }
 
