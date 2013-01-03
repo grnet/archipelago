@@ -699,6 +699,21 @@ def vlmc_create(args):
 
 def vlmc_snapshot(args):
     # snapshot
+    name = args.name[0]
+
+    if len(name) < 6:
+	print >> sys.stderr, "Name should have at least len 6"
+	sys.exit(-1)
+
+    cmd = ["vlmc-xseg", "%s" % SPEC, "snapshot", "--name", "%s" % name]
+    cmd.extend(["-mp", "%s" % MPORT])
+    cmd.extend(["-p", "%s" % VTOOL])
+
+    try:
+        check_call(cmd, shell=False, env=os.environ);
+    except Exception:
+            sys.stderr.write("vlmc snapshot failed\n")
+            sys.exit(-1)
     return
 
 def vlmc_list(args):
@@ -882,6 +897,12 @@ def vlmc():
     list_parser = subparsers.add_parser('list', help='List volumes')
     list_parser.set_defaults(func=vlmc_list)
     list_parser.add_argument('-p', '--pool', type=str, nargs='?', help='for backwards compatiblity with rbd')
+
+    snapshot_parser = subparsers.add_parser('snapshot', help='snapshot volume')
+    #group = snapshot_parser.add_mutually_exclusive_group(required=True)
+    snapshot_parser.add_argument('-p', '--pool', type=str, nargs='?', help='for backwards compatiblity with rbd')
+    snapshot_parser.add_argument('name', type=str, nargs=1, help='volume/device name')
+    snapshot_parser.set_defaults(func=vlmc_snapshot)
 
     ls_parser = subparsers.add_parser('ls', help='List volumes')
     ls_parser.set_defaults(func=vlmc_list)
