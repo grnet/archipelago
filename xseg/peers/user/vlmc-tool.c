@@ -98,7 +98,8 @@ struct xseg_config cfg;
 xport srcport = NoPort;
 xport sport = NoPort;
 struct xseg_port *port;
-xport mportno;
+xport mportno = NoPort;
+xport vportno = NoPort;
 
 static void init_local_signal() 
 {
@@ -199,7 +200,7 @@ int vlmc_snapshot(char *name)
 		return -1;
 	}
 
-	struct xseg_request *req = xseg_get_request(xseg, srcport, mportno, X_ALLOC);
+	struct xseg_request *req = xseg_get_request(xseg, srcport, vportno, X_ALLOC);
 	if (!req) {
 		fprintf(stderr, "Couldn't allocate xseg request\n");
 		return -1;
@@ -401,6 +402,13 @@ int main(int argc, char *argv[])
 				mportno = atol(argv[i+1]);
 				i++;
 			}
+		} else if (!strcmp(argv[i], "-vp") && i+1 < argc){
+			if (!validate_numeric(argv[i+1])){
+				err_in_arg(i, argv[i]);
+			} else {
+				vportno = atol(argv[i+1]);
+				i++;
+			}
 		} else if (!strcmp(argv[i], "-p") && i+1 < argc){
 			if (!validate_alphanumeric(argv[i+1])){
 				err_in_arg(i, argv[i]);
@@ -420,7 +428,7 @@ int main(int argc, char *argv[])
 		}
 	}
 
-	if (srcport > cfg.nr_ports || mportno > cfg.nr_ports) {
+	if (srcport > cfg.nr_ports || mportno > cfg.nr_ports || vportno > cfg.nr_ports) {
 		fprintf(stderr, "Invalid port\n");
 		return -1;
 	}

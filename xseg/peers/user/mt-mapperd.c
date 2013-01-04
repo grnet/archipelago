@@ -2734,7 +2734,7 @@ void * handle_snapshot(struct peer_req *pr)
 	struct peerd *peer = pr->peer;
 	char *target = xseg_get_target(peer->xseg, pr->req);
 	/* request EXCLUSIVE access, but do not force it.
-	 * check if succeeded on do_destroy
+	 * check if succeeded on do_snapshot
 	 */
 	int r = map_action(do_snapshot, pr, target, pr->req->targetlen,
 				MF_ARCHIP|MF_LOAD|MF_EXCLUSIVE);
