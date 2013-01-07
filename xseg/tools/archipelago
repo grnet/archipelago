@@ -35,6 +35,12 @@
 #
 
 
+from xseg.xseg_api import *
+from xseg.xprotocol import *
+from ctypes import CFUNCTYPE, cast, c_void_p, addressof, string_at, memmove, \
+    create_string_buffer, string_at, sizeof, POINTER, c_char_p, c_char, pointer
+cb_null_ptrtype = CFUNCTYPE(None, uint32_t)
+
 import os, sys, subprocess, argparse, time, psutil, signal, errno
 from subprocess import call, check_call, Popen, PIPE
 
@@ -635,6 +641,176 @@ def restart(args):
         return r
     return start(args)
 
+class Xseg_ctx(object):
+    ctx = None
+    port = None
+    portno = None
+
+    def __init__(self, spec, portno):
+        xseg_initialize()
+        xconf = xseg_config()
+        xseg_parse_spec(spec, xconf)
+        ctx = xseg_join(xconf.type, xconf.name, "posix", cast(0, cb_null_ptrtype))
+        if not ctx:
+            raise Exception("Cannot join segment")
+        port = xseg_bind_port(ctx, portno, c_void_p(0))
+        if not port:
+            raise Exception("Cannot bind port")
+        xseg_init_local_signal(ctx, portno)
+        self.ctx = ctx
+        self.port = port
+        self.portno = portno
+
+
+    def __del__(self):
+        return
+
+    def __enter__(self):
+        if not self.ctx:
+            raise Exception
+        return self
+
+    def __exit__(self, type_, value, traceback):
+        self.shutdown()
+        return False
+
+    def shutdown(self):
+        if self.ctx:
+            xseg_quit_local_signal(self.ctx, self.portno)
+            xseg_leave(self.ctx)
+        self.ctx = None
+
+class Request(object):
+    xseg_ctx = None
+    req = None
+
+    def __init__(self, xseg_ctx, dst_portno, targetlen, datalen):
+        ctx = xseg_ctx.ctx
+        if not ctx:
+            raise Exception
+        req = xseg_get_request(ctx, xseg_ctx.portno, dst_portno, X_ALLOC)
+        if not req:
+            raise Exception
+        r = xseg_prep_request(ctx, req, targetlen, datalen)
+        if r < 0:
+            xseg_put_request(ctx, req, xseg_ctx.portno)
+            raise Exception
+#        print hex(addressof(req.contents))
+        self.req = req
+        self.xseg_ctx = xseg_ctx
+        return
+
+    def __del__(self):
+        if self.req:
+            xseg_put_request(self.xseg_ctx.ctx, self.req, self.xseg_ctx.portno)
+        self.req = None
+        return False
+
+    def __enter__(self):
+        if not self.req:
+            raise Exception
+        return self
+
+    def __exit__(self, type_, value, traceback):
+        if self.req:
+            xseg_put_request(self.xseg_ctx.ctx, self.req, self.xseg_ctx.portno)
+        self.req = None
+        return False
+
+    def set_op(self, op):
+        self.req.contents.op = op
+
+    def set_offset(self, offset):
+        self.req.contents.offset = offset
+
+    def set_size(self, size):
+        self.req.contents.size = size
+
+    def get_op(self):
+        return self.req.contents.op
+
+    def get_offset(self):
+        return self.req.contents.offset
+
+    def get_size(self):
+        return self.req.contents.size
+
+    def set_target(self, target):
+        """Sets the target of the request, respecting request's targetlen"""
+        if len(target) != self.req.contents.targetlen:
+            return False
+        c_target = xseg_get_target_nonstatic(self.xseg_ctx.ctx, self.req)
+        p_target = create_string_buffer(target)
+#        print hex(addressof(c_target.contents))
+        memmove(c_target, p_target, len(target))
+        return True
+
+    def get_target(self):
+        """Return a string to the target of the request"""
+        c_target = xseg_get_target_nonstatic(self.xseg_ctx.ctx, self.req)
+#        print "target_addr " + str(addressof(c_target.contents))
+        return string_at(c_target, self.req.contents.targetlen)
+
+    def set_data(self, data):
+        """Sets requests data. Data should be a xseg protocol structure""" 
+        if sizeof(data) != self.req.contents.datalen:
+            return False
+        c_data = xseg_get_data_nonstatic(self.xseg_ctx.ctx, self.req)
+        p_data = pointer(data)
+        memmove(c_data, p_data, self.req.contents.datalen)
+
+        return True
+
+    def get_data(self, _type):
+        """return a pointer to the data buffer of the request, casted to the
+        selected type"""
+#        print "data addr " +  str(addressof(xseg_get_data_nonstatic(self.xseg_ctx.ctx, self.req).contents))
+#        ret = cast(xseg_get_data_nonstatic(self.xseg_ctx.ctx, self.req), _type)
+#        print addressof(ret.contents)
+#        return ret
+        if _type:
+            return cast(xseg_get_data_nonstatic(self.xseg_ctx.ctx, self.req),\
+                                                                 POINTER(_type))
+        else:
+            return cast(xseg_get_data_nonstatic(self.xseg_ctx.ctx, self.req), \
+                                                                       c_void_p)
+
+    def submit(self):
+        """Submit the associated xseg_request"""
+        p = xseg_submit(self.xseg_ctx.ctx, self.req, self.xseg_ctx.portno, X_ALLOC)
+        if p == NoPort:
+            raise Exception
+        xseg_signal(self.xseg_ctx.ctx, p)
+
+    def wait(self):
+        """Wait until the associated xseg_request is responded, discarding any
+        other requests that may be received in the meantime"""
+        while True:
+            xseg_prepare_wait(self.xseg_ctx.ctx, self.xseg_ctx.portno)
+            xseg_wait_signal(self.xseg_ctx.ctx, 10000000)
+            xseg_cancel_wait(self.xseg_ctx.ctx, self.xseg_ctx.portno)
+            received = xseg_receive(self.xseg_ctx.ctx, self.xseg_ctx.portno, 0)
+            if received:
+#                print addressof(cast(self.req, c_void_p))
+#                print addressof(cast(received, c_void_p))
+#                print addressof(self.req.contents)
+#                print addressof(received.contents)
+                if addressof(received.contents) == addressof(self.req.contents):
+#                if addressof(cast(received, c_void_p)) == addressof(cast(self.req, c_void_p)):
+                    break
+                else:
+                    p = xseg_respond(self.xseg_ctx.ctx, received, self.xseg_ctx.portno, X_ALLOC)
+                    if p == NoPort:
+                        xseg_put_request(self.xseg_ctx.ctx, received,
+                                self.xseg_ctx.portno)
+                    else:
+                        xseg_signal(self.xseg_ctx.ctx, p)
+        return True
+
+    def success(self):
+        return bool((self.req.contents.state & XS_SERVED) and not
+                (self.req.contents.state & XS_FAILED))
+
 @exclusive
 def vlmc_showmapped(args):
     try:
@@ -664,40 +840,50 @@ def vlmc_showmapped_wrapper(args):
         return r
     return 0
 
+
 @exclusive
 def vlmc_create(args):
     name = args.name[0]
-    size = args.size 
+    size = args.size
     snap = args.snap
 
     if len(name) < 6:
-	print >> sys.stderr, "Name should have at least len 6"
-	sys.exit(-1)
+        print >> sys.stderr, "Name should have at least len 6"
+        sys.exit(-1)
     if size == None and snap == None:
         print >> sys.stderr, "At least one of the size/snap args must be provided"
         sys.exit(-1)
 
-    if size:
-        size = size << 20
-    else:
-        size = 0
+    ret = False
+    xseg_ctx = Xseg_ctx(SPEC, VTOOL)
+    with Request(xseg_ctx, MPORT, len(name), sizeof(xseg_request_clone)) as req:
+        req.set_op(X_CLONE)
+        req.set_size(sizeof(xseg_request_clone))
+        req.set_offset(0)
+        req.set_target(name)
 
-    cmd = ["vlmc-xseg", "%s" % SPEC, "create", "--name", "%s" % name]
-    if snap != None:
-            cmd.extend(["--snap", "%s" % snap])
-    if size != None:
-            cmd.extend(["--size", "%s" % size])
-    cmd.extend(["-mp", "%s" % MPORT])
-    cmd.extend(["-vp", "%s" % VPORT_START])
-    cmd.extend(["-p", "%s" % VTOOL])
+        xclone = xseg_request_clone()
+        if snap:
+            xclone.target = snap
+            xclone.targetlen = len(snap)
+        else:
+            xclone.target = ""
+            xclone.targetlen = 0
+        if size:
+            xclone.size = size << 20
+        else:
+            xclone.size = -1
 
-    try:
-        check_call(cmd, shell=False, env=os.environ);
-    except Exception:
-            sys.stderr.write("vlmc creation failed\n")
-            sys.exit(-1)
+        req.set_data(xclone)
+        req.submit()
+        req.wait()
+        ret = req.success()
+    xseg_ctx.shutdown()
+    if not ret:
+        sys.stderr.write("vlmc creation failed\n")
+        sys.exit(-1)
 
-
+@exclusive
 def vlmc_snapshot(args):
     # snapshot
     name = args.name[0]
@@ -706,17 +892,29 @@ def vlmc_snapshot(args):
 	print >> sys.stderr, "Name should have at least len 6"
 	sys.exit(-1)
 
-    cmd = ["vlmc-xseg", "%s" % SPEC, "snapshot", "--name", "%s" % name]
-    cmd.extend(["-mp", "%s" % MPORT])
-    cmd.extend(["-vp", "%s" % VPORT_START])
-    cmd.extend(["-p", "%s" % VTOOL])
+    ret = False
+    xseg_ctx = Xseg_ctx(SPEC, VTOOL)
+    with Request(xseg_ctx, VPORT_START, len(name), sizeof(xseg_request_snapshot)) as req:
+        req.set_op(X_SNAPSHOT)
+        req.set_size(sizeof(xseg_request_snapshot))
+        req.set_offset(0)
+        req.set_target(name)
 
-    try:
-        check_call(cmd, shell=False, env=os.environ);
-    except Exception:
-            sys.stderr.write("vlmc snapshot failed\n")
-            sys.exit(-1)
+        xsnapshot = xseg_request_snapshot()
+        xsnapshot.target = ""
+        xsnapshot.targetlen = 0
+        req.set_data(xsnapshot)
+        req.submit()
+        req.wait()
+        ret = req.success()
+        reply = string_at(req.get_data(xseg_reply_snapshot).contents.target, 64)
+    xseg_ctx.shutdown()
+    if not ret:
+        sys.stderr.write("vlmc snapshot failed\n")
+        sys.exit(-1)
+    sys.stdout.write("Snapshot name: %s\n" % reply)
     return
+
 
 def vlmc_list(args):
     if STORAGE == "rados":
@@ -752,16 +950,20 @@ def vlmc_remove(args):
         print >> sys.stderr, reason
         sys.exit(-1)
 
-    cmd = ["vlmc-xseg", "%s" % SPEC, "remove", "--name", "%s" % name]
-    cmd.extend(["-mp", "%s" % MPORT])
-    cmd.extend(["-vp", "%s" % VPORT_START])
-    cmd.extend(["-p", "%s" % VTOOL])
-
-    try:
-        check_call(cmd, shell=False, env=os.environ);
-    except Exception:
-            sys.stderr.write("vlmc removal failed\n")
-            sys.exit(-1)
+    ret = False
+    xseg_ctx = Xseg_ctx(SPEC, VTOOL)
+    with Request(xseg_ctx, MPORT, len(name), 0) as req:
+        req.set_op(X_DELETE)
+        req.set_size(0)
+        req.set_offset(0)
+        req.set_target(name)
+        req.submit()
+        req.wait()
+        ret = req.success()
+    xseg_ctx.shutdown()
+    if not ret:
+        sys.stderr.write("vlmc removal failed\n")
+        sys.exit(-1)
 
 
 @exclusive

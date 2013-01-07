@@ -1804,6 +1804,17 @@ int xseg_finalize(void)
 }
 
 
+char* xseg_get_data_nonstatic(struct xseg* xseg, struct xseg_request *req)
+{
+        return xseg_get_data(xseg, req);
+}
+
+char* xseg_get_target_nonstatic(struct xseg* xseg, struct xseg_request *req)
+{
+        return xseg_get_target(xseg, req);
+}
+
+
 #ifdef __KERNEL__
 #include <linux/module.h>
 #include <xseg/xseg_exports.h>
