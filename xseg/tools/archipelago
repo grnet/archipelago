@@ -38,13 +38,15 @@
 from xseg.xseg_api import *
 from xseg.xprotocol import *
 from ctypes import CFUNCTYPE, cast, c_void_p, addressof, string_at, memmove, \
-    create_string_buffer, string_at, sizeof, POINTER, c_char_p, c_char, pointer
+    create_string_buffer, string_at, sizeof, POINTER, c_char_p, c_char, byref
 cb_null_ptrtype = CFUNCTYPE(None, uint32_t)
 
 import os, sys, subprocess, argparse, time, psutil, signal, errno
 from subprocess import call, check_call, Popen, PIPE
 
 DEFAULTS='/etc/default/archipelago'
+VLMC_LOCK_FILE='/tmp/vlmc.lock'
+ARCHIP_PREFIX='archip_'
 
 #system defaults
 PIDFILE_PATH="/var/run/archipelago"
@@ -309,7 +311,7 @@ def construct_peers():
              "-v", str(VERBOSITY_BLOCKERB),
                  "-d", "--pidfile", os.path.join(PIDFILE_PATH, "blockerb.pid"),
                  "-l", os.path.join(str(LOGS_PATH), "blockerb.log"),
-                 "-t", str(NR_OPS_BLOCKERB), "--prefix", "archip_"],
+                 "-t", str(NR_OPS_BLOCKERB), "--prefix", ARCHIP_PREFIX],
                  "blockerb"]
         peer_blockerm = [BLOCKER,
                 ["-p" , str(MBPORT), "-g", str(SPEC), "-n", str(NR_OPS_BLOCKERM),
@@ -317,7 +319,7 @@ def construct_peers():
              "-v", str(VERBOSITY_BLOCKERM),
                  "-d", "--pidfile", os.path.join(PIDFILE_PATH, "blockerm.pid"),
                  "-l", os.path.join(str(LOGS_PATH), "blockerm.log"),
-                 "-t", str(NR_OPS_BLOCKERM), "--prefix", "archip_"],
+                 "-t", str(NR_OPS_BLOCKERM), "--prefix", ARCHIP_PREFIX],
                  "blockerm"]
     else:
             sys.exit(-1)
@@ -348,19 +350,21 @@ def construct_peers():
 
 def exclusive(fn):
     def exclusive_args(args):
-        file = "/tmp/vlmc.lock"
         while True:
             try:
-                fd = os.open(file, os.O_CREAT|os.O_EXCL|os.O_WRONLY)
+                fd = os.open(VLMC_LOCK_FILE, os.O_CREAT|os.O_EXCL|os.O_WRONLY)
                 break;
-            except Exception, reason:
+            except OSError, (err, reason):
                 print >> sys.stderr, reason
-                time.sleep(0.05)
+                if err == errno.EEXIST:
+                    time.sleep(0.05)
+                else:
+                    raise OSError(err, VLMC_LOCK_FILE + ' ' + reason)
         try:
             r = fn(args)
         finally:
             os.close(fd)
-            os.unlink(file)
+            os.unlink(VLMC_LOCK_FILE)
         return r
 
     return exclusive_args
@@ -655,7 +659,7 @@ class Xseg_ctx(object):
             raise Exception("Cannot join segment")
         port = xseg_bind_port(ctx, portno, c_void_p(0))
         if not port:
-            raise Exception("Cannot bind port")
+            raise Exception("Cannot bind to port")
         xseg_init_local_signal(ctx, portno)
         self.ctx = ctx
         self.port = port
@@ -667,7 +671,7 @@ class Xseg_ctx(object):
 
     def __enter__(self):
         if not self.ctx:
-            raise Exception
+            raise Exception("No segment")
         return self
 
     def __exit__(self, type_, value, traceback):
@@ -687,14 +691,14 @@ class Request(object):
     def __init__(self, xseg_ctx, dst_portno, targetlen, datalen):
         ctx = xseg_ctx.ctx
         if not ctx:
-            raise Exception
+            raise Exception("No context")
         req = xseg_get_request(ctx, xseg_ctx.portno, dst_portno, X_ALLOC)
         if not req:
-            raise Exception
+            raise Exception("Cannot get request")
         r = xseg_prep_request(ctx, req, targetlen, datalen)
         if r < 0:
             xseg_put_request(ctx, req, xseg_ctx.portno)
-            raise Exception
+            raise Exception("Cannot prepare request")
 #        print hex(addressof(req.contents))
         self.req = req
         self.xseg_ctx = xseg_ctx
@@ -702,38 +706,46 @@ class Request(object):
 
     def __del__(self):
         if self.req:
-            xseg_put_request(self.xseg_ctx.ctx, self.req, self.xseg_ctx.portno)
+            if xq_count(byref(self.req.contents.path)) == 0:
+                xseg_put_request(self.xseg_ctx.ctx, self.req, self.xseg_ctx.portno)
         self.req = None
         return False
 
     def __enter__(self):
         if not self.req:
-            raise Exception
+            raise Exception("xseg request not set")
         return self
 
     def __exit__(self, type_, value, traceback):
         if self.req:
-            xseg_put_request(self.xseg_ctx.ctx, self.req, self.xseg_ctx.portno)
+            if xq_count(byref(self.req.contents.path)) == 0:
+                xseg_put_request(self.xseg_ctx.ctx, self.req, self.xseg_ctx.portno)
         self.req = None
         return False
 
     def set_op(self, op):
         self.req.contents.op = op
 
-    def set_offset(self, offset):
-        self.req.contents.offset = offset
-
-    def set_size(self, size):
-        self.req.contents.size = size
-
     def get_op(self):
         return self.req.contents.op
+
+    def set_offset(self, offset):
+        self.req.contents.offset = offset
 
     def get_offset(self):
         return self.req.contents.offset
 
     def get_size(self):
         return self.req.contents.size
+
+    def set_size(self, size):
+        self.req.contents.size = size
+
+    def set_flags(self, flags):
+        self.req.contents.flags = flags
+
+    def get_flags(self):
+        return self.req.contents.flags
 
     def set_target(self, target):
         """Sets the target of the request, respecting request's targetlen"""
@@ -786,9 +798,6 @@ class Request(object):
         """Wait until the associated xseg_request is responded, discarding any
         other requests that may be received in the meantime"""
         while True:
-            xseg_prepare_wait(self.xseg_ctx.ctx, self.xseg_ctx.portno)
-            xseg_wait_signal(self.xseg_ctx.ctx, 10000000)
-            xseg_cancel_wait(self.xseg_ctx.ctx, self.xseg_ctx.portno)
             received = xseg_receive(self.xseg_ctx.ctx, self.xseg_ctx.portno, 0)
             if received:
 #                print addressof(cast(self.req, c_void_p))
@@ -805,6 +814,10 @@ class Request(object):
                                 self.xseg_ctx.portno)
                     else:
                         xseg_signal(self.xseg_ctx.ctx, p)
+            else:
+                xseg_prepare_wait(self.xseg_ctx.ctx, self.xseg_ctx.portno)
+                xseg_wait_signal(self.xseg_ctx.ctx, 10000000)
+                xseg_cancel_wait(self.xseg_ctx.ctx, self.xseg_ctx.portno)
         return True
 
     def success(self):
@@ -922,8 +935,8 @@ def vlmc_list(args):
         proc = Popen(cmd, stdout = PIPE)
         while proc.poll() is None:
             output = proc.stdout.readline()
-            if output.startswith('archip_') and not output.endswith('_lock\n'):
-                print output.lstrip('archip_'),
+            if output.startswith(ARCHIP_PREFIX) and not output.endswith('_lock\n'):
+                print output.lstrip(ARCHIP_PREFIX),
     elif STORAGE == "files":
         print >> sys.stderr, "Vlmc list not supported for files yet"
 	return 0
@@ -1042,6 +1055,114 @@ def vlmc_resize(args):
         print >> sys.stderr, reason
         sys.exit(-1)
 
+@exclusive
+def vlmc_lock(args):
+    name = args.name[0]
+
+    if len(name) < 6:
+        print >> sys.stderr, "Name should have at least len 6"
+        sys.exit(-1)
+    name = ARCHIP_PREFIX + name
+
+    ret = False
+    xseg_ctx = Xseg_ctx(SPEC, VTOOL)
+    with Request(xseg_ctx, MBPORT, len(name), 0) as req:
+        req.set_op(X_ACQUIRE)
+        req.set_size(0)
+        req.set_offset(0)
+        req.set_flags(XF_NOSYNC)
+        req.set_target(name)
+        req.submit()
+        req.wait()
+        ret = req.success()
+    xseg_ctx.shutdown()
+    if not ret:
+        sys.stderr.write("vlmc lock failed\n")
+        sys.exit(-1)
+    else:
+        sys.stdout.write("Volume locked\n")
+
+@exclusive
+def vlmc_unlock(args):
+    name = args.name[0]
+    force = args.force
+
+    if len(name) < 6:
+        print >> sys.stderr, "Name should have at least len 6"
+        sys.exit(-1)
+    name = ARCHIP_PREFIX + name
+
+    ret = False
+    xseg_ctx = Xseg_ctx(SPEC, VTOOL)
+    with Request(xseg_ctx, MBPORT, len(name), 0) as req:
+        req.set_op(X_RELEASE)
+        req.set_size(0)
+        req.set_offset(0)
+        req.set_target(name)
+        if force:
+            req.set_flags(XF_NOSYNC|XF_FORCE)
+        else:
+            req.set_flags(XF_NOSYNC)
+        req.submit()
+        req.wait()
+        ret = req.success()
+    xseg_ctx.shutdown()
+    if not ret:
+        sys.stderr.write("vlmc unlock failed\n")
+        sys.exit(-1)
+    else:
+        sys.stdout.write("Volume unlocked\n")
+
+@exclusive
+def vlmc_open(args):
+    name = args.name[0]
+
+    if len(name) < 6:
+        print >> sys.stderr, "Name should have at least len 6"
+        sys.exit(-1)
+
+    ret = False
+    xseg_ctx = Xseg_ctx(SPEC, VTOOL)
+    with Request(xseg_ctx, VPORT, len(name), 0) as req:
+        req.set_op(X_OPEN)
+        req.set_size(0)
+        req.set_offset(0)
+        req.set_target(name)
+        req.submit()
+        req.wait()
+        ret = req.success()
+    xseg_ctx.shutdown()
+    if not ret:
+        sys.stderr.write("vlmc open failed\n")
+        sys.exit(-1)
+    else:
+        sys.stdout.write("Volume opened\n")
+
+@exclusive
+def vlmc_close(args):
+    name = args.name[0]
+
+    if len(name) < 6:
+        print >> sys.stderr, "Name should have at least len 6"
+        sys.exit(-1)
+
+    ret = False
+    xseg_ctx = Xseg_ctx(SPEC, VTOOL)
+    with Request(xseg_ctx, VPORT, len(name), 0) as req:
+        req.set_op(X_CLOSE)
+        req.set_size(0)
+        req.set_offset(0)
+        req.set_target(name)
+        req.submit()
+        req.wait()
+        ret = req.success()
+    xseg_ctx.shutdown()
+    if not ret:
+        sys.stderr.write("vlmc close failed\n")
+        sys.exit(-1)
+    else:
+        sys.stdout.write("Volume closed\n")
+
 def archipelago():
     parser = argparse.ArgumentParser(description='Archipelago tool')
     parser.add_argument('-c', '--config', type=str, nargs='?', help='config file')
@@ -1119,6 +1240,27 @@ def vlmc():
     resize_parser.set_defaults(func=vlmc_resize)
     resize_parser.add_argument('-p', '--pool', type=str, nargs='?', help='for backwards compatiblity with rbd')
 
+    open_parser = subparsers.add_parser('open', help='open volume')
+    open_parser.add_argument('name', type=str, nargs=1, help='volume/device name')
+    open_parser.set_defaults(func=vlmc_open)
+    open_parser.add_argument('-p', '--pool', type=str, nargs='?', help='for backwards compatiblity with rbd')
+
+    close_parser = subparsers.add_parser('close', help='close volume')
+    close_parser.add_argument('name', type=str, nargs=1, help='volume/device name')
+    close_parser.set_defaults(func=vlmc_close)
+    close_parser.add_argument('-p', '--pool', type=str, nargs='?', help='for backwards compatiblity with rbd')
+
+    lock_parser = subparsers.add_parser('lock', help='lock volume')
+    lock_parser.add_argument('name', type=str, nargs=1, help='volume/device name')
+    lock_parser.set_defaults(func=vlmc_lock)
+    lock_parser.add_argument('-p', '--pool', type=str, nargs='?', help='for backwards compatiblity with rbd')
+
+    unlock_parser = subparsers.add_parser('unlock', help='unlock volume')
+    unlock_parser.add_argument('name', type=str, nargs=1, help='volume/device name')
+    unlock_parser.add_argument('-f', '--force',  action='store_true', default=False , help='break lock')
+    unlock_parser.set_defaults(func=vlmc_unlock)
+    unlock_parser.add_argument('-p', '--pool', type=str, nargs='?', help='for backwards compatiblity with rbd')
+
     return parser
 
 if __name__ == "__main__":
@@ -1129,7 +1271,7 @@ if __name__ == "__main__":
             'vlmc'        : vlmc,
         }[os.path.basename(sys.argv[0])]
         parser = parser_func()
-    except:
+    except Exception as e:
         sys.stderr.write("Invalid basename\n")
         sys.exit(-1)
 

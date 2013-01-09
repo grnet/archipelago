@@ -1193,6 +1193,8 @@ done:
 	return req;
 }
 
+//add flags
+//do not put request if path not empty or X_FORCE set
 int xseg_put_request (struct xseg *xseg, struct xseg_request *xreq,
 			xport portno)
 {
