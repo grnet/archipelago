@@ -57,6 +57,10 @@ all: $(BASE)/drivers/kernel/Module.symvers
 	$(MAKE) -C $(KDIR) SUBDIRS=$(PWD) V=$(V) modules
 	cp -vaf xsegbd.ko $(LIBDIR)
 
+install:
+	mkdir -p $(DESTDIR)$(moduledir)
+	cp xsegbd.ko $(DESTDIR)$(moduledir)
+
 clean:
 	rm -f Module.symvers
 	make -C /lib/modules/$(KVER)/build M=$(PWD) V=$(V) clean

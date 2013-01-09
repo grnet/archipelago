@@ -58,6 +58,12 @@ all: $(BASE)/sys/kernel/Module.symvers
 	$(MAKE) -C $(KDIR) SUBDIRS=$(PWD) V=$(V) modules
 	cp -vaf xseg_pthread.ko xseg_segdev.ko xseg_posix.ko $(LIBDIR)
 
+install:
+	mkdir -p $(DESTDIR)$(moduledir)
+	cp xseg_segdev.ko $(DESTDIR)$(moduledir)
+	cp xseg_posix.ko $(DESTDIR)$(moduledir)
+	cp xseg_pthread.ko $(DESTDIR)$(moduledir)
+
 clean:
 	rm -f Module.symvers
 	make -C /lib/modules/$(KVER)/build M=$(PWD) V=$(V) clean

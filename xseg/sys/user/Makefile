@@ -31,7 +31,7 @@
 # or implied, of GRNET S.A.
 #
 
-.PHONY: default all clean drivers
+.PHONY: default all clean drivers install
 
 include $(XSEG_HOME)/base.mk
 
@@ -131,6 +131,12 @@ libxseg.so.$(MAJOR).$(MINOR): xseg.pic.o xseg_user.o libxseg.map \
 libxseg.a: xseg.o xq/xq.o drivers _initialize.o
 	$(AR) r libxseg.a xseg.o xq/xq.o _initialize.o $(DRVOBJS)
 	cp -vaf $@ $(LIB)
+
+install:
+	mkdir -p $(DESTDIR)$(libdir)
+	cp -vaf libxseg.so $(DESTDIR)$(libdir)
+	cp -vaf libxseg.so.$(MAJOR) $(DESTDIR)$(libdir)
+	cp -vaf libxseg.so.$(MAJOR).$(MINOR) $(DESTDIR)$(libdir)
 
 clean:
 	make -C xq clean

@@ -70,6 +70,11 @@ xobj.k.c: $(BASE)/xtypes/xobj.c $(BASE)/xtypes/xobj.h
 xseg.k.c: $(BASE)/xseg/xseg.c $(BASE)/xseg/xseg.h
 	ln -sf $< $@
 
+install:
+	mkdir -p $(DESTDIR)$(moduledir)
+	cp xseg.ko $(DESTDIR)$(moduledir)
+	cp segdev.ko $(DESTDIR)$(moduledir)
+
 clean:
 	rm -f xq.k.c xpool.k.c xhash.k.c xheap.k.c xobj.k.c xseg.k.c
 	make -C /lib/modules/$(KVER)/build M=$(PWD) V=$(V) clean

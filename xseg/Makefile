@@ -37,6 +37,7 @@ TARGET=default
 include ./base.mk
 
 XSEG_CLEAN_TARGETS=$(patsubst %,clean-%,$(XSEG_DOMAIN_TARGETS))
+XSEG_INSTALL_TARGETS=$(patsubst %,install-%,$(XSEG_DOMAIN_TARGETS))
 
 default: targets
 
@@ -47,6 +48,12 @@ targets: $(XSEG_DOMAIN_TARGETS)
 
 clean: $(XSEG_CLEAN_TARGETS)
 
+install: install-src $(XSEG_INSTALL_TARGETS)
+
+install-src:
+	mkdir -p $(DESTDIR)$(srcdir)
+	cp -r * $(DESTDIR)$(srcdir)
+
 .PHONY: $(XSEG_DOMAIN_TARGETS)
 $(XSEG_DOMAIN_TARGETS):
 	@for f in $(XSEG_DOMAIN_DIRS); do \
@@ -54,6 +61,17 @@ $(XSEG_DOMAIN_TARGETS):
 		echo "=== $@ in $$f ==="; \
 		echo " "; \
 		make -C $$f/$@ TARGET=$@ default || exit 1; \
+		echo " "; \
+	done
+	@echo " "
+
+.PHONY: $(XSEG_INSTALL_TARGETS)
+$(XSEG_INSTALL_TARGETS):
+	@for f in $(XSEG_DOMAIN_DIRS); do \
+		echo " "; \
+		echo "=== $@ in $$f ==="; \
+		echo " "; \
+		make -C $$f/$(@:install-%=%) TARGET=$@ install || true; \
 		echo " "; \
 	done
 	@echo " "

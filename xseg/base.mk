@@ -48,6 +48,12 @@ ifndef CSTD
 export CSTD=-std=gnu99 -pedantic
 endif
 
+bindir="/usr/bin/"
+libdir="/usr/lib/"
+pythondir="/usr/lib/python2.7/"
+moduledir="/lib/modules/`uname -r`/extra/"
+srcdir="/usr/src/archipelago-kernel-dkms-VERSION/"
+
 INC=-I$(BASE)
 INC+=-I$(BASE)/peers/$(TARGET)
 INC+=-I$(BASE)/sys/$(TARGET)

@@ -31,7 +31,7 @@
 # or implied, of GRNET S.A.
 #
 
-.PHONY: default all clean
+.PHONY: default all clean install
 
 include $(XSEG_HOME)/base.mk
 
@@ -59,6 +59,10 @@ xseg/xseg_api.py: xseg.xml
 
 xseg/xprotocol.py: xprotocol.xml
 	$(XML2PY) -d -k defst -c $< -o $@
+
+install:
+	mkdir p $(DESTDIR)$(pythondir)
+	cp -r xseg $(DESTDIR)$(pythondir)
 
 clean:
 	rm -f xseg.xml xprotocol.xml xseg/xseg_api.py xseg/xseg_api.pyc xseg/xprotocol.py xseg/xprotocol.pyc xseg/__init__.pyc
