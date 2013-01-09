@@ -1,3 +1,37 @@
+/*
+ * Copyright 2012 GRNET S.A. All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or
+ * without modification, are permitted provided that the following
+ * conditions are met:
+ *
+ *   1. Redistributions of source code must retain the above
+ *      copyright notice, this list of conditions and the following
+ *      disclaimer.
+ *   2. Redistributions in binary form must reproduce the above
+ *      copyright notice, this list of conditions and the following
+ *      disclaimer in the documentation and/or other materials
+ *      provided with the distribution.
+ *
+ * THIS SOFTWARE IS PROVIDED BY GRNET S.A. ``AS IS'' AND ANY EXPRESS
+ * OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+ * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+ * PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL GRNET S.A OR
+ * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+ * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF
+ * USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED
+ * AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
+ * ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ *
+ * The views and conclusions contained in the software and
+ * documentation are those of the authors and should not be
+ * interpreted as representing official policies, either expressed
+ * or implied, of GRNET S.A.
+ */
+
 #include <stdio.h>
 #include <unistd.h>
 #include <sys/types.h>
@@ -14,6 +48,7 @@
 #include <sched.h>
 #include <sys/syscall.h>
 #include <openssl/sha.h>
+#include <ctype.h>
 
 /* general mapper flags */
 #define MF_LOAD 	(1 << 0)
@@ -419,7 +454,7 @@ static struct xseg_request * __close_map(struct peer_req *pr, struct map *map)
 	if (!reqtarget)
 		goto out_put;
 	strncpy(reqtarget, map->volume, req->targetlen);
-	req->op = X_CLOSE;
+	req->op = X_RELEASE;
 	req->size = 0;
 	req->offset = 0;
 	r = xseg_set_req_data(peer->xseg, req, pr);
@@ -895,7 +930,7 @@ static struct xseg_request * __open_map(struct peer_req *pr, struct map *m,
 	if (!reqtarget)
 		goto out_put;
 	strncpy(reqtarget, m->volume, req->targetlen);
-	req->op = X_OPEN;
+	req->op = X_ACQUIRE;
 	req->size = block_size;
 	req->offset = 0;
 	if (!(flags & MF_FORCE))
@@ -1617,6 +1652,16 @@ static int do_info(struct peer_req *pr, struct map *map)
 }
 
 
+static int do_open(struct peer_req *pr, struct map *map)
+{
+	if (map->flags & MF_MAP_EXCLUSIVE){
+		return 0;
+	}
+	else {
+		return -1;
+	}
+}
+
 static int do_close(struct peer_req *pr, struct map *map)
 {
 	if (map->flags & MF_MAP_EXCLUSIVE){
@@ -1765,7 +1810,7 @@ static int do_mapw(struct peer_req *pr, struct map *map)
 static int do_clone(struct peer_req *pr, struct map *map)
 {
 	int r;
-	char buf[XSEG_MAX_TARGETLEN];
+//	char buf[XSEG_MAX_TARGETLEN];
 	struct peerd *peer = pr->peer;
 	struct mapperd *mapper = __get_mapperd(peer);
 	char *target = xseg_get_target(peer->xseg, pr->req);
@@ -1811,13 +1856,15 @@ static int do_clone(struct peer_req *pr, struct map *map)
 	}
 
 	//alloc and init map_nodes
-	unsigned long c = clonemap->size/block_size + 1;
+	//unsigned long c = clonemap->size/block_size + 1;
+	unsigned long c = calc_map_obj(clonemap);
 	struct map_node *map_nodes = calloc(c, sizeof(struct map_node));
 	if (!map_nodes){
 		goto out_err;
 	}
 	int i;
-	for (i = 0; i < clonemap->size/block_size + 1; i++) {
+	//for (i = 0; i < clonemap->size/block_size + 1; i++) {
+	for (i = 0; i < c; i++) {
 		struct map_node *mn = get_mapnode(map, i);
 		if (mn) {
 			strncpy(map_nodes[i].object, mn->object, mn->objectlen);
@@ -2090,6 +2137,21 @@ void * handle_destroy(struct peer_req *pr)
 	return NULL;
 }
 
+void * handle_open(struct peer_req *pr)
+{
+	struct peerd *peer = pr->peer;
+	char *target = xseg_get_target(peer->xseg, pr->req);
+	//here we do not want to load
+	int r = map_action(do_open, pr, target, pr->req->targetlen,
+				MF_ARCHIP|MF_LOAD|MF_EXCLUSIVE);
+	if (r < 0)
+		fail(peer, pr);
+	else
+		complete(peer, pr);
+	ta--;
+	return NULL;
+}
+
 void * handle_close(struct peer_req *pr)
 {
 	struct peerd *peer = pr->peer;
@@ -2123,6 +2185,7 @@ int dispatch_accepted(struct peerd *peer, struct peer_req *pr,
 //		case X_SNAPSHOT: handle_snap(peer, pr, req); break;
 		case X_INFO: action = handle_info; break;
 		case X_DELETE: action = handle_destroy; break;
+		case X_OPEN: action = handle_open; break;
 		case X_CLOSE: action = handle_close; break;
 		default: fprintf(stderr, "mydispatch: unknown up\n"); break;
 	}
@@ -2215,7 +2278,7 @@ int wait_reply(struct peerd *peer, struct xseg_request *expected_req)
 	struct peer_req *pr;
 	xport i;
 	int  r, c = 0;
-	struct xseg_request *req, *received;
+	struct xseg_request *received;
 	xseg_prepare_wait(xseg, portno_start);
 	while(1) {
 		XSEGLOG2(&lc, D, "Attempting to check for reply");
@@ -2257,7 +2320,6 @@ void custom_peer_finalize(struct peerd *peer)
 		XSEGLOG2(&lc, E, "Cannot get peer request");
 		return;
 	}
-	int r;
 	struct map *map;
 	struct xseg_request *req;
 	xhash_iter_t it;

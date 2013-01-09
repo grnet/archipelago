@@ -1,3 +1,37 @@
+/*
+ * Copyright 2012 GRNET S.A. All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or
+ * without modification, are permitted provided that the following
+ * conditions are met:
+ *
+ *   1. Redistributions of source code must retain the above
+ *      copyright notice, this list of conditions and the following
+ *      disclaimer.
+ *   2. Redistributions in binary form must reproduce the above
+ *      copyright notice, this list of conditions and the following
+ *      disclaimer in the documentation and/or other materials
+ *      provided with the distribution.
+ *
+ * THIS SOFTWARE IS PROVIDED BY GRNET S.A. ``AS IS'' AND ANY EXPRESS
+ * OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+ * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+ * PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL GRNET S.A OR
+ * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+ * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF
+ * USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED
+ * AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
+ * ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ *
+ * The views and conclusions contained in the software and
+ * documentation are those of the authors and should not be
+ * interpreted as representing official policies, either expressed
+ * or implied, of GRNET S.A.
+ */
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -463,7 +497,7 @@ void watch_cb(uint8_t opcode, uint64_t ver, void *arg)
 	//struct radosd *rados = (struct radosd *) pr->peer->priv;
 	struct rados_io *rio = (struct rados_io *) (pr->priv);
 
-	if (pr->req->op == X_OPEN){
+	if (pr->req->op == X_ACQUIRE){
 		XSEGLOG2(&lc, I, "watch cb signaling rio of %s", rio->obj_name);
 		pthread_cond_signal(&rio->cond);
 	}
@@ -551,7 +585,7 @@ void * unlock_op(void *arg)
 	return NULL;
 }
 
-int handle_open(struct peerd *peer, struct peer_req *pr)
+int handle_acquire(struct peerd *peer, struct peer_req *pr)
 {
 	int r = spawnthread(peer, pr, lock_op);
 	if (r < 0)
@@ -560,7 +594,7 @@ int handle_open(struct peerd *peer, struct peer_req *pr)
 }
 
 
-int handle_close(struct peerd *peer, struct peer_req *pr)
+int handle_release(struct peerd *peer, struct peer_req *pr)
 {
 	int r = spawnthread(peer, pr, unlock_op);
 	if (r < 0)
@@ -578,17 +612,15 @@ int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 		return -1;
 	}
 	rados->pool[0] = 0;
-	for (i = 0; i < argc; i++) {
-		if (!strcmp(argv[i], "--pool") && (i+1) < argc){
-			strncpy(rados->pool, argv[i+1], MAX_POOL_NAME);
-			rados->pool[MAX_POOL_NAME] = 0;
-			i += 1;
-			continue;
-		}
-	}
+
+	BEGIN_READ_ARGS(argc, argv);
+	READ_ARG_STRING("--pool", rados->pool, MAX_POOL_NAME);
+	END_READ_ARGS();
+
 	if (!rados->pool[0]){
 		XSEGLOG2(&lc, E , "Pool must be provided");
 		free(rados);
+		usage(argv[0]);
 		return -1;
 	}
 
@@ -699,10 +731,10 @@ int dispatch(struct peerd *peer, struct peer_req *pr, struct xseg_request *req,
 			else
 				handle_copy(peer, pr);
 			break;
-		case X_OPEN:
-			handle_open(peer, pr); break;
-		case X_CLOSE:
-			handle_close(peer, pr); break;
+		case X_ACQUIRE:
+			handle_acquire(peer, pr); break;
+		case X_RELEASE:
+			handle_release(peer, pr); break;
 
 		default:
 			fail(peer, pr);

@@ -1,3 +1,22 @@
+/*
+ * Copyright (C) 2012 GRNET S.A.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
+ * 02110-1301, USA.
+ */
+
 /* xsegbd.c
  *
  */
@@ -25,8 +44,6 @@
 
 #define XSEGBD_MINORS 1
 /* define max request size to be used in xsegbd */
-//FIXME should we make this 4MB instead of 256KB ?
-//#define XSEGBD_MAX_REQUEST_SIZE 262144U
 #define XSEGBD_MAX_REQUEST_SIZE 4194304U
 
 MODULE_DESCRIPTION("xsegbd");
@@ -36,13 +53,16 @@ MODULE_LICENSE("GPL");
 static long sector_size = 0;
 static long blksize = 512;
 static int major = 0;
-static int max_dev = 1024;
+static int max_dev = 200;
+static long start_portno = 0;
+static long end_portno = 199;
 static char name[XSEGBD_SEGMENT_NAMELEN] = "xsegbd";
-static char spec[256] = "segdev:xsegbd:4:1024:12";
+static char spec[256] = "segdev:xsegbd:512:1024:12";
 
 module_param(sector_size, long, 0644);
 module_param(blksize, long, 0644);
-module_param(max_dev, int, 0644);
+module_param(start_portno, long, 0644);
+module_param(end_portno, long, 0644);
 module_param(major, int, 0644);
 module_param_string(name, name, sizeof(name), 0644);
 module_param_string(spec, spec, sizeof(spec), 0644);
@@ -62,6 +82,11 @@ struct xsegbd_device *__xsegbd_get_dev(unsigned long id)
 	spin_unlock(&xsegbd_devices_lock);
 
 	return xsegbd_dev;
+}
+
+static int src_portno_to_id(xport src_portno)
+{
+	return (src_portno - start_portno);
 }
 
 /* ************************* */
@@ -222,12 +247,12 @@ static int xsegbd_dev_init(struct xsegbd_device *xsegbd_dev)
 	queue_flag_set_unlocked(QUEUE_FLAG_NONROT, xsegbd_dev->blk_queue);
 
 	/* vkoukis says we don't need partitions */
-	xsegbd_dev->gd = disk = alloc_disk(1);
+	xsegbd_dev->gd = disk = alloc_disk(XSEGBD_MINORS);
 	if (!disk)
 		goto out;
 
 	disk->major = xsegbd_dev->major;
-	disk->first_minor = 0; // id * XSEGBD_MINORS;
+	disk->first_minor = xsegbd_dev->id * XSEGBD_MINORS;
 	disk->fops = &xsegbd_ops;
 	disk->queue = xsegbd_dev->blk_queue;
 	disk->private_data = xsegbd_dev;
@@ -268,8 +293,8 @@ static void xsegbd_dev_release(struct device *dev)
 	}
 
 	spin_lock(&xsegbd_devices_lock);
-	BUG_ON(xsegbd_devices[xsegbd_dev->src_portno] != xsegbd_dev);
-	xsegbd_devices[xsegbd_dev->src_portno] = NULL;
+	BUG_ON(xsegbd_devices[xsegbd_dev->id] != xsegbd_dev);
+	xsegbd_devices[xsegbd_dev->id] = NULL;
 	spin_unlock(&xsegbd_devices_lock);
 
 	XSEGLOG("releasing id: %d", xsegbd_dev->id);
@@ -281,7 +306,7 @@ static void xsegbd_dev_release(struct device *dev)
 	if (xsegbd_dev->gd)
 		put_disk(xsegbd_dev->gd);
 
-//	if (xseg_free_requests(xsegbd_dev->xseg, 
+//	if (xseg_free_requests(xsegbd_dev->xseg,
 //			xsegbd_dev->src_portno, xsegbd_dev->nr_requests) < 0)
 //		XSEGLOG("Error trying to free requests!\n");
 
@@ -289,8 +314,6 @@ static void xsegbd_dev_release(struct device *dev)
 		xseg_leave(xsegbd_dev->xseg);
 		xsegbd_dev->xseg = NULL;
 	}
-
-	unregister_blkdev(xsegbd_dev->major, XSEGBD_NAME);
 
 	if (xsegbd_dev->blk_req_pending){
 		kfree(xsegbd_dev->blk_req_pending);
@@ -938,30 +961,28 @@ static ssize_t xsegbd_add(struct bus_type *bus, const char *buf, size_t count)
 	}
 	xsegbd_dev->targetlen = strlen(xsegbd_dev->target);
 
+	if (xsegbd_dev->src_portno < start_portno || xsegbd_dev->src_portno > end_portno){
+		XSEGLOG("Invadid portno");
+		ret = -EINVAL;
+		goto out_dev;
+	}
+	xsegbd_dev->id = src_portno_to_id(xsegbd_dev->src_portno);
+
 	spin_lock(&xsegbd_devices_lock);
-	if (xsegbd_devices[xsegbd_dev->src_portno] != NULL) {
+	if (xsegbd_devices[xsegbd_dev->id] != NULL) {
 		ret = -EINVAL;
 		goto out_unlock;
 	}
-	xsegbd_devices[xsegbd_dev->src_portno] = xsegbd_dev;
-	xsegbd_dev->id = xsegbd_dev->src_portno;
+	xsegbd_devices[xsegbd_dev->id] = xsegbd_dev;
 	spin_unlock(&xsegbd_devices_lock);
 
-	XSEGLOG("registering block device major %d", major);
-	ret = register_blkdev(major, XSEGBD_NAME);
-	if (ret < 0) {
-		XSEGLOG("cannot register block device!");
-		ret = -EBUSY;
-		goto out_delentry;
-	}
-	xsegbd_dev->major = ret;
-	XSEGLOG("registered block device major %d", xsegbd_dev->major);
+	xsegbd_dev->major = major;
 
 	ret = xsegbd_bus_add_dev(xsegbd_dev);
 	if (ret)
-		goto out_blkdev;
+		goto out_delentry;
 
-	if (!xq_alloc_seq(&xsegbd_dev->blk_queue_pending, 
+	if (!xq_alloc_seq(&xsegbd_dev->blk_queue_pending,
 				xsegbd_dev->nr_requests,
 				xsegbd_dev->nr_requests))
 		goto out_bus;
@@ -972,7 +993,7 @@ static ssize_t xsegbd_add(struct bus_type *bus, const char *buf, size_t count)
 	if (!xsegbd_dev->blk_req_pending)
 		goto out_bus;
 
-	
+
 	XSEGLOG("joining segment");
 	//FIXME use xsebd module config for now
 	xsegbd_dev->xseg = xseg_join(	xsegbd.config.type,
@@ -981,7 +1002,7 @@ static ssize_t xsegbd_add(struct bus_type *bus, const char *buf, size_t count)
 					xseg_callback		);
 	if (!xsegbd_dev->xseg)
 		goto out_bus;
-	
+
 	XSEGLOG("%s binding to source port %u (destination %u)", xsegbd_dev->target,
 			xsegbd_dev->src_portno, xsegbd_dev->dst_portno);
 	port = xseg_bind_port(xsegbd_dev->xseg, xsegbd_dev->src_portno, NULL);
@@ -1015,12 +1036,9 @@ out_bus:
 	xsegbd_bus_del_dev(xsegbd_dev);
 	return ret;
 
-out_blkdev:
-	unregister_blkdev(xsegbd_dev->major, XSEGBD_NAME);
-
 out_delentry:
 	spin_lock(&xsegbd_devices_lock);
-	xsegbd_devices[xsegbd_dev->src_portno] = NULL;
+	xsegbd_devices[xsegbd_dev->id] = NULL;
 
 out_unlock:
 	spin_unlock(&xsegbd_devices_lock);
@@ -1029,6 +1047,7 @@ out_dev:
 	kfree(xsegbd_dev);
 
 out:
+	module_put(THIS_MODULE);
 	return ret;
 }
 
@@ -1096,16 +1115,32 @@ static void xsegbd_sysfs_cleanup(void)
 static int __init xsegbd_init(void)
 {
 	int ret = -ENOMEM;
+	max_dev = end_portno - start_portno;
+	if (max_dev < 0){
+		XSEGLOG("invalid port numbers");
+		ret = -EINVAL;
+		goto out;
+	}
 	xsegbd_devices = kzalloc(max_dev * sizeof(struct xsegbd_devices *), GFP_KERNEL);
 	if (!xsegbd_devices)
 		goto out;
 
 	spin_lock_init(&xsegbd_devices_lock);
 
+	XSEGLOG("registering block device major %d", major);
+	ret = register_blkdev(major, XSEGBD_NAME);
+	if (ret < 0) {
+		XSEGLOG("cannot register block device!");
+		ret = -EBUSY;
+		goto out_free;
+	}
+	major = ret;
+	XSEGLOG("registered block device major %d", major);
+
 	ret = -ENOSYS;
 	ret = xsegbd_xseg_init();
 	if (ret)
-		goto out_free;
+		goto out_unregister;
 
 	ret = xsegbd_sysfs_init();
 	if (ret)
@@ -1118,7 +1153,10 @@ out:
 
 out_xseg:
 	xsegbd_xseg_quit();
-	
+
+out_unregister:
+	unregister_blkdev(major, XSEGBD_NAME);
+
 out_free:
 	kfree(xsegbd_devices);
 
@@ -1129,6 +1167,7 @@ static void __exit xsegbd_exit(void)
 {
 	xsegbd_sysfs_cleanup();
 	xsegbd_xseg_quit();
+	unregister_blkdev(major, XSEGBD_NAME);
 }
 
 module_init(xsegbd_init);

@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 #
-# Copyright (C) 2011 Greek Research and Technology Network
+# Copyright (C) 2012 Greek Research and Technology Network
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -108,8 +108,8 @@ def _ParseVlmcShowmappedOutput(output, volume_name):
   field_cnt = len(splitted_lines[0])
   if field_cnt != allfields:
     sys.stderr.write("Cannot parse vlmc showmapped output because its format"
-                " seems to have changed; expected %s fields, found %s",
-                allfields, field_cnt)
+                " seems to have changed; expected %s fields, found %s" % 
+		(allfields, field_cnt))
     sys.exit(1)
 
   matched_lines = \
@@ -119,7 +119,7 @@ def _ParseVlmcShowmappedOutput(output, volume_name):
   if len(matched_lines) > 1:
     sys.stderr.write("The vlmc volume %s is mapped more than once."
                 " This shouldn't happen, try to unmap the extra"
-                " devices manually.", volume_name)
+                " devices manually." % volume_name)
     sys.exit(1) 
 
   if matched_lines:

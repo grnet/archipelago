@@ -1,4 +1,38 @@
 /*
+ * Copyright 2012 GRNET S.A. All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or
+ * without modification, are permitted provided that the following
+ * conditions are met:
+ *
+ *   1. Redistributions of source code must retain the above
+ *      copyright notice, this list of conditions and the following
+ *      disclaimer.
+ *   2. Redistributions in binary form must reproduce the above
+ *      copyright notice, this list of conditions and the following
+ *      disclaimer in the documentation and/or other materials
+ *      provided with the distribution.
+ *
+ * THIS SOFTWARE IS PROVIDED BY GRNET S.A. ``AS IS'' AND ANY EXPRESS
+ * OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+ * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+ * PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL GRNET S.A OR
+ * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+ * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF
+ * USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED
+ * AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
+ * ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ *
+ * The views and conclusions contained in the software and
+ * documentation are those of the authors and should not be
+ * interpreted as representing official policies, either expressed
+ * or implied, of GRNET S.A.
+ */
+
+/*
  * The Pithos File Blocker Peer (pfiled)
  */
 
@@ -538,7 +572,7 @@ out:
 	return;
 }
 
-static void handle_open(struct peerd *peer, struct peer_req *pr)
+static void handle_acquire(struct peerd *peer, struct peer_req *pr)
 {
 	struct pfiled *pfiled = __get_pfiled(peer);
 //	struct fio *fio = __get_fio(pr);
@@ -592,7 +626,7 @@ out:
 	return;
 }
 
-static void handle_close(struct peerd *peer, struct peer_req *pr)
+static void handle_release(struct peerd *peer, struct peer_req *pr)
 {
 	struct pfiled *pfiled = __get_pfiled(peer);
 //	struct fio *fio = __get_fio(pr);
@@ -649,10 +683,10 @@ int dispatch(struct peerd *peer, struct peer_req *pr, struct xseg_request *req,
 			handle_copy(peer, pr); break;
 		case X_DELETE:
 			handle_delete(peer, pr); break;
-		case X_OPEN:
-			handle_open(peer, pr); break;
+		case X_ACQUIRE:
+			handle_acquire(peer, pr); break;
 		case X_CLOSE:
-			handle_close(peer, pr); break;
+			handle_release(peer, pr); break;
 			//	case X_SNAPSHOT:
 		case X_SYNC:
 		default:
@@ -728,6 +762,7 @@ int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 	pfiled->path_len = strlen(pfiled->path);
 	if (!pfiled->path_len){
 		XSEGLOG2(&lc, E, "Pithos path was not provided");
+		usage(argv[0]);
 		return -1;
 	}
 	if (pfiled->path[pfiled->path_len -1] != '/'){
@@ -738,6 +773,7 @@ int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 	pfiled->vpath_len = strlen(pfiled->vpath);
 	if (!pfiled->vpath_len){
 		XSEGLOG2(&lc, E, "Archipelagos path was not provided");
+		usage(argv[0]);
 		return -1;
 	}
 	if (pfiled->vpath[pfiled->vpath_len -1] != '/'){
@@ -760,6 +796,7 @@ void custom_peer_finalize(struct peerd *peer)
 	return;
 }
 
+/*
 static int safe_atoi(char *s)
 {
 	long l;
@@ -771,3 +808,4 @@ static int safe_atoi(char *s)
 	else
 		return -1;
 }
+*/

@@ -1,6 +1,39 @@
 #!/usr/bin/env python
-#
 # archipelagos tool
+
+# Copyright 2012 GRNET S.A. All rights reserved.
+#
+# Redistribution and use in source and binary forms, with or
+# without modification, are permitted provided that the following
+# conditions are met:
+#
+#   1. Redistributions of source code must retain the above
+#      copyright notice, this list of conditions and the following
+#      disclaimer.
+#   2. Redistributions in binary form must reproduce the above
+#      copyright notice, this list of conditions and the following
+#      disclaimer in the documentation and/or other materials
+#      provided with the distribution.
+#
+# THIS SOFTWARE IS PROVIDED BY GRNET S.A. ``AS IS'' AND ANY EXPRESS
+# OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+# WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+# PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL GRNET S.A OR
+# CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+# SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+# LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF
+# USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED
+# AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+# LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
+# ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+# POSSIBILITY OF SUCH DAMAGE.
+#
+# The views and conclusions contained in the software and
+# documentation are those of the authors and should not be
+# interpreted as representing official policies, either expressed
+# or implied, of GRNET S.A.
+#
+
 
 import os, sys, subprocess, argparse, time, psutil, signal, errno
 from subprocess import call, check_call, Popen, PIPE
@@ -347,7 +380,7 @@ def loaded_modules():
 def loaded_module(name):
     return name in loaded_modules()
 
-def load_module(name):
+def load_module(name, args):
     s = "Loading %s " % name
     sys.stdout.write(s.ljust(FIRST_COLUMN_WIDTH))
     modules = loaded_modules()
@@ -355,9 +388,12 @@ def load_module(name):
         sys.stdout.write(yellow("Already loaded".ljust(SECOND_COLUMN_WIDTH)))
         sys.stdout.write("\n")
         return 0
-    cmd = ["modprobe %s" % name]
+    cmd = ["modprobe", "%s" % name]
+    if args:
+        for arg in args:
+            cmd.extend(["%s=%s" % (arg)])
     try:
-        check_call(cmd, shell=True);
+        check_call(cmd, shell=False);
     except Exception:
         sys.stdout.write(red("FAILED".ljust(SECOND_COLUMN_WIDTH)))
         sys.stdout.write("\n")
@@ -524,7 +560,7 @@ def start(args):
         return -1
 
     for m in modules:
-        if load_module(m) < 0:
+        if load_module(m, None) < 0:
             stop(args)
             return -1
     time.sleep(0.5)
@@ -546,7 +582,7 @@ def start(args):
         return -1
 
 
-    if load_module(xsegbd) < 0:
+    if load_module(xsegbd, xsegbd_args) < 0:
         stop(args)
         return -1
     return 0
@@ -606,10 +642,10 @@ def vlmc_showmapped(args):
     except:
         return -1
 
+    print "id\tpool\timage\tsnap\tdevice"
     if not devices:
         print "No volumes mapped\n"
-        return -1
-    print "id\tpool\timage\tsnap\tdevice"
+        return 0
     try:
         for f in devices:
             d_id = open(XSEGBD_SYSFS + "devices/" + f + "/id").read().strip()
@@ -621,6 +657,12 @@ def vlmc_showmapped(args):
         print >> sys.stderr, reason
         return -2
     return len(devices)
+
+def vlmc_showmapped_wrapper(args):
+    r = vlmc_showmapped(args)
+    if r < 0:
+        return r
+    return 0
 
 @exclusive
 def vlmc_create(args):
@@ -834,7 +876,7 @@ def vlmc():
     unmap_parser.add_argument('-p', '--pool', type=str, nargs='?', help='for backwards compatiblity with rbd')
 
     showmapped_parser = subparsers.add_parser('showmapped', help='Show mapped volumes')
-    showmapped_parser.set_defaults(func=vlmc_showmapped)
+    showmapped_parser.set_defaults(func=vlmc_showmapped_wrapper)
     showmapped_parser.add_argument('-p', '--pool', type=str, nargs='?', help='for backwards compatiblity with rbd')
 
     list_parser = subparsers.add_parser('list', help='List volumes')
@@ -869,6 +911,8 @@ if __name__ == "__main__":
     loadrc(args.config)
     if parser_func == archipelago:
         peers = construct_peers()
+	xsegbd_args = [('start_portno', str(XSEGBD_START)), ('end_portno',
+		str(XSEGBD_END))]
 
     sys.exit(args.func(args))
 
