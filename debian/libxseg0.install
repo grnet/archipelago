@@ -1,3 +1,1 @@
-xseg/lib/user/libxseg.so.0 usr/lib 
-xseg/lib/user/libxseg.so.0.0.1 usr/lib 
-
+usr/lib/libxseg.so.*

@@ -26,5 +26,5 @@ BUILT_MODULE_NAME[5]="xseg"
 BUILT_MODULE_LOCATION[5]="xseg/lib/kernel/"
 DEST_MODULE_LOCATION[5]="/kernel"
 
-MAKE[0]="make xseg KVER=${kernelver}"
+MAKE[0]="make XSEG_DOMAIN_TARGETS="kernel" KVER=${kernelver}"
 AUTOINSTALL="yes"
