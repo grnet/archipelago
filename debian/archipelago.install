@@ -1,9 +1,3 @@
-xseg/peers/user/st-vlmcd usr/bin
-xseg/peers/user/mt-mapperd usr/bin
-xseg/peers/user/pfiled usr/bin
-xseg/peers/user/mt-sosd usr/bin
-xseg/peers/user/mt-pfiled usr/bin
-xseg/peers/user/xseg usr/bin
-xseg/peers/user/vlmc-xseg usr/bin
+usr/bin/*
 xseg/tools/vlmc usr/bin
 xseg/tools/archipelago usr/bin
