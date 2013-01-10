@@ -47,6 +47,7 @@ SHELL=/bin/bash
 default: all
 
 all: libxseg.a libxseg.so
+	make -C python
 	make -C xq all
 	make -C xpool all
 	make -C xhash all
@@ -133,6 +134,7 @@ libxseg.a: xseg.o xq/xq.o drivers _initialize.o
 	cp -vaf $@ $(LIB)
 
 install:
+	make -C python install
 	mkdir -p $(DESTDIR)$(libdir)
 	cp -vaf libxseg.so $(DESTDIR)$(libdir)
 	cp -vaf libxseg.so.$(MAJOR) $(DESTDIR)$(libdir)
