@@ -47,8 +47,8 @@ DEBIANDIR = os.path.normpath(DEBIANDIR)
 
 
 # Package info
-#VERSION = @VERSION@
-VERSION = '0.1.1'
+VERSION = @VERSION
+#VERSION = '0.1.1'
 README = open(os.path.join(DEBIANDIR, 'README')).read()
 CHANGES = open(os.path.join(DEBIANDIR, 'changelog')).read()
 SHORT_DESCRIPTION = 'Package short description'

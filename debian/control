@@ -19,6 +19,7 @@ Description: Xseg library
  Extended Description here
 
 Package: python-xseg
+Section: python
 Architecture: any
 Depends: ${misc:Depends}, ${python:Depends}, libxseg0(=${binary:Version})
 Description: Python xseg bindings

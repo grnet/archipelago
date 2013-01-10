@@ -21,5 +21,8 @@ override_dh_auto_install:
 	cp xseg/base.mk /tmp/base.mk
 	sed -e 's/VERSION/$(VERSION)/g' < /tmp/base.mk > xseg/base.mk
 	rm /tmp/base.mk
+	cp xseg/sys/user/python/setup.py /tmp/setup.py
+	sed -e 's/@VERSION/"$(VERSION)"/g' < /tmp/setup.py > xseg/sys/user/python/setup.py
+	rm /tmp/setup.py
 	dh_auto_install
 
