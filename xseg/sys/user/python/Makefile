@@ -31,9 +31,15 @@
 # or implied, of GRNET S.A.
 #
 
-.PHONY: default all clean install
+.PHONY: default all clean install install-src
 
 include $(XSEG_HOME)/base.mk
+
+FILES="Makefile"
+FILES+=$(shell ls *.py)
+
+SUBDIR:=$(subst $(XSEG_HOME),,$(CURDIR))
+
 
 H2XML = h2xml
 XML2PY = xml2py
@@ -64,6 +70,16 @@ install:
 #	mkdir p $(DESTDIR)$(pythondir)
 #	cp -r xseg $(DESTDIR)$(pythondir)
 	python setup.py install --install-layout=deb --root=$(DESTDIR)
+
+install-src:
+	install -d $(DESTDIR)$(srcdir)$(SUBDIR) ;
+	@for f in $(FILES) ; do \
+		install -o 0 -g 0 -m 644 -t $(DESTDIR)$(srcdir)$(SUBDIR) $$f ; \
+	done
+	install -d $(DESTDIR)$(srcdir)$(SUBDIR)/xseg ;
+	install -o 0 -g 0 -m 644 -t $(DESTDIR)$(srcdir)$(SUBDIR)/xseg xseg/__init__.py ; \
+
+
 
 clean:
 	rm -f xseg.xml xprotocol.xml xseg/xseg_api.py xseg/xseg_api.pyc xseg/xprotocol.py xseg/xprotocol.pyc xseg/__init__.pyc

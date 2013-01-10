@@ -31,9 +31,15 @@
 # or implied, of GRNET S.A.
 #
 
-.PHONY: default all clean
+.PHONY: default all clean install install-src
 
 include $(XSEG_HOME)/base.mk
+
+FILES="Makefile"
+#FILES+=$(shell ls *.h)
+#FILES+=$(shell ls *.c)
+
+SUBDIR:=$(subst $(XSEG_HOME),,$(CURDIR))
 
 DEBUG=-g
 
@@ -60,3 +66,12 @@ xq.pic.o: $(BASE)/xtypes/xq.c $(BASE)/xtypes/xq.h $(BASE)/xtypes/xlock.h
 
 clean:
 	rm -f xq_lock_test xq_test xq.o xq.pic.o
+
+install:
+
+install-src:
+	install -d $(DESTDIR)$(srcdir)$(SUBDIR) ;
+	@for f in $(FILES) ; do \
+		install -o 0 -g 0 -m 644 -t $(DESTDIR)$(srcdir)$(SUBDIR) $$f ; \
+	done
+

@@ -31,11 +31,17 @@
 # or implied, of GRNET S.A.
 #
 
-.PHONY: default all clean
+.PHONY: default all clean install install-src
 
 include $(XSEG_HOME)/base.mk
 
 DEBUG=-g
+
+FILES="Makefile"
+#FILES+=$(shell ls *.h)
+#FILES+=$(shell ls *.c)
+
+SUBDIR:=$(subst $(XSEG_HOME),,$(CURDIR))
 
 default: all
 
@@ -57,3 +63,11 @@ xobj.pic.o: $(BASE)/xtypes/xobj.c $(BASE)/xtypes/xobj.h $(BASE)/xtypes/xlock.h
 
 clean:
 	rm -f xobj.o xobj.pic.o xobj_test
+
+install:
+
+install-src:
+	install -d $(DESTDIR)$(srcdir)$(SUBDIR) ;
+	@for f in $(FILES) ; do \
+		install -o 0 -g 0 -m 644 -t $(DESTDIR)$(srcdir)$(SUBDIR) $$f ; \
+	done

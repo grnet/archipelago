@@ -31,10 +31,18 @@
 # or implied, of GRNET S.A.
 #
 
-.PHONY: default all clean install
+.PHONY: default all clean install install-src
 
 include $(XSEG_HOME)/base.mk
 PEERS := xseg mt-sosd dummy mt-mapperd pfiled vlmc-xseg st-vlmcd mt-pfiled
+
+FILES="Makefile"
+FILES+=$(shell ls *.h)
+FILES+=$(shell ls *.c)
+FILES+=""
+
+SUBDIR:=$(subst $(XSEG_HOME),,$(CURDIR))
+
 
 default: $(PEERS)
 
@@ -86,10 +94,15 @@ vlmc-xseg: vlmc-tool.c $(BASE)/xseg/xseg.h
 	$(CC) $(CFLAGS) -o $@ $< $(INC) -L$(LIB) -lxseg
 
 install:
-	mkdir -p $(DESTDIR)$(bindir)
+	install -d $(DESTDIR)$(bindir)
 	@for p in $(PEERS); do\
-		echo "cp $$p $(DESTDIR)$(bindir)" ; \
-		cp $$p $(DESTDIR)$(bindir) ; \
+		install -o 0 -g 0 -m 755 -t $(DESTDIR)$(bindir) $$p ; \
+	done
+
+install-src:
+	install -d $(DESTDIR)$(srcdir)$(SUBDIR) 
+	@for f in $(FILES) ; do \
+		install -o 0 -g 0 -m 644 -t $(DESTDIR)$(srcdir)$(SUBDIR) $$f ; \
 	done
 
 clean:

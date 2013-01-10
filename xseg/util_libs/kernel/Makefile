@@ -31,4 +31,14 @@
 # or implied, of GRNET S.A.
 #
 
-default: 
+.PHONY: default clean install install-src
+
+default:
+
+clean:
+
+install:
+
+install-src:
+
+

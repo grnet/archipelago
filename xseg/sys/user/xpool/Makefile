@@ -31,11 +31,17 @@
 # or implied, of GRNET S.A.
 #
 
-.PHONY: default all clean
+.PHONY: default all clean install install-src
 
 include $(XSEG_HOME)/base.mk
 
 DEBUG=-g
+
+FILES="Makefile"
+#FILES+=$(shell ls *.h)
+#FILES+=$(shell ls *.c)
+
+SUBDIR:=$(subst $(XSEG_HOME),,$(CURDIR))
 
 default: all
 
@@ -49,6 +55,14 @@ xpool.o: $(BASE)/xtypes/xpool.c $(BASE)/xtypes/xpool.h $(BASE)/xtypes/xlock.h
 
 xpool.pic.o: $(BASE)/xtypes/xpool.c $(BASE)/xtypes/xpool.h $(BASE)/xtypes/xlock.h
 	$(CC) $(CFLAGS) $(INC) -fPIC -c -o $@ $<
+
+install:
+
+install-src:
+	install -d $(DESTDIR)$(srcdir)$(SUBDIR) ;
+	@for f in $(FILES) ; do \
+		install -o 0 -g 0 -m 644 -t $(DESTDIR)$(srcdir)$(SUBDIR) $$f ; \
+	done
 
 clean:
 	rm -f xpool.o xpool.pic.o
