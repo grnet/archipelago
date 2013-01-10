@@ -47,6 +47,7 @@ SHELL=/bin/bash
 default: all
 
 all: libxseg.a libxseg.so
+	make -C python
 	make -C xq all
 	make -C xpool all
 	make -C xhash all
