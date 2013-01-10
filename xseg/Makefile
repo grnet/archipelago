@@ -35,7 +35,6 @@
 
 TARGET=default
 include ./base.mk
-FILES=$(shell git ls-files | sed 's/.*git.*//')
 
 XSEG_CLEAN_TARGETS=$(patsubst %,clean-%,$(XSEG_DOMAIN_TARGETS))
 XSEG_INSTALL_TARGETS=$(patsubst %,install-%,$(XSEG_DOMAIN_TARGETS))
@@ -53,9 +52,7 @@ install: install-src $(XSEG_INSTALL_TARGETS)
 
 install-src:
 	mkdir -p $(DESTDIR)$(srcdir)
-	@for f in $(FILES) ; do \
-		cp --parents $$f $(DESTDIR)$(srcdir) ; \
-	done
+	cp -r * $(DESTDIR)$(srcdir)
 
 .PHONY: $(XSEG_DOMAIN_TARGETS)
 $(XSEG_DOMAIN_TARGETS):

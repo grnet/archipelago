@@ -16,8 +16,6 @@ override_dh_strip:
 	dh_strip -parchipelago --dbg-package=archipelago-dbg
 
 override_dh_auto_install:
-	sed -e 's/VERSION/$(VERSION)/g' < debian/archipelago-kernel-dkms.install.in \
-		> debian/archipelago-kernel-dkms.install
 	cp xseg/base.mk /tmp/base.mk
 	sed -e 's/VERSION/$(VERSION)/g' < /tmp/base.mk > xseg/base.mk
 	rm /tmp/base.mk
