@@ -41,19 +41,19 @@ from distutils.util import convert_path
 from fnmatch import fnmatchcase
 from setuptools import setup, find_packages
 
-#HERE = os.path.abspath(os.path.normpath(os.path.dirname(__file__)))
-HERE = os.path.join(os.path.abspath(os.path.normpath(os.path.dirname(__file__))),
-		'debian')
+HERE = os.path.abspath(os.path.normpath(os.path.dirname(__file__)))
+DEBIANDIR = os.path.join(HERE, '../../../../debian');
+DEBIANDIR = os.path.normpath(DEBIANDIR)
 
 
 # Package info
 #VERSION = @VERSION@
 VERSION = '0.1.1'
-README = open(os.path.join(HERE, 'README')).read()
-CHANGES = open(os.path.join(HERE, 'changelog')).read()
+README = open(os.path.join(DEBIANDIR, 'README')).read()
+CHANGES = open(os.path.join(DEBIANDIR, 'changelog')).read()
 SHORT_DESCRIPTION = 'Package short description'
 
-PACKAGES_ROOT = 'xseg/sys/user/python/'
+PACKAGES_ROOT = '.'
 PACKAGES = find_packages(PACKAGES_ROOT)
 
 # Package meta

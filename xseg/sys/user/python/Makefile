@@ -61,8 +61,9 @@ xseg/xprotocol.py: xprotocol.xml
 	$(XML2PY) -d -k defst -c $< -o $@
 
 install:
-	mkdir p $(DESTDIR)$(pythondir)
-	cp -r xseg $(DESTDIR)$(pythondir)
+#	mkdir p $(DESTDIR)$(pythondir)
+#	cp -r xseg $(DESTDIR)$(pythondir)
+	python setup.py install --install-layout=deb --root=$(DESTDIR)
 
 clean:
 	rm -f xseg.xml xprotocol.xml xseg/xseg_api.py xseg/xseg_api.pyc xseg/xprotocol.py xseg/xprotocol.pyc xseg/__init__.pyc
