@@ -48,11 +48,13 @@ ifndef CSTD
 export CSTD=-std=gnu99 -pedantic
 endif
 
+
 bindir="/usr/bin/"
 libdir="/usr/lib/"
 pythondir="/usr/lib/python2.7/"
 moduledir="/lib/modules/`uname -r`/extra/"
 srcdir="/usr/src/archipelago-kernel-dkms-VERSION/"
+ganetidir="/usr/share/ganeti/extstorage/vlmc/"
 
 INC=-I$(BASE)
 INC+=-I$(BASE)/peers/$(TARGET)
@@ -73,14 +75,14 @@ endif
 
 CONFIG=./config.mk
 
-default:
+#default:
 
-.PHONY: clean-config
+#.PHONY: clean-config
 
-clean: clean-config
+#clean: clean-config
 
-clean-config:
-	rm -f $(CONFIG)
+#clean-config:
+#	rm -f $(CONFIG)
 
 ifndef BASE
 exists=$(shell [ -f "$(CONFIG)" ] && echo exists)

@@ -31,11 +31,17 @@
 # or implied, of GRNET S.A.
 #
 
-.PHONY: default all clean
+.PHONY: default all clean install install-src
 
 include $(XSEG_HOME)/base.mk
 
 DEBUG=-g
+
+FILES="Makefile"
+#FILES+=$(shell ls *.h)
+#FILES+=$(shell ls *.c)
+
+SUBDIR:=$(subst $(XSEG_HOME),,$(CURDIR))
 
 default: all
 
@@ -53,6 +59,14 @@ xhash.o: $(BASE)/xtypes/xhash.c $(BASE)/xtypes/xhash.h $(BASE)/xtypes/xlock.h
 
 xhash.pic.o: $(BASE)/xtypes/xhash.c $(BASE)/xtypes/xhash.h $(BASE)/xtypes/xlock.h
 	$(CC) $(CFLAGS) $(INC) -DVAL_OVERLOAD -fPIC -c -o $@ $<
+
+install:
+
+install-src:
+	install -d $(DESTDIR)$(srcdir)$(SUBDIR) ;
+	@for f in $(FILES) ; do \
+		install -m 644 -t $(DESTDIR)$(srcdir)$(SUBDIR) $$f ; \
+	done
 
 clean:
 	rm -f xhash.o xhash.pic.o xhash_test

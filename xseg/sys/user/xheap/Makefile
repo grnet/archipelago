@@ -31,15 +31,21 @@
 # or implied, of GRNET S.A.
 #
 
-.PHONY: default all clean
+.PHONY: default all clean install install-src
 
 include $(XSEG_HOME)/base.mk
 
 DEBUG=-g
 
+FILES="Makefile"
+#FILES+=$(shell ls *.h)
+#FILES+=$(shell ls *.c)
+
+SUBDIR:=$(subst $(XSEG_HOME),,$(CURDIR))
+
 default: all
 
-all: xheap.o xheap.pic.o xheap_test 
+all: xheap.o xheap.pic.o xheap_test
 
 $(BASE)/sys/user/xseg_user.o:
 	make -C $(BASE)/sys/user xseg_user.o
@@ -53,6 +59,14 @@ xheap.o: $(BASE)/xtypes/xheap.c $(BASE)/xtypes/xheap.h $(BASE)/xtypes/xlock.h
 
 xheap.pic.o: $(BASE)/xtypes/xheap.c $(BASE)/xtypes/xheap.h $(BASE)/xtypes/xlock.h
 	$(CC) $(CFLAGS) $(INC) -fPIC -c -o $@ $<
+
+install:
+
+install-src:
+	install -d $(DESTDIR)$(srcdir)$(SUBDIR) ;
+	@for f in $(FILES) ; do \
+		install -m 644 -t $(DESTDIR)$(srcdir)$(SUBDIR) $$f ; \
+	done
 
 clean:
 	rm -f xheap.o xheap.pic.o xheap_test

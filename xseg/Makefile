@@ -36,56 +36,73 @@
 TARGET=default
 include ./base.mk
 
-XSEG_CLEAN_TARGETS=$(patsubst %,clean-%,$(XSEG_DOMAIN_TARGETS))
-XSEG_INSTALL_TARGETS=$(patsubst %,install-%,$(XSEG_DOMAIN_TARGETS))
+FILES="base.mk"
+FILES+="config.env"
+FILES+="envsetup"
+FILES+="Makefile"
+FILES+="launch"
+
+
+XSEG_BUILD_TARGETS=$(patsubst %,build-%,$(XSEG_DIRS))
+XSEG_CLEAN_TARGETS=$(patsubst %,clean-%,$(XSEG_DIRS))
+XSEG_INSTALL_TARGETS=$(patsubst %,install-%,$(XSEG_DIRS))
+XSEG_INSTALLSRC_TARGETS=$(patsubst %,install-src-%,$(XSEG_DIRS))
 
 default: targets
 
 target-list:
 	@echo $(XSEG_DOMAIN_TARGETS)
 
-targets: $(XSEG_DOMAIN_TARGETS)
+targets: $(XSEG_BUILD_TARGETS)
 
 clean: $(XSEG_CLEAN_TARGETS)
+	rm $(CONFIG)
 
-install: install-src $(XSEG_INSTALL_TARGETS)
+install: $(XSEG_INSTALL_TARGETS)
 
-install-src:
-	mkdir -p $(DESTDIR)$(srcdir)
-	cp -r * $(DESTDIR)$(srcdir)
+install-src: $(XSEG_INSTALLSRC_TARGETS) $(XSEG_INSTALLSRC_DIRS)
+	install -d $(DESTDIR)$(srcdir)/lib
+	install -d $(DESTDIR)$(srcdir)/lib/user
+	install -d $(DESTDIR)$(srcdir)/lib/kernel
+	install -d $(DESTDIR)$(srcdir)/
+	install -m 755 -t $(DESTDIR)$(srcdir) envsetup
+	install -m 755 -t $(DESTDIR)$(srcdir) launch
+	install -m 644 -t $(DESTDIR)$(srcdir) config.env
+	install -m 644 -t $(DESTDIR)$(srcdir) Makefile
+	install -m 644 -t $(DESTDIR)$(srcdir) base.mk
 
-.PHONY: $(XSEG_DOMAIN_TARGETS)
-$(XSEG_DOMAIN_TARGETS):
-	@for f in $(XSEG_DOMAIN_DIRS); do \
-		echo " "; \
-		echo "=== $@ in $$f ==="; \
-		echo " "; \
-		make -C $$f/$@ TARGET=$@ default || exit 1; \
-		echo " "; \
-	done
-	@echo " "
+#	@for f in $(FILES); do \
+#		install -m 644 -t $(DESTDIR)$(srcdir) $$f ; \
+#	done
+
+
+.PHONY: $(XSEG_BUILD_TARGETS)
+$(XSEG_BUILD_TARGETS):
+	@echo "" ;
+	@echo "=== $@ ===";
+	@make -C $(@:build-%=%) default || exit 1;
+	@echo "" ;
 
 .PHONY: $(XSEG_INSTALL_TARGETS)
 $(XSEG_INSTALL_TARGETS):
-	@for f in $(XSEG_DOMAIN_DIRS); do \
-		echo " "; \
-		echo "=== $@ in $$f ==="; \
-		echo " "; \
-		make -C $$f/$(@:install-%=%) TARGET=$@ install || true; \
-		echo " "; \
-	done
-	@echo " "
+	@echo "" ;
+	@echo "=== $@ ===";
+	@make -C $(@:install-%=%) install || true;
+	@echo "" ;
+
+.PHONY: $(XSEG_INSTALLSRC_TARGETS)
+$(XSEG_INSTALLSRC_TARGETS):
+	@echo "" ;
+	@echo "=== $@ ===";
+	@make -C $(@:install-src-%=%) install-src || true;
+	@echo "" ;
 
 .PHONY: $(XSEG_CLEAN_TARGETS)
 $(XSEG_CLEAN_TARGETS):
-	@for f in $(XSEG_DOMAIN_DIRS); do \
-		echo " "; \
-		echo "=== $@ in $$f ==="; \
-		echo " "; \
-		make -C $$f/$(@:clean-%=%) TARGET=$@ clean || true; \
-		echo " "; \
-	done
-	@echo " "
+	@echo "" ;
+	@echo "=== $@ ===";
+	@make -C $(@:clean-%=%) clean || true;
+	@echo "" ;
 
 distclean: $(XSEG_CLEAN_TARGETS)
 	rm -f lib/user/*.so* lib/user/*.a
