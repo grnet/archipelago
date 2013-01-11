@@ -166,25 +166,6 @@ install-src:
 	done
 
 
-#install -t $(DESTDIR)$(libdir) libxseg.so.$(MAJOR)
-#install -t $(DESTDIR)$(libdir) libxseg.so.$(MAJOR).$(MINOR)
-
-install-src:
-	make -C xq install-src
-	make -C xpool install-src
-	make -C xhash install-src
-	make -C xheap install-src
-	make -C xobj install-src
-	make -C python install-src
-	install -d $(DESTDIR)$(srcdir)$(SUBDIR) ;
-	@for f in $(FILES) ; do \
-		install -m 644 -t $(DESTDIR)$(srcdir)$(SUBDIR) $$f ; \
-	done
-	@for f in $(EFILES) ; do \
-		install -m 755 -t $(DESTDIR)$(srcdir)$(SUBDIR) $$f ; \
-	done
-
-
 clean:
 	make -C xq clean
 	make -C xpool clean

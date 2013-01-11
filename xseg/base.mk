@@ -49,12 +49,12 @@ export CSTD=-std=gnu99 -pedantic
 endif
 
 
-bindir="/usr/bin/"
-libdir="/usr/lib/"
-pythondir="/usr/lib/python2.7/"
-moduledir="/lib/modules/`uname -r`/extra/"
-srcdir="/usr/src/archipelago-kernel-dkms-VERSION/"
-ganetidir="/usr/share/ganeti/extstorage/vlmc/"
+bindir=/usr/bin/
+libdir=/usr/lib/
+pythondir=/usr/lib/python2.7/
+moduledir=/lib/modules/`uname -r`/extra/
+srcdir=/usr/src/archipelago-kernel-dkms-VERSION/
+ganetidir=/usr/share/ganeti/extstorage/vlmc/
 
 INC=-I$(BASE)
 INC+=-I$(BASE)/peers/$(TARGET)
