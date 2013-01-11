@@ -14,6 +14,7 @@ clean:
 
 install:
 	make -C xseg install
+	make -C xseg install-src
 	rm xseg/config.mk
 
 distclean:

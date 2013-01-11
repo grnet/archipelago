@@ -96,7 +96,7 @@ vlmc-xseg: vlmc-tool.c $(BASE)/xseg/xseg.h
 install:
 	install -d $(DESTDIR)$(bindir)
 	@for p in $(PEERS); do\
-		install -o 0 -g 0 -m 755 -t $(DESTDIR)$(bindir) $$p ; \
+		install -o root -g root -m 755 -t $(DESTDIR)$(bindir) $$p ; \
 	done
 
 install-src:

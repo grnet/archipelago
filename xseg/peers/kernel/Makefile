@@ -74,12 +74,6 @@ install-src:
 		install -o 0 -g 0 -m 644 -t $(DESTDIR)$(srcdir)$(SUBDIR) $$f ; \
 	done
 
-install-src:
-	install -d $(DESTDIR)$(srcdir)$(SUBDIR) ;
-	@for f in $(FILES) ; do \
-		install -o 0 -g 0 -m 644 -t $(DESTDIR)$(srcdir)$(SUBDIR) $$f ; \
-	done
-
 clean:
 	rm -f Module.symvers
 	make -C /lib/modules/$(KVER)/build M=$(PWD) V=$(V) clean
