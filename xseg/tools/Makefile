@@ -19,16 +19,16 @@ clean:
 install:
 	make -C ext_scripts install
 	install -d $(DESTDIR)$(bindir)
-	install -m 755 -t $(DESTDIR)$(bindir) archipelago
-	install -m 755 -t $(DESTDIR)$(bindir) vlmc
+	install -o 0 -g 0 -m 755 -t $(DESTDIR)$(bindir) archipelago
+	install -o 0 -g 0 -m 755 -t $(DESTDIR)$(bindir) vlmc
 
 install-src:
 	make -C ext_scripts install-src
 	install -d $(DESTDIR)$(srcdir)$(SUBDIR) ;
 	@for f in $(FILES) ; do \
-		install -m 644 -t $(DESTDIR)$(srcdir)$(SUBDIR) $$f ; \
+		install -o 0 -g 0 -m 644 -t $(DESTDIR)$(srcdir)$(SUBDIR) $$f ; \
 	done
 	@for f in $(EFILES) ; do \
-		install -m 755 -t $(DESTDIR)$(srcdir)$(SUBDIR) $$f ; \
+		install -o 0 -g 0 -m 755 -t $(DESTDIR)$(srcdir)$(SUBDIR) $$f ; \
 	done
 

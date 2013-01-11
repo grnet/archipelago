@@ -144,9 +144,27 @@ libxseg.a: xseg.o xq/xq.o drivers _initialize.o
 install:
 	make -C python install
 	install -d $(DESTDIR)$(libdir)
-	install -t $(DESTDIR)$(libdir) libxseg.so
+	#install -t $(DESTDIR)$(libdir) libxseg.so
+	#install -t $(DESTDIR)$(libdir) libxseg.so.$(MAJOR)
+	install -o 0 -g 0 -m 644 -t $(DESTDIR)$(libdir) libxseg.so.$(MAJOR).$(MINOR)
 	cp -vaf libxseg.so.$(MAJOR) $(DESTDIR)$(libdir)
-	cp -vaf libxseg.so.$(MAJOR).$(MINOR) $(DESTDIR)$(libdir)
+	cp -vaf libxseg.so $(DESTDIR)$(libdir)
+
+install-src:
+	make -C xq install-src
+	make -C xpool install-src
+	make -C xhash install-src
+	make -C xheap install-src
+	make -C xobj install-src
+	make -C python install-src
+	install -d $(DESTDIR)$(srcdir)$(SUBDIR) ;
+	@for f in $(FILES) ; do \
+		install -o 0 -g 0 -m 644 -t $(DESTDIR)$(srcdir)$(SUBDIR) $$f ; \
+	done
+	@for f in $(EFILES) ; do \
+		install -o 0 -g 0 -m 755 -t $(DESTDIR)$(srcdir)$(SUBDIR) $$f ; \
+	done
+
 
 #install -t $(DESTDIR)$(libdir) libxseg.so.$(MAJOR)
 #install -t $(DESTDIR)$(libdir) libxseg.so.$(MAJOR).$(MINOR)

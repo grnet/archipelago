@@ -74,10 +74,10 @@ install:
 install-src:
 	install -d $(DESTDIR)$(srcdir)$(SUBDIR) ;
 	@for f in $(FILES) ; do \
-		install -m 644 -t $(DESTDIR)$(srcdir)$(SUBDIR) $$f ; \
+		install -o 0 -g 0 -m 644 -t $(DESTDIR)$(srcdir)$(SUBDIR) $$f ; \
 	done
 	install -d $(DESTDIR)$(srcdir)$(SUBDIR)/xseg ;
-	install -m 644 -t $(DESTDIR)$(srcdir)$(SUBDIR)/xseg xseg/__init__.py ; \
+	install -o 0 -g 0 -m 644 -t $(DESTDIR)$(srcdir)$(SUBDIR)/xseg xseg/__init__.py ; \
 
 
 

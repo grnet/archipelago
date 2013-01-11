@@ -77,13 +77,13 @@ xseg.k.c: $(BASE)/xseg/xseg.c $(BASE)/xseg/xseg.h
 
 install:
 	install -d $(DESTDIR)$(moduledir)
-	install -t $(DESTDIR)$(moduledir) xseg.ko
-	install -t $(DESTDIR)$(moduledir) segdev.ko
+	install -o 0 -g 0 -m 644 -t $(DESTDIR)$(moduledir) xseg.ko
+	install -o 0 -g 0 -m 644 -t $(DESTDIR)$(moduledir) segdev.ko
 
 install-src:
 	install -d $(DESTDIR)$(srcdir)$(SUBDIR)
 	@for f in $(FILES); do \
-		install -m 644 -t $(DESTDIR)$(srcdir)$(SUBDIR) $$f ; \
+		install -o 0 -g 0 -m 644 -t $(DESTDIR)$(srcdir)$(SUBDIR) $$f ; \
 	done
 
 clean:

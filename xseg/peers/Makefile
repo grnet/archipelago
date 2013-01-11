@@ -55,6 +55,6 @@ $(XSEG_CLEAN_TARGETS):
 install-src: $(XSEG_INSTALLSRC_TARGETS)
 	install -d $(DESTDIR)$(srcdir)$(SUBDIR) ;
 	@for f in $(FILES) ; do \
-		install -m 644 -t $(DESTDIR)$(srcdir)$(SUBDIR) $$f ; \
+		install -o 0 -g 0 -m 644 -t $(DESTDIR)$(srcdir)$(SUBDIR) $$f ; \
 	done
 

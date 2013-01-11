@@ -66,14 +66,14 @@ all: $(BASE)/sys/kernel/Module.symvers
 
 install:
 	install -d $(DESTDIR)$(moduledir)
-	install -m 644 -t $(DESTDIR)$(moduledir) xseg_segdev.ko
-	install -m 644 -t $(DESTDIR)$(moduledir) xseg_posix.ko
-	install -m 644 -t $(DESTDIR)$(moduledir) xseg_pthread.ko
+	install -o 0 -g 0 -m 644 -t $(DESTDIR)$(moduledir) xseg_segdev.ko
+	install -o 0 -g 0 -m 644 -t $(DESTDIR)$(moduledir) xseg_posix.ko
+	install -o 0 -g 0 -m 644 -t $(DESTDIR)$(moduledir) xseg_pthread.ko
 
 install-src:
 	install -d $(DESTDIR)$(srcdir)$(SUBDIR) ;
 	@for f in $(FILES) ; do \
-		install -m 644 -t $(DESTDIR)$(srcdir)$(SUBDIR) $$f ; \
+		install -o 0 -g 0 -m 644 -t $(DESTDIR)$(srcdir)$(SUBDIR) $$f ; \
 	done
 
 

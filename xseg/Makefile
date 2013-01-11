@@ -65,14 +65,14 @@ install-src: $(XSEG_INSTALLSRC_TARGETS) $(XSEG_INSTALLSRC_DIRS)
 	install -d $(DESTDIR)$(srcdir)/lib/user
 	install -d $(DESTDIR)$(srcdir)/lib/kernel
 	install -d $(DESTDIR)$(srcdir)/
-	install -m 755 -t $(DESTDIR)$(srcdir) envsetup
-	install -m 755 -t $(DESTDIR)$(srcdir) launch
-	install -m 644 -t $(DESTDIR)$(srcdir) config.env
-	install -m 644 -t $(DESTDIR)$(srcdir) Makefile
-	install -m 644 -t $(DESTDIR)$(srcdir) base.mk
+	install -o 0 -g 0 -m 755 -t $(DESTDIR)$(srcdir) envsetup
+	install -o 0 -g 0 -m 755 -t $(DESTDIR)$(srcdir) launch
+	install -o 0 -g 0 -m 644 -t $(DESTDIR)$(srcdir) config.env
+	install -o 0 -g 0 -m 644 -t $(DESTDIR)$(srcdir) Makefile
+	install -o 0 -g 0 -m 644 -t $(DESTDIR)$(srcdir) base.mk
 
 #	@for f in $(FILES); do \
-#		install -m 644 -t $(DESTDIR)$(srcdir) $$f ; \
+#		install -o 0 -g 0 -m 644 -t $(DESTDIR)$(srcdir) $$f ; \
 #	done
 
 
