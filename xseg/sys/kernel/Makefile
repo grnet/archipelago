@@ -31,7 +31,7 @@
 # or implied, of GRNET S.A.
 #
 
-.PHONY: clean
+.PHONY: clean default install install-src
 
 include $(XSEG_HOME)/base.mk
 
@@ -39,6 +39,11 @@ ifeq (,$(KVER))
 KVER := $(shell uname -r)
 endif
 
+FILES="Makefile"
+FILES+=$(shell ls *.h)
+FILES+=$(shell ls *.c)
+
+SUBDIR:=$(subst $(XSEG_HOME),,$(CURDIR))
 
 KDIR := /lib/modules/$(KVER)/build
 PWD := $(shell pwd)
@@ -71,9 +76,15 @@ xseg.k.c: $(BASE)/xseg/xseg.c $(BASE)/xseg/xseg.h
 	ln -sf $< $@
 
 install:
-	mkdir -p $(DESTDIR)$(moduledir)
-	cp xseg.ko $(DESTDIR)$(moduledir)
-	cp segdev.ko $(DESTDIR)$(moduledir)
+	install -d $(DESTDIR)$(moduledir)
+	install -t $(DESTDIR)$(moduledir) xseg.ko
+	install -t $(DESTDIR)$(moduledir) segdev.ko
+
+install-src:
+	install -d $(DESTDIR)$(srcdir)$(SUBDIR)
+	@for f in $(FILES); do \
+		install -m 644 -t $(DESTDIR)$(srcdir)$(SUBDIR) $$f ; \
+	done
 
 clean:
 	rm -f xq.k.c xpool.k.c xhash.k.c xheap.k.c xobj.k.c xseg.k.c

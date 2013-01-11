@@ -31,9 +31,17 @@
 # or implied, of GRNET S.A.
 #
 
-.PHONY: default all clean drivers install
+.PHONY: default all clean drivers install install-src
 
 include $(XSEG_HOME)/base.mk
+
+FILES="Makefile"
+FILES+=$(shell ls *.h)
+FILES+=$(shell ls *.c)
+
+EFILES+="make_symbol_map.sh"
+
+SUBDIR:=$(subst $(XSEG_HOME),,$(CURDIR))
 
 MAJOR=0
 MINOR=0.1
@@ -135,10 +143,26 @@ libxseg.a: xseg.o xq/xq.o drivers _initialize.o
 
 install:
 	make -C python install
-	mkdir -p $(DESTDIR)$(libdir)
-	cp -vaf libxseg.so $(DESTDIR)$(libdir)
-	cp -vaf libxseg.so.$(MAJOR) $(DESTDIR)$(libdir)
-	cp -vaf libxseg.so.$(MAJOR).$(MINOR) $(DESTDIR)$(libdir)
+	install -d $(DESTDIR)$(libdir)
+	install -t $(DESTDIR)$(libdir) libxseg.so
+	install -t $(DESTDIR)$(libdir) libxseg.so.$(MAJOR)
+	install -t $(DESTDIR)$(libdir) libxseg.so.$(MAJOR).$(MINOR)
+
+install-src:
+	make -C xq install-src
+	make -C xpool install-src
+	make -C xhash install-src
+	make -C xheap install-src
+	make -C xobj install-src
+	make -C python install-src
+	install -d $(DESTDIR)$(srcdir)$(SUBDIR) ;
+	@for f in $(FILES) ; do \
+		install -m 644 -t $(DESTDIR)$(srcdir)$(SUBDIR) $$f ; \
+	done
+	@for f in $(EFILES) ; do \
+		install -m 755 -t $(DESTDIR)$(srcdir)$(SUBDIR) $$f ; \
+	done
+
 
 clean:
 	make -C xq clean
