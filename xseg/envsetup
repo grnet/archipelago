@@ -77,7 +77,7 @@ if [ "$1" = "show" ]; then
 	echo "export XSEG_DIRS="${XSEG_DIRS}
 	echo "export XSEG_DOMAIN_DIRS="${XSEG_DOMAIN_DIRS}
 	echo "export PATH="${PATH}
-	echo "export LD_LIBRARY_PATH="${LD_LIBRARY_PATH}
+	echo "export LD_LIBRARY_PATH=${LD_LIBRARY_PATH}"
 else
 	if [ -z "${NONINTERACTIVE}" ]; then
 		[ -z "$SHELL" ] && SHELL=/bin/bash

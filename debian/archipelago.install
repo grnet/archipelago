@@ -1,3 +1,3 @@
+#xseg/tools/vlmc usr/bin
+#xseg/tools/archipelago usr/bin
 usr/bin/*
-xseg/tools/vlmc usr/bin
-xseg/tools/archipelago usr/bin

@@ -6,13 +6,15 @@ build: xseg
 
 xseg:
 	make -C xseg
+	rm xseg/config.mk
 
 clean:
 	make -C xseg clean
-	rm ./config.mk
+	rm xseg/config.mk
 
 install:
 	make -C xseg install
+	rm xseg/config.mk
 
 distclean:
 	make -C xseg distclean

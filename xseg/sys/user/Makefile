@@ -145,8 +145,11 @@ install:
 	make -C python install
 	install -d $(DESTDIR)$(libdir)
 	install -t $(DESTDIR)$(libdir) libxseg.so
-	install -t $(DESTDIR)$(libdir) libxseg.so.$(MAJOR)
-	install -t $(DESTDIR)$(libdir) libxseg.so.$(MAJOR).$(MINOR)
+	cp -vaf libxseg.so.$(MAJOR) $(DESTDIR)$(libdir)
+	cp -vaf libxseg.so.$(MAJOR).$(MINOR) $(DESTDIR)$(libdir)
+
+#install -t $(DESTDIR)$(libdir) libxseg.so.$(MAJOR)
+#install -t $(DESTDIR)$(libdir) libxseg.so.$(MAJOR).$(MINOR)
 
 install-src:
 	make -C xq install-src

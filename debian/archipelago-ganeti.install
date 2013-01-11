@@ -1,10 +1,12 @@
 #vlmc ganeti ext storage scripts 
-xseg/tools/ext_scripts/attach usr/share/ganeti/extstorage/vlmc
-xseg/tools/ext_scripts/create usr/share/ganeti/extstorage/vlmc
-xseg/tools/ext_scripts/detach usr/share/ganeti/extstorage/vlmc
-xseg/tools/ext_scripts/grow usr/share/ganeti/extstorage/vlmc
-xseg/tools/ext_scripts/parameters.list usr/share/ganeti/extstorage/vlmc
-xseg/tools/ext_scripts/remove usr/share/ganeti/extstorage/vlmc
-xseg/tools/ext_scripts/verify usr/share/ganeti/extstorage/vlmc
-xseg/tools/ext_scripts/vlmc_wrapper.py usr/share/ganeti/extstorage/vlmc
+#xseg/tools/ext_scripts/attach usr/share/ganeti/extstorage/vlmc
+#xseg/tools/ext_scripts/create usr/share/ganeti/extstorage/vlmc
+#xseg/tools/ext_scripts/detach usr/share/ganeti/extstorage/vlmc
+#xseg/tools/ext_scripts/grow usr/share/ganeti/extstorage/vlmc
+#xseg/tools/ext_scripts/parameters.list usr/share/ganeti/extstorage/vlmc
+#xseg/tools/ext_scripts/remove usr/share/ganeti/extstorage/vlmc
+#xseg/tools/ext_scripts/verify usr/share/ganeti/extstorage/vlmc
+#xseg/tools/ext_scripts/vlmc_wrapper.py usr/share/ganeti/extstorage/vlmc
+#
+usr/share/ganeti/*
 

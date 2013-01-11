@@ -1,6 +1,8 @@
 #!/usr/bin/make -f
 # -*- makefile -*-
 
+#export DH_VERBOSE=1
+
 .PHONY: override_dh_dkms override_dh_strip
 VERSION := $(shell head -n 1 debian/changelog | sed -r 's/.*([0-9]+\.[0-9]+\.[0-9]+).*/\1/g')
 

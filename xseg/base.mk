@@ -49,7 +49,7 @@ export CSTD=-std=gnu99 -pedantic
 endif
 
 
-bindir="/usr/bin/"
+bindir=/usr/bin/
 libdir="/usr/lib/"
 pythondir="/usr/lib/python2.7/"
 moduledir="/lib/modules/`uname -r`/extra/"
