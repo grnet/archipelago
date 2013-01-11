@@ -55,7 +55,7 @@ SHELL=/bin/bash
 default: all
 
 all: libxseg.a libxseg.so
-	make -C python
+	make -C python MAJOR=$(MAJOR) MINOR=$(MINOR)
 	make -C xq all
 	make -C xpool all
 	make -C xhash all
