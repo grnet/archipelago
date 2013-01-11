@@ -35,6 +35,13 @@
 
 include $(XSEG_HOME)/base.mk
 
+FILES="Makefile"
+#FILES+=$(shell ls *.h)
+FILES+=$(shell ls *.c)
+
+SUBDIR:=$(subst $(XSEG_HOME),,$(CURDIR))
+
+
 DRIVERS=xseg_posix xseg_segdev xseg_pthread
 DRVOBJS=$(DRIVERS:=.o)
 DRVSOS=$(DRIVERS:=.so)
@@ -67,5 +74,18 @@ xseg_pthread.so: xseg_pthread.o $(BASE)/sys/user/xseg_user.o
 .PHONY: lib
 lib:
 	cp -vaf $(DRVSOS) $(LIB)
+
+.PHONY: install-src
+
+install-src:
+	install -d $(DESTDIR)$(srcdir)$(SUBDIR) ;
+	@for f in $(FILES) ; do \
+		install -o 0 -g 0 -m 644 -t $(DESTDIR)$(srcdir)$(SUBDIR) $$f ; \
+	done
+
+.PHONY: install
+install:
+
+
 clean:
 	rm -f $(DRVOBJS) $(DRVSOS)

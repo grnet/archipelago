@@ -31,11 +31,20 @@
 # or implied, of GRNET S.A.
 #
 
-.PHONY: default all clean
+.PHONY: default all clean install install-src
 
 include $(XSEG_HOME)/base.mk
+PEERS := xseg mt-sosd dummy mt-mapperd pfiled vlmc-xseg st-vlmcd mt-pfiled
 
-default: all
+FILES="Makefile"
+FILES+=$(shell ls *.h)
+FILES+=$(shell ls *.c)
+FILES+=""
+
+SUBDIR:=$(subst $(XSEG_HOME),,$(CURDIR))
+
+
+default: $(PEERS)
 
 #all: filed xseg sosd vlmcd mapperd
 #all: filed xseg vlmcd mapperd
@@ -83,6 +92,18 @@ pfiled: pfiled.c common.c $(BASE)/xseg/xseg.h $(BASE)/xseg/protocol.h common.h
 
 vlmc-xseg: vlmc-tool.c $(BASE)/xseg/xseg.h
 	$(CC) $(CFLAGS) -o $@ $< $(INC) -L$(LIB) -lxseg
+
+install:
+	install -d $(DESTDIR)$(bindir)
+	@for p in $(PEERS); do\
+		install -o 0 -g 0 -m 755 -t $(DESTDIR)$(bindir) $$p ; \
+	done
+
+install-src:
+	install -d $(DESTDIR)$(srcdir)$(SUBDIR) 
+	@for f in $(FILES) ; do \
+		install -o 0 -g 0 -m 644 -t $(DESTDIR)$(srcdir)$(SUBDIR) $$f ; \
+	done
 
 clean:
 	rm -f filed xseg sosd vlmcd mapperd mt-sosd dummy monitor mt-mapperd \

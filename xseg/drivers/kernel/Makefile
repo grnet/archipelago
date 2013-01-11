@@ -31,7 +31,7 @@
 # or implied, of GRNET S.A.
 #
 
-.PHONY: default all clean
+.PHONY: default all clean install install-src
 
 include $(XSEG_HOME)/base.mk
 
@@ -48,6 +48,12 @@ obj-m += xseg_segdev.o
 obj-m += xseg_posix.o
 obj-m += xseg_pthread.o
 
+FILES="Makefile"
+#FILES+=$(shell ls *.h)
+FILES+=$(shell ls *.c)
+
+SUBDIR:=$(subst $(XSEG_HOME),,$(CURDIR))
+
 default: all
 
 $(BASE)/sys/kernel/Module.symvers:
@@ -57,6 +63,19 @@ all: $(BASE)/sys/kernel/Module.symvers
 	cp -vaf $< .
 	$(MAKE) -C $(KDIR) SUBDIRS=$(PWD) V=$(V) modules
 	cp -vaf xseg_pthread.ko xseg_segdev.ko xseg_posix.ko $(LIBDIR)
+
+install:
+	install -d $(DESTDIR)$(moduledir)
+	install -o 0 -g 0 -m 644 -t $(DESTDIR)$(moduledir) xseg_segdev.ko
+	install -o 0 -g 0 -m 644 -t $(DESTDIR)$(moduledir) xseg_posix.ko
+	install -o 0 -g 0 -m 644 -t $(DESTDIR)$(moduledir) xseg_pthread.ko
+
+install-src:
+	install -d $(DESTDIR)$(srcdir)$(SUBDIR) ;
+	@for f in $(FILES) ; do \
+		install -o 0 -g 0 -m 644 -t $(DESTDIR)$(srcdir)$(SUBDIR) $$f ; \
+	done
+
 
 clean:
 	rm -f Module.symvers

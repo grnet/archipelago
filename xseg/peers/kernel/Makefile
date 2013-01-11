@@ -35,6 +35,13 @@
 
 include $(XSEG_HOME)/base.mk
 
+FILES="Makefile"
+FILES+=$(shell ls *.h)
+FILES+=$(shell ls *.c)
+
+SUBDIR:=$(subst $(XSEG_HOME),,$(CURDIR))
+
+
 ifeq (,$(KVER))
 KVER := $(shell uname -r)
 endif
@@ -56,6 +63,16 @@ all: $(BASE)/drivers/kernel/Module.symvers
 	cp -vaf $< .
 	$(MAKE) -C $(KDIR) SUBDIRS=$(PWD) V=$(V) modules
 	cp -vaf xsegbd.ko $(LIBDIR)
+
+install:
+	mkdir -p $(DESTDIR)$(moduledir)
+	install -o 0 -g 0 -m 644 $(DESTDIR)$(moduledir) xsegbd.ko
+
+install-src:
+	install -d $(DESTDIR)$(srcdir)$(SUBDIR) ;
+	@for f in $(FILES) ; do \
+		install -o 0 -g 0 -m 644 -t $(DESTDIR)$(srcdir)$(SUBDIR) $$f ; \
+	done
 
 clean:
 	rm -f Module.symvers
