@@ -30,7 +30,7 @@ Package: archipelago
 Architecture: amd64
 Depends: ${misc:Depends}, ${python:Depends}, ${shlibs:Depends},
 	 libxseg0(=${binary:Version}), libst1(>=1.9-3), python-xseg(=${binary:Version}),
-	 librados2(=0.54-1-grnet), python-psutil(>=0.1.3), python-argparse,
+	 librados2(=0.56.1-1-grnet), python-psutil(>=0.1.3), python-argparse,
 	 libssl0.9.8,  archipelago-kernel-dkms(=${binary:Version})
 Description:  Provides archipelago infrastructure
  Extended Description here
