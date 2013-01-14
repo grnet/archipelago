@@ -224,6 +224,7 @@ struct xseg_task {
 #define X_MAPW     13
 #define X_OPEN     14
 #define X_CLOSE    15
+#define	X_SNAPSHOT 16
 
 /* FLAGS */
 #define XF_NOSYNC (1 << 0)

@@ -81,5 +81,14 @@ struct xseg_request_copy {
 	uint32_t targetlen;
 };
 
+struct xseg_request_snapshot {
+        char target[XSEG_MAX_TARGETLEN];
+	uint32_t targetlen;
+};
+
+struct xseg_reply_snapshot {
+        char target[XSEG_MAX_TARGETLEN];
+	uint32_t targetlen;
+};
 
 #endif

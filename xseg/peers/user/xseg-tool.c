@@ -581,6 +581,48 @@ int cmd_clone(char *src, char *dst)
 	return 0;
 }
 
+int cmd_snapshot(char *src, char *dst, long block_size)
+{
+
+        uint32_t targetlen = strlen(src);
+	uint32_t parentlen = strlen(dst);
+        struct xseg_request *req;
+        struct xseg_request_snapshot *xsnapshot;
+	xseg_bind_port(xseg, srcport, NULL);
+	req = xseg_get_request(xseg, srcport, dstport, X_ALLOC);
+        if (!req) {
+                fprintf(stderr, "No request\n");
+                return -1;
+        }
+
+	int r = xseg_prep_request(xseg, req, targetlen, sizeof(struct xseg_request_snapshot));
+        if (r < 0) {
+                fprintf(stderr, "Cannot prepare request!\n");
+                xseg_put_request(xseg, req, srcport);
+                return -1;
+        }
+
+	char *target = xseg_get_target(xseg, req);
+	char *data = xseg_get_data(xseg, req);
+
+	strncpy(target, src, targetlen);
+        xsnapshot = (struct xseg_request_snapshot *) data;
+        strncpy(xsnapshot->target, dst, parentlen);
+	xsnapshot->targetlen = parentlen;
+        req->offset = 0;
+        req->size = (uint64_t) block_size;
+        req->op = X_SNAPSHOT;
+
+	xport p = xseg_submit(xseg, req, srcport, X_ALLOC);
+	if (p == NoPort){
+		fprintf(stderr, "Cannot submit request\n");
+		return -1;
+	}
+	xseg_signal(xseg, p);
+
+	return 0;
+}
+
 void log_req(int logfd, uint32_t portno2, uint32_t portno1, int op, int method,
 		struct xseg_request *req)
 {
@@ -1626,9 +1668,13 @@ void handle_reply(struct xseg_request *req)
 		break;
 	case X_CLOSE:
 		fprintf(stderr, "Closed %s\n", req_target);
+		break;
 	case X_OPEN:
 		fprintf(stderr, "Opened %s\n", req_target);
-
+		break;
+	case X_SNAPSHOT:
+		fprintf(stderr, "Snapshotted %s\n", req_target);
+		break;
 	default:
 		break;
 	}
@@ -2007,6 +2053,13 @@ int main(int argc, char **argv)
 			char *src = argv[i+1];
 			char *dst = argv[i+2];
 			ret = cmd_clone(src, dst);
+			i += 2;
+			continue;
+		}
+		if (!strcmp(argv[i], "snapshot") && (i + 2 < argc)) {
+			char *src = argv[i+1];
+			char *dst = argv[i+2];
+			ret = cmd_snapshot(src, dst, 4096*1024);
 			i += 2;
 			continue;
 		}
