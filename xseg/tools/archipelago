@@ -1123,7 +1123,7 @@ def vlmc_open(args):
 
     ret = False
     xseg_ctx = Xseg_ctx(SPEC, VTOOL)
-    with Request(xseg_ctx, VPORT, len(name), 0) as req:
+    with Request(xseg_ctx, VPORT_START, len(name), 0) as req:
         req.set_op(X_OPEN)
         req.set_size(0)
         req.set_offset(0)
@@ -1148,7 +1148,7 @@ def vlmc_close(args):
 
     ret = False
     xseg_ctx = Xseg_ctx(SPEC, VTOOL)
-    with Request(xseg_ctx, VPORT, len(name), 0) as req:
+    with Request(xseg_ctx, VPORT_START, len(name), 0) as req:
         req.set_op(X_CLOSE)
         req.set_size(0)
         req.set_offset(0)

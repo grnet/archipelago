@@ -2,7 +2,8 @@
 
 include $(XSEG_HOME)/base.mk
 
-FILES="Makefile"
+DEVFILES="Makefile"
+
 FILES+="parameters.list"
 
 EFILES="vlmc_wrapper.py"
@@ -21,12 +22,18 @@ clean:
 
 install:
 	install -d $(DESTDIR)$(ganetidir)
+	@for f in $(FILES) ; do \
+		install -o 0 -g 0 -m 644 -t $(DESTDIR)$(ganetidir) $$f ; \
+	done
 	@for f in $(EFILES) ; do \
 		install -o 0 -g 0 -m 755 -t $(DESTDIR)$(ganetidir) $$f ; \
 	done
 
 install-src:
 	install -d $(DESTDIR)$(srcdir)$(SUBDIR) ;
+	@for f in $(DEVFILES) ; do \
+		install -o 0 -g 0 -m 644 -t $(DESTDIR)$(srcdir)$(SUBDIR) $$f ; \
+	done
 	@for f in $(FILES) ; do \
 		install -o 0 -g 0 -m 644 -t $(DESTDIR)$(srcdir)$(SUBDIR) $$f ; \
 	done
