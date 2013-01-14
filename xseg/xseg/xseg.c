@@ -1193,6 +1193,8 @@ done:
 	return req;
 }
 
+//add flags
+//do not put request if path not empty or X_FORCE set
 int xseg_put_request (struct xseg *xseg, struct xseg_request *xreq,
 			xport portno)
 {
@@ -1801,6 +1803,17 @@ int xseg_finalize(void)
 {
 	/* finalize not supported yet */
 	return -1;
+}
+
+
+char* xseg_get_data_nonstatic(struct xseg* xseg, struct xseg_request *req)
+{
+        return xseg_get_data(xseg, req);
+}
+
+char* xseg_get_target_nonstatic(struct xseg* xseg, struct xseg_request *req)
+{
+        return xseg_get_target(xseg, req);
 }
 
 

@@ -59,7 +59,8 @@
 
 struct xlock {
 	unsigned long owner;
-} __attribute__ ((aligned (16))); /* support up to 128bit longs */
+};
+//} __attribute__ ((aligned (16))); /* support up to 128bit longs */
 
 static inline unsigned long xlock_acquire(struct xlock *lock, unsigned long who)
 {

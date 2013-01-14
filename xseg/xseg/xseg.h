@@ -224,6 +224,7 @@ struct xseg_task {
 #define X_MAPW     13
 #define X_OPEN     14
 #define X_CLOSE    15
+#define	X_SNAPSHOT 16
 
 /* FLAGS */
 #define XF_NOSYNC (1 << 0)
@@ -428,11 +429,14 @@ struct xseg_request *  xseg_accept          ( struct xseg         * xseg,
 
 struct xseg_port* xseg_get_port(struct xseg *xseg, uint32_t portno);
 
+
+extern char* xseg_get_data_nonstatic(struct xseg* xseg, struct xseg_request *req);
+extern char* xseg_get_target_nonstatic(struct xseg* xseg, struct xseg_request *req);
+
 static inline uint32_t xseg_portno(struct xseg *xseg, struct xseg_port *port)
 {
 	return port->portno;
 }
-
 static inline char* xseg_get_target(struct xseg* xseg, struct xseg_request *req)
 {
 	return (char *) XPTR_TAKE(req->target, xseg->segment);
