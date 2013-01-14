@@ -24,7 +24,7 @@ case "$1" in
 		    if [ -x "`which invoke-rc.d 2>/dev/null`" ]; then
 			    invoke-rc.d archipelago start || exit $?
 		    else
-			    /etc/init.d/archipelago stop  || exit $?
+			    /etc/init.d/archipelago start  || exit $?
 		    fi
 	    fi
 
