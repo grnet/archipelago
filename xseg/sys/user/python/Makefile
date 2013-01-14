@@ -61,7 +61,12 @@ xprotocol.xml:
 	$(H2XML) -c $(INC) -o $@ $(BASE)/xseg/protocol.h
 
 xseg/xseg_api.py: xseg.xml
-	$(XML2PY) -d -k defst -l $(BASE)/lib/user/libxseg.so -c $< -o $@
+	$(XML2PY) -d -k defst -l $(BASE)/lib/user/libxseg.so.$(MAJOR) -c $< -o $@
+	sed -i -e 's/xseg_get_data_nonstatic.restype = STRING/xseg_get_data_nonstatic.restype = POINTER(c_char)/g' xseg/xseg_api.py
+	sed -i -e 's/xseg_get_target_nonstatic.restype = STRING/xseg_get_target_nonstatic.restype = POINTER(c_char)/g' xseg/xseg_api.py
+	sed -i -e 's/STRING = 1//g' xseg/xseg_api.py
+	sed -i -e 's,$(BASE)/lib/user/libxseg.so.$(MAJOR),libxseg.so.$(MAJOR),g' xseg/xseg_api.py
+
 
 xseg/xprotocol.py: xprotocol.xml
 	$(XML2PY) -d -k defst -c $< -o $@
