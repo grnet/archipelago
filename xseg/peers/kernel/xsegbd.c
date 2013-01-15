@@ -515,7 +515,8 @@ int update_dev_sectors_from_request(	struct xsegbd_device *xsegbd_dev,
 		XSEGLOG("Invalid xsegbd_dev");
 		return -ENOENT;
 	}
-	xsegbd_dev->sectors = *((uint64_t *) data) / 512ULL;
+	struct xseg_reply_info *xreply = (struct xseg_reply_info *)data;
+	xsegbd_dev->sectors = xreply->size / 512ULL;
 	return 0;
 }
 

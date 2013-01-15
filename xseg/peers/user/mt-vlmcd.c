@@ -454,9 +454,10 @@ static int mapping_info(struct peerd *peer, struct peer_req *pr)
 		vio->err = 1;
 	}
 	else {
-		struct xseg_reply_info *xinfo = (struct xseg_reply_info *) xseg_get_data(peer->xseg, vio->mreq);
+		struct xseg_reply_info *xinfo = (struct xseg_reply_info *)xseg_get_data(peer->xseg, vio->mreq);
 		char *data = xseg_get_data(peer->xseg, pr->req);
-		*(uint64_t *)data = xinfo->size;
+		struct xseg_reply_info *xreply = (struct xseg_reply_info *)data;
+		xreply->size = xinfo->size;
 	}
 	xseg_put_request(peer->xseg, vio->mreq, pr->portno);
 	vio->mreq = NULL;
