@@ -497,9 +497,9 @@ def stop_peer(peer):
 
     s = "Stopping %s " % peer[2]
     sys.stdout.write(s.ljust(FIRST_COLUMN_WIDTH))
-    os.kill(pid, signal.SIGTERM)
     i = 0
     while check_running(peer[0], pid) > 0:
+        os.kill(pid, signal.SIGTERM)
         time.sleep(0.1)
         i += 1
         if i > 150:
