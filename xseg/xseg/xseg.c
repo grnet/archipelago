@@ -1381,7 +1381,6 @@ out_rel:
 		__xq_pop_head(&xreq->path);
 		next = NoPort;
 	}
-out:
 	return next;
 	
 }
@@ -1624,6 +1623,9 @@ struct xseg_port *xseg_bind_port(struct xseg *xseg, uint32_t req, void * sd)
 {
 	uint32_t portno, maxno, id = __get_id(), force;
 	struct xseg_port *port = NULL;
+	void *peer_data, *sigdesc;
+	int64_t driver;
+	int r;
 
 	if (req >= xseg->config.nr_ports) {
 		portno = 0;
@@ -1637,7 +1639,6 @@ struct xseg_port *xseg_bind_port(struct xseg *xseg, uint32_t req, void * sd)
 
 	__lock_segment(xseg);
 	for (; portno < maxno; portno++) {
-		int64_t driver;
 		if (!xseg->ports[portno]) {
 			port = xseg_alloc_port(xseg, X_ALLOC, XSEG_DEF_REQS);
 			if (!port)
@@ -1653,13 +1654,13 @@ struct xseg_port *xseg_bind_port(struct xseg *xseg, uint32_t req, void * sd)
 		if (driver < 0)
 			break;
 		if (!sd){
-			void *peer_data = __get_peer_type_data(xseg, (uint64_t) driver);
+			peer_data = __get_peer_type_data(xseg, (uint64_t) driver);
 			if (!peer_data)
 				break;
-			void *sigdesc = xseg->priv->peer_type.peer_ops.alloc_signal_desc(xseg, peer_data);
+			sigdesc = xseg->priv->peer_type.peer_ops.alloc_signal_desc(xseg, peer_data);
 			if (!sigdesc)
 				break;
-			int r = xseg->priv->peer_type.peer_ops.init_signal_desc(xseg, sigdesc);
+			r = xseg->priv->peer_type.peer_ops.init_signal_desc(xseg, sigdesc);
 			if (r < 0){
 				xseg->priv->peer_type.peer_ops.free_signal_desc(xseg, peer_data, sigdesc);
 				break;
@@ -1696,15 +1697,17 @@ out:
 int xseg_set_max_requests(struct xseg *xseg, xport portno, uint64_t nr_reqs)
 {
 	int r = -1;
+	struct xseg_port *port;
+	struct xq *q;
 	if (nr_reqs > XSEG_MAX_ALLOCATED_REQS)
 		return -1;
 
-	struct xseg_port *port = xseg_get_port(xseg, portno);
+	port = xseg_get_port(xseg, portno);
 	if (!port)
 		return -1;
 
 	xlock_acquire(&port->fq_lock, portno);
-	struct xq *q = XPTR_TAKE(port->free_queue, xseg->segment);
+	q = XPTR_TAKE(port->free_queue, xseg->segment);
 	if (xq_size(q) <= nr_reqs){
 		port->max_alloc_reqs = nr_reqs;
 		r = 0;
