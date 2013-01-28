@@ -268,13 +268,19 @@ static int do_accepted_pr(struct peerd *peer, struct peer_req *pr)
 
 	XSEGLOG2(&lc, I, "Do accepted pr started for pr %lx", pr);
 	target = xseg_get_target(peer->xseg, pr->req);
-	if (!target)
-		goto out_err;
+	if (!target){
+		vio->err = 1;
+		conclude_pr(peer, pr);
+		return -1;
+	}
 
 	vi = find_volume_len(vlmc, target, pr->req->targetlen);
 	if (!vi){
 		XSEGLOG2(&lc, E, "Cannot find volume");
-		goto out_err;
+		XSEGLOG2(&lc, E, "Pr %lx", pr);
+		vio->err = 1;
+		conclude_pr(peer, pr);
+		return -1;
 	}
 
 	if (pr->req->op == X_CLOSE || pr->req->op == X_SNAPSHOT){
@@ -454,9 +460,10 @@ static int mapping_info(struct peerd *peer, struct peer_req *pr)
 		vio->err = 1;
 	}
 	else {
-		struct xseg_reply_info *xinfo = (struct xseg_reply_info *) xseg_get_data(peer->xseg, vio->mreq);
+		struct xseg_reply_info *xinfo = (struct xseg_reply_info *)xseg_get_data(peer->xseg, vio->mreq);
 		char *data = xseg_get_data(peer->xseg, pr->req);
-		*(uint64_t *)data = xinfo->size;
+		struct xseg_reply_info *xreply = (struct xseg_reply_info *)data;
+		xreply->size = xinfo->size;
 	}
 	xseg_put_request(peer->xseg, vio->mreq, pr->portno);
 	vio->mreq = NULL;

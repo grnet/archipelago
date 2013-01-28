@@ -394,7 +394,7 @@ static void xseg_request_fn(struct request_queue *rq)
 
 		if (blkreq_idx >= xsegbd_dev->nr_requests) {
 			XSEGLOG("blkreq_idx >= xsegbd_dev->nr_requests");
-			BUG_ON(1);
+			WARN_ON(1);
 			break;
 		}
 
@@ -425,14 +425,14 @@ static void xseg_request_fn(struct request_queue *rq)
 		if (r < 0) {
 			XSEGLOG("couldn't prep request");
 			blk_end_request_err(blkreq, r);
-			BUG_ON(1);
+			WARN_ON(1);
 			break;
 		}
 		r = -ENOMEM;
 		if (xreq->bufferlen - xsegbd_dev->targetlen < datalen){
 			XSEGLOG("malformed req buffers");
 			blk_end_request_err(blkreq, r);
-			BUG_ON(1);
+			WARN_ON(1);
 			break;
 		}
 
@@ -483,10 +483,10 @@ static void xseg_request_fn(struct request_queue *rq)
 		WARN_ON(xseg_signal(xsegbd_dev->xsegbd->xseg, p) < 0);
 	}
 	if (xreq)
-		BUG_ON(xseg_put_request(xsegbd_dev->xsegbd->xseg, xreq, 
+		WARN_ON(xseg_put_request(xsegbd_dev->xsegbd->xseg, xreq, 
 					xsegbd_dev->src_portno) == -1);
 	if (blkreq_idx != Noneidx)
-		BUG_ON(xq_append_head(&xsegbd_dev->blk_queue_pending, 
+		WARN_ON(xq_append_head(&xsegbd_dev->blk_queue_pending, 
 				blkreq_idx, xsegbd_dev->src_portno) == Noneidx);
 	spin_lock_irq(&xsegbd_dev->rqlock);
 }
@@ -515,7 +515,8 @@ int update_dev_sectors_from_request(	struct xsegbd_device *xsegbd_dev,
 		XSEGLOG("Invalid xsegbd_dev");
 		return -ENOENT;
 	}
-	xsegbd_dev->sectors = *((uint64_t *) data) / 512ULL;
+	struct xseg_reply_info *xreply = (struct xseg_reply_info *)data;
+	xsegbd_dev->sectors = xreply->size / 512ULL;
 	return 0;
 }
 
@@ -534,7 +535,7 @@ static int xsegbd_get_size(struct xsegbd_device *xsegbd_dev)
 	if (!xreq)
 		goto out;
 
-	BUG_ON(xseg_prep_request(xsegbd_dev->xseg, xreq, xsegbd_dev->targetlen, 
+	WARN_ON(xseg_prep_request(xsegbd_dev->xseg, xreq, xsegbd_dev->targetlen, 
 				sizeof(struct xseg_reply_info)));
 
 	init_completion(&comp);
@@ -561,7 +562,7 @@ static int xsegbd_get_size(struct xsegbd_device *xsegbd_dev)
 				xsegbd_dev->src_portno, X_ALLOC);
 	if ( p == NoPort) {
 		XSEGLOG("couldn't submit request");
-		BUG_ON(1);
+		WARN_ON(1);
 		goto out_queue;
 	}
 	WARN_ON(xseg_signal(xsegbd_dev->xseg, p) < 0);
@@ -576,7 +577,7 @@ out_queue:
 	pending->comp = NULL;
 	xq_append_head(&xsegbd_dev->blk_queue_pending, blkreq_idx, 1);
 out_put:
-	BUG_ON(xseg_put_request(xsegbd_dev->xseg, xreq, xsegbd_dev->src_portno) == -1);
+	WARN_ON(xseg_put_request(xsegbd_dev->xseg, xreq, xsegbd_dev->src_portno) == -1);
 out:
 	return ret;
 }
@@ -596,7 +597,7 @@ static int xsegbd_mapclose(struct xsegbd_device *xsegbd_dev)
 	if (!xreq)
 		goto out;
 
-	BUG_ON(xseg_prep_request(xsegbd_dev->xseg, xreq, xsegbd_dev->targetlen, 0));
+	WARN_ON(xseg_prep_request(xsegbd_dev->xseg, xreq, xsegbd_dev->targetlen, 0));
 
 	init_completion(&comp);
 	blkreq_idx = xq_pop_head(&xsegbd_dev->blk_queue_pending, 1);
@@ -622,7 +623,7 @@ static int xsegbd_mapclose(struct xsegbd_device *xsegbd_dev)
 				xsegbd_dev->src_portno, X_ALLOC);
 	if ( p == NoPort) {
 		XSEGLOG("couldn't submit request");
-		BUG_ON(1);
+		WARN_ON(1);
 		goto out_queue;
 	}
 	WARN_ON(xseg_signal(xsegbd_dev->xseg, p) < 0);
@@ -636,7 +637,7 @@ out_queue:
 	pending->comp = NULL;
 	xq_append_head(&xsegbd_dev->blk_queue_pending, blkreq_idx, 1);
 out_put:
-	BUG_ON(xseg_put_request(xsegbd_dev->xseg, xreq, xsegbd_dev->src_portno) == -1);
+	WARN_ON(xseg_put_request(xsegbd_dev->xseg, xreq, xsegbd_dev->src_portno) == -1);
 out:
 	return ret;
 }
@@ -724,7 +725,7 @@ blk_end:
 		if (xseg_put_request(xsegbd_dev->xseg, xreq, 
 						xsegbd_dev->src_portno) < 0){
 			XSEGLOG("couldn't put req");
-			BUG_ON(1);
+			WARN_ON(1);
 		}
 	}
 	if (xsegbd_dev) {
@@ -1015,7 +1016,7 @@ static ssize_t xsegbd_add(struct bus_type *bus, const char *buf, size_t count)
 	
 	if (xsegbd_dev->src_portno != xseg_portno(xsegbd_dev->xseg, port)) {
 		XSEGLOG("portno != xsegbd_dev->src_portno");
-		BUG_ON(1);
+		WARN_ON(1);
 		ret = -EFAULT;
 		goto out_bus;
 	}
