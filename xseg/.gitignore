@@ -9,3 +9,8 @@
 *.o.cmd
 .*.ko.cmd
 *.ko
+*.pyc
+config.mk
+*tmp_versions*
+*Module*
+*modules*

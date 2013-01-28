@@ -1,34 +1,60 @@
-.PHONY: clean
+.PHONY: install-src
 
-ifndef XSEG_HOME
-$(error The XSEG_HOME variable must be set)
-else
-BASE=$(XSEG_HOME)
-endif
+include $(XSEG_HOME)/base.mk
 
-KDIR := /lib/modules/$(shell uname -r)/build
-PWD := $(shell pwd)
-EXTRA_CFLAGS += -I$(BASE) -DRELATIVE_POINTERS
+FILES="Makefile"
+FILES+=$(shell ls *.h)
 
-xseg-objs := xsegmod.o xq.k.o xseg.k.o 
-obj-m += xsegbd.o xsegdev.o xseg.o
+SUBDIR:=$(subst $(XSEG_HOME)/,,$(CURDIR))
+XSEG_CLEAN_TARGETS=$(patsubst %,clean-%,$(XSEG_DOMAIN_TARGETS))
+XSEG_INSTALL_TARGETS=$(patsubst %,install-%,$(XSEG_DOMAIN_TARGETS))
+XSEG_INSTALLSRC_TARGETS=$(patsubst %,install-src-%,$(XSEG_DOMAIN_TARGETS))
 
-default: xq.k.c xseg.k.c
-	$(MAKE) -C $(KDIR) SUBDIRS=$(PWD) modules
 
-xq.k.c: $(BASE)/xq/xq.c $(BASE)/xq/xq.h
-	ln -sf $< $@
+default: $(XSEG_DOMAIN_TARGETS)
 
-xseg.k.c: $(BASE)/xseg/xseg.c $(BASE)/xseg/xseg.h
-	ln -sf $< $@
+install: $(XSEG_INSTALL_TARGETS)
 
-xseg_user.o: xseg_user.c
-	$(CC) -I$(BASE) -Wall -O2 -finline-functions -fPIC -c -o $@ $<
+clean: $(XSEG_CLEAN_TARGETS)
 
-libxseg.map: $(BASE)/xq/xq_exports.h $(BASE)/xseg/xseg_exports.h
-	cat $(BASE)/xq/xq_exports.h $(BASE)/xseg/xseg_exports.h | ./make_symbol_map.sh > $@
+.PHONY: $(XSEG_DOMAIN_TARGETS)
+$(XSEG_DOMAIN_TARGETS):
+	@echo " ";
+	@echo "=== $@ in $(SUBDIR) ===";
+	@echo " ";
+	@make -C $@ TARGET=$@ default || exit 1;
+	@echo " ";
 
-clean:
-	rm -f xseg_user.o libxseg.map xq.k.c xseg.k.c
-	make -C /lib/modules/$(shell uname -r)/build M=$(PWD) clean
+.PHONY: $(XSEG_INSTALL_TARGETS)
+$(XSEG_INSTALL_TARGETS):
+	@echo " ";
+	@echo "=== $@ in $(SUBDIR)===";
+	@echo " ";
+	@make -C $(@:install-%=%) TARGET=$@ install || true;
+	@echo " ";
+
+
+.PHONY: $(XSEG_INSTALLSRC_TARGETS)
+$(XSEG_INSTALLSRC_TARGETS):
+	@echo " ";
+	@echo "=== $@ in $(SUBDIR)===";
+	@echo " ";
+	@make -C $(@:install-src-%=%) TARGET=$@ install-src || true;
+	@echo " ";
+
+.PHONY: $(XSEG_CLEAN_TARGETS)
+$(XSEG_CLEAN_TARGETS):
+	@echo " ";
+	@echo "=== $@ in $(SUBDIR)===";
+	@echo " ";
+	@make -C $(@:clean-%=%) TARGET=$@ clean || true;
+	@echo " ";
+
+
+
+install-src: $(XSEG_INSTALLSRC_TARGETS)
+	@install -d $(DESTDIR)$(srcdir)$(SUBDIR) ;
+	@for f in $(FILES) ; do \
+		install -o 0 -g 0 -m 644 -t $(DESTDIR)$(srcdir)$(SUBDIR) $$f ; \
+	done
 

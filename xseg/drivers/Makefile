@@ -1,32 +1,60 @@
-.PHONY: all clean xseg lib
+.PHONY: install-src
 
-BASE=..
+include $(XSEG_HOME)/base.mk
 
-include $(BASE)/config.mk
-include $(BASE)/base.mk
+FILES="Makefile"
+FILES+=$(shell ls *.h)
 
-DRIVERS=xseg_posix xseg_xsegdev
-DRVOBJS=$(DRIVERS:=.o)
-DRVSOS=$(DRIVERS:=.so)
+SUBDIR:=$(subst $(XSEG_HOME)/,,$(CURDIR))
+XSEG_CLEAN_TARGETS=$(patsubst %,clean-%,$(XSEG_DOMAIN_TARGETS))
+XSEG_INSTALL_TARGETS=$(patsubst %,install-%,$(XSEG_DOMAIN_TARGETS))
+XSEG_INSTALLSRC_TARGETS=$(patsubst %,install-src-%,$(XSEG_DOMAIN_TARGETS))
 
-all: xseg $(DRIVERS:=.so) lib
 
-$(BASE)/sys/xseg_user.o:
-	make -C $(BASE)/sys xseg_user.o
+default: $(XSEG_DOMAIN_TARGETS)
 
-xseg_posix.o: xseg_posix.c $(BASE)/xseg/xseg.h
-	$(CC) $(CFLAGS) -fPIC -c -o $@ $<
+install: $(XSEG_INSTALL_TARGETS)
 
-xseg_posix.so: xseg_posix.o $(BASE)/sys/xseg_user.o
-	$(CC) -shared -o $@ $< $(BASE)/sys/xseg_user.o 
+clean: $(XSEG_CLEAN_TARGETS)
 
-xseg_xsegdev.o: xseg_xsegdev.c $(BASE)/xseg/xseg.h
-	$(CC) $(CFLAGS) -I$(BASE)/sys -fPIC -c -o $@ $<
+.PHONY: $(XSEG_DOMAIN_TARGETS)
+$(XSEG_DOMAIN_TARGETS):
+	@echo " ";
+	@echo "=== $@ in $(SUBDIR) ===";
+	@echo " ";
+	@make -C $@ TARGET=$@ default || exit 1;
+	@echo " ";
 
-xseg_xsegdev.so: xseg_xsegdev.o $(BASE)/sys/xseg_user.o
-	$(CC) -shared -o $@ $< $(BASE)/sys/xseg_user.o 
+.PHONY: $(XSEG_INSTALL_TARGETS)
+$(XSEG_INSTALL_TARGETS):
+	@echo " ";
+	@echo "=== $@ in $(SUBDIR)===";
+	@echo " ";
+	@make -C $(@:install-%=%) TARGET=$@ install || true;
+	@echo " ";
 
-lib:
-	cp -vaf $(DRVSOS) ../lib
-clean:
-	rm -f $(DRVOBJS) $(DRVSOS)
+
+.PHONY: $(XSEG_INSTALLSRC_TARGETS)
+$(XSEG_INSTALLSRC_TARGETS):
+	@echo " ";
+	@echo "=== $@ in $(SUBDIR)===";
+	@echo " ";
+	@make -C $(@:install-src-%=%) TARGET=$@ install-src || true;
+	@echo " ";
+
+.PHONY: $(XSEG_CLEAN_TARGETS)
+$(XSEG_CLEAN_TARGETS):
+	@echo " ";
+	@echo "=== $@ in $(SUBDIR)===";
+	@echo " ";
+	@make -C $(@:clean-%=%) TARGET=$@ clean || true;
+	@echo " ";
+
+
+
+install-src: $(XSEG_INSTALLSRC_TARGETS)
+	@install -d $(DESTDIR)$(srcdir)$(SUBDIR) ;
+	@for f in $(FILES) ; do \
+		install -o 0 -g 0 -m 644 -t $(DESTDIR)$(srcdir)$(SUBDIR) $$f ; \
+	done
+

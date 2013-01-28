@@ -1,0 +1,44 @@
+Intented audience
+=================
+
+People who want to tinker with xseg internals, and need a quick-n-dirty intro
+to the basics behind its operation.
+
+Terminology / API
+*****************
+
+Client, server, peer, xsegbd, vlmc, map, request, segment, signal, wait...
+
+Basic flow
+**********
+
+The initiator/client... then...
+
+ * Load the modules, mknod, create segment
+	- insmod lib/kernel/xseg.ko
+	- insmod lib/kernel/segdev.ko
+	- mknod /dev/segdev c 60 0
+	- insmod lib/kernel/xseg_segdev.ko
+	- insmod lib/kernel/xseg_posix.ko
+	- ./peer/users/xseg segdev:xsegbd:16:4096:64:1024:12 create
+	- insmod lib/kernel/xsegbd.ko
+
+ * Verify that the segment was created successfully:
+ 	- ./peer/users/xseg segdev:xsegbd reportall
+
+ * Allocate request for vlmcd:
+ 	- ./peer/users/xseg segdev:xsegbd 0:1 alloc_requests 1024
+
+ * Run vlmcd/mapperd/filed:
+ 	- ./peer/users/filed /srv/archip/images -p 9 -g segdev:xsegbd
+	- ./peer/users/mapperd[.py] -p 10 -g segdev:xsegbd
+	- ./peer/users/vlmcd -p 0 -g segdev:xsegbd -b 9 -m 10
+
+ * Create/List/Map/Unmap/Remove a volume:
+ 	- vlmc create test -s 4096
+	- vlmc list
+ 	- echo "test 1:0:1024" > /sys/bus/xsegbd/add
+	(vlmc map test might work as long as vlmcd runs on port 0, and port 1-2-n, where n the no of volumes mapped are free)
+	- vlmc showmapped
+	- echo 0 > /sys/bus/xsegbd/remove (or vlmc unmap /dev/xsegbd0)
+	- vlmc rm test

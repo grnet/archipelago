@@ -1,17 +1,60 @@
-.PHONY: all clean
+.PHONY: install-src
 
-BASE=..
+include $(XSEG_HOME)/base.mk
 
-include $(BASE)/config.mk
-include $(BASE)/base.mk
+FILES="Makefile"
+#FILES+=$(shell ls *.h)
 
-all: blockd xseg
+SUBDIR:=$(subst $(XSEG_HOME)/,,$(CURDIR))
+XSEG_CLEAN_TARGETS=$(patsubst %,clean-%,$(XSEG_DOMAIN_TARGETS))
+XSEG_INSTALL_TARGETS=$(patsubst %,install-%,$(XSEG_DOMAIN_TARGETS))
+XSEG_INSTALLSRC_TARGETS=$(patsubst %,install-src-%,$(XSEG_DOMAIN_TARGETS))
 
-blockd: blockd.c $(BASE)/xseg/xseg.h
-	$(CC) $(CFLAGS) -o $@ $< -I$(BASE) -L$(BASE)/lib -lxseg
 
-xseg: xseg-tool.c $(BASE)/xseg/xseg.h
-	$(CC) $(CFLAGS) -o $@ $< -L$(BASE)/lib -lxseg
+default: $(XSEG_DOMAIN_TARGETS)
 
-clean:
-	rm -f blockd xseg
+install: $(XSEG_INSTALL_TARGETS)
+
+clean: $(XSEG_CLEAN_TARGETS)
+
+.PHONY: $(XSEG_DOMAIN_TARGETS)
+$(XSEG_DOMAIN_TARGETS):
+	@echo " ";
+	@echo "=== $@ in $(SUBDIR) ===";
+	@echo " ";
+	@make -C $@ TARGET=$@ default || exit 1;
+	@echo " ";
+
+.PHONY: $(XSEG_INSTALL_TARGETS)
+$(XSEG_INSTALL_TARGETS):
+	@echo " ";
+	@echo "=== $@ in $(SUBDIR)===";
+	@echo " ";
+	@make -C $(@:install-%=%) TARGET=$@ install || true;
+	@echo " ";
+
+
+.PHONY: $(XSEG_INSTALLSRC_TARGETS)
+$(XSEG_INSTALLSRC_TARGETS):
+	@echo " ";
+	@echo "=== $@ in $(SUBDIR)===";
+	@echo " ";
+	@make -C $(@:install-src-%=%) TARGET=$@ install-src || true;
+	@echo " ";
+
+.PHONY: $(XSEG_CLEAN_TARGETS)
+$(XSEG_CLEAN_TARGETS):
+	@echo " ";
+	@echo "=== $@ in $(SUBDIR)===";
+	@echo " ";
+	@make -C $(@:clean-%=%) TARGET=$@ clean || true;
+	@echo " ";
+
+
+
+install-src: $(XSEG_INSTALLSRC_TARGETS)
+	install -d $(DESTDIR)$(srcdir)$(SUBDIR) ;
+	@for f in $(FILES) ; do \
+		install -o 0 -g 0 -m 644 -t $(DESTDIR)$(srcdir)$(SUBDIR) $$f ; \
+	done
+
