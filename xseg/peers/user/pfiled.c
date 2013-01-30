@@ -1123,6 +1123,7 @@ int main(int argc, char **argv)
 			return -1;
 		}
 	}
+
 	if (cmdline_daemon){
 		if (daemon(0, 1) < 0){
 			perr(PFE, 0, "Cannot daemonize");
@@ -1133,7 +1134,8 @@ int main(int argc, char **argv)
 	setup_signals();
 	if (pid_fd > 0)
 		pidfile_write(pid_fd);
-	
+
+
 	if (pfiled_init(&pfiled) < 0){
 		r = -1;
 		goto out;
@@ -1144,4 +1146,5 @@ out:
 	if (pid_fd > 0)
 		pidfile_remove(cmdline_pidfile, pid_fd);
 	return r;
+
 }
