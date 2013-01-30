@@ -342,8 +342,8 @@ def construct_peers():
     peers = []
     peers.append(peer_blockerb)
     peers.append(peer_blockerm)
-    peers.append(peer_vlmcd)
     peers.append(peer_mapperd)
+    peers.append(peer_vlmcd)
 
     return peers
 
