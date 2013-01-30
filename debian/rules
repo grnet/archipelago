@@ -10,7 +10,7 @@ VERSION := $(shell head -n 1 debian/changelog | sed -r 's/.*([0-9]+\.[0-9]+\.[0-
 	dh $@ --with dkms --with python2
 
 override_dh_dkms:
-	dh_dkms -V
+	dh_dkms -V $(VERSION)
 
 override_dh_strip:
 	dh_strip -plibxseg0 --dbg-package=libxseg0-dbg
