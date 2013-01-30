@@ -20,14 +20,6 @@ set -e
 
 case "$1" in
     configure)
-	    if [ -x "/etc/init.d/archipelago" ]; then
-		    if [ -x "`which invoke-rc.d 2>/dev/null`" ]; then
-			    invoke-rc.d archipelago start || exit $?
-		    else
-			    /etc/init.d/archipelago start  || exit $?
-		    fi
-	    fi
-
     ;;
 
     abort-upgrade|abort-remove|abort-deconfigure)
