@@ -45,12 +45,13 @@ import os, sys, subprocess, argparse, time, psutil, signal, errno
 from subprocess import call, check_call, Popen, PIPE
 
 DEFAULTS='/etc/default/archipelago'
-VLMC_LOCK_FILE='/tmp/vlmc.lock'
+VLMC_LOCK_FILE='vlmc.lock'
 ARCHIP_PREFIX='archip_'
 
 #system defaults
 PIDFILE_PATH="/var/run/archipelago"
 LOGS_PATH="/var/log/archipelago"
+LOCK_PATH="/var/lock"
 DEVICE_PREFIX="/dev/xsegbd"
 XSEGBD_SYSFS="/sys/bus/xsegbd/"
 
@@ -350,21 +351,31 @@ def construct_peers():
 
 def exclusive(fn):
     def exclusive_args(args):
+        if not os.path.exists(LOCK_PATH):
+            try:
+                os.mkdir(LOCK_PATH)
+            except OSError, (err, reason):
+                print >> sys.stderr, reason
+        if not os.path.isdir(LOCK_PATH):
+            sys.stderr.write("Locking error: ")
+            print >> sys.stderr, LOCK_PATH + " is not a directory"
+            return -1;
+        lock_file = os.path.join(LOCK_PATH, VLMC_LOCK_FILE)
         while True:
             try:
-                fd = os.open(VLMC_LOCK_FILE, os.O_CREAT|os.O_EXCL|os.O_WRONLY)
+                fd = os.open(lock_file, os.O_CREAT|os.O_EXCL|os.O_WRONLY)
                 break;
             except OSError, (err, reason):
                 print >> sys.stderr, reason
                 if err == errno.EEXIST:
-                    time.sleep(0.05)
+                    time.sleep(0.2)
                 else:
-                    raise OSError(err, VLMC_LOCK_FILE + ' ' + reason)
+                    raise OSError(err, lock_file + ' ' + reason)
         try:
             r = fn(args)
         finally:
             os.close(fd)
-            os.unlink(VLMC_LOCK_FILE)
+            os.unlink(lock_file)
         return r
 
     return exclusive_args
