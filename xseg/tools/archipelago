@@ -43,6 +43,9 @@ cb_null_ptrtype = CFUNCTYPE(None, uint32_t)
 import os, sys, subprocess, argparse, time, psutil, signal, errno
 from subprocess import call, check_call, Popen, PIPE
 from collections import namedtuple
+import struct
+import binascii
+import ctypes
 
 #archipelago peer roles. Order matters!
 roles = ['blockerb', 'blockerm', 'mapperd', 'vlmcd']
@@ -1186,6 +1189,49 @@ def vlmc_info(args):
     else:
         sys.stdout.write("Volume %s: size: %d\n" % (name, size) )
 
+def vlmc_mapinfo(args):
+    name = args.name[0]
+
+    if len(name) < 6:
+        raise Error("Name should have at least len 6")
+
+    if STORAGE == "rados":
+        import rados
+        cluster = rados.Rados(conffile='/etc/ceph/ceph.conf')
+        cluster.connect()
+        ioctx = cluster.open_ioctx(RADOS_POOL_MAPS)
+        BLOCKSIZE = 4*1024*1024
+        mapdata = ioctx.read(ARCHIP_PREFIX + name, length=BLOCKSIZE)
+        if not  mapdata:
+            raise Error("Cannot read map data")
+        pos = 0
+        size_uint32t = ctypes.sizeof(ctypes.c_uint32)
+        version = struct.unpack("<L", mapdata[pos:pos+size_uint32t])[0]
+        pos += size_uint32t
+        size_uint64t = ctypes.sizeof(ctypes.c_uint64)
+        size = struct.unpack("Q", mapdata[pos:pos+size_uint64t])[0]
+        pos += size_uint64t
+        blocks = size / BLOCKSIZE
+        nr_exists = 0
+        print "Version: " + str(version)
+        print "Size: " + str(size)
+        for i in range(blocks):
+            exists = bool(struct.unpack("B", mapdata[pos:pos+1])[0])
+            if exists:
+                nr_exists += 1
+            pos += 1
+            block = binascii.hexlify(mapdata[pos:pos+32])
+            pos += 32
+            if args.verbose:
+                print block, exists
+        print "Actual disk usage: " + str(nr_exists * BLOCKSIZE),
+        print '(' + str(nr_exists) + '/' + str(blocks) + ' blocks)'
+
+    elif STORAGE=="files":
+        raise Error("Mapinfo for file storage not supported")
+    else:
+        raise Error("Invalid storage")
+
 def archipelago():
     parser = argparse.ArgumentParser(description='Archipelago tool')
     parser.add_argument('-c', '--config', type=str, nargs='?', help='config file')
@@ -1291,6 +1337,12 @@ def vlmc():
     info_parser.add_argument('name', type=str, nargs=1, help='volume name')
     info_parser.set_defaults(func=vlmc_info)
     info_parser.add_argument('-p', '--pool', type=str, nargs='?', help='for backwards compatiblity with rbd')
+
+    map_info_parser = subparsers.add_parser('mapinfo', help='Show volume map_info')
+    map_info_parser.add_argument('name', type=str, nargs=1, help='volume name')
+    map_info_parser.set_defaults(func=vlmc_mapinfo)
+    map_info_parser.add_argument('-p', '--pool', type=str, nargs='?', help='for backwards compatiblity with rbd')
+    map_info_parser.add_argument('-v', '--verbose',  action='store_true', default=False , help='')
 
     return parser
 
