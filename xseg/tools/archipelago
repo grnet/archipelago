@@ -947,13 +947,15 @@ def vlmc_snapshot(args):
 
 def vlmc_list(args):
     if STORAGE == "rados":
-    #FIXME use rados.py
-        cmd = [ 'rados', '-p', '%s' % RADOS_POOL_MAPS, 'ls' ]
-        proc = Popen(cmd, stdout = PIPE)
-        while proc.poll() is None:
-            output = proc.stdout.readline()
-            if output.startswith(ARCHIP_PREFIX) and not output.endswith('_lock\n'):
-                print output.lstrip(ARCHIP_PREFIX),
+        import rados
+        cluster = rados.Rados(conffile='/etc/ceph/ceph.conf')
+        cluster.connect()
+        ioctx = cluster.open_ioctx(RADOS_POOL_MAPS)
+        oi = rados.ObjectIterator(ioctx)
+        for o in oi :
+            name = o.key
+            if name.startswith(ARCHIP_PREFIX) and not name.endswith('_lock'):
+                print name.lstrip(ARCHIP_PREFIX)
     elif STORAGE == "files":
         raise Error("Vlmc list not supported for files yet")
     else:
