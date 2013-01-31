@@ -938,7 +938,8 @@ def vlmc_snapshot(args):
         req.submit()
         req.wait()
         ret = req.success()
-        reply = string_at(req.get_data(xseg_reply_snapshot).contents.target, 64)
+        if ret:
+            reply = string_at(req.get_data(xseg_reply_snapshot).contents.target, 64)
     xseg_ctx.shutdown()
     if not ret:
         raise Error("vlmc snapshot failed")
@@ -1160,6 +1161,31 @@ def vlmc_close(args):
     else:
         sys.stdout.write("Volume closed\n")
 
+@exclusive
+def vlmc_info(args):
+    name = args.name[0]
+
+    if len(name) < 6:
+        raise Error("Name should have at least len 6")
+
+    ret = False
+    xseg_ctx = Xseg_ctx(SPEC, VTOOL)
+    with Request(xseg_ctx, MPORT, len(name), 0) as req:
+        req.set_op(X_INFO)
+        req.set_size(0)
+        req.set_offset(0)
+        req.set_target(name)
+        req.submit()
+        req.wait()
+        ret = req.success()
+        if ret:
+            size = req.get_data(xseg_reply_info).contents.size
+    xseg_ctx.shutdown()
+    if not ret:
+        raise Error("vlmc info failed")
+    else:
+        sys.stdout.write("Volume %s: size: %d\n" % (name, size) )
+
 def archipelago():
     parser = argparse.ArgumentParser(description='Archipelago tool')
     parser.add_argument('-c', '--config', type=str, nargs='?', help='config file')
@@ -1260,6 +1286,11 @@ def vlmc():
     unlock_parser.add_argument('-f', '--force',  action='store_true', default=False , help='break lock')
     unlock_parser.set_defaults(func=vlmc_unlock)
     unlock_parser.add_argument('-p', '--pool', type=str, nargs='?', help='for backwards compatiblity with rbd')
+
+    info_parser = subparsers.add_parser('info', help='Show volume info')
+    info_parser.add_argument('name', type=str, nargs=1, help='volume name')
+    info_parser.set_defaults(func=vlmc_info)
+    info_parser.add_argument('-p', '--pool', type=str, nargs='?', help='for backwards compatiblity with rbd')
 
     return parser
 
