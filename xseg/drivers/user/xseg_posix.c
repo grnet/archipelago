@@ -54,7 +54,7 @@ char errbuf[ERRSIZE];
 static long posix_allocate(const char *name, uint64_t size)
 {
 	int fd, r;
-	fd = shm_open(name, O_RDWR | O_CREAT, 0770);
+	fd = shm_open(name, O_RDWR | O_CREAT | O_EXCL, 0770);
 	if (fd < 0) {
 		XSEGLOG("Cannot create shared segment: %s\n",
 			strerror_r(errno, errbuf, ERRSIZE));
