@@ -16,5 +16,6 @@ grn_echo(){
 	echo -e "${txtgrn}${1}${txtrst}"
 }
 
-XSEG=/home/$(logname)/archipelago/xseg
+#ARCH_SCRIPTS must be already set by the caller function
+XSEG=$ARCH_SCRIPTS/../xseg
 

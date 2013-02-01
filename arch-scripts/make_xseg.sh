@@ -6,8 +6,11 @@
 
 set -e  #exit on error
 
+# Find script location
+ARCH_SCRIPTS=$(dirname "$(readlink /proc/$$/fd/255)")
+
 #Include basic functions
-source /home/$(logname)/archipelago/arch-scripts/init.sh
+source $ARCH_SCRIPTS/init.sh
 
 PIPE="1>/dev/null"
 

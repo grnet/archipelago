@@ -6,8 +6,11 @@
 
 set -e	#exit on error
 
+# Find script location
+ARCH_SCRIPTS=$(dirname "$(readlink /proc/$$/fd/255)")
+
 #Include basic functions
-source /home/$(logname)/archipelago/arch-scripts/init.sh
+source $ARCH_SCRIPTS/init.sh
 
 SED_XSEG=$(echo "${XSEG}/" | sed 's/\//\\\//g')
 INCLUDE="--include=*.c --include=*.h"
