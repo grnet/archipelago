@@ -4,12 +4,11 @@
 # Initializations #
 ###################
 
+set -e  #exit on error
+
 #Include basic functions
-source init.sh
+source /home/$(logname)/archipelago/arch-scripts/init.sh
 
-set -e	#exit on error
-
-XSEG=/home/$(logname)/archipelago/xseg
 PIPE="1>/dev/null"
 
 #############

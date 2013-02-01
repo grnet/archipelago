@@ -4,14 +4,12 @@
 # Initializations #
 ###################
 
-#Include basic functions
-source init.sh
-
 set -e	#exit on error
 
-XSEG=/home/$(logname)/archipelago/xseg
-SED_XSEG=$(echo "${XSEG}/" | sed 's/\//\\\//g')
+#Include basic functions
+source /home/$(logname)/archipelago/arch-scripts/init.sh
 
+SED_XSEG=$(echo "${XSEG}/" | sed 's/\//\\\//g')
 INCLUDE="--include=*.c --include=*.h"
 
 #############

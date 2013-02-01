@@ -1,7 +1,7 @@
 #! /bin/bash
 
 ##########################
-# Functions' definitions #
+# Function definitions #
 ##########################
 
 txtrst=$(tput sgr0)		# Reset text color
@@ -15,3 +15,6 @@ red_echo(){
 grn_echo(){
 	echo -e "${txtgrn}${1}${txtrst}"
 }
+
+XSEG=/home/$(logname)/archipelago/xseg
+
