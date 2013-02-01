@@ -310,25 +310,25 @@ def construct_peers():
 
     if BLOCKER == "pfiled":
         config_opts['blockerb'] = [
-                "-p" , str(BPORT), "-g", str(SPEC), "-n", str(NR_OPS_BLOCKERB),
+                "-p" , str(BPORT), "-g", str(SPEC).encode(), "-n", str(NR_OPS_BLOCKERB),
                  str(PITHOS), str(FILED_IMAGES), "-d",
                 "-f", os.path.join(PIDFILE_PATH, "blockerb" + PID_SUFFIX)
                 ]
         config_opts['blockerm'] = [
-                "-p" , str(MBPORT), "-g", str(SPEC), "-n", str(NR_OPS_BLOCKERM),
+                "-p" , str(MBPORT), "-g", str(SPEC).encode(), "-n", str(NR_OPS_BLOCKERM),
                 str(PITHOSMAPS), str(FILED_MAPS), "-d",
                 "-f", os.path.join(PIDFILE_PATH, "blockerm" + PID_SUFFIX)
                 ]
     elif BLOCKER == "mt-sosd":
         config_opts['blockerb'] = [
-                "-p" , str(BPORT), "-g", str(SPEC), "-n", str(NR_OPS_BLOCKERB),
+                "-p" , str(BPORT), "-g", str(SPEC).encode(), "-n", str(NR_OPS_BLOCKERB),
                  "--pool", str(RADOS_POOL_BLOCKS), "-v", str(VERBOSITY_BLOCKERB),
                  "-d", "--pidfile", os.path.join(PIDFILE_PATH, "blockerb" + PID_SUFFIX),
                  "-l", os.path.join(str(LOGS_PATH), "blockerb" + LOG_SUFFIX),
                  "-t", "3"
                  ]
         config_opts['blockerm'] = [
-                "-p" , str(MBPORT), "-g", str(SPEC), "-n", str(NR_OPS_BLOCKERM),
+                "-p" , str(MBPORT), "-g", str(SPEC).encode(), "-n", str(NR_OPS_BLOCKERM),
                  "--pool", str(RADOS_POOL_MAPS), "-v", str(VERBOSITY_BLOCKERM),
                  "-d", "--pidfile", os.path.join(PIDFILE_PATH, "blockerm" + PID_SUFFIX),
                  "-l", os.path.join(str(LOGS_PATH), "blockerm" + LOG_SUFFIX),
@@ -336,7 +336,7 @@ def construct_peers():
                  ]
     elif BLOCKER == "mt-pfiled":
         config_opts['blockerb'] = [
-                "-p" , str(BPORT), "-g", str(SPEC), "-n", str(NR_OPS_BLOCKERB),
+                "-p" , str(BPORT), "-g", str(SPEC).encode(), "-n", str(NR_OPS_BLOCKERB),
                  "--pithos", str(PITHOS), "--archip", str(FILED_IMAGES),
              "-v", str(VERBOSITY_BLOCKERB),
                  "-d", "--pidfile", os.path.join(PIDFILE_PATH, "blockerb" + PID_SUFFIX),
@@ -344,7 +344,7 @@ def construct_peers():
                  "-t", str(NR_OPS_BLOCKERB), "--prefix", ARCHIP_PREFIX
                  ]
         config_opts['blockerm'] = [
-                "-p" , str(MBPORT), "-g", str(SPEC), "-n", str(NR_OPS_BLOCKERM),
+                "-p" , str(MBPORT), "-g", str(SPEC).encode(), "-n", str(NR_OPS_BLOCKERM),
                  "--pithos", str(PITHOSMAPS), "--archip", str(FILED_MAPS),
              "-v", str(VERBOSITY_BLOCKERM),
                  "-d", "--pidfile", os.path.join(PIDFILE_PATH, "blockerm" + PID_SUFFIX),
@@ -356,14 +356,14 @@ def construct_peers():
 
     config_opts['mapperd'] = [
              "-t" , "1", "-p",  str(MPORT), "-mbp", str(MBPORT),
-              "-g", str(SPEC), "-n", str(NR_OPS_MAPPER), "-bp", str(BPORT),
+              "-g", str(SPEC).encode(), "-n", str(NR_OPS_MAPPER), "-bp", str(BPORT),
               "--pidfile", os.path.join(PIDFILE_PATH, "mapperd" + PID_SUFFIX),
               "-v", str(VERBOSITY_MAPPER), "-d",
               "-l", os.path.join(str(LOGS_PATH), "mapperd" + LOG_SUFFIX)
               ]
     config_opts['vlmcd'] = [
              "-t" , "1", "-sp",  str(VPORT_START), "-ep", str(VPORT_END),
-              "-g", str(SPEC), "-n", str(NR_OPS_VLMC), "-bp", str(BPORT),
+              "-g", str(SPEC).encode(), "-n", str(NR_OPS_VLMC), "-bp", str(BPORT),
               "-mp", str(MPORT), "-d", "-v", str(VERBOSITY_VLMC),
               "--pidfile", os.path.join(PIDFILE_PATH, "vlmcd" + PID_SUFFIX),
               "-l", os.path.join(str(LOGS_PATH), "vlmcd" + LOG_SUFFIX)
@@ -466,22 +466,34 @@ def unload_module(name):
     sys.stdout.write(green("OK".ljust(SECOND_COLUMN_WIDTH)))
     sys.stdout.write("\n")
 
+xseg_initialized = False
+
+def initialize_xseg():
+    global xseg_initialized
+    xseg_initialize()
+    xseg_initialized = True
+
 def create_segment():
     #fixme blocking....
-    #fixme use xseg binding
-    cmd = ["xseg", str(SPEC), "create"]
-    try:
-        check_call(cmd, shell=False);
-    except Exception:
+    initialize_xseg()
+    xconf = xseg_config()
+    xseg_parse_spec(str(SPEC), xconf)
+    r = xseg_create(xconf)
+    if r < 0:
         raise Error("Cannot create segment")
 
 def destroy_segment():
     #fixme blocking....
-    #fixme use xseg binding
-    cmd = ["xseg", str(SPEC), "destroy"]
     try:
-        check_call(cmd, shell=False);
-    except Exception:
+        initialize_xseg()
+        xconf = xseg_config()
+        xseg_parse_spec(str(SPEC), xconf)
+        xseg = xseg_join(xconf.type, xconf.name, "posix", cast(0, cb_null_ptrtype))
+        if not xseg:
+            raise Error("Cannot join segment")
+        xseg_leave(xseg)
+        xseg_destroy(xseg)
+    except Exception as e:
         raise Error("Cannot destroy segment")
 
 def check_running(name, pid = None):
@@ -511,12 +523,13 @@ def check_pidfile(name):
 def start_peer(peer):
     if check_pidfile(peer.role) > 0:
         raise Error("Cannot start peer %s. Peer already running" % peer.role)
-    cmd = [peer.executable] + peer.opts
+    cmd = [peer.executable]+ peer.opts
     s = "Starting %s " % peer.role
     sys.stdout.write(s.ljust(FIRST_COLUMN_WIDTH))
     try:
         check_call(cmd, shell=False);
-    except Exception:
+    except Exception as e:
+        print e
         sys.stdout.write(red("FAILED".ljust(SECOND_COLUMN_WIDTH)))
         sys.stdout.write("\n")
         raise Error("Cannot start %s" % peer.role)
@@ -649,10 +662,11 @@ def stop(args):
     remove_segdev()
     for m in reversed(modules):
         unload_module(m)
+        time.sleep(0.3)
 
 def status(args):
     r = 0
-    if vlmc_showmapped(args) >= 0:
+    if vlmc_showmapped(args) > 0:
         r += 1
     if loaded_module(xsegbd):
         pretty_print(xsegbd, green('Loaded'))
@@ -681,7 +695,7 @@ class Xseg_ctx(object):
     portno = None
 
     def __init__(self, spec, portno):
-        xseg_initialize()
+        initialize_xseg()
         xconf = xseg_config()
         xseg_parse_spec(spec, xconf)
         ctx = xseg_join(xconf.type, xconf.name, "posix", cast(0, cb_null_ptrtype))
@@ -859,7 +873,10 @@ def vlmc_showmapped(args):
     try:
         devices = os.listdir(os.path.join(XSEGBD_SYSFS, "devices/"))
     except:
-        raise Error("Cannot list %s/devices/" % XSEGBD_SYSFS)
+        if loaded_module(xsegbd):
+            raise Error("Cannot list %s/devices/" % XSEGBD_SYSFS)
+        else:
+            return 0
 
     print "id\tpool\timage\tsnap\tdevice"
     if not devices:
