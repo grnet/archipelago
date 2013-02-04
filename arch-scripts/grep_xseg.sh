@@ -23,7 +23,7 @@ if [[ -z $1 ]]; then
 	red_echo "No parameters given."
 	exit 1
 elif [[ $1 = "-m" ]]; then
-	INCLUDE="--include=Makefile --include=*.mk"
+	INCLUDE="--include=Makefile --include=*.mk --include=envsetup"
 	shift
 fi
 
@@ -31,6 +31,8 @@ fi
 # Grep XSEG #
 #############
 
-grep -RIni --exclude-dir=${XSEG}/sys/user/python --exclude=test.c \
-	${INCLUDE} --color=always -e $1 ${XSEG} | \
+grep -RIni --color=always ${INCLUDE} \
+	--exclude-dir=python \
+	-e $1 ${XSEG} | \
 	sed 's/'$SED_XSEG'//'
+
