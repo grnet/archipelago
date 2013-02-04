@@ -48,12 +48,16 @@ ifndef CSTD
 export CSTD=-std=gnu99 -pedantic
 endif
 
+ifeq (,$(VERSION))
+export TOPDIR=$(shell dirname $(CURDIR))
+export VERSION=$(shell cat $(TOPDIR)/version)
+endif
 
 bindir=/usr/bin/
 libdir=/usr/lib/
 pythondir=/usr/lib/python2.7/
 moduledir=/lib/modules/`uname -r`/extra/
-srcdir=/usr/src/archipelago-kernel-dkms-VERSION/
+srcdir=/usr/src/archipelago-kernel-dkms-$(VERSION)/
 ganetidir=/usr/share/ganeti/extstorage/vlmc/
 
 INC=-I$(BASE)
