@@ -395,6 +395,7 @@ static int segdev_init(void)
 	segdev->callback = segdev_callback;
 	segdev->priv = segpriv;
 
+	segdev_put(segdev);
 	return 0;
 
 err3:
