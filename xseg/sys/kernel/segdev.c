@@ -149,7 +149,7 @@ out:
 	return dev;
 
 fail_busy:
-	atomic_dec(&dev->usercount);
+	segdev_put(dev)
 	dev = ERR_PTR(-EBUSY);
 	goto out;
 }
