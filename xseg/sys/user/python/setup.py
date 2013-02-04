@@ -41,15 +41,21 @@ from distutils.util import convert_path
 from fnmatch import fnmatchcase
 from setuptools import setup, find_packages
 
-HERE = os.path.abspath(os.path.normpath(os.path.dirname(__file__)))
-DEBIANDIR = os.path.join(HERE, '../../../../debian');
+#HERE = os.path.abspath(os.path.normpath(os.path.dirname(__file__)))
+TOPDIR = os.environ['TOPDIR']
+DEBIANDIR = os.path.join(TOPDIR, 'debian');
 DEBIANDIR = os.path.normpath(DEBIANDIR)
 
 
+VERSION = os.environ['VERSION']
 # Package info
-VERSION = @VERSION
-README = open(os.path.join(DEBIANDIR, 'README')).read()
-CHANGES = open(os.path.join(DEBIANDIR, 'changelog')).read()
+if os.path.isdir(DEBIANDIR):
+    README = open(os.path.join(DEBIANDIR, 'README')).read()
+    CHANGES = open(os.path.join(DEBIANDIR, 'changelog')).read()
+else:
+    README = ''
+    CHANGES = ''
+
 SHORT_DESCRIPTION = 'Package short description'
 
 PACKAGES_ROOT = '.'
