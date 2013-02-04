@@ -254,14 +254,14 @@ static ssize_t segdev_write(struct file *file, const char __user *buf,
 		goto out;
 
 	if (count != sizeof(uint32_t))
-		goto out;
+		goto out_put;
 
 	ret = copy_from_user(&portno, buf, sizeof(uint32_t));
 	if (ret < 0)
-		goto out;
+		goto out_put;
 
 	if((count - ret) != sizeof(uint32_t))
-		goto out;
+		goto out_put;
 
 	ret = 0;
 	if (dev->callback)
@@ -270,6 +270,7 @@ static ssize_t segdev_write(struct file *file, const char __user *buf,
 		ret = -ENOSYS;
 
 	dev->buffer_index = 0;
+out_put:
 	segdev_put(dev);
 out:
 	return ret;
