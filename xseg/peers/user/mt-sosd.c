@@ -41,6 +41,7 @@
 #include <xseg/protocol.h>
 #include <pthread.h>
 #include <openssl/sha.h>
+#include <ctype.h>
 
 #ifndef SHA256_DIGEST_SIZE
 #define SHA256_DIGEST_SIZE 32
@@ -74,7 +75,7 @@ static void hexlify(unsigned char *data, char *hex)
         for (i=0; i<SHA256_DIGEST_LENGTH; i++)
                 sprintf(hex+2*i, "%02x", data[i]);
 }
-
+/*
 static void unhexlify(char *hex, unsigned char *data)
 {
         int i;
@@ -111,7 +112,7 @@ static void unhexlify(char *hex, unsigned char *data)
                 data[i] |= c & 0x0F;
         }
 }
-
+*/
 
 enum rados_state {
 	ACCEPTED = 0,

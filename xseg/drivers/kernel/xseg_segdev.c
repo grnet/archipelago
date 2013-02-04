@@ -235,6 +235,7 @@ static int segdev_local_signal_init(struct xseg *xseg, xport portno)
 {
 	//assert xsegments[portno] == NULL;
 	xsegments[portno] = xseg;
+	return 0;
 }
 
 static void segdev_local_signal_quit(struct xseg *xseg, xport portno)
@@ -311,10 +312,11 @@ static void segdev_free_data(struct xseg *xseg, void *data)
 
 static void *segdev_alloc_signal_desc(struct xseg *xseg, void *data)
 {
+	struct segdev_signal_desc *ssd;
 	struct xobject_h *sd_h = (struct xobject_h *) data;
 	if (!sd_h)
 		return NULL;
-	struct segdev_signal_desc *ssd = xobj_get_obj(sd_h, X_ALLOC);
+	ssd = xobj_get_obj(sd_h, X_ALLOC);
 	if (!ssd)
 		return NULL;
 	ssd->waitcue = 0;

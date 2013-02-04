@@ -531,6 +531,7 @@ int update_dev_sectors_from_request(	struct xsegbd_device *xsegbd_dev,
 					struct xseg_request *xreq	)
 {
 	void *data;
+	struct xseg_reply_info *xreply;
 	if (!xreq) {
 		XSEGLOG("Invalid xreq");
 		return -EIO;
@@ -551,7 +552,7 @@ int update_dev_sectors_from_request(	struct xsegbd_device *xsegbd_dev,
 		XSEGLOG("Invalid xsegbd_dev");
 		return -ENOENT;
 	}
-	struct xseg_reply_info *xreply = (struct xseg_reply_info *)data;
+	xreply = (struct xseg_reply_info *)data;
 	xsegbd_dev->sectors = xreply->size / 512ULL;
 	return 0;
 }

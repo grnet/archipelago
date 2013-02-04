@@ -1070,7 +1070,7 @@ int cmd_submit_reqs(long loops, long concurrent_reqs, int op)
 
 	struct xseg_request *submitted = NULL, *received;
 	long nr_submitted = 0, nr_received = 0, nr_failed = 0, nr_mismatch = 0, nr_flying = 0;
-	int reported = 0, r;
+	int r;
 	uint64_t offset;
 	uint32_t targetlen = 10, chunksize = 4096;
 	struct timeval tv1, tv2;
@@ -1097,7 +1097,6 @@ int cmd_submit_reqs(long loops, long concurrent_reqs, int op)
 			//FIXME
 			++nr_flying;
 			nr_submitted += 1;
-			reported = 0;
 			offset = 0;//pick(size);
 
 			submitted->offset = offset;
@@ -1886,7 +1885,7 @@ int main(int argc, char **argv)
 
 		if (!strcmp(argv[i], "failreq") && (i + 1 < argc)) {
 			struct xseg_request *req;
-			sscanf(argv[i+1], "%lx", &req);
+			sscanf(argv[i+1], "%lx", (unsigned long *)&req);
 			ret = cmd_request(req, FAIL);
 			i += 1;
 			continue;
