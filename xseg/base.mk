@@ -48,8 +48,8 @@ ifndef CSTD
 export CSTD=-std=gnu99 -pedantic
 endif
 
-ifeq (,$(VERSION))
 export TOPDIR=$(shell dirname $(CURDIR))
+ifeq (,$(VERSION))
 export VERSION=$(shell cat $(TOPDIR)/version)
 endif
 
