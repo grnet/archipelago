@@ -98,12 +98,8 @@ static long segdev_allocate(const char *name, uint64_t size)
 
 	oldsize = ioctl(fd, SEGDEV_IOC_SEGSIZE, 0);
 	if (oldsize >= 0) {
-		XSEGLOG("Destroying old segment\n");
-		if (ioctl(fd, SEGDEV_IOC_DESTROYSEG, 0)) {
-			XSEGLOG("Failed to destroy old segment");
-			closedev();
-			return -2;
-		}
+		XSEGLOG("Failed to create new segment. Destroy the old one first");
+		return -2;
 	}
 
 	XSEGLOG("creating segment of size %llu\n", size);
@@ -168,6 +164,7 @@ static void segdev_unmap(void *ptr, uint64_t size)
 {
 	struct xseg *xseg = ptr;
 	(void)munmap(xseg, xseg->segment_size);
+	closedev();
 }
 
 

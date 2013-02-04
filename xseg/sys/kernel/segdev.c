@@ -149,7 +149,7 @@ out:
 	return dev;
 
 fail_busy:
-	segdev_put(dev)
+	segdev_put(dev);
 	dev = ERR_PTR(-EBUSY);
 	goto out;
 }
