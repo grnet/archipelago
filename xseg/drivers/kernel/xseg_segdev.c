@@ -96,12 +96,14 @@ static long segdev_allocate(const char *name, uint64_t size)
 		goto out;
 	}
 
+	/*
 	if (segdev->segment) {
 		XSEGLOG("destroying existing segdev segment");
 		r = segdev_destroy_segment(segdev);
 		if (r)
 			goto out;
 	}
+	*/
 
 	XSEGLOG("creating segdev segment size %llu", size);
 	r = segdev_create_segment(segdev, size, 1);
