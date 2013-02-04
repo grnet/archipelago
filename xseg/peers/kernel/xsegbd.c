@@ -159,10 +159,7 @@ int xsegbd_xseg_quit(void)
 	struct segdev *segdev;
 
 	/* make sure to unmap the segment first */
-	segdev = segdev_get(0);
-	clear_bit(SEGDEV_RESERVED, &segdev->flags);
-	xsegbd.xseg->priv->segment_type.ops.unmap(xsegbd.xseg, xsegbd.xseg->segment_size);
-	segdev_put(segdev);
+	xseg_leave(xsegbd.xseg);
 
 	return 0;
 }
