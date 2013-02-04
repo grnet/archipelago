@@ -4,7 +4,7 @@
 #export DH_VERBOSE=1
 
 .PHONY: override_dh_dkms override_dh_strip
-VERSION := $(shell head -n 1 debian/changelog | sed -r 's/.*([0-9]+\.[0-9]+\.[0-9]+.*)-[0-9]+.*/\1/g')
+export VERSION := $(shell head -n 1 debian/changelog | sed -r 's/.*([0-9]+\.[0-9]+\.[0-9]+.*)-[0-9]+.*/\1/g')
 
 %:
 	dh $@ --with dkms --with python2
@@ -15,13 +15,3 @@ override_dh_dkms:
 override_dh_strip:
 	dh_strip -plibxseg0 --dbg-package=libxseg0-dbg
 	dh_strip -parchipelago --dbg-package=archipelago-dbg
-
-override_dh_auto_install:
-	cp xseg/base.mk /tmp/base.mk
-	sed -e 's/VERSION/$(VERSION)/g' < /tmp/base.mk > xseg/base.mk
-	rm /tmp/base.mk
-	cp xseg/sys/user/python/setup.py /tmp/setup.py
-	sed -e 's/@VERSION/"$(VERSION)"/g' < /tmp/setup.py > xseg/sys/user/python/setup.py
-	rm /tmp/setup.py
-	dh_auto_install
-
