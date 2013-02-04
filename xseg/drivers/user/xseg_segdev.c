@@ -127,7 +127,7 @@ static long segdev_deallocate(const char *name)
 		XSEGLOG("Failed to destroy old segment");
 		return -2;
 	}
-
+	close(fd);
 	closedev();
 	return 0;
 }
