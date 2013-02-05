@@ -1381,7 +1381,7 @@ def cli():
         parser = parser_func()
     except Exception as e:
         sys.stderr.write("Invalid basename\n")
-        sys.exit(-1)
+        return -1
 
     args = parser.parse_args()
     loadrc(args.config)
