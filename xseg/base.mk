@@ -53,6 +53,10 @@ export TOPDIR=$(shell dirname $(CURDIR))
 export VERSION=$(shell cat $(TOPDIR)/version)
 endif
 
+ifeq (,$(DESTDIR))
+export DESTDIR=/
+endif
+
 bindir=/usr/bin/
 libdir=/usr/lib/
 pythondir=/usr/lib/python2.7/
