@@ -41,12 +41,13 @@ from distutils.util import convert_path
 from fnmatch import fnmatchcase
 from setuptools import setup, find_packages
 
-HERE = os.path.abspath(os.path.normpath(os.path.dirname(__file__)))
-DEBIANDIR = os.path.join(HERE, '../../../../debian');
+#HERE = os.path.abspath(os.path.normpath(os.path.dirname(__file__)))
+TOPDIR = os.environ['TOPDIR']
+DEBIANDIR = os.path.join(TOPDIR, 'debian');
 DEBIANDIR = os.path.normpath(DEBIANDIR)
 
-
-VERSION = os.environ['VERSION']
+from archipelago.version import __version__
+VERSION = __version__
 # Package info
 if os.path.isdir(DEBIANDIR):
     README = open(os.path.join(DEBIANDIR, 'README')).read()
@@ -64,7 +65,7 @@ PACKAGES = find_packages(PACKAGES_ROOT)
 CLASSIFIERS = []
 
 # Package requirements
-INSTALL_REQUIRES = ['xseg'
+INSTALL_REQUIRES = ['python-xseg'
 ]
 
 EXTRAS_REQUIRES = {
@@ -193,8 +194,8 @@ setup(
 
     entry_points = {
         'console_scripts': [
-            'archipelago = archipelago.cli',
-            'vlmc = archipelago.cli',
+            'archipelago = archipelago.archipelago:cli',
+            'vlmc = archipelago.archipelago:cli',
             ],
         }
 )
