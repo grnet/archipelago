@@ -1369,7 +1369,7 @@ def vlmc():
 
     return parser
 
-if __name__ == "__main__":
+def cli():
     # parse arguments and discpatch to the correct func
     try:
         parser_func = {
@@ -1390,8 +1390,10 @@ if __name__ == "__main__":
 
     try:
         args.func(args)
-        sys.exit(0)
+        return 0
     except Error as e:
         print red(e)
-        sys.exit(-1)
+        return -1
 
+if __name__ == "__main__":
+    sys.exit(cli())
