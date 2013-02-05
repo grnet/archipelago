@@ -11,6 +11,8 @@ EFILES+="xseg-domain-targets"
 SUBDIR:=$(subst $(XSEG_HOME),,$(CURDIR))
 
 default:
+	make -C archipelago
+	make -C ext_scripts
 
 clean:
 	make -C archipelago clean
