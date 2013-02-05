@@ -41,9 +41,8 @@ from distutils.util import convert_path
 from fnmatch import fnmatchcase
 from setuptools import setup, find_packages
 
-#HERE = os.path.abspath(os.path.normpath(os.path.dirname(__file__)))
-TOPDIR = os.environ['TOPDIR']
-DEBIANDIR = os.path.join(TOPDIR, 'debian');
+HERE = os.path.abspath(os.path.normpath(os.path.dirname(__file__)))
+DEBIANDIR = os.path.join(HERE, '../../../../debian');
 DEBIANDIR = os.path.normpath(DEBIANDIR)
 
 
@@ -65,7 +64,7 @@ PACKAGES = find_packages(PACKAGES_ROOT)
 CLASSIFIERS = []
 
 # Package requirements
-INSTALL_REQUIRES = [
+INSTALL_REQUIRES = ['xseg'
 ]
 
 EXTRAS_REQUIRES = {
@@ -79,7 +78,7 @@ TESTS_REQUIRES = [
 # of replicating them:
 standard_exclude = ["*.py", "*.pyc", "*$py.class", "*~", ".*", "*.bak"]
 standard_exclude_directories = [
-    ".*", "CVS", "_darcs", "./build", "./dist", "EGG-INFO", "*.egg-info", "snf-0.7"
+    ".*", "CVS", "_darcs", "./build", "./dist", "EGG-INFO", "*.egg-info"
 ]
 
 # (c) 2005 Ian Bicking and contributors; written for Paste (http://pythonpaste.org)
@@ -166,7 +165,7 @@ def find_package_data(
     return out
 
 setup(
-    name = 'python-xseg',
+    name = 'python-archipelago',
     version = VERSION,
     license = 'BSD',
     url = 'http://code.grnet.gr/',
@@ -192,6 +191,10 @@ setup(
 
     dependency_links = ['http://docs.dev.grnet.gr/pypi'],
 
-    entry_points = {},
+    entry_points = {
+        'console_scripts': [
+            'archipelago = archipelago.cli',
+            'vlmc = archipelago.cli',
+            ],
+        }
 )
-

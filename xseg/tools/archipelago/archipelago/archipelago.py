@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-# archipelagos tool
 
 # Copyright 2012 GRNET S.A. All rights reserved.
 #
@@ -38,19 +37,35 @@
 from xseg.xseg_api import *
 from xseg.xprotocol import *
 from ctypes import CFUNCTYPE, cast, c_void_p, addressof, string_at, memmove, \
-    create_string_buffer, pointer, sizeof, POINTER, c_char_p, c_char, byref
+    create_string_buffer, pointer, sizeof, POINTER, c_char_p, c_char, byref, \
+    c_uint32, c_uint64
 cb_null_ptrtype = CFUNCTYPE(None, uint32_t)
 
 import os, sys, subprocess, argparse, time, psutil, signal, errno
 from subprocess import call, check_call, Popen, PIPE
+from collections import namedtuple
+from struct import unpack
+from binascii import hexlify
 
+#archipelago peer roles. Order matters!
+roles = ['blockerb', 'blockerm', 'mapperd', 'vlmcd']
+Peer = namedtuple('Peer', ['executable', 'opts', 'role'])
+
+peers = dict()
+modules = ['xseg', 'segdev', 'xseg_posix', 'xseg_pthread', 'xseg_segdev']
+xsegbd = 'xsegbd'
+
+LOG_SUFFIX='.log'
+PID_SUFFIX='.pid'
 DEFAULTS='/etc/default/archipelago'
-VLMC_LOCK_FILE='/tmp/vlmc.lock'
+VLMC_LOCK_FILE='vlmc.lock'
 ARCHIP_PREFIX='archip_'
+CEPH_CONF_FILE='/etc/ceph/ceph.conf'
 
 #system defaults
 PIDFILE_PATH="/var/run/archipelago"
 LOGS_PATH="/var/log/archipelago"
+LOCK_PATH="/var/lock"
 DEVICE_PREFIX="/dev/xsegbd"
 XSEGBD_SYSFS="/sys/bus/xsegbd/"
 
@@ -68,22 +83,19 @@ BLOCKER=''
 
 available_storage = {'files': FILE_BLOCKER, 'rados': RADOS_BLOCKER}
 
-peers = []
-modules = ["xseg", "segdev", "xseg_posix", "xseg_pthread", "xseg_segdev"]
-xsegbd = "xsegbd"
 
 XSEGBD_START=0
-XSEGBD_END=199
-VPORT_START=200
-VPORT_END=399
-BPORT=500
-MPORT=501
-MBPORT=502
-VTOOL=503
-#RESERVED 511
+XSEGBD_END=499
+VPORT_START=500
+VPORT_END=999
+BPORT=1000
+MPORT=1001
+MBPORT=1002
+VTOOL=1003
+#RESERVED 1023
 
 #default config
-SPEC="segdev:xsegbd:512:2048:12"
+SPEC="segdev:xsegbd:1024:5120:12"
 
 NR_OPS_BLOCKERB=""
 NR_OPS_BLOCKERM=""
@@ -110,19 +122,26 @@ FIRST_COLUMN_WIDTH = 23
 SECOND_COLUMN_WIDTH = 23
 
 def green(s):
-    return '\x1b[32m' + s + '\x1b[0m'
+    return '\x1b[32m' + str(s) + '\x1b[0m'
 
 def red(s):
-    return '\x1b[31m' + s + '\x1b[0m'
+    return '\x1b[31m' + str(s) + '\x1b[0m'
 
 def yellow(s):
-    return '\x1b[33m' + s + '\x1b[0m'
+    return '\x1b[33m' + str(s) + '\x1b[0m'
 
 def pretty_print(cid, status):
     sys.stdout.write(cid.ljust(FIRST_COLUMN_WIDTH))
     sys.stdout.write(status.ljust(SECOND_COLUMN_WIDTH))
     sys.stdout.write('\n')
     return
+
+class Error(Exception):
+    def __init__(self, msg):
+        self.msg = msg
+
+    def __str__(self):
+        return self.msg
 
 def check_conf():
     def isExec(file_path):
@@ -269,6 +288,9 @@ def check_conf():
         if PITHOSMAPS and not os.path.isdir(str(PITHOSMAPS)):
              print red("PITHOSMAPS invalid")
              return False
+    elif STORAGE=="RADOS":
+        #TODO use rados.py to check for pool existance
+        pass
 
     for p in [BLOCKER, MAPPER, VLMC]:
         if not validExec(p):
@@ -278,93 +300,109 @@ def check_conf():
     return True
 
 def construct_peers():
+    #these must be in sync with roles
+    executables = dict()
+    config_opts = dict()
+    executables['blockerb'] = BLOCKER
+    executables['blockerm'] = BLOCKER
+    executables['mapperd'] = MAPPER
+    executables['vlmcd'] = VLMC
+
     if BLOCKER == "pfiled":
-        peer_blockerb = [BLOCKER,
-                ["-p" , str(BPORT), "-g", str(SPEC), "-n", str(NR_OPS_BLOCKERB),
+        config_opts['blockerb'] = [
+                "-p" , str(BPORT), "-g", str(SPEC).encode(), "-n", str(NR_OPS_BLOCKERB),
                  str(PITHOS), str(FILED_IMAGES), "-d",
-                "-f", os.path.join(PIDFILE_PATH, "blockerb.pid")],
-                "blockerb"]
-        peer_blockerm = [BLOCKER,
-                ["-p" , str(MBPORT), "-g", str(SPEC), "-n", str(NR_OPS_BLOCKERM),
+                "-f", os.path.join(PIDFILE_PATH, "blockerb" + PID_SUFFIX)
+                ]
+        config_opts['blockerm'] = [
+                "-p" , str(MBPORT), "-g", str(SPEC).encode(), "-n", str(NR_OPS_BLOCKERM),
                 str(PITHOSMAPS), str(FILED_MAPS), "-d",
-                "-f", os.path.join(PIDFILE_PATH, "blockerm.pid")],
-                "blockerm" ]
+                "-f", os.path.join(PIDFILE_PATH, "blockerm" + PID_SUFFIX)
+                ]
     elif BLOCKER == "mt-sosd":
-        peer_blockerb = [BLOCKER,
-                ["-p" , str(BPORT), "-g", str(SPEC), "-n", str(NR_OPS_BLOCKERB),
+        config_opts['blockerb'] = [
+                "-p" , str(BPORT), "-g", str(SPEC).encode(), "-n", str(NR_OPS_BLOCKERB),
                  "--pool", str(RADOS_POOL_BLOCKS), "-v", str(VERBOSITY_BLOCKERB),
-                 "-d", "--pidfile", os.path.join(PIDFILE_PATH, "blockerb.pid"),
-                 "-l", os.path.join(str(LOGS_PATH), "blockerb.log"),
-                 "-t", "3"],
-                 "blockerb"]
-        peer_blockerm = [BLOCKER,
-                ["-p" , str(MBPORT), "-g", str(SPEC), "-n", str(NR_OPS_BLOCKERM),
+                 "-d", "--pidfile", os.path.join(PIDFILE_PATH, "blockerb" + PID_SUFFIX),
+                 "-l", os.path.join(str(LOGS_PATH), "blockerb" + LOG_SUFFIX),
+                 "-t", "3"
+                 ]
+        config_opts['blockerm'] = [
+                "-p" , str(MBPORT), "-g", str(SPEC).encode(), "-n", str(NR_OPS_BLOCKERM),
                  "--pool", str(RADOS_POOL_MAPS), "-v", str(VERBOSITY_BLOCKERM),
-                 "-d", "--pidfile", os.path.join(PIDFILE_PATH, "blockerm.pid"),
-                 "-l", os.path.join(str(LOGS_PATH), "blockerm.log"),
-                 "-t", "3"],
-                 "blockerm"]
+                 "-d", "--pidfile", os.path.join(PIDFILE_PATH, "blockerm" + PID_SUFFIX),
+                 "-l", os.path.join(str(LOGS_PATH), "blockerm" + LOG_SUFFIX),
+                 "-t", "3"
+                 ]
     elif BLOCKER == "mt-pfiled":
-        peer_blockerb = [BLOCKER,
-                ["-p" , str(BPORT), "-g", str(SPEC), "-n", str(NR_OPS_BLOCKERB),
+        config_opts['blockerb'] = [
+                "-p" , str(BPORT), "-g", str(SPEC).encode(), "-n", str(NR_OPS_BLOCKERB),
                  "--pithos", str(PITHOS), "--archip", str(FILED_IMAGES),
              "-v", str(VERBOSITY_BLOCKERB),
-                 "-d", "--pidfile", os.path.join(PIDFILE_PATH, "blockerb.pid"),
-                 "-l", os.path.join(str(LOGS_PATH), "blockerb.log"),
-                 "-t", str(NR_OPS_BLOCKERB), "--prefix", ARCHIP_PREFIX],
-                 "blockerb"]
-        peer_blockerm = [BLOCKER,
-                ["-p" , str(MBPORT), "-g", str(SPEC), "-n", str(NR_OPS_BLOCKERM),
+                 "-d", "--pidfile", os.path.join(PIDFILE_PATH, "blockerb" + PID_SUFFIX),
+                 "-l", os.path.join(str(LOGS_PATH), "blockerb" + LOG_SUFFIX),
+                 "-t", str(NR_OPS_BLOCKERB), "--prefix", ARCHIP_PREFIX
+                 ]
+        config_opts['blockerm'] = [
+                "-p" , str(MBPORT), "-g", str(SPEC).encode(), "-n", str(NR_OPS_BLOCKERM),
                  "--pithos", str(PITHOSMAPS), "--archip", str(FILED_MAPS),
              "-v", str(VERBOSITY_BLOCKERM),
-                 "-d", "--pidfile", os.path.join(PIDFILE_PATH, "blockerm.pid"),
-                 "-l", os.path.join(str(LOGS_PATH), "blockerm.log"),
-                 "-t", str(NR_OPS_BLOCKERM), "--prefix", ARCHIP_PREFIX],
-                 "blockerm"]
+                 "-d", "--pidfile", os.path.join(PIDFILE_PATH, "blockerm" + PID_SUFFIX),
+                 "-l", os.path.join(str(LOGS_PATH), "blockerm" + LOG_SUFFIX),
+                 "-t", str(NR_OPS_BLOCKERM), "--prefix", ARCHIP_PREFIX
+                 ]
     else:
             sys.exit(-1)
 
-    peer_vlmcd = [VLMC,
-             ["-t" , "1", "-sp",  str(VPORT_START), "-ep", str(VPORT_END),
-              "-g", str(SPEC), "-n", str(NR_OPS_VLMC), "-bp", str(BPORT),
-              "-mp", str(MPORT), "-d", "-v", str(VERBOSITY_VLMC),
-              "--pidfile", os.path.join(PIDFILE_PATH, "vlmcd.pid"),
-              "-l", os.path.join(str(LOGS_PATH), "vlmcd.log")
-              ], "vlmcd"]
-    peer_mapperd = [MAPPER,
-             ["-t" , "1", "-p",  str(MPORT), "-mbp", str(MBPORT),
-              "-g", str(SPEC), "-n", str(NR_OPS_MAPPER), "-bp", str(BPORT),
-              "--pidfile", os.path.join(PIDFILE_PATH, "mapperd.pid"),
+    config_opts['mapperd'] = [
+             "-t" , "1", "-p",  str(MPORT), "-mbp", str(MBPORT),
+              "-g", str(SPEC).encode(), "-n", str(NR_OPS_MAPPER), "-bp", str(BPORT),
+              "--pidfile", os.path.join(PIDFILE_PATH, "mapperd" + PID_SUFFIX),
               "-v", str(VERBOSITY_MAPPER), "-d",
-              "-l", os.path.join(str(LOGS_PATH), "mapperd.log")
-              ], "mapperd"]
+              "-l", os.path.join(str(LOGS_PATH), "mapperd" + LOG_SUFFIX)
+              ]
+    config_opts['vlmcd'] = [
+             "-t" , "1", "-sp",  str(VPORT_START), "-ep", str(VPORT_END),
+              "-g", str(SPEC).encode(), "-n", str(NR_OPS_VLMC), "-bp", str(BPORT),
+              "-mp", str(MPORT), "-d", "-v", str(VERBOSITY_VLMC),
+              "--pidfile", os.path.join(PIDFILE_PATH, "vlmcd" + PID_SUFFIX),
+              "-l", os.path.join(str(LOGS_PATH), "vlmcd" + LOG_SUFFIX)
+              ]
 
-    peers = []
-    peers.append(peer_blockerb)
-    peers.append(peer_blockerm)
-    peers.append(peer_vlmcd)
-    peers.append(peer_mapperd)
+    for r in roles:
+        peers[r] = Peer(executable = executables[r], opts = config_opts[r],
+                role = r)
 
     return peers
 
 
 def exclusive(fn):
     def exclusive_args(args):
+        if not os.path.exists(LOCK_PATH):
+            try:
+                os.mkdir(LOCK_PATH)
+            except OSError, (err, reason):
+                print >> sys.stderr, reason
+        if not os.path.isdir(LOCK_PATH):
+            sys.stderr.write("Locking error: ")
+            print >> sys.stderr, LOCK_PATH + " is not a directory"
+            return -1;
+        lock_file = os.path.join(LOCK_PATH, VLMC_LOCK_FILE)
         while True:
             try:
-                fd = os.open(VLMC_LOCK_FILE, os.O_CREAT|os.O_EXCL|os.O_WRONLY)
+                fd = os.open(lock_file, os.O_CREAT|os.O_EXCL|os.O_WRONLY)
                 break;
             except OSError, (err, reason):
                 print >> sys.stderr, reason
                 if err == errno.EEXIST:
-                    time.sleep(0.05)
+                    time.sleep(0.2)
                 else:
-                    raise OSError(err, VLMC_LOCK_FILE + ' ' + reason)
+                    raise OSError(err, lock_file + ' ' + reason)
         try:
             r = fn(args)
         finally:
             os.close(fd)
-            os.unlink(VLMC_LOCK_FILE)
+            os.unlink(lock_file)
         return r
 
     return exclusive_args
@@ -376,11 +414,10 @@ def loadrc(rc):
         else:
             execfile(rc, globals())
     except:
-        sys.stderr.write("Cannot read config file\n")
-        sys.exit(1)
+        raise Error("Cannot read config file")
 
     if not check_conf():
-        sys.exit(1)
+        raise Error("Invalid conf file")
 
 def loaded_modules():
     lines = open("/proc/modules").read().split("\n")
@@ -397,7 +434,7 @@ def load_module(name, args):
     if name in modules:
         sys.stdout.write(yellow("Already loaded".ljust(SECOND_COLUMN_WIDTH)))
         sys.stdout.write("\n")
-        return 0
+        return
     cmd = ["modprobe", "%s" % name]
     if args:
         for arg in args:
@@ -407,10 +444,9 @@ def load_module(name, args):
     except Exception:
         sys.stdout.write(red("FAILED".ljust(SECOND_COLUMN_WIDTH)))
         sys.stdout.write("\n")
-        return -1
+        raise Error("Cannot load module %s. Check system logs" %name)
     sys.stdout.write(green("OK".ljust(SECOND_COLUMN_WIDTH)))
     sys.stdout.write("\n")
-    return 0
 
 def unload_module(name):
     s = "Unloading %s " % name
@@ -419,50 +455,59 @@ def unload_module(name):
     if name not in modules:
         sys.stdout.write(yellow("Not loaded".ljust(SECOND_COLUMN_WIDTH)))
         sys.stdout.write("\n")
-        return 0
+        return
     cmd = ["modprobe -r %s" % name]
     try:
         check_call(cmd, shell=True);
     except Exception:
         sys.stdout.write(red("FAILED".ljust(SECOND_COLUMN_WIDTH)))
         sys.stdout.write("\n")
-        return -1
+        raise Error("Cannot unload module %s. Check system logs" %name)
     sys.stdout.write(green("OK".ljust(SECOND_COLUMN_WIDTH)))
     sys.stdout.write("\n")
-    return 0
+
+xseg_initialized = False
+
+def initialize_xseg():
+    global xseg_initialized
+    xseg_initialize()
+    xseg_initialized = True
 
 def create_segment():
     #fixme blocking....
-    cmd = ["xseg", str(SPEC), "create"]
-    try:
-        check_call(cmd, shell=False);
-    except Exception:
-            sys.stderr.write(red("Cannot create segment. \n"))
-            return -1
-    return 0
+    initialize_xseg()
+    xconf = xseg_config()
+    xseg_parse_spec(str(SPEC), xconf)
+    r = xseg_create(xconf)
+    if r < 0:
+        raise Error("Cannot create segment")
 
 def destroy_segment():
     #fixme blocking....
-    cmd = ["xseg", str(SPEC), "destroy"]
     try:
-        check_call(cmd, shell=False);
-    except Exception:
-            sys.stderr.write(red("Cannot destroy segment. \n"))
-            return 0
-    return 0
+        initialize_xseg()
+        xconf = xseg_config()
+        xseg_parse_spec(str(SPEC), xconf)
+        xseg = xseg_join(xconf.type, xconf.name, "posix", cast(0, cb_null_ptrtype))
+        if not xseg:
+            raise Error("Cannot join segment")
+        xseg_leave(xseg)
+        xseg_destroy(xseg)
+    except Exception as e:
+        raise Error("Cannot destroy segment")
 
-def check_running(name, pid = -1):
+def check_running(name, pid = None):
     for p in psutil.process_iter():
         if p.name == name:
-            if pid != -1:
+            if pid:
                 if pid == p.pid:
                     return pid
             else:
                 return pid
-    return -1
+    return None
 
 def check_pidfile(name):
-    pidfile = os.path.join(PIDFILE_PATH, name + ".pid")
+    pidfile = os.path.join(PIDFILE_PATH, name + PID_SUFFIX)
     pf = None
     try:
         pf = open(pidfile, "r")
@@ -471,60 +516,72 @@ def check_pidfile(name):
     except:
         if pf:
             pf.close()
-        return -1
+        return -1;
 
     return pid
 
 def start_peer(peer):
-    cmd = [peer[0]] + peer[1]
-    s = "Starting %s " % peer[2]
+    if check_pidfile(peer.role) > 0:
+        raise Error("Cannot start peer %s. Peer already running" % peer.role)
+    cmd = [peer.executable]+ peer.opts
+    s = "Starting %s " % peer.role
     sys.stdout.write(s.ljust(FIRST_COLUMN_WIDTH))
     try:
         check_call(cmd, shell=False);
-    except Exception:
+    except Exception as e:
+        print e
         sys.stdout.write(red("FAILED".ljust(SECOND_COLUMN_WIDTH)))
         sys.stdout.write("\n")
-        return -1
+        raise Error("Cannot start %s" % peer.role)
+
+    pid = check_pidfile(peer.role)
+    if pid < 0 or not check_running(peer.executable, pid):
+        sys.stdout.write(red("FAILED".ljust(SECOND_COLUMN_WIDTH)))
+        sys.stdout.write("\n")
+        raise Error("Couldn't start %s" % peer.role)
+
     sys.stdout.write(green("OK".ljust(SECOND_COLUMN_WIDTH)))
     sys.stdout.write("\n")
-    return 0
 
 def stop_peer(peer):
-    pid = check_pidfile(peer[2])
+    pid = check_pidfile(peer.role)
     if pid < 0:
         pretty_print(peer[2], yellow("not running"))
-        return -1
+        return
 
-    s = "Stopping %s " % peer[2]
+    s = "Stopping %s " % peer.role
     sys.stdout.write(s.ljust(FIRST_COLUMN_WIDTH))
     i = 0
-    while check_running(peer[0], pid) > 0:
+    while check_running(peer.executable, pid):
         os.kill(pid, signal.SIGTERM)
         time.sleep(0.1)
         i += 1
         if i > 150:
             sys.stdout.write(red("FAILED".ljust(SECOND_COLUMN_WIDTH)))
             sys.stdout.write("\n")
-            return -1
+            raise Error("Failed to stop peer %s." % peer.role)
     sys.stdout.write(green("OK".ljust(SECOND_COLUMN_WIDTH)))
     sys.stdout.write("\n")
-    return 0
 
 def peer_running(peer):
-    pid = check_pidfile(peer[2])
+    pid = check_pidfile(peer.role)
     if pid < 0:
-        return -1
+        pretty_print(peer.role, red('not running'))
+        return False
 
-    r = check_running(peer[0], pid)
-    if r < 0:
-        pretty_print(peer[2], yellow("Has valid pidfile but does not seem to be active"))
-    return 0
+    if not check_running(peer.executable, pid):
+        pretty_print(peer.role, yellow("Has valid pidfile but does not seem to be active"))
+        return False
+    pretty_print(peer.role, green('running'))
+    return True
 
 
 def make_segdev():
     try:
         os.stat(str(CHARDEV_NAME))
-        return -2
+        raise Error("Segdev already exists")
+    except Error as e:
+        raise e
     except:
         pass
     cmd = ["mknod", str(CHARDEV_NAME), "c", str(CHARDEV_MAJOR), str(CHARDEV_MINOR)]
@@ -532,93 +589,84 @@ def make_segdev():
     try:
         check_call(cmd, shell=False);
     except Exception:
-        sys.stderr.write(red("Segdev device creation failed.\n"))
-        return -1
-    return 0
+        raise Error("Segdev device creation failed.")
 
 def remove_segdev():
     try:
         os.stat(str(CHARDEV_NAME))
-    except:
-        return -2
+    except OSError, (err, reason):
+        if err == errno.ENOENT:
+            return
+        raise OSError(str(CHARDEV_NAME) + ' ' + reason)
     try:
         os.unlink(str(CHARDEV_NAME))
     except:
-        sys.stderr.write(red("Segdev device removal failed.\n"))
-        return -1
+        raise Error("Segdev device removal failed.")
 
 def start_peers(peers):
     for m in modules:
         if not loaded_module(m):
-            print red("Cannot start userspace peers. " + m + " module not loaded")
-            return -1
-    for p in peers:
-        if start_peer(p) < 0:
-            return -1
-    return 0
+            raise Error("Cannot start userspace peers. " + m + " module not loaded")
+    for r in roles:
+        p = peers[r]
+        start_peer(p)
 
 def stop_peers(peers):
-    for p in reversed(peers):
+    for r in reversed(roles):
+        p = peers[r]
         stop_peer(p)
-    return 0
 
 def start(args):
+    if args.peer:
+        try:
+            p = peers[args.peer]
+        except KeyError:
+            raise Error("Invalid peer %s" % str(args.peer))
+        return start_peer(p)
+
     if args.user:
         return start_peers(peers)
 
     if status(args) > 0:
-        return -1
+        raise Error("Cannot start. Try stopping first")
 
-    for m in modules:
-        if load_module(m, None) < 0:
-            stop(args)
-            return -1
-    time.sleep(0.5)
-
-    if make_segdev() < 0:
+    try:
+        for m in modules:
+            load_module(m, None)
+        time.sleep(0.5)
+        make_segdev()
+        time.sleep(0.5)
+        create_segment()
+        time.sleep(0.5)
+        start_peers(peers)
+        load_module(xsegbd, xsegbd_args)
+    except Exception as e:
         stop(args)
-        return -1
+        raise e
 
-    time.sleep(0.5)
-
-    if create_segment() < 0:
-        stop(args)
-        return -1
-
-    time.sleep(0.5)
-
-    if start_peers(peers) < 0:
-        stop(args)
-        return -1
-
-
-    if load_module(xsegbd, xsegbd_args) < 0:
-        stop(args)
-        return -1
-    return 0
 
 def stop(args):
+    if args.peer:
+        try:
+            p = peers[args.peer]
+        except KeyError:
+            raise Error("Invalid peer %s" % str(args.peer))
+        return stop_peer(p)
     if args.user:
         return stop_peers(peers)
     #check devices
     if vlmc_showmapped(args) > 0:
-        print "Cannot stop archipelago. Mapped volumes exist"
-        return -1
-    if unload_module(xsegbd):
-        return -1
-    r = 0
-
+        raise Error("Cannot stop archipelago. Mapped volumes exist")
+    unload_module(xsegbd)
     stop_peers(peers)
-
     remove_segdev()
-
     for m in reversed(modules):
         unload_module(m)
-    return 0
+        time.sleep(0.3)
 
 def status(args):
     r = 0
-    if vlmc_showmapped(args) >= 0:
+    if vlmc_showmapped(args) > 0:
         r += 1
     if loaded_module(xsegbd):
         pretty_print(xsegbd, green('Loaded'))
@@ -631,19 +679,15 @@ def status(args):
             r += 1
         else:
             pretty_print(m, red('Not loaded'))
-    for p in reversed(peers):
-        if peer_running(p) < 0:
-            pretty_print(p[0], red('not running'))
-        else:
-            pretty_print(p[0], green('running'))
+    for role in reversed(roles):
+        p = peers[role]
+        if peer_running(p):
             r += 1
     return r
 
 def restart(args):
-    r = stop(args)
-    if r < 0:
-        return r
-    return start(args)
+    stop(args)
+    start(args)
 
 class Xseg_ctx(object):
     ctx = None
@@ -651,15 +695,15 @@ class Xseg_ctx(object):
     portno = None
 
     def __init__(self, spec, portno):
-        xseg_initialize()
+        initialize_xseg()
         xconf = xseg_config()
         xseg_parse_spec(spec, xconf)
         ctx = xseg_join(xconf.type, xconf.name, "posix", cast(0, cb_null_ptrtype))
         if not ctx:
-            raise Exception("Cannot join segment")
+            raise Error("Cannot join segment")
         port = xseg_bind_port(ctx, portno, c_void_p(0))
         if not port:
-            raise Exception("Cannot bind to port")
+            raise Error("Cannot bind to port")
         xseg_init_local_signal(ctx, portno)
         self.ctx = ctx
         self.port = port
@@ -671,7 +715,7 @@ class Xseg_ctx(object):
 
     def __enter__(self):
         if not self.ctx:
-            raise Exception("No segment")
+            raise Error("No segment")
         return self
 
     def __exit__(self, type_, value, traceback):
@@ -691,14 +735,14 @@ class Request(object):
     def __init__(self, xseg_ctx, dst_portno, targetlen, datalen):
         ctx = xseg_ctx.ctx
         if not ctx:
-            raise Exception("No context")
+            raise Error("No context")
         req = xseg_get_request(ctx, xseg_ctx.portno, dst_portno, X_ALLOC)
         if not req:
-            raise Exception("Cannot get request")
+            raise Error("Cannot get request")
         r = xseg_prep_request(ctx, req, targetlen, datalen)
         if r < 0:
             xseg_put_request(ctx, req, xseg_ctx.portno)
-            raise Exception("Cannot prepare request")
+            raise Error("Cannot prepare request")
 #        print hex(addressof(req.contents))
         self.req = req
         self.xseg_ctx = xseg_ctx
@@ -713,7 +757,7 @@ class Request(object):
 
     def __enter__(self):
         if not self.req:
-            raise Exception("xseg request not set")
+            raise Error("xseg request not set")
         return self
 
     def __exit__(self, type_, value, traceback):
@@ -829,7 +873,10 @@ def vlmc_showmapped(args):
     try:
         devices = os.listdir(os.path.join(XSEGBD_SYSFS, "devices/"))
     except:
-        return -1
+        if loaded_module(xsegbd):
+            raise Error("Cannot list %s/devices/" % XSEGBD_SYSFS)
+        else:
+            return 0
 
     print "id\tpool\timage\tsnap\tdevice"
     if not devices:
@@ -843,15 +890,11 @@ def vlmc_showmapped(args):
             print "%s\t%s\t%s\t%s\t%s" % (d_id, '-', target, '-', DEVICE_PREFIX +
             d_id)
     except Exception, reason:
-        print >> sys.stderr, reason
-        return -2
+        raise Error(reason)
     return len(devices)
 
 def vlmc_showmapped_wrapper(args):
-    r = vlmc_showmapped(args)
-    if r < 0:
-        return r
-    return 0
+    vlmc_showmapped(args)
 
 
 @exclusive
@@ -861,11 +904,9 @@ def vlmc_create(args):
     snap = args.snap
 
     if len(name) < 6:
-        print >> sys.stderr, "Name should have at least len 6"
-        sys.exit(-1)
+        raise Error("Name should have at least len 6")
     if size == None and snap == None:
-        print >> sys.stderr, "At least one of the size/snap args must be provided"
-        sys.exit(-1)
+        raise Error("At least one of the size/snap args must be provided")
 
     ret = False
     xseg_ctx = Xseg_ctx(SPEC, VTOOL)
@@ -893,8 +934,7 @@ def vlmc_create(args):
         ret = req.success()
     xseg_ctx.shutdown()
     if not ret:
-        sys.stderr.write("vlmc creation failed\n")
-        sys.exit(-1)
+        raise Error("vlmc creation failed")
 
 @exclusive
 def vlmc_snapshot(args):
@@ -902,8 +942,7 @@ def vlmc_snapshot(args):
     name = args.name[0]
 
     if len(name) < 6:
-	print >> sys.stderr, "Name should have at least len 6"
-	sys.exit(-1)
+        raise Error("Name should have at least len 6")
 
     ret = False
     xseg_ctx = Xseg_ctx(SPEC, VTOOL)
@@ -920,31 +959,30 @@ def vlmc_snapshot(args):
         req.submit()
         req.wait()
         ret = req.success()
-        reply = string_at(req.get_data(xseg_reply_snapshot).contents.target, 64)
+        if ret:
+            reply = string_at(req.get_data(xseg_reply_snapshot).contents.target, 64)
     xseg_ctx.shutdown()
     if not ret:
-        sys.stderr.write("vlmc snapshot failed\n")
-        sys.exit(-1)
+        raise Error("vlmc snapshot failed")
     sys.stdout.write("Snapshot name: %s\n" % reply)
-    return
 
 
 def vlmc_list(args):
     if STORAGE == "rados":
-        cmd = [ 'rados', '-p', '%s' % RADOS_POOL_MAPS, 'ls' ]
-        proc = Popen(cmd, stdout = PIPE)
-        while proc.poll() is None:
-            output = proc.stdout.readline()
-            if output.startswith(ARCHIP_PREFIX) and not output.endswith('_lock\n'):
-                print output.lstrip(ARCHIP_PREFIX),
+        import rados
+        cluster = rados.Rados(conffile='/etc/ceph/ceph.conf')
+        cluster.connect()
+        ioctx = cluster.open_ioctx(RADOS_POOL_MAPS)
+        oi = rados.ObjectIterator(ioctx)
+        for o in oi :
+            name = o.key
+            if name.startswith(ARCHIP_PREFIX) and not name.endswith('_lock'):
+		    print name[len(ARCHIP_PREFIX):]
     elif STORAGE == "files":
-        print >> sys.stderr, "Vlmc list not supported for files yet"
-	return 0
+        raise Error("Vlmc list not supported for files yet")
     else:
-        print >> sys.stderr, "Invalid storage"
-        sys.exit(-1)
+        raise Error("Invalid storage")
 
-    return
 
 @exclusive
 def vlmc_remove(args):
@@ -955,13 +993,11 @@ def vlmc_remove(args):
             d_id = open(XSEGBD_SYSFS + "devices/" + f + "/id").read().strip()
             target = open(XSEGBD_SYSFS + "devices/"+ f + "/target").read().strip()
             if target == name:
-                sys.stderr.write("Volume mapped on device %s%s\n" % (DEVICE_PREFIX,
+                raise Error("Volume mapped on device %s%s" % (DEVICE_PREFIX,
 								d_id))
-                sys.exit(-1)
 
     except Exception, reason:
-        print >> sys.stderr, reason
-        sys.exit(-1)
+        raise Error(name + ': ' + str(reason))
 
     ret = False
     xseg_ctx = Xseg_ctx(SPEC, VTOOL)
@@ -975,15 +1011,13 @@ def vlmc_remove(args):
         ret = req.success()
     xseg_ctx.shutdown()
     if not ret:
-        sys.stderr.write("vlmc removal failed\n")
-        sys.exit(-1)
+        raise Error("vlmc removal failed")
 
 
 @exclusive
 def vlmc_map(args):
     if not loaded_module(xsegbd):
-        sys.stderr.write("Xsegbd module not loaded\n")
-        sys.exit(-1)
+        raise Error("Xsegbd module not loaded")
     name = args.name[0]
     prev = XSEGBD_START
     try:
@@ -998,22 +1032,19 @@ def vlmc_map(args):
 
         port = prev + 1
         if port > XSEGBD_END:
-            print >> sys.stderr, "Max xsegbd devices reached"
-            sys.exit(-1)
+            raise Error("Max xsegbd devices reached")
         fd = os.open(XSEGBD_SYSFS + "add", os.O_WRONLY)
         print >> sys.stderr, "write to %s : %s %d:%d:%d" %( XSEGBD_SYSFS +
 			"add", name, port, port - XSEGBD_START + VPORT_START, REQS )
         os.write(fd, "%s %d:%d:%d" % (name, port, port - XSEGBD_START + VPORT_START, REQS))
         os.close(fd)
     except Exception, reason:
-        print >> sys.stderr, reason
-        sys.exit(-1)
+        raise Error(name + ': ' + str(reason))
 
 @exclusive
 def vlmc_unmap(args):
     if not loaded_module(xsegbd):
-        sys.stderr.write("Xsegbd module not loaded\n")
-        sys.exit(-1)
+        raise Error("Xsegbd module not loaded")
     device = args.name[0]
     try:
         for f in os.listdir(XSEGBD_SYSFS + "devices/"):
@@ -1023,19 +1054,15 @@ def vlmc_unmap(args):
                 fd = os.open(XSEGBD_SYSFS + "remove", os.O_WRONLY)
                 os.write(fd, d_id)
                 os.close(fd)
-
-                sys.exit(0)
-        print >> sys.stderr, "Device %s doesn't exist" % device
-        sys.exit(-1)
+                return
+        raise Error("Device %s doesn't exist" % device)
     except Exception, reason:
-        print >> sys.stderr, reason
-        sys.exit(-1)
+        raise Error(device + ': ' + str(reason))
 
 # FIXME:
 def vlmc_resize(args):
     if not loaded_module(xsegbd):
-        sys.stderr.write("Xsegbd module not loaded\n")
-        sys.exit(-1)
+        raise Error("Xsegbd module not loaded")
 
     name = args.name[0]
     size = args.size[0]
@@ -1050,18 +1077,16 @@ def vlmc_resize(args):
                 os.write(fd, "1")
                 os.close(fd)
 
-        sys.exit(0)
     except Exception, reason:
-        print >> sys.stderr, reason
-        sys.exit(-1)
+        raise Error(name + ': ' + str(reason))
 
 @exclusive
 def vlmc_lock(args):
     name = args.name[0]
 
     if len(name) < 6:
-        print >> sys.stderr, "Name should have at least len 6"
-        sys.exit(-1)
+        raise Error("Name should have at least len 6")
+
     name = ARCHIP_PREFIX + name
 
     ret = False
@@ -1077,8 +1102,7 @@ def vlmc_lock(args):
         ret = req.success()
     xseg_ctx.shutdown()
     if not ret:
-        sys.stderr.write("vlmc lock failed\n")
-        sys.exit(-1)
+        raise Error("vlmc lock failed")
     else:
         sys.stdout.write("Volume locked\n")
 
@@ -1088,8 +1112,8 @@ def vlmc_unlock(args):
     force = args.force
 
     if len(name) < 6:
-        print >> sys.stderr, "Name should have at least len 6"
-        sys.exit(-1)
+        raise Error("Name should have at least len 6")
+
     name = ARCHIP_PREFIX + name
 
     ret = False
@@ -1108,8 +1132,7 @@ def vlmc_unlock(args):
         ret = req.success()
     xseg_ctx.shutdown()
     if not ret:
-        sys.stderr.write("vlmc unlock failed\n")
-        sys.exit(-1)
+        raise Error("vlmc unlock failed")
     else:
         sys.stdout.write("Volume unlocked\n")
 
@@ -1118,8 +1141,7 @@ def vlmc_open(args):
     name = args.name[0]
 
     if len(name) < 6:
-        print >> sys.stderr, "Name should have at least len 6"
-        sys.exit(-1)
+        raise Error("Name should have at least len 6")
 
     ret = False
     xseg_ctx = Xseg_ctx(SPEC, VTOOL)
@@ -1133,8 +1155,7 @@ def vlmc_open(args):
         ret = req.success()
     xseg_ctx.shutdown()
     if not ret:
-        sys.stderr.write("vlmc open failed\n")
-        sys.exit(-1)
+        raise Error("vlmc open failed")
     else:
         sys.stdout.write("Volume opened\n")
 
@@ -1143,8 +1164,7 @@ def vlmc_close(args):
     name = args.name[0]
 
     if len(name) < 6:
-        print >> sys.stderr, "Name should have at least len 6"
-        sys.exit(-1)
+        raise Error("Name should have at least len 6")
 
     ret = False
     xseg_ctx = Xseg_ctx(SPEC, VTOOL)
@@ -1158,10 +1178,82 @@ def vlmc_close(args):
         ret = req.success()
     xseg_ctx.shutdown()
     if not ret:
-        sys.stderr.write("vlmc close failed\n")
-        sys.exit(-1)
+        raise Error("vlmc close failed")
     else:
         sys.stdout.write("Volume closed\n")
+
+@exclusive
+def vlmc_info(args):
+    name = args.name[0]
+
+    if len(name) < 6:
+        raise Error("Name should have at least len 6")
+
+    ret = False
+    xseg_ctx = Xseg_ctx(SPEC, VTOOL)
+    with Request(xseg_ctx, MPORT, len(name), 0) as req:
+        req.set_op(X_INFO)
+        req.set_size(0)
+        req.set_offset(0)
+        req.set_target(name)
+        req.submit()
+        req.wait()
+        ret = req.success()
+        if ret:
+            size = req.get_data(xseg_reply_info).contents.size
+    xseg_ctx.shutdown()
+    if not ret:
+        raise Error("vlmc info failed")
+    else:
+        sys.stdout.write("Volume %s: size: %d\n" % (name, size) )
+
+def vlmc_mapinfo(args):
+    name = args.name[0]
+
+    if len(name) < 6:
+        raise Error("Name should have at least len 6")
+
+    if STORAGE == "rados":
+        import rados
+        cluster = rados.Rados(conffile=CEPH_CONF_FILE)
+        cluster.connect()
+        ioctx = cluster.open_ioctx(RADOS_POOL_MAPS)
+        BLOCKSIZE = 4*1024*1024
+        try:
+            mapdata = ioctx.read(ARCHIP_PREFIX + name, length=BLOCKSIZE)
+        except Exception:
+            raise Error("Cannot read map data")
+        if not  mapdata:
+            raise Error("Cannot read map data")
+        pos = 0
+        size_uint32t = sizeof(c_uint32)
+        version = unpack("<L", mapdata[pos:pos+size_uint32t])[0]
+        pos += size_uint32t
+        size_uint64t = sizeof(c_uint64)
+        size = unpack("Q", mapdata[pos:pos+size_uint64t])[0]
+        pos += size_uint64t
+        blocks = size / BLOCKSIZE
+        nr_exists = 0
+        print ""
+        print "Volume: " + name
+        print "Version: " + str(version)
+        print "Size: " + str(size)
+        for i in range(blocks):
+            exists = bool(unpack("B", mapdata[pos:pos+1])[0])
+            if exists:
+                nr_exists += 1
+            pos += 1
+            block = hexlify(mapdata[pos:pos+32])
+            pos += 32
+            if args.verbose:
+                print block, exists
+        print "Actual disk usage: " + str(nr_exists * BLOCKSIZE),
+        print '(' + str(nr_exists) + '/' + str(blocks) + ' blocks)'
+
+    elif STORAGE=="files":
+        raise Error("Mapinfo for file storage not supported")
+    else:
+        raise Error("Invalid storage")
 
 def archipelago():
     parser = argparse.ArgumentParser(description='Archipelago tool')
@@ -1171,15 +1263,18 @@ def archipelago():
 
     start_parser = subparsers.add_parser('start', help='Start archipelago')
     start_parser.set_defaults(func=start)
+    start_parser.add_argument('peer', type=str, nargs='?',  help='peer to start')
 
     stop_parser = subparsers.add_parser('stop', help='Stop archipelago')
     stop_parser.set_defaults(func=stop)
+    stop_parser.add_argument('peer', type=str, nargs='?', help='peer to stop')
 
     status_parser = subparsers.add_parser('status', help='Archipelago status')
     status_parser.set_defaults(func=status)
 
     restart_parser = subparsers.add_parser('restart', help='Restart archipelago')
     restart_parser.set_defaults(func=restart)
+    restart_parser.add_argument('peer', type=str, nargs='?', help='peer to restart')
 
     return parser
 
@@ -1261,9 +1356,20 @@ def vlmc():
     unlock_parser.set_defaults(func=vlmc_unlock)
     unlock_parser.add_argument('-p', '--pool', type=str, nargs='?', help='for backwards compatiblity with rbd')
 
+    info_parser = subparsers.add_parser('info', help='Show volume info')
+    info_parser.add_argument('name', type=str, nargs=1, help='volume name')
+    info_parser.set_defaults(func=vlmc_info)
+    info_parser.add_argument('-p', '--pool', type=str, nargs='?', help='for backwards compatiblity with rbd')
+
+    map_info_parser = subparsers.add_parser('mapinfo', help='Show volume map_info')
+    map_info_parser.add_argument('name', type=str, nargs=1, help='volume name')
+    map_info_parser.set_defaults(func=vlmc_mapinfo)
+    map_info_parser.add_argument('-p', '--pool', type=str, nargs='?', help='for backwards compatiblity with rbd')
+    map_info_parser.add_argument('-v', '--verbose',  action='store_true', default=False , help='')
+
     return parser
 
-if __name__ == "__main__":
+def cli():
     # parse arguments and discpatch to the correct func
     try:
         parser_func = {
@@ -1282,5 +1388,12 @@ if __name__ == "__main__":
 	xsegbd_args = [('start_portno', str(XSEGBD_START)), ('end_portno',
 		str(XSEGBD_END))]
 
-    sys.exit(args.func(args))
+    try:
+        args.func(args)
+        return 0
+    except Error as e:
+        print red(e)
+        return -1
 
+if __name__ == "__main__":
+    sys.exit(cli())

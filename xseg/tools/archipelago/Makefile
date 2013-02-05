@@ -31,74 +31,34 @@
 # or implied, of GRNET S.A.
 #
 
-# Setup for xseg Makefiles.
+.PHONY: default all clean install install-src
 
-ifndef TARGET
-TARGET:=$(shell basename $(shell pwd))
-endif
+include $(XSEG_HOME)/base.mk
 
-export CC=gcc
-ifndef MOPTS
-export MOPTS=
-endif
-ifndef COPTS
-export COPTS=-O2 -g -finline-functions $(MOPTS) $(DEBUG)
-endif
-ifndef CSTD
-export CSTD=-std=gnu99 -pedantic
-endif
+FILES="Makefile"
+FILES+=$(shell ls *.py)
 
-export TOPDIR=$(shell dirname $(CURDIR))
-ifeq (,$(VERSION))
-export VERSION=$(shell cat $(TOPDIR)/version)
-endif
+SUBDIR:=$(subst $(XSEG_HOME),,$(CURDIR))
 
-bindir=/usr/bin/
-libdir=/usr/lib/
-pythondir=/usr/lib/python2.7/
-moduledir=/lib/modules/`uname -r`/extra/
-srcdir=/usr/src/archipelago-kernel-dkms-$(VERSION)/
-ganetidir=/usr/share/ganeti/extstorage/vlmc/
+default:
 
-INC=-I$(BASE)
-INC+=-I$(BASE)/peers/$(TARGET)
-INC+=-I$(BASE)/sys/$(TARGET)
-INC+=-I$(BASE)/drivers/$(TARGET)
-export INC
+clean:
+	rm -r build/
+	rm -r python_archipelago.egg-info/
 
-export LIB=$(BASE)/lib/$(TARGET)
-export CFLAGS=-Wall $(COPTS) $(CSTD)
+install:
+#	mkdir p $(DESTDIR)$(pythondir)
+#	cp -r xseg $(DESTDIR)$(pythondir)
+	python setup.py install --install-layout=deb --root=$(DESTDIR)
 
-#ifeq (,$(XSEG_HOME))
-#export XSEG_HOME=$(shell ${XSEG_HOME})
-#endif
+install-src:
+	install -d $(DESTDIR)$(srcdir)$(SUBDIR) ;
+	@for f in $(FILES) ; do \
+		install -o 0 -g 0 -m 644 -t $(DESTDIR)$(srcdir)$(SUBDIR) $$f ; \
+	done
+	install -d $(DESTDIR)$(srcdir)$(SUBDIR)/archipelago ;
+	install -o 0 -g 0 -m 644 -t $(DESTDIR)$(srcdir)$(SUBDIR)/archipelago archipelago/__init__.py ; 
+	install -o 0 -g 0 -m 644 -t $(DESTDIR)$(srcdir)$(SUBDIR)/archipelago archipelago/archipelago.py ; 
+	install -o 0 -g 0 -m 644 -t $(DESTDIR)$(srcdir)$(SUBDIR)/archipelago archipelago/vlmc.py ; 
 
-ifeq (,$(XSEG_HOME))
-export XSEG_HOME=$(CURDIR)
-endif
 
-CONFIG=./config.mk
-
-#default:
-
-#.PHONY: clean-config
-
-#clean: clean-config
-
-#clean-config:
-#	rm -f $(CONFIG)
-
-ifndef BASE
-exists=$(shell [ -f "$(CONFIG)" ] && echo exists)
-ifeq (exists,$(exists))
-include $(CONFIG)
-else
-$(shell $(XSEG_HOME)/envsetup show | sed -e 's/"//g' > "$(CONFIG)")
-include $(CONFIG)
-endif
-
-ifeq (,$(XSEG_DOMAIN_TARGETS))
-export XSEG_DOMAIN_TARGETS=$(shell $(XSEG_HOME)/tools/xseg-domain-targets | sed -e 's/^[^=]*=//;s/"//g')
-endif
-export BASE=$(XSEG_HOME)
-endif
