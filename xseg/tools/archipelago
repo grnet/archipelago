@@ -52,6 +52,7 @@ roles = ['blockerb', 'blockerm', 'mapperd', 'vlmcd']
 Peer = namedtuple('Peer', ['executable', 'opts', 'role'])
 
 peers = dict()
+xsegbd_args = []
 modules = ['xseg', 'segdev', 'xseg_posix', 'xseg_pthread', 'xseg_segdev']
 xsegbd = 'xsegbd'
 
@@ -641,6 +642,7 @@ def start(args):
         start_peers(peers)
         load_module(xsegbd, xsegbd_args)
     except Exception as e:
+        print red(e)
         stop(args)
         raise e
 
