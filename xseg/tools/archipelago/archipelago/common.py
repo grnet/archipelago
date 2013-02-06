@@ -402,7 +402,7 @@ def construct_peers():
 
 
 def exclusive(fn):
-    def exclusive_args(args):
+    def exclusive_args(**kwargs):
         if not os.path.exists(LOCK_PATH):
             try:
                 os.mkdir(LOCK_PATH)
@@ -424,7 +424,7 @@ def exclusive(fn):
                 else:
                     raise OSError(err, lock_file + ' ' + reason)
         try:
-            r = fn(args)
+            r = fn(**kwargs)
         finally:
             os.close(fd)
             os.unlink(lock_file)

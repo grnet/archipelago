@@ -194,8 +194,8 @@ setup(
 
     entry_points = {
         'console_scripts': [
-            'archipelago = archipelago.common:cli',
-            'vlmc = archipelago.common:cli',
+            'archipelago = archipelago.cli:main',
+            'vlmc = archipelago.cli:main',
             ],
         }
 )

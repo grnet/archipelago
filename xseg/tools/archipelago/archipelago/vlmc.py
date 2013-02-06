@@ -41,7 +41,7 @@ from binascii import hexlify
 from .common import *
 
 @exclusive
-def showmapped(args):
+def showmapped():
     try:
         devices = os.listdir(os.path.join(XSEGBD_SYSFS, "devices/"))
     except:
@@ -65,16 +65,12 @@ def showmapped(args):
         raise Error(reason)
     return len(devices)
 
-def showmapped_wrapper(args):
-    showmapped(args)
+def showmapped_wrapper(**kwargs):
+    showmapped()
 
 
 @exclusive
-def create(args):
-    name = args.name[0]
-    size = args.size
-    snap = args.snap
-
+def create(name, size=None, snap=None, **kwargs):
     if len(name) < 6:
         raise Error("Name should have at least len 6")
     if size == None and snap == None:
@@ -109,10 +105,7 @@ def create(args):
         raise Error("vlmc creation failed")
 
 @exclusive
-def snapshot(args):
-    # snapshot
-    name = args.name[0]
-
+def snapshot(name, **kwargs):
     if len(name) < 6:
         raise Error("Name should have at least len 6")
 
@@ -139,7 +132,7 @@ def snapshot(args):
     sys.stdout.write("Snapshot name: %s\n" % reply)
 
 
-def list_volumes(args):
+def list_volumes(**kwargs):
     if config['STORAGE'] == "rados":
         import rados
         cluster = rados.Rados(conffile=config['CEPH_CONF_FILE'])
@@ -157,9 +150,7 @@ def list_volumes(args):
 
 
 @exclusive
-def remove(args):
-    name = args.name[0]
-
+def remove(name, **kwargs):
     try:
         for f in os.listdir(XSEGBD_SYSFS + "devices/"):
             d_id = open(XSEGBD_SYSFS + "devices/" + f + "/id").read().strip()
@@ -187,10 +178,9 @@ def remove(args):
 
 
 @exclusive
-def map_volume(args):
+def map_volume(name, **kwargs):
     if not loaded_module(xsegbd):
         raise Error("Xsegbd module not loaded")
-    name = args.name[0]
     prev = config['XSEGBD_START']
     try:
         result = [int(open(XSEGBD_SYSFS + "devices/" + f + "/srcport").read().strip()) for f in os.listdir(XSEGBD_SYSFS + "devices/")]
@@ -215,10 +205,10 @@ def map_volume(args):
         raise Error(name + ': ' + str(reason))
 
 @exclusive
-def unmap_volume(args):
+def unmap_volume(name, **kwargs):
     if not loaded_module(xsegbd):
         raise Error("Xsegbd module not loaded")
-    device = args.name[0]
+    device = name
     try:
         for f in os.listdir(XSEGBD_SYSFS + "devices/"):
             d_id = open(XSEGBD_SYSFS + "devices/" + f + "/id").read().strip()
@@ -233,12 +223,9 @@ def unmap_volume(args):
         raise Error(device + ': ' + str(reason))
 
 # FIXME:
-def resize(args):
+def resize(name, size, **kwargs):
     if not loaded_module(xsegbd):
         raise Error("Xsegbd module not loaded")
-
-    name = args.name[0]
-    size = args.size[0]
 
     try:
 
@@ -254,9 +241,7 @@ def resize(args):
         raise Error(name + ': ' + str(reason))
 
 @exclusive
-def lock(args):
-    name = args.name[0]
-
+def lock(name, **kwargs):
     if len(name) < 6:
         raise Error("Name should have at least len 6")
 
@@ -280,10 +265,7 @@ def lock(args):
         sys.stdout.write("Volume locked\n")
 
 @exclusive
-def unlock(args):
-    name = args.name[0]
-    force = args.force
-
+def unlock(name, force=False, **kwargs):
     if len(name) < 6:
         raise Error("Name should have at least len 6")
 
@@ -310,9 +292,7 @@ def unlock(args):
         sys.stdout.write("Volume unlocked\n")
 
 @exclusive
-def open_volume(args):
-    name = args.name[0]
-
+def open_volume(name, **kwargs):
     if len(name) < 6:
         raise Error("Name should have at least len 6")
 
@@ -333,9 +313,7 @@ def open_volume(args):
         sys.stdout.write("Volume opened\n")
 
 @exclusive
-def close_volume(args):
-    name = args.name[0]
-
+def close_volume(name, **kwargs):
     if len(name) < 6:
         raise Error("Name should have at least len 6")
 
@@ -356,9 +334,7 @@ def close_volume(args):
         sys.stdout.write("Volume closed\n")
 
 @exclusive
-def info(args):
-    name = args.name[0]
-
+def info(name, **kwargs):
     if len(name) < 6:
         raise Error("Name should have at least len 6")
 
@@ -380,9 +356,7 @@ def info(args):
     else:
         sys.stdout.write("Volume %s: size: %d\n" % (name, size) )
 
-def mapinfo(args):
-    name = args.name[0]
-
+def mapinfo(name, verbose=False, **kwargs):
     if len(name) < 6:
         raise Error("Name should have at least len 6")
 
@@ -418,7 +392,7 @@ def mapinfo(args):
             pos += 1
             block = hexlify(mapdata[pos:pos+32])
             pos += 32
-            if args.verbose:
+            if verbose:
                 print block, exists
         print "Actual disk usage: " + str(nr_exists * BLOCKSIZE),
         print '(' + str(nr_exists) + '/' + str(blocks) + ' blocks)'

@@ -175,7 +175,7 @@ def stop(user=False, peer=None, **kwargs):
     if user:
         return stop_peers(peers)
     #check devices
-    if vlmc_showmapped([]) > 0:
+    if vlmc_showmapped() > 0:
         raise Error("Cannot stop archipelago. Mapped volumes exist")
     unload_module(xsegbd)
     stop_peers(peers)
@@ -186,7 +186,7 @@ def stop(user=False, peer=None, **kwargs):
 
 def status(**kwargs):
     r = 0
-    if vlmc_showmapped([]) > 0:
+    if vlmc_showmapped() > 0:
         r += 1
     if loaded_module(xsegbd):
         pretty_print(xsegbd, green('Loaded'))
