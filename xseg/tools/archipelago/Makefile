@@ -49,6 +49,9 @@ default:
 clean:
 	rm -r build/
 	rm -r python_archipelago.egg-info/
+	rm archipelago/version.py rm distribute_setup.pyc \
+		archipelago/__init__.pyc archipelago/archipelago.pyc \
+		archipelago/version.pyc
 
 install:
 	if [ ! -e archipelago/version.py ] ; then \

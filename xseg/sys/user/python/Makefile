@@ -47,6 +47,10 @@ XML2PY = xml2py
 default: all
 
 all: xseg/xseg_api.py xseg/xprotocol.py
+	if [ ! -e xseg/version.py ] ; then \
+		echo '__version__ = "'`devflow-version python`'"' > xseg/version.py ; \
+	fi
+	python setup.py build
 
 $(BASE)/sys/user/libxseg.so:
 	make -C $(BASE)/sys/user libxseg.so
@@ -72,8 +76,9 @@ xseg/xprotocol.py: xprotocol.xml
 	$(XML2PY) -d -k defst -c $< -o $@
 
 install:
-#	mkdir p $(DESTDIR)$(pythondir)
-#	cp -r xseg $(DESTDIR)$(pythondir)
+	if [ ! -e xseg/version.py ] ; then \
+		echo '__version__ = "'`devflow-version python`'"' > xseg/version.py ; \
+	fi
 	python setup.py install --install-layout=deb --root=$(DESTDIR)
 
 install-src:
@@ -87,4 +92,8 @@ install-src:
 
 
 clean:
-	rm -f xseg.xml xprotocol.xml xseg/xseg_api.py xseg/xseg_api.pyc xseg/xprotocol.py xseg/xprotocol.pyc xseg/__init__.pyc
+	rm -rf build/
+	rm -rf python_xseg.egg-info/
+	rm -f xseg.xml xprotocol.xml xseg/xseg_api.py xseg/xseg_api.pyc \
+		xseg/xprotocol.py xseg/xprotocol.pyc xseg/__init__.pyc  \
+		xseg/version.py
