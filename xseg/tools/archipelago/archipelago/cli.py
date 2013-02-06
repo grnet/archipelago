@@ -37,7 +37,7 @@
 import os, sys, argparse
 from .common import *
 
-def vlmc():
+def vlmc_parser():
     import vlmc
     parser = argparse.ArgumentParser(description='vlmc tool')
     parser.add_argument('-c', '--config', type=str, nargs='?', help='config file')
@@ -63,12 +63,12 @@ def vlmc():
 
     map_parser = subparsers.add_parser('map', help='Map volume')
     map_parser.add_argument('name', type=str, nargs=1, help='volume/device name')
-    map_parser.set_defaults(func=vlmc.map)
+    map_parser.set_defaults(func=vlmc.map_volume)
     map_parser.add_argument('-p', '--pool', type=str, nargs='?', help='for backwards compatiblity with rbd')
 
     unmap_parser = subparsers.add_parser('unmap', help='Unmap volume')
     unmap_parser.add_argument('name', type=str, nargs=1, help='volume/device name')
-    unmap_parser.set_defaults(func=vlmc.unmap)
+    unmap_parser.set_defaults(func=vlmc.unmap_volume)
     unmap_parser.add_argument('-p', '--pool', type=str, nargs='?', help='for backwards compatiblity with rbd')
 
     showmapped_parser = subparsers.add_parser('showmapped', help='Show mapped volumes')
@@ -76,7 +76,7 @@ def vlmc():
     showmapped_parser.add_argument('-p', '--pool', type=str, nargs='?', help='for backwards compatiblity with rbd')
 
     list_parser = subparsers.add_parser('list', help='List volumes')
-    list_parser.set_defaults(func=vlmc.list)
+    list_parser.set_defaults(func=vlmc.list_volumes)
     list_parser.add_argument('-p', '--pool', type=str, nargs='?', help='for backwards compatiblity with rbd')
 
     snapshot_parser = subparsers.add_parser('snapshot', help='snapshot volume')
@@ -86,7 +86,7 @@ def vlmc():
     snapshot_parser.set_defaults(func=vlmc.snapshot)
 
     ls_parser = subparsers.add_parser('ls', help='List volumes')
-    ls_parser.set_defaults(func=vlmc.list)
+    ls_parser.set_defaults(func=vlmc.list_volumes)
     ls_parser.add_argument('-p', '--pool', type=str, nargs='?', help='for backwards compatiblity with rbd')
 
     resize_parser = subparsers.add_parser('resize', help='Resize volume')
@@ -97,12 +97,12 @@ def vlmc():
 
     open_parser = subparsers.add_parser('open', help='open volume')
     open_parser.add_argument('name', type=str, nargs=1, help='volume/device name')
-    open_parser.set_defaults(func=vlmc.open)
+    open_parser.set_defaults(func=vlmc.open_volume)
     open_parser.add_argument('-p', '--pool', type=str, nargs='?', help='for backwards compatiblity with rbd')
 
     close_parser = subparsers.add_parser('close', help='close volume')
     close_parser.add_argument('name', type=str, nargs=1, help='volume/device name')
-    close_parser.set_defaults(func=vlmc.close)
+    close_parser.set_defaults(func=vlmc.close_volume)
     close_parser.add_argument('-p', '--pool', type=str, nargs='?', help='for backwards compatiblity with rbd')
 
     lock_parser = subparsers.add_parser('lock', help='lock volume')
@@ -129,7 +129,7 @@ def vlmc():
 
     return parser
 
-def archipelago():
+def archipelago_parser():
     import archipelago
     parser = argparse.ArgumentParser(description='Archipelago tool')
     parser.add_argument('-c', '--config', type=str, nargs='?', help='config file')
@@ -157,8 +157,8 @@ def main():
     # parse arguments and discpatch to the correct func
     try:
         parser_func = {
-            'archipelago' : archipelago,
-            'vlmc'        : vlmc,
+            'archipelago' : archipelago_parser,
+            'vlmc'        : vlmc_parser,
         }[os.path.basename(sys.argv[0])]
         parser = parser_func()
     except Exception as e:
@@ -167,10 +167,17 @@ def main():
 
     args = parser.parse_args()
     loadrc(args.config)
-    if parser_func == archipelago:
+    if parser_func == archipelago_parser:
         peers = construct_peers()
-	xsegbd_args = [('start_portno', str(config['XSEGBD_START'])), ('end_portno',
-		str(config['XSEGBD_END']))]
+        xsegbd_args = [('start_portno', str(config['XSEGBD_START'])), ('end_portno',
+    		str(config['XSEGBD_END']))]
+        kwargs=vars(args)
+        try:
+            args.func(**kwargs)
+            return 0
+        except Error as e:
+            print red(e)
+            return -1
 
     try:
         args.func(args)

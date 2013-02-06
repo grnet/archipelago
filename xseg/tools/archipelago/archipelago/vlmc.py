@@ -81,8 +81,8 @@ def create(args):
         raise Error("At least one of the size/snap args must be provided")
 
     ret = False
-    xseg_ctx = Xseg_ctx(SPEC, VTOOL)
-    with Request(xseg_ctx, MPORT, len(name), sizeof(xseg_request_clone)) as req:
+    xseg_ctx = Xseg_ctx(config['SPEC'], config['VTOOL'])
+    with Request(xseg_ctx, config['MPORT'], len(name), sizeof(xseg_request_clone)) as req:
         req.set_op(X_CLONE)
         req.set_size(sizeof(xseg_request_clone))
         req.set_offset(0)
@@ -139,7 +139,7 @@ def snapshot(args):
     sys.stdout.write("Snapshot name: %s\n" % reply)
 
 
-def list(args):
+def list_volumes(args):
     if config['STORAGE'] == "rados":
         import rados
         cluster = rados.Rados(conffile=config['CEPH_CONF_FILE'])
@@ -187,7 +187,7 @@ def remove(args):
 
 
 @exclusive
-def map(args):
+def map_volume(args):
     if not loaded_module(xsegbd):
         raise Error("Xsegbd module not loaded")
     name = args.name[0]
@@ -215,7 +215,7 @@ def map(args):
         raise Error(name + ': ' + str(reason))
 
 @exclusive
-def unmap(args):
+def unmap_volume(args):
     if not loaded_module(xsegbd):
         raise Error("Xsegbd module not loaded")
     device = args.name[0]
@@ -310,7 +310,7 @@ def unlock(args):
         sys.stdout.write("Volume unlocked\n")
 
 @exclusive
-def open(args):
+def open_volume(args):
     name = args.name[0]
 
     if len(name) < 6:
@@ -333,7 +333,7 @@ def open(args):
         sys.stdout.write("Volume opened\n")
 
 @exclusive
-def close(args):
+def close_volume(args):
     name = args.name[0]
 
     if len(name) < 6:

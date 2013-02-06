@@ -135,18 +135,18 @@ def stop_peers(peers):
         p = peers[r]
         stop_peer(p)
 
-def start(args):
-    if args.peer:
+def start(user=False, peer=None, **kwargs):
+    if peer:
         try:
-            p = peers[args.peer]
+            p = peers[peer]
         except KeyError:
             raise Error("Invalid peer %s" % str(args.peer))
         return start_peer(p)
 
-    if args.user:
+    if user:
         return start_peers(peers)
 
-    if status(args) > 0:
+    if status() > 0:
         raise Error("Cannot start. Try stopping first")
 
     try:
@@ -161,21 +161,21 @@ def start(args):
         load_module(xsegbd, xsegbd_args)
     except Exception as e:
         print red(e)
-        stop(args)
+        stop(user, peer)
         raise e
 
 
-def stop(args):
-    if args.peer:
+def stop(user=False, peer=None, **kwargs):
+    if peer:
         try:
-            p = peers[args.peer]
+            p = peers[peer]
         except KeyError:
             raise Error("Invalid peer %s" % str(args.peer))
         return stop_peer(p)
-    if args.user:
+    if user:
         return stop_peers(peers)
     #check devices
-    if vlmc_showmapped(args) > 0:
+    if vlmc_showmapped([]) > 0:
         raise Error("Cannot stop archipelago. Mapped volumes exist")
     unload_module(xsegbd)
     stop_peers(peers)
@@ -184,9 +184,9 @@ def stop(args):
         unload_module(m)
         time.sleep(0.3)
 
-def status(args):
+def status(**kwargs):
     r = 0
-    if vlmc_showmapped(args) > 0:
+    if vlmc_showmapped([]) > 0:
         r += 1
     if loaded_module(xsegbd):
         pretty_print(xsegbd, green('Loaded'))
@@ -205,8 +205,8 @@ def status(args):
             r += 1
     return r
 
-def restart(args):
-    stop(args)
-    start(args)
+def restart(**kwargs):
+    stop(**kwargs)
+    start(**kwargs)
 
 
