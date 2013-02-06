@@ -65,7 +65,7 @@ PACKAGES = find_packages(PACKAGES_ROOT)
 CLASSIFIERS = []
 
 # Package requirements
-INSTALL_REQUIRES = ['xseg'
+INSTALL_REQUIRES = ['python-xseg'
 ]
 
 EXTRAS_REQUIRES = {
@@ -194,8 +194,8 @@ setup(
 
     entry_points = {
         'console_scripts': [
-            'archipelago = archipelago.cli',
-            'vlmc = archipelago.cli',
+            'archipelago = archipelago.common:cli',
+            'vlmc = archipelago.common:cli',
             ],
         }
 )

@@ -47,7 +47,8 @@ DEBIANDIR = os.path.join(TOPDIR, 'debian');
 DEBIANDIR = os.path.normpath(DEBIANDIR)
 
 
-VERSION = os.environ['VERSION']
+from xseg.version import __version__
+VERSION = __version__
 # Package info
 if os.path.isdir(DEBIANDIR):
     README = open(os.path.join(DEBIANDIR, 'README')).read()

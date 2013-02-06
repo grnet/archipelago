@@ -41,14 +41,22 @@ FILES+=$(shell ls *.py)
 SUBDIR:=$(subst $(XSEG_HOME),,$(CURDIR))
 
 default:
+	if [ ! -e archipelago/version.py ] ; then \
+		echo '__version__ = "'`devflow-version python`'"' > archipelago/version.py ; \
+	fi
+	python setup.py build
 
 clean:
 	rm -r build/
 	rm -r python_archipelago.egg-info/
+	rm archipelago/version.py rm distribute_setup.pyc \
+		archipelago/__init__.pyc archipelago/archipelago.pyc \
+		archipelago/version.pyc
 
 install:
-#	mkdir p $(DESTDIR)$(pythondir)
-#	cp -r xseg $(DESTDIR)$(pythondir)
+	if [ ! -e archipelago/version.py ] ; then \
+		echo '__version__ = "'`devflow-version python`'"' > archipelago/version.py ; \
+	fi
 	python setup.py install --install-layout=deb --root=$(DESTDIR)
 
 install-src:
@@ -60,5 +68,6 @@ install-src:
 	install -o 0 -g 0 -m 644 -t $(DESTDIR)$(srcdir)$(SUBDIR)/archipelago archipelago/__init__.py ; 
 	install -o 0 -g 0 -m 644 -t $(DESTDIR)$(srcdir)$(SUBDIR)/archipelago archipelago/archipelago.py ; 
 	install -o 0 -g 0 -m 644 -t $(DESTDIR)$(srcdir)$(SUBDIR)/archipelago archipelago/vlmc.py ; 
+	install -o 0 -g 0 -m 644 -t $(DESTDIR)$(srcdir)$(SUBDIR)/archipelago archipelago/version.py ; 
 
 
