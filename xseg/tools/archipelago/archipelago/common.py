@@ -47,9 +47,6 @@ from collections import namedtuple
 from struct import unpack
 from binascii import hexlify
 
-from archipelago import archipelago
-from vlmc import vlmc
-
 #archipelago peer roles. Order matters!
 roles = ['blockerb', 'blockerm', 'mapperd', 'vlmcd']
 Peer = namedtuple('Peer', ['executable', 'opts', 'role'])
@@ -59,15 +56,14 @@ xsegbd_args = []
 modules = ['xseg', 'segdev', 'xseg_posix', 'xseg_pthread', 'xseg_segdev']
 xsegbd = 'xsegbd'
 
-LOG_SUFFIX='.log'
-PID_SUFFIX='.pid'
 DEFAULTS='/etc/default/archipelago'
-VLMC_LOCK_FILE='vlmc.lock'
-ARCHIP_PREFIX='archip_'
-CEPH_CONF_FILE='/etc/ceph/ceph.conf'
 
 #system defaults
+ARCHIP_PREFIX='archip_'
+LOG_SUFFIX='.log'
+PID_SUFFIX='.pid'
 PIDFILE_PATH="/var/run/archipelago"
+VLMC_LOCK_FILE='vlmc.lock'
 LOGS_PATH="/var/log/archipelago"
 LOCK_PATH="/var/lock"
 DEVICE_PREFIX="/dev/xsegbd"
@@ -88,39 +84,36 @@ BLOCKER=''
 available_storage = {'files': FILE_BLOCKER, 'rados': RADOS_BLOCKER}
 
 
-XSEGBD_START=0
-XSEGBD_END=499
-VPORT_START=500
-VPORT_END=999
-BPORT=1000
-MPORT=1001
-MBPORT=1002
-VTOOL=1003
-#RESERVED 1023
-
+config = {
+        'CEPH_CONF_FILE':'/etc/ceph/ceph.conf',
+        'XSEGBD_START':0,
+        'XSEGBD_END':499,
+        'VPORT_START':500,
+        'VPORT_END':999,
+        'BPORT':1000,
+        'MPORT':1001,
+        'MBPORT':1002,
+        'VTOOL':1003,
+        #RESERVED 1023
 #default config
-SPEC="segdev:xsegbd:1024:5120:12"
-
-NR_OPS_BLOCKERB=""
-NR_OPS_BLOCKERM=""
-NR_OPS_VLMC=""
-NR_OPS_MAPPER=""
-
-VERBOSITY_BLOCKERB=""
-VERBOSITY_BLOCKERM=""
-VERBOSITY_MAPPER=""
-VERBOSITY_VLMC=""
-
-
-#mt-pfiled specific options
-FILED_IMAGES=""
-FILED_MAPS=""
-PITHOS=""
-PITHOSMAPS=""
-
-#mt-sosd specific options
-RADOS_POOL_MAPS=""
-RADOS_POOL_BLOCKS=""
+        'SPEC':"segdev:xsegbd:1024:5120:12",
+        'NR_OPS_BLOCKERB':"",
+        'NR_OPS_BLOCKERM':"",
+        'NR_OPS_VLMC':"",
+        'NR_OPS_MAPPER':"",
+#        'VERBOSITY_BLOCKERB':"",
+#        'VERBOSITY_BLOCKERM':"",
+#        'VERBOSITY_MAPPER':"",
+#        'VERBOSITY_VLMC':"",
+#mt-pfiled specific options,
+        'FILED_IMAGES':"",
+        'FILED_MAPS':"",
+        'PITHOS':"",
+        'PITHOSMAPS':"",
+#mt-sosd specific options,
+        'RADOS_POOL_MAPS':"",
+        'RADOS_POOL_BLOCKS':""
+}
 
 FIRST_COLUMN_WIDTH = 23
 SECOND_COLUMN_WIDTH = 23
@@ -202,7 +195,7 @@ def check_conf():
         print red("PIDFILE_PATH is not set")
         return False
 
-    splitted_spec = str(SPEC).split(':')
+    splitted_spec = str(config['SPEC']).split(':')
     if len(splitted_spec) < 5:
         print red("Invalid spec")
         return False
@@ -223,8 +216,11 @@ def check_conf():
         print red("Wrong alignemt")
         return False
 
-    for v in [VERBOSITY_BLOCKERB, VERBOSITY_BLOCKERM, VERBOSITY_MAPPER,
-                    VERBOSITY_VLMC]:
+    for v in [config['VERBOSITY_BLOCKERB'],
+              config['VERBOSITY_BLOCKERM'],
+              config['VERBOSITY_MAPPER'],
+              config['VERBOSITY_VLMC']
+              ]:
          if v is None:
              print red("Verbosity missing")
          try:
@@ -235,7 +231,11 @@ def check_conf():
              print red("Invalid verbosity " + str(v))
              return False
 
-    for n in [NR_OPS_BLOCKERB, NR_OPS_BLOCKERM, NR_OPS_VLMC, NR_OPS_MAPPER]:
+    for n in [config['NR_OPS_BLOCKERB'],
+              config['NR_OPS_BLOCKERM'],
+              config['NR_OPS_VLMC'],
+              config['NR_OPS_MAPPER']
+             ]:
          if n is None:
              print red("Nr ops missing")
          try:
@@ -246,53 +246,53 @@ def check_conf():
              print red("Invalid nr_ops " + str(n))
              return False
 
-    if not validPort(VTOOL, xseg_ports, "VTOOL"):
+    if not validPort(config['VTOOL'], xseg_ports, "VTOOL"):
         return False
-    if not validPort(MPORT, xseg_ports, "MPORT"):
+    if not validPort(config['MPORT'], xseg_ports, "MPORT"):
         return False
-    if not validPort(BPORT, xseg_ports, "BPORT"):
+    if not validPort(config['BPORT'], xseg_ports, "BPORT"):
         return False
-    if not validPort(MBPORT, xseg_ports, "MBPORT"):
+    if not validPort(config['MBPORT'], xseg_ports, "MBPORT"):
         return False
-    if not validPort(VPORT_START, xseg_ports, "VPORT_START"):
+    if not validPort(config['VPORT_START'], xseg_ports, "VPORT_START"):
         return False
-    if not validPort(VPORT_END, xseg_ports, "VPORT_END"):
+    if not validPort(config['VPORT_END'], xseg_ports, "VPORT_END"):
         return False
-    if not validPort(XSEGBD_START, xseg_ports, "XSEGBD_START"):
+    if not validPort(config['XSEGBD_START'], xseg_ports, "XSEGBD_START"):
         return False
-    if not validPort(XSEGBD_END, xseg_ports, "XSEGBD_END"):
+    if not validPort(config['XSEGBD_END'], xseg_ports, "XSEGBD_END"):
         return False
 
-    if not XSEGBD_START < XSEGBD_END:
+    if not config['XSEGBD_START'] < config['XSEGBD_END']:
         print red("XSEGBD_START should be less than XSEGBD_END")
         return False
-    if not VPORT_START < VPORT_END:
+    if not config['VPORT_START'] < config['VPORT_END']:
         print red("VPORT_START should be less than VPORT_END")
         return False
 #TODO check than no other port is set in the above ranges
 
     global BLOCKER
     try:
-        BLOCKER = available_storage[str(STORAGE)]
+        BLOCKER = available_storage[str(config['STORAGE'])]
     except:
-        print red("Invalid storage " + str(STORAGE))
+        print red("Invalid storage " + str(config['STORAGE']))
         print "Available storage: \"" + ', "'.join(available_storage) + "\""
         return False
 
-    if STORAGE=="files":
-        if FILED_IMAGES and not os.path.isdir(str(FILED_IMAGES)):
+    if config['STORAGE']=="files":
+        if config['FILED_IMAGES'] and not os.path.isdir(str(config['FILED_IMAGES'])):
              print red("FILED_IMAGES invalid")
              return False
-        if FILED_MAPS and not os.path.isdir(str(FILED_MAPS)):
+        if config['FILED_MAPS'] and not os.path.isdir(str(config['FILED_MAPS'])):
              print red("FILED_PATH invalid")
              return False
-        if PITHOS and not os.path.isdir(str(PITHOS)):
+        if config['PITHOS'] and not os.path.isdir(str(config['PITHOS'])):
              print red("PITHOS invalid ")
              return False
-        if PITHOSMAPS and not os.path.isdir(str(PITHOSMAPS)):
+        if config['PITHOSMAPS'] and not os.path.isdir(str(config['PITHOSMAPS'])):
              print red("PITHOSMAPS invalid")
              return False
-    elif STORAGE=="RADOS":
+    elif config['STORAGE']=="RADOS":
         #TODO use rados.py to check for pool existance
         pass
 
@@ -314,61 +314,82 @@ def construct_peers():
 
     if BLOCKER == "pfiled":
         config_opts['blockerb'] = [
-                "-p" , str(BPORT), "-g", str(SPEC).encode(), "-n", str(NR_OPS_BLOCKERB),
-                 str(PITHOS), str(FILED_IMAGES), "-d",
+                "-p" , str(config['BPORT']), "-g",
+                str(config['SPEC']).encode(), "-n",
+                str(config['NR_OPS_BLOCKERB']),
+                 str(config['PITHOS']), str(config['FILED_IMAGES']), "-d",
                 "-f", os.path.join(PIDFILE_PATH, "blockerb" + PID_SUFFIX)
                 ]
         config_opts['blockerm'] = [
-                "-p" , str(MBPORT), "-g", str(SPEC).encode(), "-n", str(NR_OPS_BLOCKERM),
-                str(PITHOSMAPS), str(FILED_MAPS), "-d",
+                "-p" , str(config['MBPORT']), "-g",
+                str(config['SPEC']).encode(), "-n",
+                str(config['NR_OPS_BLOCKERM']),
+                str(config['PITHOSMAPS']), str(config['FILED_MAPS']), "-d",
                 "-f", os.path.join(PIDFILE_PATH, "blockerm" + PID_SUFFIX)
                 ]
     elif BLOCKER == "mt-sosd":
         config_opts['blockerb'] = [
-                "-p" , str(BPORT), "-g", str(SPEC).encode(), "-n", str(NR_OPS_BLOCKERB),
-                 "--pool", str(RADOS_POOL_BLOCKS), "-v", str(VERBOSITY_BLOCKERB),
+                "-p" , str(config['BPORT']), "-g",
+                str(config['SPEC']).encode(), "-n",
+                str(config['NR_OPS_BLOCKERB']),
+                 "--pool", str(config['RADOS_POOL_BLOCKS']), "-v",
+                 str(config['VERBOSITY_BLOCKERB']),
                  "-d", "--pidfile", os.path.join(PIDFILE_PATH, "blockerb" + PID_SUFFIX),
                  "-l", os.path.join(str(LOGS_PATH), "blockerb" + LOG_SUFFIX),
                  "-t", "3"
                  ]
         config_opts['blockerm'] = [
-                "-p" , str(MBPORT), "-g", str(SPEC).encode(), "-n", str(NR_OPS_BLOCKERM),
-                 "--pool", str(RADOS_POOL_MAPS), "-v", str(VERBOSITY_BLOCKERM),
+                "-p" , str(config['MBPORT']), "-g",
+                str(config['SPEC']).encode(), "-n",
+                str(config['NR_OPS_BLOCKERM']),
+                 "--pool", str(config['RADOS_POOL_MAPS']), "-v",
+                 str(config['VERBOSITY_BLOCKERM']),
                  "-d", "--pidfile", os.path.join(PIDFILE_PATH, "blockerm" + PID_SUFFIX),
                  "-l", os.path.join(str(LOGS_PATH), "blockerm" + LOG_SUFFIX),
                  "-t", "3"
                  ]
     elif BLOCKER == "mt-pfiled":
         config_opts['blockerb'] = [
-                "-p" , str(BPORT), "-g", str(SPEC).encode(), "-n", str(NR_OPS_BLOCKERB),
-                 "--pithos", str(PITHOS), "--archip", str(FILED_IMAGES),
-             "-v", str(VERBOSITY_BLOCKERB),
+                "-p" , str(config['BPORT']), "-g",
+                str(config['SPEC']).encode(), "-n",
+                str(config['NR_OPS_BLOCKERB']),
+                 "--pithos", str(config['PITHOS']), "--archip",
+                 str(config['FILED_IMAGES']),
+             "-v", str(config['VERBOSITY_BLOCKERB']),
                  "-d", "--pidfile", os.path.join(PIDFILE_PATH, "blockerb" + PID_SUFFIX),
                  "-l", os.path.join(str(LOGS_PATH), "blockerb" + LOG_SUFFIX),
-                 "-t", str(NR_OPS_BLOCKERB), "--prefix", ARCHIP_PREFIX
+                 "-t", str(config['NR_OPS_BLOCKERB']), "--prefix", ARCHIP_PREFIX
                  ]
         config_opts['blockerm'] = [
-                "-p" , str(MBPORT), "-g", str(SPEC).encode(), "-n", str(NR_OPS_BLOCKERM),
-                 "--pithos", str(PITHOSMAPS), "--archip", str(FILED_MAPS),
-             "-v", str(VERBOSITY_BLOCKERM),
+                "-p" , str(config['MBPORT']), "-g",
+                str(config['SPEC']).encode(), "-n",
+                str(config['NR_OPS_BLOCKERM']),
+                 "--pithos", str(config['PITHOSMAPS']), "--archip",
+                 str(config['FILED_MAPS']),
+             "-v", str(config['VERBOSITY_BLOCKERM']),
                  "-d", "--pidfile", os.path.join(PIDFILE_PATH, "blockerm" + PID_SUFFIX),
                  "-l", os.path.join(str(LOGS_PATH), "blockerm" + LOG_SUFFIX),
-                 "-t", str(NR_OPS_BLOCKERM), "--prefix", ARCHIP_PREFIX
+                 "-t", str(config['NR_OPS_BLOCKERM']), "--prefix", ARCHIP_PREFIX
                  ]
     else:
             sys.exit(-1)
 
     config_opts['mapperd'] = [
-             "-t" , "1", "-p",  str(MPORT), "-mbp", str(MBPORT),
-              "-g", str(SPEC).encode(), "-n", str(NR_OPS_MAPPER), "-bp", str(BPORT),
+             "-t" , "1", "-p",  str(config['MPORT']), "-mbp",
+             str(config['MBPORT']),
+              "-g", str(config['SPEC']).encode(), "-n",
+              str(config['NR_OPS_MAPPER']), "-bp", str(config['BPORT']),
               "--pidfile", os.path.join(PIDFILE_PATH, "mapperd" + PID_SUFFIX),
-              "-v", str(VERBOSITY_MAPPER), "-d",
+              "-v", str(config['VERBOSITY_MAPPER']), "-d",
               "-l", os.path.join(str(LOGS_PATH), "mapperd" + LOG_SUFFIX)
               ]
     config_opts['vlmcd'] = [
-             "-t" , "1", "-sp",  str(VPORT_START), "-ep", str(VPORT_END),
-              "-g", str(SPEC).encode(), "-n", str(NR_OPS_VLMC), "-bp", str(BPORT),
-              "-mp", str(MPORT), "-d", "-v", str(VERBOSITY_VLMC),
+             "-t" , "1", "-sp",  str(config['VPORT_START']), "-ep",
+             str(config['VPORT_END']),
+              "-g", str(config['SPEC']).encode(), "-n",
+              str(config['NR_OPS_VLMC']), "-bp", str(config['BPORT']),
+              "-mp", str(config['MPORT']), "-d", "-v",
+              str(config['VERBOSITY_VLMC']),
               "--pidfile", os.path.join(PIDFILE_PATH, "vlmcd" + PID_SUFFIX),
               "-l", os.path.join(str(LOGS_PATH), "vlmcd" + LOG_SUFFIX)
               ]
@@ -414,9 +435,9 @@ def exclusive(fn):
 def loadrc(rc):
     try:
         if rc == None:
-            execfile(os.path.expanduser(DEFAULTS), globals())
+            execfile(os.path.expanduser(DEFAULTS), config)
         else:
-            execfile(rc, globals())
+            execfile(rc, config)
     except:
         raise Error("Cannot read config file")
 
@@ -481,7 +502,7 @@ def create_segment():
     #fixme blocking....
     initialize_xseg()
     xconf = xseg_config()
-    xseg_parse_spec(str(SPEC), xconf)
+    xseg_parse_spec(str(config['SPEC']), xconf)
     r = xseg_create(xconf)
     if r < 0:
         raise Error("Cannot create segment")
@@ -491,7 +512,7 @@ def destroy_segment():
     try:
         initialize_xseg()
         xconf = xseg_config()
-        xseg_parse_spec(str(SPEC), xconf)
+        xseg_parse_spec(str(config['SPEC']), xconf)
         xseg = xseg_join(xconf.type, xconf.name, "posix", cast(0, cb_null_ptrtype))
         if not xseg:
             raise Error("Cannot join segment")
@@ -703,30 +724,3 @@ class Request(object):
     def success(self):
         return bool((self.req.contents.state & XS_SERVED) and not
                 (self.req.contents.state & XS_FAILED))
-
-
-def cli():
-    # parse arguments and discpatch to the correct func
-    try:
-        parser_func = {
-            'archipelago' : archipelago,
-            'vlmc'        : vlmc,
-        }[os.path.basename(sys.argv[0])]
-        parser = parser_func()
-    except Exception as e:
-        sys.stderr.write("Invalid basename\n")
-        return -1
-
-    args = parser.parse_args()
-    loadrc(args.config)
-    if parser_func == archipelago:
-        peers = construct_peers()
-	xsegbd_args = [('start_portno', str(XSEGBD_START)), ('end_portno',
-		str(XSEGBD_END))]
-
-    try:
-        args.func(args)
-        return 0
-    except Error as e:
-        print red(e)
-        return -1

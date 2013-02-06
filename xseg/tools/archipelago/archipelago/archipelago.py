@@ -36,8 +36,8 @@
 
 import os, sys, subprocess, argparse, time, psutil, signal, errno
 from subprocess import check_call
-from archipelago.common import *
-from archipelago.vlmc import vlmc_showmapped
+from .common import *
+from .vlmc import showmapped as vlmc_showmapped
 
 def start_peer(peer):
     if check_pidfile(peer.role) > 0:
@@ -210,25 +210,3 @@ def restart(args):
     start(args)
 
 
-def archipelago():
-    parser = argparse.ArgumentParser(description='Archipelago tool')
-    parser.add_argument('-c', '--config', type=str, nargs='?', help='config file')
-    parser.add_argument('-u', '--user',  action='store_true', default=False , help='affect only userspace peers')
-    subparsers = parser.add_subparsers()
-
-    start_parser = subparsers.add_parser('start', help='Start archipelago')
-    start_parser.set_defaults(func=start)
-    start_parser.add_argument('peer', type=str, nargs='?',  help='peer to start')
-
-    stop_parser = subparsers.add_parser('stop', help='Stop archipelago')
-    stop_parser.set_defaults(func=stop)
-    stop_parser.add_argument('peer', type=str, nargs='?', help='peer to stop')
-
-    status_parser = subparsers.add_parser('status', help='Archipelago status')
-    status_parser.set_defaults(func=status)
-
-    restart_parser = subparsers.add_parser('restart', help='Restart archipelago')
-    restart_parser.set_defaults(func=restart)
-    restart_parser.add_argument('peer', type=str, nargs='?', help='peer to restart')
-
-    return parser

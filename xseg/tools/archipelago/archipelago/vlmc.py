@@ -38,10 +38,10 @@ import os, sys, subprocess, argparse, time, psutil, signal, errno
 from struct import unpack
 from binascii import hexlify
 
-from archipelago.common import *
+from .common import *
 
 @exclusive
-def vlmc_showmapped(args):
+def showmapped(args):
     try:
         devices = os.listdir(os.path.join(XSEGBD_SYSFS, "devices/"))
     except:
@@ -65,12 +65,12 @@ def vlmc_showmapped(args):
         raise Error(reason)
     return len(devices)
 
-def vlmc_showmapped_wrapper(args):
-    vlmc_showmapped(args)
+def showmapped_wrapper(args):
+    showmapped(args)
 
 
 @exclusive
-def vlmc_create(args):
+def create(args):
     name = args.name[0]
     size = args.size
     snap = args.snap
@@ -109,7 +109,7 @@ def vlmc_create(args):
         raise Error("vlmc creation failed")
 
 @exclusive
-def vlmc_snapshot(args):
+def snapshot(args):
     # snapshot
     name = args.name[0]
 
@@ -117,8 +117,8 @@ def vlmc_snapshot(args):
         raise Error("Name should have at least len 6")
 
     ret = False
-    xseg_ctx = Xseg_ctx(SPEC, VTOOL)
-    with Request(xseg_ctx, VPORT_START, len(name), sizeof(xseg_request_snapshot)) as req:
+    xseg_ctx = Xseg_ctx(config['SPEC'], config['VTOOL'])
+    with Request(xseg_ctx, config['VPORT_START'], len(name), sizeof(xseg_request_snapshot)) as req:
         req.set_op(X_SNAPSHOT)
         req.set_size(sizeof(xseg_request_snapshot))
         req.set_offset(0)
@@ -139,25 +139,25 @@ def vlmc_snapshot(args):
     sys.stdout.write("Snapshot name: %s\n" % reply)
 
 
-def vlmc_list(args):
-    if STORAGE == "rados":
+def list(args):
+    if config['STORAGE'] == "rados":
         import rados
-        cluster = rados.Rados(conffile='/etc/ceph/ceph.conf')
+        cluster = rados.Rados(conffile=config['CEPH_CONF_FILE'])
         cluster.connect()
-        ioctx = cluster.open_ioctx(RADOS_POOL_MAPS)
+        ioctx = cluster.open_ioctx(config['RADOS_POOL_MAPS'])
         oi = rados.ObjectIterator(ioctx)
         for o in oi :
             name = o.key
             if name.startswith(ARCHIP_PREFIX) and not name.endswith('_lock'):
 		    print name[len(ARCHIP_PREFIX):]
-    elif STORAGE == "files":
+    elif config['STORAGE'] == "files":
         raise Error("Vlmc list not supported for files yet")
     else:
         raise Error("Invalid storage")
 
 
 @exclusive
-def vlmc_remove(args):
+def remove(args):
     name = args.name[0]
 
     try:
@@ -172,8 +172,8 @@ def vlmc_remove(args):
         raise Error(name + ': ' + str(reason))
 
     ret = False
-    xseg_ctx = Xseg_ctx(SPEC, VTOOL)
-    with Request(xseg_ctx, MPORT, len(name), 0) as req:
+    xseg_ctx = Xseg_ctx(config['SPEC'], config['VTOOL'])
+    with Request(xseg_ctx, config['MPORT'], len(name), 0) as req:
         req.set_op(X_DELETE)
         req.set_size(0)
         req.set_offset(0)
@@ -187,11 +187,11 @@ def vlmc_remove(args):
 
 
 @exclusive
-def vlmc_map(args):
+def map(args):
     if not loaded_module(xsegbd):
         raise Error("Xsegbd module not loaded")
     name = args.name[0]
-    prev = XSEGBD_START
+    prev = config['XSEGBD_START']
     try:
         result = [int(open(XSEGBD_SYSFS + "devices/" + f + "/srcport").read().strip()) for f in os.listdir(XSEGBD_SYSFS + "devices/")]
         result.sort()
@@ -203,18 +203,19 @@ def vlmc_map(args):
                prev = p
 
         port = prev + 1
-        if port > XSEGBD_END:
+        if port > config['XSEGBD_END']:
             raise Error("Max xsegbd devices reached")
         fd = os.open(XSEGBD_SYSFS + "add", os.O_WRONLY)
         print >> sys.stderr, "write to %s : %s %d:%d:%d" %( XSEGBD_SYSFS +
-			"add", name, port, port - XSEGBD_START + VPORT_START, REQS )
-        os.write(fd, "%s %d:%d:%d" % (name, port, port - XSEGBD_START + VPORT_START, REQS))
+			"add", name, port, port - config['XSEGBD_START'] + config['VPORT_START'], REQS )
+        os.write(fd, "%s %d:%d:%d" % (name, port, port - config['XSEGBD_START']
+                                                    + config['VPORT_START'], REQS))
         os.close(fd)
     except Exception, reason:
         raise Error(name + ': ' + str(reason))
 
 @exclusive
-def vlmc_unmap(args):
+def unmap(args):
     if not loaded_module(xsegbd):
         raise Error("Xsegbd module not loaded")
     device = args.name[0]
@@ -232,7 +233,7 @@ def vlmc_unmap(args):
         raise Error(device + ': ' + str(reason))
 
 # FIXME:
-def vlmc_resize(args):
+def resize(args):
     if not loaded_module(xsegbd):
         raise Error("Xsegbd module not loaded")
 
@@ -253,7 +254,7 @@ def vlmc_resize(args):
         raise Error(name + ': ' + str(reason))
 
 @exclusive
-def vlmc_lock(args):
+def lock(args):
     name = args.name[0]
 
     if len(name) < 6:
@@ -262,8 +263,8 @@ def vlmc_lock(args):
     name = ARCHIP_PREFIX + name
 
     ret = False
-    xseg_ctx = Xseg_ctx(SPEC, VTOOL)
-    with Request(xseg_ctx, MBPORT, len(name), 0) as req:
+    xseg_ctx = Xseg_ctx(config['SPEC'], config['VTOOL'])
+    with Request(xseg_ctx, config['MBPORT'], len(name), 0) as req:
         req.set_op(X_ACQUIRE)
         req.set_size(0)
         req.set_offset(0)
@@ -279,7 +280,7 @@ def vlmc_lock(args):
         sys.stdout.write("Volume locked\n")
 
 @exclusive
-def vlmc_unlock(args):
+def unlock(args):
     name = args.name[0]
     force = args.force
 
@@ -289,8 +290,8 @@ def vlmc_unlock(args):
     name = ARCHIP_PREFIX + name
 
     ret = False
-    xseg_ctx = Xseg_ctx(SPEC, VTOOL)
-    with Request(xseg_ctx, MBPORT, len(name), 0) as req:
+    xseg_ctx = Xseg_ctx(config['SPEC'], config['VTOOL'])
+    with Request(xseg_ctx, config['MBPORT'], len(name), 0) as req:
         req.set_op(X_RELEASE)
         req.set_size(0)
         req.set_offset(0)
@@ -309,15 +310,15 @@ def vlmc_unlock(args):
         sys.stdout.write("Volume unlocked\n")
 
 @exclusive
-def vlmc_open(args):
+def open(args):
     name = args.name[0]
 
     if len(name) < 6:
         raise Error("Name should have at least len 6")
 
     ret = False
-    xseg_ctx = Xseg_ctx(SPEC, VTOOL)
-    with Request(xseg_ctx, VPORT_START, len(name), 0) as req:
+    xseg_ctx = Xseg_ctx(config['SPEC'], config['VTOOL'])
+    with Request(xseg_ctx, config['VPORT_START'], len(name), 0) as req:
         req.set_op(X_OPEN)
         req.set_size(0)
         req.set_offset(0)
@@ -332,15 +333,15 @@ def vlmc_open(args):
         sys.stdout.write("Volume opened\n")
 
 @exclusive
-def vlmc_close(args):
+def close(args):
     name = args.name[0]
 
     if len(name) < 6:
         raise Error("Name should have at least len 6")
 
     ret = False
-    xseg_ctx = Xseg_ctx(SPEC, VTOOL)
-    with Request(xseg_ctx, VPORT_START, len(name), 0) as req:
+    xseg_ctx = Xseg_ctx(config['SPEC'], config['VTOOL'])
+    with Request(xseg_ctx, config['VPORT_START'], len(name), 0) as req:
         req.set_op(X_CLOSE)
         req.set_size(0)
         req.set_offset(0)
@@ -355,15 +356,15 @@ def vlmc_close(args):
         sys.stdout.write("Volume closed\n")
 
 @exclusive
-def vlmc_info(args):
+def info(args):
     name = args.name[0]
 
     if len(name) < 6:
         raise Error("Name should have at least len 6")
 
     ret = False
-    xseg_ctx = Xseg_ctx(SPEC, VTOOL)
-    with Request(xseg_ctx, MPORT, len(name), 0) as req:
+    xseg_ctx = Xseg_ctx(config['SPEC'], config['VTOOL'])
+    with Request(xseg_ctx, config['MPORT'], len(name), 0) as req:
         req.set_op(X_INFO)
         req.set_size(0)
         req.set_offset(0)
@@ -379,7 +380,7 @@ def vlmc_info(args):
     else:
         sys.stdout.write("Volume %s: size: %d\n" % (name, size) )
 
-def vlmc_mapinfo(args):
+def mapinfo(args):
     name = args.name[0]
 
     if len(name) < 6:
@@ -387,9 +388,9 @@ def vlmc_mapinfo(args):
 
     if STORAGE == "rados":
         import rados
-        cluster = rados.Rados(conffile=CEPH_CONF_FILE)
+        cluster = rados.Rados(conffile=config['CEPH_CONF_FILE'])
         cluster.connect()
-        ioctx = cluster.open_ioctx(RADOS_POOL_MAPS)
+        ioctx = cluster.open_ioctx(config['RADOS_POOL_MAPS'])
         BLOCKSIZE = 4*1024*1024
         try:
             mapdata = ioctx.read(ARCHIP_PREFIX + name, length=BLOCKSIZE)
@@ -427,93 +428,3 @@ def vlmc_mapinfo(args):
     else:
         raise Error("Invalid storage")
 
-def vlmc():
-    parser = argparse.ArgumentParser(description='vlmc tool')
-    parser.add_argument('-c', '--config', type=str, nargs='?', help='config file')
-    subparsers = parser.add_subparsers()
-
-    create_parser = subparsers.add_parser('create', help='Create volume')
-    #group = create_parser.add_mutually_exclusive_group(required=True)
-    create_parser.add_argument('-s', '--size', type=int, nargs='?', help='requested size in MB for create')
-    create_parser.add_argument('--snap', type=str, nargs='?', help='create from snapshot')
-    create_parser.add_argument('-p', '--pool', type=str, nargs='?', help='for backwards compatiblity with rbd')
-    create_parser.add_argument('name', type=str, nargs=1, help='volume/device name')
-    create_parser.set_defaults(func=vlmc_create)
-
-    remove_parser = subparsers.add_parser('remove', help='Delete volume')
-    remove_parser.add_argument('name', type=str, nargs=1, help='volume/device name')
-    remove_parser.set_defaults(func=vlmc_remove)
-    remove_parser.add_argument('-p', '--pool', type=str, nargs='?', help='for backwards compatiblity with rbd')
-
-    rm_parser = subparsers.add_parser('rm', help='Delete volume')
-    rm_parser.add_argument('name', type=str, nargs=1, help='volume/device name')
-    rm_parser.set_defaults(func=vlmc_remove)
-    rm_parser.add_argument('-p', '--pool', type=str, nargs='?', help='for backwards compatiblity with rbd')
-
-    map_parser = subparsers.add_parser('map', help='Map volume')
-    map_parser.add_argument('name', type=str, nargs=1, help='volume/device name')
-    map_parser.set_defaults(func=vlmc_map)
-    map_parser.add_argument('-p', '--pool', type=str, nargs='?', help='for backwards compatiblity with rbd')
-
-    unmap_parser = subparsers.add_parser('unmap', help='Unmap volume')
-    unmap_parser.add_argument('name', type=str, nargs=1, help='volume/device name')
-    unmap_parser.set_defaults(func=vlmc_unmap)
-    unmap_parser.add_argument('-p', '--pool', type=str, nargs='?', help='for backwards compatiblity with rbd')
-
-    showmapped_parser = subparsers.add_parser('showmapped', help='Show mapped volumes')
-    showmapped_parser.set_defaults(func=vlmc_showmapped_wrapper)
-    showmapped_parser.add_argument('-p', '--pool', type=str, nargs='?', help='for backwards compatiblity with rbd')
-
-    list_parser = subparsers.add_parser('list', help='List volumes')
-    list_parser.set_defaults(func=vlmc_list)
-    list_parser.add_argument('-p', '--pool', type=str, nargs='?', help='for backwards compatiblity with rbd')
-
-    snapshot_parser = subparsers.add_parser('snapshot', help='snapshot volume')
-    #group = snapshot_parser.add_mutually_exclusive_group(required=True)
-    snapshot_parser.add_argument('-p', '--pool', type=str, nargs='?', help='for backwards compatiblity with rbd')
-    snapshot_parser.add_argument('name', type=str, nargs=1, help='volume/device name')
-    snapshot_parser.set_defaults(func=vlmc_snapshot)
-
-    ls_parser = subparsers.add_parser('ls', help='List volumes')
-    ls_parser.set_defaults(func=vlmc_list)
-    ls_parser.add_argument('-p', '--pool', type=str, nargs='?', help='for backwards compatiblity with rbd')
-
-    resize_parser = subparsers.add_parser('resize', help='Resize volume')
-    resize_parser.add_argument('-s', '--size', type=int, nargs=1, help='requested size in MB for resize')
-    resize_parser.add_argument('name', type=str, nargs=1, help='volume/device name')
-    resize_parser.set_defaults(func=vlmc_resize)
-    resize_parser.add_argument('-p', '--pool', type=str, nargs='?', help='for backwards compatiblity with rbd')
-
-    open_parser = subparsers.add_parser('open', help='open volume')
-    open_parser.add_argument('name', type=str, nargs=1, help='volume/device name')
-    open_parser.set_defaults(func=vlmc_open)
-    open_parser.add_argument('-p', '--pool', type=str, nargs='?', help='for backwards compatiblity with rbd')
-
-    close_parser = subparsers.add_parser('close', help='close volume')
-    close_parser.add_argument('name', type=str, nargs=1, help='volume/device name')
-    close_parser.set_defaults(func=vlmc_close)
-    close_parser.add_argument('-p', '--pool', type=str, nargs='?', help='for backwards compatiblity with rbd')
-
-    lock_parser = subparsers.add_parser('lock', help='lock volume')
-    lock_parser.add_argument('name', type=str, nargs=1, help='volume/device name')
-    lock_parser.set_defaults(func=vlmc_lock)
-    lock_parser.add_argument('-p', '--pool', type=str, nargs='?', help='for backwards compatiblity with rbd')
-
-    unlock_parser = subparsers.add_parser('unlock', help='unlock volume')
-    unlock_parser.add_argument('name', type=str, nargs=1, help='volume/device name')
-    unlock_parser.add_argument('-f', '--force',  action='store_true', default=False , help='break lock')
-    unlock_parser.set_defaults(func=vlmc_unlock)
-    unlock_parser.add_argument('-p', '--pool', type=str, nargs='?', help='for backwards compatiblity with rbd')
-
-    info_parser = subparsers.add_parser('info', help='Show volume info')
-    info_parser.add_argument('name', type=str, nargs=1, help='volume name')
-    info_parser.set_defaults(func=vlmc_info)
-    info_parser.add_argument('-p', '--pool', type=str, nargs='?', help='for backwards compatiblity with rbd')
-
-    map_info_parser = subparsers.add_parser('mapinfo', help='Show volume map_info')
-    map_info_parser.add_argument('name', type=str, nargs=1, help='volume name')
-    map_info_parser.set_defaults(func=vlmc_mapinfo)
-    map_info_parser.add_argument('-p', '--pool', type=str, nargs='?', help='for backwards compatiblity with rbd')
-    map_info_parser.add_argument('-v', '--verbose',  action='store_true', default=False , help='')
-
-    return parser
