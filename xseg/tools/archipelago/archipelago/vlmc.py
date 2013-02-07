@@ -130,6 +130,7 @@ def snapshot(name, **kwargs):
     if not ret:
         raise Error("vlmc snapshot failed")
     sys.stdout.write("Snapshot name: %s\n" % reply)
+    return reply
 
 
 def list_volumes(**kwargs):
