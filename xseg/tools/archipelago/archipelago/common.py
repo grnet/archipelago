@@ -495,8 +495,9 @@ xseg_initialized = False
 
 def initialize_xseg():
     global xseg_initialized
-    xseg_initialize()
-    xseg_initialized = True
+    if not xseg_initialized:
+        xseg_initialize()
+        xseg_initialized = True
 
 def create_segment():
     #fixme blocking....
@@ -554,7 +555,7 @@ class Xseg_ctx(object):
     def __init__(self, spec, portno):
         initialize_xseg()
         xconf = xseg_config()
-        xseg_parse_spec(spec, xconf)
+        xseg_parse_spec(create_string_buffer(spec), xconf)
         ctx = xseg_join(xconf.type, xconf.name, "posix", cast(0, cb_null_ptrtype))
         if not ctx:
             raise Error("Cannot join segment")
