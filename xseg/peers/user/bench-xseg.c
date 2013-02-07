@@ -43,19 +43,144 @@
 
 struct timespec delay = {0, 4000000};
 
+struct bench {
+	uint64_t ts; //Total I/O size
+	uint64_t os; //Object size
+	uint64_t bs; //Block size
+	uint32_t iodepth; //Num of in-flight xseg reqs
+	uint8_t flags;
+};
+
+#define MAX_ARG_LEN 10
+
 void custom_peer_usage()
 {
 	fprintf(stderr, "Custom peer options: \n"
 		"  --------------------------------------------\n"
-		"    -ts       | No      | Total I/O size\n"
-		"    -os       | 4MB     | Object size\n"
+		"    -ts       | None    | Total I/O size\n"
+		"    -os       | 4M      | Object size\n"
+		"    -bs       | 4k      | Block size\n"
 		"    --iodepth | 1       | Number of in-flight I/O requests\n"
 		"\n");
 }
+
+/*
+ * Convert string to size in bytes.
+ * If syntax is invalid, return 0. Values such as zero and non-integer
+ * multiples of segment's page size should not be accepted.
+ */
+static uint64_t str2num(char *str)
+{
+	char *unit;
+	uint64_t num;
+
+	num = strtoll(str, &unit, 10);
+	if (strlen(unit) > 1) //Invalid syntax
+		return 0;
+	else if (strlen(unit) < 1) //Plain number in bytes
+		return num;
+
+	switch (*unit) {
+		case 'g':
+		case 'G':
+			num *= 1024;
+		case 'm':
+		case 'M':
+			num *= 1024;
+		case 'k':
+		case 'K':
+			num *= 1024;
+			break;
+		default:
+			num = 0;
+	}
+	return num;
+}
+
 int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 {
+	struct bench *prefs;
+	char total_size[MAX_ARG_LEN + 1];
+	char object_size[MAX_ARG_LEN + 1];
+	char block_size[MAX_ARG_LEN + 1];
+	struct xseg *xseg = peer->xseg;
+	unsigned int xseg_page_size = 1 << xseg->config.page_shift;
+
+	total_size[0] = 0;
+	block_size[0] = 0;
+	object_size[0] = 0;
+
+	prefs = malloc(sizeof(struct bench));
+	if (!prefs) {
+		perror("malloc");
+		return -1;
+	}
+
+	//Begin reading the benchmark-specific arguments
+	BEGIN_READ_ARGS(argc, argv);
+	READ_ARG_STRING("-ts", total_size, MAX_ARG_LEN);
+	READ_ARG_STRING("-os", object_size, MAX_ARG_LEN);
+	READ_ARG_STRING("-bs", block_size, MAX_ARG_LEN);
+	READ_ARG_ULONG("--iodepth", prefs->iodepth);
+	END_READ_ARGS();
+
+	//Block size (bs): Defaults to 4K.
+	//It must be a number followed by one of these characters: [k|K|m|M|g|G].
+	//If not, it will be considered as size in bytes.
+	//Must be integer multiple of segment's page size (typically 4k).
+	if (!block_size[0])
+		strcpy(block_size,"4k");
+
+	prefs->bs = str2num(block_size);
+	if (!prefs->bs) {
+		XSEGLOG2(&lc, E, "Invalid syntax: %s\n", block_size);
+		goto arg_fail;
+	} else if (prefs->bs % xseg_page_size) {
+		XSEGLOG2(&lc, E, "Misaligned block size: %s\n", block_size);
+		goto arg_fail;
+	}
+
+	//Total I/O size (ts): Must be supplied by user.
+	//Must have the same format as "total size"
+	//Must be integer multiple of "block size"
+	if (!total_size[0]) {
+		XSEGLOG2(&lc, E, "Total I/O size needs to be supplied\n");
+		goto arg_fail;
+	}
+
+	prefs->ts = str2num(total_size);
+	if (!prefs->ts) {
+		XSEGLOG2(&lc, E, "Invalid syntax: %s\n", total_size);
+		goto arg_fail;
+	} else if (prefs->ts % prefs->bs) {
+		XSEGLOG2(&lc, E, "Misaligned total I/O size: %s\n", total_size);
+		goto arg_fail;
+	} else if (prefs->ts > xseg->segment_size) {
+		XSEGLOG2(&lc, E, "Total I/O size exceeds segment size\n", total_size);
+		goto arg_fail;
+	}
+
+	//Object size (os): Defaults to 4M.
+	//Must have the same format as "total size"
+	//Must be integer multiple of "block size"
+	if (!object_size[0])
+		strcpy(object_size,"4M");
+
+	prefs->os = str2num(object_size);
+	if (!prefs->os) {
+		XSEGLOG2(&lc, E, "Invalid syntax: %s\n", object_size);
+		goto arg_fail;
+	} else if (prefs->os % prefs->bs) {
+		XSEGLOG2(&lc, E, "Misaligned object size: %s\n", object_size);
+		goto arg_fail;
+	}
 
 	return 0;
+
+arg_fail:
+	free(prefs);
+	custom_peer_usage();
+	return -1;
 }
 
 void custom_peer_finalize(struct peerd *peer)
@@ -71,7 +196,7 @@ int dispatch(struct peerd *peer, struct peer_req *pr, struct xseg_request *req,
 	else {
 //		printf("completing req id: %u (remote %u)\n", (unsigned int) (pr - peer->peer_reqs), (unsigned int) pr->req->priv);
 //		nanosleep(&delay,NULL);
-		print_req(peer->xseg, pr->req);
+//		print_req(peer->xseg, pr->req);
 		complete(peer, pr);
 	}
 	return 0;
