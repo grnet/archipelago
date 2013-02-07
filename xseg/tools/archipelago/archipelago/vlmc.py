@@ -201,6 +201,7 @@ def map_volume(name, **kwargs):
         os.write(fd, "%s %d:%d:%d" % (name, port, port - config['XSEGBD_START']
                                                     + config['VPORT_START'], REQS))
         os.close(fd)
+        return port
     except Exception, reason:
         raise Error(name + ': ' + str(reason))
 
