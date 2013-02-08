@@ -80,7 +80,6 @@ struct thread {
 	void *arg;
 };
 
-
 inline static struct thread* alloc_thread(struct peerd *peer)
 {
 	xqindex idx = xq_pop_head(&peer->threads, 1);
@@ -116,8 +115,11 @@ inline static int wake_up_next_thread(struct peerd *peer)
 }
 #endif
 
-
-static inline int isTerminate()
+/*
+ * extern is needed if this function is going to be called by another file
+ * such as bench-xseg.c
+ */
+inline extern int isTerminate()
 {
 /* ta doesn't need to be taken into account, because the main loops
  * doesn't check the terminated flag if ta is not 0.
@@ -355,7 +357,7 @@ int submit_peer_req(struct peerd *peer, struct peer_req *pr)
 	return 0;
 }
 
-static int check_ports(struct peerd *peer)
+int check_ports(struct peerd *peer)
 {
 	struct xseg *xseg = peer->xseg;
 	xport portno_start = peer->portno_start;
@@ -439,6 +441,7 @@ static void* thread_loop(void *arg)
 	XSEGLOG2(&lc, I, "Thread %u has tid %u.\n", (unsigned int) (t- peer->thread), pid);
 	xseg_init_local_signal(xseg, peer->portno_start);
 	for (;!(isTerminate() && xq_count(&peer->free_reqs) == peer->nr_ops);) {
+		XSEGLOG("Head of loop.\n");
 		if (t->func) {
 			XSEGLOG2(&lc, D, "Thread %u executes function\n", (unsigned int) (t- peer->thread));
 			xseg_cancel_wait(xseg, peer->portno_start);
@@ -448,7 +451,7 @@ static void* thread_loop(void *arg)
 			continue;
 		}
 
-		for(loops= threshold; loops > 0; loops--) {
+		for(loops =  threshold; loops > 0; loops--) {
 			if (loops == 1)
 				xseg_prepare_wait(xseg, peer->portno_start);
 			if (check_ports(peer))
@@ -505,7 +508,7 @@ int defer_request(struct peerd *peer, struct peer_req *pr)
 	return 0;
 }
 
-static int peerd_loop(struct peerd *peer) 
+static int peerd_loop(struct peerd *peer)
 {
 #ifdef MT
 	int i;
@@ -605,7 +608,7 @@ malloc_fail:
 		return NULL;
 	}
 	peer->xseg = join(spec);
-	if (!peer->xseg) 
+	if (!peer->xseg)
 		return NULL;
 
 	peer->portno_start = (xport) portno_start;
@@ -831,7 +834,10 @@ int main(int argc, char *argv[])
 	st_thread_t st = st_thread_create(peerd_loop, peer, 1, 0);
 	r = st_thread_join(st, NULL);
 #else
-	r = peerd_loop(peer);
+	if (peer->custom_peerd_loop)
+		r = peer->custom_peerd_loop(peer);
+	else
+		r = peerd_loop(peer);
 #endif
 out:
 	if (pid_fd > 0)

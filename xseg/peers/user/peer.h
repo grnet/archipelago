@@ -93,6 +93,7 @@ struct peerd {
 	xport defer_portno;
 	struct peer_req *peer_reqs;
 	struct xq free_reqs;
+	int (*custom_peerd_loop)(struct peerd *peer);
 	void *priv;
 #ifdef MT
 	uint32_t nr_threads;
@@ -121,6 +122,9 @@ void get_submits_stats();
 void get_responds_stats();
 void usage();
 void print_req(struct xseg *xseg, struct xseg_request *req);
+int isTerminate();
+int check_ports(struct peerd *peer);
+
 #ifdef MT
 int thread_execute(struct peerd *peer, void (*func)(void *arg), void *arg);
 #endif

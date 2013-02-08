@@ -32,14 +32,18 @@
  * or implied, of GRNET S.A.
  */
 
+#define _GNU_SOURCE
 #include <stdio.h>
+#include <stdlib.h>
 #include <unistd.h>
+#include <sys/syscall.h>
 #include <sys/types.h>
 #include <pthread.h>
 #include <xseg/xseg.h>
 #include <peer.h>
 #include <time.h>
 #include <sys/util.h>
+#include <signal.h>
 
 struct timespec delay = {0, 4000000};
 
@@ -48,8 +52,11 @@ struct bench {
 	uint64_t os; //Object size
 	uint64_t bs; //Block size
 	uint32_t iodepth; //Num of in-flight xseg reqs
+	xport dst_port;
 	uint8_t flags;
 };
+
+int custom_peerd_loop(struct peerd *peer);
 
 #define MAX_ARG_LEN 10
 
@@ -60,6 +67,7 @@ void custom_peer_usage()
 		"    -ts       | None    | Total I/O size\n"
 		"    -os       | 4M      | Object size\n"
 		"    -bs       | 4k      | Block size\n"
+		"    -dp       | None    | Destination port\n"
 		"    --iodepth | 1       | Number of in-flight I/O requests\n"
 		"\n");
 }
@@ -105,6 +113,7 @@ int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 	char block_size[MAX_ARG_LEN + 1];
 	struct xseg *xseg = peer->xseg;
 	unsigned int xseg_page_size = 1 << xseg->config.page_shift;
+	long dst_port = -1;
 
 	total_size[0] = 0;
 	block_size[0] = 0;
@@ -122,7 +131,14 @@ int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 	READ_ARG_STRING("-os", object_size, MAX_ARG_LEN);
 	READ_ARG_STRING("-bs", block_size, MAX_ARG_LEN);
 	READ_ARG_ULONG("--iodepth", prefs->iodepth);
+	READ_ARG_ULONG("-dp", dst_port);
 	END_READ_ARGS();
+
+	/*
+	 *************************
+	 * Check size parameters *
+	 *************************
+	 */
 
 	//Block size (bs): Defaults to 4K.
 	//It must be a number followed by one of these characters: [k|K|m|M|g|G].
@@ -175,12 +191,88 @@ int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 		goto arg_fail;
 	}
 
+	/*
+	 *************************
+	 * Check port parameters *
+	 *************************
+	 */
+
+	if (dst_port < 0){
+		XSEGLOG2(&lc, E, "Destination port needs to be supplied\n");
+		goto arg_fail;
+	}
+
+	prefs->dst_port = (xport) dst_port;
+
+	/*
+	 **************************
+	 * Customize struct peerd *
+	 **************************
+	 */
+
+	peer->custom_peerd_loop = custom_peerd_loop;
+	peer->priv = (void *) prefs;
 	return 0;
 
 arg_fail:
 	free(prefs);
 	custom_peer_usage();
 	return -1;
+}
+
+/*
+ * This function substitutes the default peerd_loop of peer.c.
+ * This is achieved by passing to gcc a CUSTOM_LOOP macro definition which is
+ * checked (ifdef) in peer.c
+ */
+int custom_peerd_loop(struct peerd *peer)
+{
+#ifdef MT
+	int i;
+	if (peer->interactive_func)
+		peer->interactive_func();
+	for (i = 0; i < peer->nr_threads; i++) {
+		pthread_join(peer->thread[i].tid, NULL);
+	}
+#else
+	struct xseg *xseg = peer->xseg;
+	struct bench *prefs = peer->priv;
+
+	xport portno_start = peer->portno_start;
+	xport portno_end = peer->portno_end;
+	uint64_t threshold=1000/(1 + portno_end - portno_start);
+	pid_t pid =syscall(SYS_gettid);
+	uint64_t loops;
+
+	uint64_t remaining = prefs->ts;
+
+	XSEGLOG2(&lc, I, "Peer has tid %u.\n", pid);
+	xseg_init_local_signal(xseg, peer->portno_start);
+
+	while (!isTerminate()
+			&& xq_count(&peer->free_reqs) == peer->nr_ops
+			&& remaining) {
+		for (loops= threshold; loops > 0; loops--) {
+			if (loops == 1)
+				xseg_prepare_wait(xseg, peer->portno_start);
+			if (check_ports(peer))
+				loops = threshold;
+		}
+#ifdef ST_THREADS
+		if (ta){
+			st_sleep(0);
+			continue;
+		}
+#endif
+		XSEGLOG2(&lc, I, "Peer goes to sleep\n");
+		xseg_wait_signal(xseg, 10000000UL);
+		xseg_cancel_wait(xseg, peer->portno_start);
+		XSEGLOG2(&lc, I, "Peer woke up\n");
+	}
+	custom_peer_finalize(peer);
+	xseg_quit_local_signal(xseg, peer->portno_start);
+#endif
+	return 0;
 }
 
 void custom_peer_finalize(struct peerd *peer)
