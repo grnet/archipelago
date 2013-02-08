@@ -34,19 +34,25 @@
 #
 
 
-import os, sys, subprocess, argparse, time, psutil, signal, errno
+import os
+import sys
+import time
+import signal
+import errno
 from subprocess import check_call
+
 from .common import *
 from .vlmc import showmapped as vlmc_showmapped
+
 
 def start_peer(peer):
     if check_pidfile(peer.role) > 0:
         raise Error("Cannot start peer %s. Peer already running" % peer.role)
-    cmd = [peer.executable]+ peer.opts
+    cmd = [peer.executable] + peer.opts
     s = "Starting %s " % peer.role
     sys.stdout.write(s.ljust(FIRST_COLUMN_WIDTH))
     try:
-        check_call(cmd, shell=False);
+        check_call(cmd, shell=False)
     except Exception as e:
         print e
         sys.stdout.write(red("FAILED".ljust(SECOND_COLUMN_WIDTH)))
@@ -61,6 +67,7 @@ def start_peer(peer):
 
     sys.stdout.write(green("OK".ljust(SECOND_COLUMN_WIDTH)))
     sys.stdout.write("\n")
+
 
 def stop_peer(peer):
     pid = check_pidfile(peer.role)
@@ -82,6 +89,7 @@ def stop_peer(peer):
     sys.stdout.write(green("OK".ljust(SECOND_COLUMN_WIDTH)))
     sys.stdout.write("\n")
 
+
 def peer_running(peer):
     pid = check_pidfile(peer.role)
     if pid < 0:
@@ -89,7 +97,8 @@ def peer_running(peer):
         return False
 
     if not check_running(peer.executable, pid):
-        pretty_print(peer.role, yellow("Has valid pidfile but does not seem to be active"))
+        pretty_print(peer.role, yellow("Has valid pidfile but does not seem "
+                                       "to be active"))
         return False
     pretty_print(peer.role, green('running'))
     return True
@@ -103,12 +112,14 @@ def make_segdev():
         raise e
     except:
         pass
-    cmd = ["mknod", str(CHARDEV_NAME), "c", str(CHARDEV_MAJOR), str(CHARDEV_MINOR)]
+    cmd = ["mknod", str(CHARDEV_NAME), "c", str(CHARDEV_MAJOR),
+           str(CHARDEV_MINOR)]
     print ' '.join(cmd)
     try:
-        check_call(cmd, shell=False);
+        check_call(cmd, shell=False)
     except Exception:
         raise Error("Segdev device creation failed.")
+
 
 def remove_segdev():
     try:
@@ -122,18 +133,22 @@ def remove_segdev():
     except:
         raise Error("Segdev device removal failed.")
 
+
 def start_peers(peers):
     for m in modules:
         if not loaded_module(m):
-            raise Error("Cannot start userspace peers. " + m + " module not loaded")
+            raise Error("Cannot start userspace peers. " + m +
+                        " module not loaded")
     for r in roles:
         p = peers[r]
         start_peer(p)
+
 
 def stop_peers(peers):
     for r in reversed(roles):
         p = peers[r]
         stop_peer(p)
+
 
 def start(user=False, peer=None, **kwargs):
     if peer:
@@ -184,6 +199,7 @@ def stop(user=False, peer=None, **kwargs):
         unload_module(m)
         time.sleep(0.3)
 
+
 def status(**kwargs):
     r = 0
     if vlmc_showmapped() > 0:
@@ -205,8 +221,7 @@ def status(**kwargs):
             r += 1
     return r
 
+
 def restart(**kwargs):
     stop(**kwargs)
     start(**kwargs)
-
-
