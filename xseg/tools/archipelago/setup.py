@@ -36,6 +36,7 @@ import distribute_setup
 distribute_setup.use_setuptools()
 
 import os
+import sys
 
 from distutils.util import convert_path
 from fnmatch import fnmatchcase
@@ -43,7 +44,7 @@ from setuptools import setup, find_packages
 
 #HERE = os.path.abspath(os.path.normpath(os.path.dirname(__file__)))
 TOPDIR = os.environ['TOPDIR']
-DEBIANDIR = os.path.join(TOPDIR, 'debian');
+DEBIANDIR = os.path.join(TOPDIR, 'debian')
 DEBIANDIR = os.path.normpath(DEBIANDIR)
 
 from archipelago.version import __version__
@@ -66,7 +67,7 @@ CLASSIFIERS = []
 
 # Package requirements
 INSTALL_REQUIRES = ['python-xseg'
-]
+                    ]
 
 EXTRAS_REQUIRES = {
 }
@@ -82,18 +83,22 @@ standard_exclude_directories = [
     ".*", "CVS", "_darcs", "./build", "./dist", "EGG-INFO", "*.egg-info"
 ]
 
-# (c) 2005 Ian Bicking and contributors; written for Paste (http://pythonpaste.org)
-# Licensed under the MIT license: http://www.opensource.org/licenses/mit-license.php
+# (c) 2005 Ian Bicking and contributors; written for Paste
+# (http://pythonpaste.org)
+# Licensed under the MIT license:
+#           http://www.opensource.org/licenses/mit-license.php
 # Note: you may want to copy this into your setup.py file verbatim, as
 # you can't import this from another package, when you don't know if
 # that package is installed yet.
+
+
 def find_package_data(
-    where=".",
-    package="",
-    exclude=standard_exclude,
-    exclude_directories=standard_exclude_directories,
-    only_in_packages=True,
-    show_ignored=False):
+        where=".",
+        package="",
+        exclude=standard_exclude,
+        exclude_directories=standard_exclude_directories,
+        only_in_packages=True,
+        show_ignored=False):
     """
     Return a dictionary suitable for use in ``package_data``
     in a distutils ``setup.py`` file.
@@ -130,7 +135,7 @@ def find_package_data(
                 bad_name = False
                 for pattern in exclude_directories:
                     if (fnmatchcase(name, pattern)
-                        or fn.lower() == pattern.lower()):
+                            or fn.lower() == pattern.lower()):
                         bad_name = True
                         if show_ignored:
                             print >> sys.stderr, (
@@ -140,20 +145,21 @@ def find_package_data(
                 if bad_name:
                     continue
                 if (os.path.isfile(os.path.join(fn, "__init__.py"))
-                    and not prefix):
+                        and not prefix):
                     if not package:
                         new_package = name
                     else:
                         new_package = package + "." + name
                     stack.append((fn, "", new_package, False))
                 else:
-                    stack.append((fn, prefix + name + "/", package, only_in_packages))
+                    stack.append((fn, prefix + name + "/", package,
+                                  only_in_packages))
             elif package or not only_in_packages:
                 # is a file
                 bad_name = False
                 for pattern in exclude:
                     if (fnmatchcase(name, pattern)
-                        or fn.lower() == pattern.lower()):
+                            or fn.lower() == pattern.lower()):
                         bad_name = True
                         if show_ignored:
                             print >> sys.stderr, (
@@ -166,36 +172,35 @@ def find_package_data(
     return out
 
 setup(
-    name = 'python-archipelago',
-    version = VERSION,
-    license = 'BSD',
-    url = 'http://code.grnet.gr/',
-    description = SHORT_DESCRIPTION,
-    long_description=README + '\n\n' +  CHANGES,
-    classifiers = CLASSIFIERS,
+    name='python-archipelago',
+    version=VERSION,
+    license='BSD',
+    url='http://code.grnet.gr/',
+    description=SHORT_DESCRIPTION,
+    long_description=README + '\n\n' + CHANGES,
+    classifiers=CLASSIFIERS,
 
-    author = 'Filippos Giannakos',
-    author_email = 'philipgian@grnet.gr',
-    maintainer = 'Filippos Giannakos',
-    maintainer_email = 'philipgianr@grnet.gr',
+    author='Filippos Giannakos',
+    author_email='philipgian@grnet.gr',
+    maintainer='Filippos Giannakos',
+    maintainer_email='philipgianr@grnet.gr',
 
-#    namespace_packages = ['synnefo', 'synnefo.versions'],
-    packages = PACKAGES,
-    package_dir= {'': PACKAGES_ROOT},
-    include_package_data = True,
-    package_data = find_package_data('.'),
-    zip_safe = False,
+    packages=PACKAGES,
+    package_dir={'': PACKAGES_ROOT},
+    include_package_data=True,
+    package_data=find_package_data('.'),
+    zip_safe=False,
 
-    install_requires = INSTALL_REQUIRES,
-    extras_require = EXTRAS_REQUIRES,
-    tests_require = TESTS_REQUIRES,
+    install_requires=INSTALL_REQUIRES,
+    extras_require=EXTRAS_REQUIRES,
+    tests_require=TESTS_REQUIRES,
 
-    dependency_links = ['http://docs.dev.grnet.gr/pypi'],
+    dependency_links=['http://docs.dev.grnet.gr/pypi'],
 
-    entry_points = {
+    entry_points={
         'console_scripts': [
-            'archipelago = archipelago.common:cli',
-            'vlmc = archipelago.common:cli',
-            ],
-        }
+            'archipelago = archipelago.cli:main',
+            'vlmc = archipelago.cli:main',
+        ],
+    }
 )

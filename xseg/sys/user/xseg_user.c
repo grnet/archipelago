@@ -44,7 +44,7 @@
 #include <errno.h>
 #include <sys/util.h>
 #include <sys/time.h>
-
+#include <execinfo.h>
 #include <sys/domain.h>
 #include <xtypes/domain.h>
 #include <xseg/domain.h>

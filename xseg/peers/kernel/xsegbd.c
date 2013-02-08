@@ -84,7 +84,7 @@ struct xsegbd_device *__xsegbd_get_dev(unsigned long id)
 	return xsegbd_dev;
 }
 
-static int src_portno_to_id(xport src_portno)
+static long src_portno_to_id(xport src_portno)
 {
 	return (src_portno - start_portno);
 }
@@ -174,21 +174,56 @@ int xsegbd_xseg_quit(void)
 
 static int xsegbd_open(struct block_device *bdev, fmode_t mode)
 {
+	int ret = 0, id;
 	struct gendisk *disk = bdev->bd_disk;
-	struct xsegbd_device *xsegbd_dev = disk->private_data;
+	struct xsegbd_device *xsegbd_dev;
+	id = (long)disk->private_data;
+
+	//struct xsegbd_device *xsegbd_dev = disk->private_data;
+
+
+	mutex_lock_nested(&xsegbd_mutex, SINGLE_DEPTH_NESTING);
+
+	spin_lock(&xsegbd_devices_lock);
+	xsegbd_dev = xsegbd_devices[id];
+	spin_unlock(&xsegbd_devices_lock);
+	if (!xsegbd_dev){
+		ret = -ENOENT;
+		goto out;
+	}
 
 	xsegbd_get_dev(xsegbd_dev);
-
-	return 0;
+	xsegbd_dev->user_count++;
+out:
+	mutex_unlock(&xsegbd_mutex);
+	return ret;
 }
 
 static int xsegbd_release(struct gendisk *gd, fmode_t mode)
 {
-	struct xsegbd_device *xsegbd_dev = gd->private_data;
+	int ret = 0, id;
+	struct xsegbd_device *xsegbd_dev;
+	id = (long)gd->private_data;
 
+	mutex_lock_nested(&xsegbd_mutex, SINGLE_DEPTH_NESTING);
+
+	spin_lock(&xsegbd_devices_lock);
+	xsegbd_dev = xsegbd_devices[id];
+	spin_unlock(&xsegbd_devices_lock);
+	if (!xsegbd_dev){
+		ret = -ENOENT;
+		goto out;
+	}
+	if (!(xsegbd_dev->user_count > 0)){
+		XSEGLOG("User count for xsebd %d not > 0", xsegbd_dev->id);
+		WARN_ON(1);
+	}
+
+	xsegbd_dev->user_count--;
 	xsegbd_put_dev(xsegbd_dev);
-
-	return 0;
+out:
+	mutex_unlock(&xsegbd_mutex);
+	return ret;
 }
 
 static int xsegbd_ioctl(struct block_device *bdev, fmode_t mode,
@@ -255,9 +290,10 @@ static int xsegbd_dev_init(struct xsegbd_device *xsegbd_dev)
 	disk->first_minor = xsegbd_dev->id * XSEGBD_MINORS;
 	disk->fops = &xsegbd_ops;
 	disk->queue = xsegbd_dev->blk_queue;
-	disk->private_data = xsegbd_dev;
+//	disk->private_data = xsegbd_dev;
+	disk->private_data = (void *)xsegbd_dev->id;
 	disk->flags |= GENHD_FL_SUPPRESS_PARTITION_INFO;
-	snprintf(disk->disk_name, 32, "xsegbd%u", xsegbd_dev->id);
+	snprintf(disk->disk_name, 32, "xsegbd%ld", xsegbd_dev->id);
 
 	ret = 0;
 
@@ -495,6 +531,7 @@ int update_dev_sectors_from_request(	struct xsegbd_device *xsegbd_dev,
 					struct xseg_request *xreq	)
 {
 	void *data;
+	struct xseg_reply_info *xreply;
 	if (!xreq) {
 		XSEGLOG("Invalid xreq");
 		return -EIO;
@@ -515,7 +552,7 @@ int update_dev_sectors_from_request(	struct xsegbd_device *xsegbd_dev,
 		XSEGLOG("Invalid xsegbd_dev");
 		return -ENOENT;
 	}
-	struct xseg_reply_info *xreply = (struct xseg_reply_info *)data;
+	xreply = (struct xseg_reply_info *)data;
 	xsegbd_dev->sectors = xreply->size / 512ULL;
 	return 0;
 }
@@ -651,7 +688,7 @@ static void xseg_callback(xport portno)
 	unsigned long flags;
 	xqindex blkreq_idx, ridx;
 	int err;
-
+	// mayby this should be src_portno_to_id(portno)
 	xsegbd_dev  = __xsegbd_get_dev(portno);
 	if (!xsegbd_dev) {
 		XSEGLOG("portno: %u has no xsegbd device assigned", portno);
@@ -924,7 +961,7 @@ static int xsegbd_bus_add_dev(struct xsegbd_device *xsegbd_dev)
 	dev->type = &xsegbd_device_type;
 	dev->parent = &xsegbd_root_dev;
 	dev->release = xsegbd_dev_release;
-	dev_set_name(dev, "%d", xsegbd_dev->id);
+	dev_set_name(dev, "%ld", xsegbd_dev->id);
 
 	ret = device_register(dev);
 
@@ -952,6 +989,7 @@ static ssize_t xsegbd_add(struct bus_type *bus, const char *buf, size_t count)
 
 	spin_lock_init(&xsegbd_dev->rqlock);
 	INIT_LIST_HEAD(&xsegbd_dev->node);
+	xsegbd_dev->user_count = 0;
 
 	/* parse cmd */
 	if (sscanf(buf, "%" __stringify(XSEGBD_TARGET_NAMELEN) "s "
@@ -1072,6 +1110,10 @@ static ssize_t xsegbd_remove(struct bus_type *bus, const char *buf, size_t count
 	xsegbd_dev = __xsegbd_get_dev(id);
 	if (!xsegbd_dev) {
 		ret = -ENOENT;
+		goto out_unlock;
+	}
+	if (xsegbd_dev->user_count > 0){
+		ret = -EBUSY;
 		goto out_unlock;
 	}
 	xsegbd_bus_del_dev(xsegbd_dev);

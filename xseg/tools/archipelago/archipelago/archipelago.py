@@ -34,19 +34,25 @@
 #
 
 
-import os, sys, subprocess, argparse, time, psutil, signal, errno
+import os
+import sys
+import time
+import signal
+import errno
 from subprocess import check_call
-from archipelago.common import *
-from archipelago.vlmc import vlmc_showmapped
+
+from .common import *
+from .vlmc import showmapped as vlmc_showmapped
+
 
 def start_peer(peer):
     if check_pidfile(peer.role) > 0:
         raise Error("Cannot start peer %s. Peer already running" % peer.role)
-    cmd = [peer.executable]+ peer.opts
+    cmd = [peer.executable] + peer.opts
     s = "Starting %s " % peer.role
     sys.stdout.write(s.ljust(FIRST_COLUMN_WIDTH))
     try:
-        check_call(cmd, shell=False);
+        check_call(cmd, shell=False)
     except Exception as e:
         print e
         sys.stdout.write(red("FAILED".ljust(SECOND_COLUMN_WIDTH)))
@@ -61,6 +67,7 @@ def start_peer(peer):
 
     sys.stdout.write(green("OK".ljust(SECOND_COLUMN_WIDTH)))
     sys.stdout.write("\n")
+
 
 def stop_peer(peer):
     pid = check_pidfile(peer.role)
@@ -82,6 +89,7 @@ def stop_peer(peer):
     sys.stdout.write(green("OK".ljust(SECOND_COLUMN_WIDTH)))
     sys.stdout.write("\n")
 
+
 def peer_running(peer):
     pid = check_pidfile(peer.role)
     if pid < 0:
@@ -89,7 +97,8 @@ def peer_running(peer):
         return False
 
     if not check_running(peer.executable, pid):
-        pretty_print(peer.role, yellow("Has valid pidfile but does not seem to be active"))
+        pretty_print(peer.role, yellow("Has valid pidfile but does not seem "
+                                       "to be active"))
         return False
     pretty_print(peer.role, green('running'))
     return True
@@ -103,12 +112,14 @@ def make_segdev():
         raise e
     except:
         pass
-    cmd = ["mknod", str(CHARDEV_NAME), "c", str(CHARDEV_MAJOR), str(CHARDEV_MINOR)]
+    cmd = ["mknod", str(CHARDEV_NAME), "c", str(CHARDEV_MAJOR),
+           str(CHARDEV_MINOR)]
     print ' '.join(cmd)
     try:
-        check_call(cmd, shell=False);
+        check_call(cmd, shell=False)
     except Exception:
         raise Error("Segdev device creation failed.")
+
 
 def remove_segdev():
     try:
@@ -122,31 +133,35 @@ def remove_segdev():
     except:
         raise Error("Segdev device removal failed.")
 
+
 def start_peers(peers):
     for m in modules:
         if not loaded_module(m):
-            raise Error("Cannot start userspace peers. " + m + " module not loaded")
+            raise Error("Cannot start userspace peers. " + m +
+                        " module not loaded")
     for r in roles:
         p = peers[r]
         start_peer(p)
+
 
 def stop_peers(peers):
     for r in reversed(roles):
         p = peers[r]
         stop_peer(p)
 
-def start(args):
-    if args.peer:
+
+def start(user=False, peer=None, **kwargs):
+    if peer:
         try:
-            p = peers[args.peer]
+            p = peers[peer]
         except KeyError:
             raise Error("Invalid peer %s" % str(args.peer))
         return start_peer(p)
 
-    if args.user:
+    if user:
         return start_peers(peers)
 
-    if status(args) > 0:
+    if status() > 0:
         raise Error("Cannot start. Try stopping first")
 
     try:
@@ -161,21 +176,21 @@ def start(args):
         load_module(xsegbd, xsegbd_args)
     except Exception as e:
         print red(e)
-        stop(args)
+        stop(user, peer)
         raise e
 
 
-def stop(args):
-    if args.peer:
+def stop(user=False, peer=None, **kwargs):
+    if peer:
         try:
-            p = peers[args.peer]
+            p = peers[peer]
         except KeyError:
             raise Error("Invalid peer %s" % str(args.peer))
         return stop_peer(p)
-    if args.user:
+    if user:
         return stop_peers(peers)
     #check devices
-    if vlmc_showmapped(args) > 0:
+    if vlmc_showmapped() > 0:
         raise Error("Cannot stop archipelago. Mapped volumes exist")
     unload_module(xsegbd)
     stop_peers(peers)
@@ -184,9 +199,10 @@ def stop(args):
         unload_module(m)
         time.sleep(0.3)
 
-def status(args):
+
+def status(**kwargs):
     r = 0
-    if vlmc_showmapped(args) > 0:
+    if vlmc_showmapped() > 0:
         r += 1
     if loaded_module(xsegbd):
         pretty_print(xsegbd, green('Loaded'))
@@ -205,30 +221,7 @@ def status(args):
             r += 1
     return r
 
-def restart(args):
-    stop(args)
-    start(args)
 
-
-def archipelago():
-    parser = argparse.ArgumentParser(description='Archipelago tool')
-    parser.add_argument('-c', '--config', type=str, nargs='?', help='config file')
-    parser.add_argument('-u', '--user',  action='store_true', default=False , help='affect only userspace peers')
-    subparsers = parser.add_subparsers()
-
-    start_parser = subparsers.add_parser('start', help='Start archipelago')
-    start_parser.set_defaults(func=start)
-    start_parser.add_argument('peer', type=str, nargs='?',  help='peer to start')
-
-    stop_parser = subparsers.add_parser('stop', help='Stop archipelago')
-    stop_parser.set_defaults(func=stop)
-    stop_parser.add_argument('peer', type=str, nargs='?', help='peer to stop')
-
-    status_parser = subparsers.add_parser('status', help='Archipelago status')
-    status_parser.set_defaults(func=status)
-
-    restart_parser = subparsers.add_parser('restart', help='Restart archipelago')
-    restart_parser.set_defaults(func=restart)
-    restart_parser.add_argument('peer', type=str, nargs='?', help='peer to restart')
-
-    return parser
+def restart(**kwargs):
+    stop(**kwargs)
+    start(**kwargs)

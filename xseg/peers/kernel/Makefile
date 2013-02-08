@@ -66,7 +66,7 @@ all: $(BASE)/drivers/kernel/Module.symvers
 
 install:
 	mkdir -p $(DESTDIR)$(moduledir)
-	install -o 0 -g 0 -m 644 $(DESTDIR)$(moduledir) xsegbd.ko
+	install -o 0 -g 0 -m 644 -t $(DESTDIR)$(moduledir) xsegbd.ko
 
 install-src:
 	install -d $(DESTDIR)$(srcdir)$(SUBDIR) ;
