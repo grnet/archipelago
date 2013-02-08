@@ -39,126 +39,125 @@ Returns O after successfull completion, 1 on failure
 import os
 import sys
 
-from ganeti import utils
 from archipelago.common import Error, DEVICE_PREFIX, loadrc
 from archipelago import vlmc as vlmc
 
 
 def ReadEnv():
-  """Read the enviromental variables
-  """
+    """Read the enviromental variables
+    """
 
-  name = os.getenv("VOL_NAME")
-  if name is None:
-    sys.stderr.write('The environment variable VOL_NAME is missing.\n')
-    return None
+    name = os.getenv("VOL_NAME")
+    if name is None:
+        sys.stderr.write('The environment variable VOL_NAME is missing.\n')
+        return None
+    size = os.getenv("VOL_SIZE")
+    origin = os.getenv("EXTP_ORIGIN")
+    return (name, size, origin)
 
-  size = os.getenv("VOL_SIZE")
-#  if size is None:
-#    sys.stderr.write('The environment variable VOL_SIZE is missing.\n')
-#    return None
-
-  origin = os.getenv("EXTP_ORIGIN")
-
-  return (name, size, origin)
 
 def create(env):
-  """Create a new vlmc Image
-  """
-  name, size, origin = env
-  vlmc.create(name=name, size=int(size), snap=origin)
-  return 0
+    """Create a new vlmc Image
+    """
+    name, size, origin = env
+    vlmc.create(name=name, size=int(size), snap=origin)
+    return 0
+
 
 def attach(env):
-  """Map an existing vlmc Image to a block device
+    """Map an existing vlmc Image to a block device
 
-  This function maps an existing vlmc Image to a block device
-  e.g. /dev/xsegbd{X} and returns the device path. If the mapping
-  already exists, it returns the corresponding device path.
-  """
+    This function maps an existing vlmc Image to a block device
+    e.g. /dev/xsegbd{X} and returns the device path. If the mapping
+    already exists, it returns the corresponding device path.
+    """
 
-  name, _, _ = env
+    name, _, _ = env
 
-  # Check if the mapping already exists
-  d_id=vlmc.is_mapped(name)
-  if d_id:
-    # The mapping exists. Return it.
+    # Check if the mapping already exists
+    d_id = vlmc.is_mapped(name)
+    if d_id:
+      # The mapping exists. Return it.
+        sys.stdout.write("%s" % str(DEVICE_PREFIX + str(d_id)))
+        return 0
+    # The mapping doesn't exist. Create it.
+    d_id = vlmc.map_volume(name=name)
+    # The device was successfully mapped. Return it.
+    #maybe assert (d_id == vlmc.is_mapped(name)
     sys.stdout.write("%s" % str(DEVICE_PREFIX + str(d_id)))
     return 0
-  # The mapping doesn't exist. Create it.
-  d_id = vlmc.map_volume(name=name)
-  # The device was successfully mapped. Return it.
-  #maybe assert (d_id == vlmc.is_mapped(name)
-  sys.stdout.write("%s" % str(DEVICE_PREFIX + str(d_id)))
-  return 0
 
 
 def detach(env):
-  """Unmap a vlmc device from the Image it is mapped to
+    """Unmap a vlmc device from the Image it is mapped to
 
-  This function unmaps an vlmc device from the Image it is mapped to.
-  It is idempotent if the mapping doesn't exist at all.
-  """
-  name, _, _ = env
+    This function unmaps an vlmc device from the Image it is mapped to.
+    It is idempotent if the mapping doesn't exist at all.
+    """
+    name, _, _ = env
 
-#try:
-  # Check if the mapping already exists
-  d_id=vlmc.is_mapped(name)
-  if d_id:
-    # The mapping exists. Unmap the vlmc device.
-    vlmc.unmap_volume(name=str(DEVICE_PREFIX + str(d_id)))
-  #assert(vlmc.is_mapped(name) == None)
-  return 0
-#except Error as e:
-#  sys.stderr.write(str(e)+'\n')
-#  return -1
+    #try:
+    # Check if the mapping already exists
+    d_id = vlmc.is_mapped(name)
+    if d_id:
+        # The mapping exists. Unmap the vlmc device.
+        vlmc.unmap_volume(name=str(DEVICE_PREFIX + str(d_id)))
+    #assert(vlmc.is_mapped(name) == None)
+    return 0
+    #except Error as e:
+    #  sys.stderr.write(str(e)+'\n')
+    #  return -1
+
 
 def grow(env):
-  """Grow an existing vlmc Image
-  """
-  name, size, _ = env
+    """Grow an existing vlmc Image
+    """
+    name, size, _ = env
 
-  vlmc.resize(name=name, size=int(size))
-  return 0
+    vlmc.resize(name=name, size=int(size))
+    return 0
+
 
 def remove(env):
-  """ Delete a vlmc Image
-  """
+    """ Delete a vlmc Image
+    """
 
-  name, _, _ = env
+    name, _, _ = env
 
-  vlmc.remove(name=name)
-  return 0
+    vlmc.remove(name=name)
+    return 0
+
 
 def verify(env):
-  return 0
+    return 0
+
 
 def main():
-  env = ReadEnv()
-  if env is None:
-    sys.stderr.write("Wrong environment. Aborting...\n")
-    return 1
+    env = ReadEnv()
+    if env is None:
+        sys.stderr.write("Wrong environment. Aborting...\n")
+        return 1
 
-  loadrc(None)
+    loadrc(None)
 
-  try:
-    action = {
-      'attach': attach,
-      'create': create,
-      'detach': detach,
-      'grow'  : grow,
-      'remove': remove,
-      'verify': verify
-    }[os.path.basename(sys.argv[0])]
-  except:
-    sys.stderr.write("Op not supported\n")
-    return 1
+    try:
+        action = {
+            'attach': attach,
+            'create': create,
+            'detach': detach,
+            'grow': grow,
+            'remove': remove,
+            'verify': verify
+        }[os.path.basename(sys.argv[0])]
+    except:
+        sys.stderr.write("Op not supported\n")
+        return 1
 
-  try:
-    return action(env)
-  except Error as e:
-    sys.stderr.write(str(e) + '\n')
-    return 1
+    try:
+        return action(env)
+    except Error as e:
+        sys.stderr.write(str(e) + '\n')
+        return 1
 
 if __name__ == "__main__":
     sys.exit(main())
