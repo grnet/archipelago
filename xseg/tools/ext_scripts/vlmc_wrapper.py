@@ -40,6 +40,8 @@ import os
 import sys
 
 from ganeti import utils
+from archipelago.common import Error, DEVICE_PREFIX, loadrc
+from archipelago import vlmc as vlmc
 
 
 def ReadEnv():
@@ -63,72 +65,9 @@ def ReadEnv():
 def create(env):
   """Create a new vlmc Image
   """
-  sys.stderr.write('Creation started...\n')
-
   name, size, origin = env
-
-  cmd = ["vlmc", "create", "%s" % name, "--size", "%s" % size]
-  if origin:
-     cmd.extend(["--snap", origin])
-
-  sys.stderr.write('Before RunCmd')
-  result = utils.RunCmd(cmd)
-  sys.stderr.write('After RunCmd')
-
-  if result.failed:
-    sys.stderr.write('vlmc creation failed (%s): %s\n' %
-                     (result.fail_reason, result.output))
-    return 1 
-
+  vlmc.create(name=name, size=int(size), snap=origin)
   return 0
-
-def _ParseVlmcShowmappedOutput(output, volume_name):
-  """Parse the output of `vlmc showmapped'.
-
-  This method parses the output of `vlmc showmapped' and returns
-  the vlmc block device path (e.g. /dev/xsegbd0) that matches the
-  given vlmc volume.
-
-  """
-  allfields = 5
-  volumefield = 2
-  devicefield = 4
-
-  field_sep = "\t"
-
-  lines = output.splitlines()
-  splitted_lines = map(lambda l: l.split(field_sep), lines)
-
-  # Check empty output.
-  if not splitted_lines:
-    sys.stderr.write("vlmc showmapped returned empty output")
-    sys.exit(1)
-
-  # Check showmapped header line, to determine number of fields.
-  field_cnt = len(splitted_lines[0])
-  if field_cnt != allfields:
-    sys.stderr.write("Cannot parse vlmc showmapped output because its format"
-                " seems to have changed; expected %s fields, found %s" % 
-		(allfields, field_cnt))
-    sys.exit(1)
-
-  matched_lines = \
-    filter(lambda l: len(l) == allfields and l[volumefield] == volume_name,
-           splitted_lines)
-
-  if len(matched_lines) > 1:
-    sys.stderr.write("The vlmc volume %s is mapped more than once."
-                " This shouldn't happen, try to unmap the extra"
-                " devices manually." % volume_name)
-    sys.exit(1) 
-
-  if matched_lines:
-    # vlmc block device found. Return it.
-    dev = matched_lines[0][devicefield]
-    return dev
-
-  # The given volume is not mapped.
-  return None
 
 def attach(env):
   """Map an existing vlmc Image to a block device
@@ -141,44 +80,18 @@ def attach(env):
   name, _, _ = env
 
   # Check if the mapping already exists
-  cmd = ["vlmc", "showmapped"]
-  result = utils.RunCmd(cmd)
-  if result.failed:
-    sys.stderr.write("vlmc showmapped failed (%s): %s" %
-                     (result.fail_reason, result.output))
-    return 1
-
-  dev = _ParseVlmcShowmappedOutput(result.output, name)
-  if dev:
+  d_id=vlmc.is_mapped(name)
+  if d_id:
     # The mapping exists. Return it.
-    sys.stdout.write("%s" % str(dev))
+    sys.stdout.write("%s" % str(DEVICE_PREFIX + str(d_id)))
     return 0
-
   # The mapping doesn't exist. Create it.
-  map_cmd = ["vlmc", "map", name]
-  result = utils.RunCmd(map_cmd)
-  if result.failed:
-    sys.stderr.write("vlmc map failed (%s): %s" %
-                (result.fail_reason, result.output))
-    return 1
-
-  # Find the corresponding vlmc device.
-  showmap_cmd = ["vlmc", "showmapped"]
-  result = utils.RunCmd(showmap_cmd)
-  if result.failed:
-    sys.stderr.write("vlmc map succeeded, but showmapped failed (%s): %s" %
-                (result.fail_reason, result.output))
-    return 1
-
-  dev = _ParseVlmcShowmappedOutput(result.output, name)
-
-  if not dev:
-    sys.stderr.write("vlmc map succeeded, but could not find the vlmc block"
-                " device in output of showmapped, for volume: %s" % name)
-
+  d_id = vlmc.map_volume(name=name)
   # The device was successfully mapped. Return it.
-  sys.stdout.write("%s" % str(dev))
+  #maybe assert (d_id == vlmc.is_mapped(name)
+  sys.stdout.write("%s" % str(DEVICE_PREFIX + str(d_id)))
   return 0
+
 
 def detach(env):
   """Unmap a vlmc device from the Image it is mapped to
@@ -188,39 +101,24 @@ def detach(env):
   """
   name, _, _ = env
 
+#try:
   # Check if the mapping already exists
-  cmd = ["vlmc", "showmapped"]
-  result = utils.RunCmd(cmd)
-  if result.failed:
-    sys.stderr.write("vlmc showmapped failed (%s): %s" %
-                     (result.fail_reason, result.output))
-    return 1
-
-  dev = _ParseVlmcShowmappedOutput(result.output, name)
-
-  if dev:
+  d_id=vlmc.is_mapped(name)
+  if d_id:
     # The mapping exists. Unmap the vlmc device.
-    unmap_cmd = ["vlmc", "unmap", "%s" % dev]
-    result = utils.RunCmd(unmap_cmd)
-    if result.failed:
-      sys.stderr.write("vlmc unmap failed (%s): %s",
-                  result.fail_reason, result.output)
-
+    vlmc.unmap_volume(name=str(DEVICE_PREFIX + str(d_id)))
+  #assert(vlmc.is_mapped(name) == None)
   return 0
+#except Error as e:
+#  sys.stderr.write(str(e)+'\n')
+#  return -1
 
 def grow(env):
   """Grow an existing vlmc Image
   """
   name, size, _ = env
 
-  cmd = ["vlmc", "resize", "%s" % name, "--size", "%s" % size]
-
-  result = utils.RunCmd(cmd)
-  if result.failed:
-    sys.stderr.write('vlmc resize failed (%s): %s\n' %
-                     (result.fail_reason, result.output))
-    return 1
-
+  vlmc.resize(name=name, size=int(size))
   return 0
 
 def remove(env):
@@ -229,15 +127,7 @@ def remove(env):
 
   name, _, _ = env
 
-  cmd = ["vlmc", "rm", "%s" % name]
-
-  result = utils.RunCmd(cmd)
-  if result.failed:
-    sys.stderr.write("Can't remove Image %s from cluster with vlmc rm: "
-                     "%s - %s" % 
-                     (name, result.fail_reason, result.output))
-    return 1
-
+  vlmc.remove(name=name)
   return 0
 
 def verify(env):
@@ -249,17 +139,25 @@ def main():
     sys.stderr.write("Wrong environment. Aborting...\n")
     return 1
 
+  loadrc(None)
+
   try:
-    return {
+    action = {
       'attach': attach,
       'create': create,
       'detach': detach,
       'grow'  : grow,
       'remove': remove,
       'verify': verify
-    }[os.path.basename(sys.argv[0])](env)
+    }[os.path.basename(sys.argv[0])]
   except:
-    sys.stderr.write("Op not supported")
+    sys.stderr.write("Op not supported\n")
+    return 1
+
+  try:
+    return action(env)
+  except Error as e:
+    sys.stderr.write(str(e) + '\n')
     return 1
 
 if __name__ == "__main__":
