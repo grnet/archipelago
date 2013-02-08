@@ -185,7 +185,6 @@ setup(
     maintainer='Filippos Giannakos',
     maintainer_email='philipgianr@grnet.gr',
 
-    # namespace_packages = ['synnefo', 'synnefo.versions'],
     packages=PACKAGES,
     package_dir={'': PACKAGES_ROOT},
     include_package_data=True,
