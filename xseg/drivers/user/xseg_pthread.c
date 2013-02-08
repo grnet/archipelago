@@ -396,19 +396,19 @@ static struct xseg_type xseg_pthread = {
 };
 
 int pthread_init_signal_desc(struct xseg *xseg, void *sd)
-{       
+{
 	struct pthread_signal_desc *psd = (struct pthread_signal_desc *)sd;
-	xpool_init(&psd->waiters, MAX_WAITERS, &psd->bufs);
+	xpool_init(&psd->waiters, MAX_WAITERS, psd->bufs);
 	xpool_clear(&psd->waiters, 1);
 	return 0;
-}       
+}
 
 void pthread_quit_signal_desc(struct xseg *xseg, void *sd)
-{       
+{
 	struct pthread_signal_desc *psd = (struct pthread_signal_desc *)sd;
 	xpool_clear(&psd->waiters, 1);
 	return;
-}           
+}
 
 void * pthread_alloc_data(struct xseg *xseg)
 {
