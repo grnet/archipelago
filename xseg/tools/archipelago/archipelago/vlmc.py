@@ -40,33 +40,56 @@ from binascii import hexlify
 
 from .common import *
 
+
 @exclusive
-def showmapped():
+def get_mapped():
     try:
         devices = os.listdir(os.path.join(XSEGBD_SYSFS, "devices/"))
     except:
         if loaded_module(xsegbd):
             raise Error("Cannot list %s/devices/" % XSEGBD_SYSFS)
         else:
-            return 0
-
-    print "id\tpool\timage\tsnap\tdevice"
-    if not devices:
-        print "No volumes mapped\n"
-        return 0
+            return None
     try:
+        mapped = []
         for f in devices:
             d_id = open(XSEGBD_SYSFS + "devices/" + f + "/id").read().strip()
             target = open(XSEGBD_SYSFS + "devices/"+ f + "/target").read().strip()
+            mapped.append((d_id, target))
 
-            print "%s\t%s\t%s\t%s\t%s" % (d_id, '-', target, '-', DEVICE_PREFIX +
-            d_id)
     except Exception, reason:
         raise Error(reason)
-    return len(devices)
+
+    return mapped
+
+
+def showmapped():
+    mapped = get_mapped()
+    if not mapped:
+        print "No volumes mapped"
+        print ""
+        return 0
+
+    print "id\timage\t\tdevice"
+    for m in mapped:
+        print "%s\t%s\t%s" % (m[0], m[1], DEVICE_PREFIX + m[0])
+
+    return len(mapped)
 
 def showmapped_wrapper(**kwargs):
     showmapped()
+
+def is_mapped(volume):
+    mapped = get_mapped()
+    if not mapped:
+        return None
+
+    for m in mapped:
+        d_id = m[0]
+        target = m[1]
+        if target == volume:
+            return d_id
+    return None
 
 
 @exclusive
