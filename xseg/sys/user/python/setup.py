@@ -198,9 +198,5 @@ setup(
     dependency_links=['http://docs.dev.grnet.gr/pypi'],
 
     entry_points={
-        'console_scripts': [
-            'archipelago = archipelago.cli:main',
-            'vlmc = archipelago.cli:main',
-        ],
     }
 )
