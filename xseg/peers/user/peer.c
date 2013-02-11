@@ -448,12 +448,11 @@ int peerd_start_threads(struct peerd *peer)
 		peer->thread[i].arg = NULL;
 	}
 
+	if (peer->interactive_func)
+		peer->interactive_func();
 	for (i = 0; i < nr_threads; i++) {
 		pthread_join(peer->thread[i].tid, NULL);
 	}
-	//?: Is this re-ordering acceptable?
-	if (peer->interactive_func)
-		peer->interactive_func();
 
 	return 0;
 }
@@ -799,12 +798,10 @@ int main(int argc, char *argv[])
 	r = custom_peer_init(peer, argc, argv);
 	if (r < 0)
 		goto out;
-#ifdef MT
+#if defined(MT)
 	//TODO err check
 	peerd_start_threads(peer);
-#endif
-
-#ifdef ST_THREADS
+#elif defined(ST_THREADS)
 	st_thread_t st = st_thread_create(peerd_loop, peer, 1, 0);
 	r = st_thread_join(st, NULL);
 #else
