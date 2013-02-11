@@ -414,7 +414,7 @@ def mapinfo(name, verbose=False, **kwargs):
     if len(name) < 6:
         raise Error("Name should have at least len 6")
 
-    if STORAGE == "rados":
+    if config['STORAGE'] == "rados":
         import rados
         cluster = rados.Rados(conffile=config['CEPH_CONF_FILE'])
         cluster.connect()
