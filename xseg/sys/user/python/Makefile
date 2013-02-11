@@ -95,5 +95,4 @@ clean:
 	rm -rf build/
 	rm -rf python_xseg.egg-info/
 	rm -f xseg.xml xprotocol.xml xseg/xseg_api.py xseg/xseg_api.pyc \
-		xseg/xprotocol.py xseg/xprotocol.pyc xseg/__init__.pyc  \
-		xseg/version.py
+		xseg/xprotocol.py xseg/xprotocol.pyc xseg/__init__.pyc  
