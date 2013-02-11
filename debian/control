@@ -4,6 +4,7 @@ Priority: extra
 Maintainer: Filippos Giannakos <philipgian@grnet.gr>
 Build-Depends: debhelper (>= 7.0.50~), dkms(>=2.1.0.0), python
 Standards-Version: 3.9.1
+X-Python-Version: >=2.6
 
 Package: libxseg0
 Architecture: amd64
