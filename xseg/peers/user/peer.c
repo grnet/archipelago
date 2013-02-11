@@ -119,20 +119,6 @@ inline static int wake_up_next_thread(struct peerd *peer)
  * extern is needed if this function is going to be called by another file
  * such as bench-xseg.c
  */
-inline extern int isTerminate()
-{
-/* ta doesn't need to be taken into account, because the main loops
- * doesn't check the terminated flag if ta is not 0.
- */
-	/*
-#ifdef ST_THREADS
-	return (!ta & terminated);
-#else
-	return terminated;
-#endif
-	*/
-	return terminated;
-}
 
 void signal_handler(int signal)
 {
@@ -412,18 +398,7 @@ int check_ports(struct peerd *peer)
 }
 
 #ifdef MT
-int thread_execute(struct peerd *peer, void (*func)(void *arg), void *arg)
-{
-	struct thread *t = alloc_thread(peer);
-	if (t) {
-		t->func = func;
-		t->arg = arg;
-		wake_up_thread(t);
-		return 0;
-	} else
-		// we could hijack a thread
-		return -1;
-}
+static int peerd_loop(void *arg);
 
 static void* thread_loop(void *arg)
 {
@@ -437,20 +412,9 @@ static void* thread_loop(void *arg)
 	uint64_t threshold=1000/(1 + portno_end - portno_start);
 
 	XSEGLOG2(&lc, D, "thread %u\n",  (unsigned int) (t- peer->thread));
-
 	XSEGLOG2(&lc, I, "Thread %u has tid %u.\n", (unsigned int) (t- peer->thread), pid);
 	xseg_init_local_signal(xseg, peer->portno_start);
 	for (;!(isTerminate() && xq_count(&peer->free_reqs) == peer->nr_ops);) {
-		XSEGLOG("Head of loop.\n");
-		if (t->func) {
-			XSEGLOG2(&lc, D, "Thread %u executes function\n", (unsigned int) (t- peer->thread));
-			xseg_cancel_wait(xseg, peer->portno_start);
-			t->func(t->arg);
-			t->func = NULL;
-			t->arg = NULL;
-			continue;
-		}
-
 		for(loops =  threshold; loops > 0; loops--) {
 			if (loops == 1)
 				xseg_prepare_wait(xseg, peer->portno_start);
@@ -476,11 +440,21 @@ int peerd_start_threads(struct peerd *peer)
 		peer->thread[i].peer = peer;
 		pthread_cond_init(&peer->thread[i].cond,NULL);
 		pthread_mutex_init(&peer->thread[i].lock, NULL);
-		pthread_create(&peer->thread[i].tid, NULL, thread_loop, (void *)(peer->thread + i));
+		if (peer->custom_peerd_loop)
+			pthread_create(&peer->thread[i].tid, NULL, peer->custom_peerd_loop, (void *)(peer->thread + i));
+		else
+			pthread_create(&peer->thread[i].tid, NULL, peerd_loop, (void *)(peer->thread + i));
 		peer->thread[i].func = NULL;
 		peer->thread[i].arg = NULL;
-
 	}
+
+	for (i = 0; i < nr_threads; i++) {
+		pthread_join(peer->thread[i].tid, NULL);
+	}
+	//?: Is this re-ordering acceptable?
+	if (peer->interactive_func)
+		peer->interactive_func();
+
 	return 0;
 }
 #endif
@@ -508,21 +482,19 @@ int defer_request(struct peerd *peer, struct peer_req *pr)
 	return 0;
 }
 
-static int peerd_loop(struct peerd *peer)
+static int peerd_loop(void *arg)
 {
 #ifdef MT
-	int i;
-	if (peer->interactive_func)
-		peer->interactive_func();
-	for (i = 0; i < peer->nr_threads; i++) {
-		pthread_join(peer->thread[i].tid, NULL);
-	}
+	struct thread *t = (struct thread *) arg;
+	struct peerd *peer = t->peer;
 #else
+	struct peerd *peer = (struct peerd *) arg;
+#endif
 	struct xseg *xseg = peer->xseg;
 	xport portno_start = peer->portno_start;
 	xport portno_end = peer->portno_end;
-	uint64_t threshold=1000/(1 + portno_end - portno_start);
 	pid_t pid =syscall(SYS_gettid);
+	uint64_t threshold=1000/(1 + portno_end - portno_start);
 	uint64_t loops;
 
 	XSEGLOG2(&lc, I, "Peer has tid %u.\n", pid);
@@ -537,16 +509,18 @@ static int peerd_loop(struct peerd *peer)
 #ifdef ST_THREADS
 		if (ta){
 			st_sleep(0);
-		} else {
-#endif
-			XSEGLOG2(&lc, I, "Peer goes to sleep\n");
-			xseg_wait_signal(xseg, 10000000UL);
-			xseg_cancel_wait(xseg, peer->portno_start);
-			XSEGLOG2(&lc, I, "Peer woke up\n");
-#ifdef ST_THREADS
+			continue;
 		}
 #endif
+		XSEGLOG2(&lc, I, "Peer goes to sleep\n");
+		xseg_wait_signal(xseg, 10000000UL);
+		xseg_cancel_wait(xseg, peer->portno_start);
+		XSEGLOG2(&lc, I, "Peer woke up\n");
 	}
+#ifdef MT
+	wake_up_next_thread(peer);
+	custom_peer_finalize(peer);
+#else
 	custom_peer_finalize(peer);
 	xseg_quit_local_signal(xseg, peer->portno_start);
 #endif
