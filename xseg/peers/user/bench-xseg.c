@@ -133,6 +133,9 @@ int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 	if (!block_size[0])
 		strcpy(block_size,"4k");
 
+	if (!prefs->iodepth)
+		prefs->iodepth = 1;
+
 	prefs->bs = str2num(block_size);
 	if (!prefs->bs) {
 		XSEGLOG2(&lc, E, "Invalid syntax: %s\n", block_size);
@@ -202,8 +205,12 @@ int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 		perror("malloc");
 		return -1;
 	}
+	memset(prefs->total_tm, 0, sizeof(struct timer));
+	memset(prefs->get_tm, 0, sizeof(struct timer));
+	memset(prefs->sub_tm, 0, sizeof(struct timer));
+	memset(prefs->rec_tm, 0, sizeof(struct timer));
 
-	peer->custom_peerd_loop = custom_peerd_loop;
+	peer->peerd_loop = custom_peerd_loop;
 	peer->priv = (void *) prefs;
 	return 0;
 
@@ -224,16 +231,20 @@ int send_request(struct peerd *peer, struct bench *prefs)
 
 	int r;
 	uint32_t targetlen=10; //FIXME: handle it better
-	uint64_t size = prefs->os;
+	uint64_t size = prefs->bs;
 
 	//srcport and dstport must already be provided by the user.
 	//returns struct xseg_request with basic initializations
+	XSEGLOG2(&lc, I, "Get request %lu\n", prefs->get_tm->completed);
+	timer_start(prefs->get_tm);
 	req = xseg_get_request(xseg, srcport, dstport, X_ALLOC);
 	if (!req) {
 		fprintf(stderr, "No request\n");
 		return -1;
 	}
+	timer_stop(prefs->get_tm);
 
+	XSEGLOG2(&lc, I, "Prepare request\n");
 	//Allocate enough space for the data and the target's name
 	r = xseg_prep_request(xseg, req, targetlen, size);
 	if (r < 0) {
@@ -257,6 +268,7 @@ int send_request(struct peerd *peer, struct bench *prefs)
 	req->op = X_WRITE;
 #endif
 
+	XSEGLOG2(&lc, I, "Submit request %lu\n", prefs->sub_tm->completed);
 	//Submit the request from the source port to the target port
 	timer_start(prefs->sub_tm);
 	p = xseg_submit(xseg, req, srcport, X_ALLOC);
@@ -265,7 +277,7 @@ int send_request(struct peerd *peer, struct bench *prefs)
 		return -1;
 	}
 	timer_stop(prefs->sub_tm);
-
+	timer_start(prefs->rec_tm);
 	//Send SIGIO to the process that has binded this port to inform that
 	//IO is possible
 	xseg_signal(xseg, p);
@@ -277,38 +289,52 @@ int send_request(struct peerd *peer, struct bench *prefs)
  * This function substitutes the default peerd_loop of peer.c.
  * It's plugged to struct peerd at custom peer's initialisation
  */
-int custom_peerd_loop(struct peerd *peer)
+int custom_peerd_loop(void *arg)
 {
 #ifdef MT
-	int i;
-	if (peer->interactive_func)
-		peer->interactive_func();
-	for (i = 0; i < peer->nr_threads; i++) {
-		pthread_join(peer->thread[i].tid, NULL);
-	}
+	struct thread *t = (struct thread *) arg;
+	struct peerd *peer = t->peer;
+	char *id = t->arg;
 #else
+	struct peerd *peer = (struct peerd *) arg;
+	char id[4] = {'P','e','e','r'};
+#endif
 	struct xseg *xseg = peer->xseg;
 	struct bench *prefs = peer->priv;
-
 	xport portno_start = peer->portno_start;
 	xport portno_end = peer->portno_end;
 	uint64_t threshold=1000/(1 + portno_end - portno_start);
 	pid_t pid =syscall(SYS_gettid);
-	XSEGLOG2(&lc, I, "Peer has tid %u.\n", pid);
+
+	XSEGLOG2(&lc, I, "%s has tid %u.\n",id, pid);
 	xseg_init_local_signal(xseg, peer->portno_start);
 	uint64_t loops;
 
-	uint64_t remaining = prefs->ts;
+	timer_start(prefs->total_tm);
 
 	while (!isTerminate()
 			&& xq_count(&peer->free_reqs) == peer->nr_ops
-			&& remaining) {
+			&& prefs->rec_tm->completed != prefs->ts / prefs->bs ) {
+#if 0
+		//#pragma GCC push_options
+		//#pragma GCC optimize ("O0")
+		timer_start(prefs->total_tm);
+		//for(int i = 0; i<1000; i++){}
+		/*while(prefs->sub_tm->completed < 10000) {
+			timer_start(prefs->sub_tm);
+			timer_stop(prefs->sub_tm);
+		}*/
+		usleep(500000);
+		timer_stop(prefs->total_tm);
+		break;
+		//#pragma GCC pop_options
 
-		while (prefs->sub_tm->completed - prefs->sub_tm->completed <
+		while (prefs->sub_tm->completed - prefs->rec_tm->completed <
 				prefs->iodepth){
+			XSEGLOG2(&lc, I, "Start sending new request\n");
 			send_request(peer, prefs);
 		}
-
+#endif
 		for (loops = threshold; loops > 0; loops--) {
 			if (loops == 1)
 				xseg_prepare_wait(xseg, peer->portno_start);
@@ -321,32 +347,59 @@ int custom_peerd_loop(struct peerd *peer)
 			continue;
 		}
 #endif
-		XSEGLOG2(&lc, I, "Peer goes to sleep\n");
+		XSEGLOG2(&lc, I, "%s goes to sleep\n",id);
 		xseg_wait_signal(xseg, 10000000UL);
 		xseg_cancel_wait(xseg, peer->portno_start);
-		XSEGLOG2(&lc, I, "Peer woke up\n");
+		XSEGLOG2(&lc, I, "%s woke up\n", pid);
 	}
-	custom_peer_finalize(peer);
-	xseg_quit_local_signal(xseg, peer->portno_start);
-#endif
 	return 0;
 }
 
 void custom_peer_finalize(struct peerd *peer)
 {
+	struct bench *prefs = peer->priv;
+	unsigned int s, ms, us, ns;
+
+	if (!prefs->total_tm->completed)
+		timer_stop(prefs->total_tm);
+
+	struct timespec tm = prefs->total_tm->sum;
+	ns = tm.tv_nsec % 1000;
+	tm.tv_nsec /= 1000;
+	us = tm.tv_nsec % 1000;
+	ms = tm.tv_nsec / 1000;
+	s = tm.tv_sec;
+
+	printf("\n");
+	printf("          Total time spent\n");
+	printf("================================\n");
+	printf("      |-s-||-ms-|-us-|-ns-|\n");
+	printf("Time:  %03u, %03u  %03u  %03u\n", s, ms, us, ns);
 	return;
+}
+
+
+void handle_received(struct peerd *peer, struct peer_req *pr)
+{
+	//FIXME: handle null pointer
+	struct bench *prefs = peer->priv;
+	struct timer *rec = prefs->rec_tm;
+
+	timer_stop(rec);
 }
 
 int dispatch(struct peerd *peer, struct peer_req *pr, struct xseg_request *req,
 		enum dispatch_reason reason)
 {
-	if (canDefer(peer))
-		defer_request(peer, pr);
-	else {
-//		printf("completing req id: %u (remote %u)\n", (unsigned int) (pr - peer->peer_reqs), (unsigned int) pr->req->priv);
-//		nanosleep(&delay,NULL);
-//		print_req(peer->xseg, pr->req);
-		complete(peer, pr);
+	switch (reason) {
+		case dispatch_accept:
+			//This is wrong, benchmarking peer should not accept requests,
+			//only receive them.
+			complete(peer, pr);
+		case dispatch_receive:
+			handle_received(peer, pr);
+		default:
+			fail(peer, pr);
 	}
 	return 0;
 }

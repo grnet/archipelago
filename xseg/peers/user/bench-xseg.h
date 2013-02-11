@@ -67,7 +67,7 @@ struct timer {
 	unsigned long completed;
 };
 
-int custom_peerd_loop(struct peerd *peer);
+int custom_peerd_loop(void *arg);
 
 void timer_start(struct timer *sample_req);
 void timer_stop(struct timer *sample_tm);

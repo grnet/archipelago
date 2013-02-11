@@ -46,37 +46,39 @@
 #include <bench-xseg.h>
 #include <limits.h>
 
+#define SEC 1000000000 //1sec = 10^9 nsec
+#define SEC2 (uint64_t) SEC*SEC //1sec*1sec = 10^18 nsec^2
+
 void timer_start(struct timer *timer)
 {
 	//We need a low-latency way to get current time in nanoseconds.
 	//Is this way the best way?
-	clock_gettime(CLOCK_MONOTONIC, &timer->start_time);
+	//RAW means that we trust the system's oscilator isn't screwed up
+	clock_gettime(CLOCK_MONOTONIC_RAW, &timer->start_time);
 }
 
 void timer_stop(struct timer *timer)
 {
 	struct timespec end_time;
 	struct timespec start_time = timer->start_time;
-	struct timespec elapsed_time;
+	volatile struct timespec elapsed_time;
 	struct timespec2 elapsed_time_sq;
 
-	clock_gettime(CLOCK_MONOTONIC, &end_time);
+	clock_gettime(CLOCK_MONOTONIC_RAW, &end_time);
 
 	//Get elapsed time by subtracting start time from end time.
-	//Also, be very cautious with negative values
+	//Subtraction can result to a negative value, so we check for both cases
 	if (start_time.tv_nsec > end_time.tv_nsec) {
-		//UGLY: Is there a better way to handle carrying?
-		elapsed_time.tv_nsec = (volatile long)
-			LONG_MAX - start_time.tv_nsec + end_time.tv_nsec + 1;
+		elapsed_time.tv_nsec = SEC - start_time.tv_nsec + end_time.tv_nsec;
 		elapsed_time.tv_sec = end_time.tv_sec - start_time.tv_sec - 1;
 	} else {
 		elapsed_time.tv_nsec = end_time.tv_nsec - start_time.tv_nsec;
 		elapsed_time.tv_sec = end_time.tv_sec - start_time.tv_sec;
 	}
 
-	//Add the elapsed time to the current sum for this timer
-	if (LONG_MAX - elapsed_time.tv_nsec < timer->sum.tv_nsec){
-		//UGLY: Is there a better way to handle overflows?
+	//Add the elapsed time to the current sum for this timer.
+	//For accuracy, nanoseconds' sum has to be always less that 10^9
+	if (elapsed_time.tv_nsec + timer->sum.tv_nsec > SEC){
 		timer->sum.tv_nsec += elapsed_time.tv_nsec;
 		timer->sum.tv_sec += elapsed_time.tv_sec + 1;
 	} else {
@@ -85,12 +87,13 @@ void timer_stop(struct timer *timer)
 	}
 
 	//Add elapsed_time^2 to the current sum of squares for this timer
-	//Needed to calculate standard deviation.
+	//This is needed to calculate standard deviation.
+	//As above, the sum of square of nanoseconds has to be less than 10^18
 	elapsed_time_sq.tv_sec2 = elapsed_time.tv_sec*elapsed_time.tv_sec;
 	elapsed_time_sq.tv_nsec2 = elapsed_time.tv_nsec*elapsed_time.tv_nsec;
-	if (UINT64_MAX - elapsed_time_sq.tv_nsec2 < timer->sum_sq.tv_nsec2) {
-		//UGLY: Is there a better way to handle overflows?
-		timer->sum_sq.tv_nsec2 += elapsed_time_sq.tv_nsec2;
+	if (elapsed_time_sq.tv_nsec2 + timer->sum_sq.tv_nsec2 > SEC2) {
+		timer->sum_sq.tv_nsec2 =
+			(timer->sum_sq.tv_nsec2 + elapsed_time_sq.tv_nsec2) % SEC2;
 		timer->sum_sq.tv_sec2 += elapsed_time_sq.tv_sec2 + 1;
 	} else {
 		timer->sum_sq.tv_nsec2 += elapsed_time_sq.tv_nsec2;
@@ -99,6 +102,10 @@ void timer_stop(struct timer *timer)
 
 	//TODO: check if we need to make it volatile
 	timer->completed++;
+
+	printf("Start: %lu s %lu ns\n", start_time.tv_sec, start_time.tv_nsec);
+	printf("Elpsd: %lu s %lu ns\n", elapsed_time.tv_sec, elapsed_time.tv_nsec);
+	printf("End:   %lu s %lu ns\n", end_time.tv_sec, end_time.tv_nsec);
 }
 
 
