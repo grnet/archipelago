@@ -298,9 +298,10 @@ static uint32_t calc_nr_obj(struct xseg_request *req)
 	return r;
 }
 
-/* hexlify function. 
+/* hexlify function.
  * Unsafe. Doesn't check if data length is odd!
  */
+
 static void hexlify(unsigned char *data, char *hex)
 {
 	int i;
@@ -344,6 +345,39 @@ static void unhexlify(char *hex, unsigned char *data)
 		data[i] |= c & 0x0F;
 	}
 }
+
+void merkle_hash(unsigned char *hashes, unsigned long len,
+		unsigned char hash[SHA256_DIGEST_SIZE])
+{
+	uint32_t i, l, s = 2;
+	uint32_t nr = len/SHA256_DIGEST_SIZE;
+	unsigned char *buf;
+	unsigned char tmp_hash[SHA256_DIGEST_SIZE];
+
+	if (!nr){
+		SHA256(hashes, 0, hash);
+		return;
+	}
+	if (nr == 1){
+		memcpy(hash, hashes, SHA256_DIGEST_SIZE);
+		return;
+	}
+	while (s < nr)
+		s = s << 1;
+	buf = malloc(sizeof(unsigned char)* SHA256_DIGEST_SIZE * s);
+	memcpy(buf, hashes, nr * SHA256_DIGEST_SIZE);
+	memset(buf + nr * SHA256_DIGEST_SIZE, 0, (s - nr) * SHA256_DIGEST_SIZE);
+	for (l = s; l > 1; l = l/2) {
+		for (i = 0; i < l; i += 2) {
+			SHA256(buf + (i * SHA256_DIGEST_SIZE),
+					2 * SHA256_DIGEST_SIZE, tmp_hash);
+			memcpy(buf + (i/2 * SHA256_DIGEST_SIZE),
+					tmp_hash, SHA256_DIGEST_SIZE);
+		}
+	}
+	memcpy(hash, buf, SHA256_DIGEST_SIZE);
+}
+
 /*
  * Maps handling functions
  */
@@ -2197,7 +2231,8 @@ static int do_snapshot(struct peer_req *pr, struct map *map)
 		v0_object_to_map(mn, buf+pos);
 		pos += v0_objectsize_in_map;
 	}
-	SHA256(buf, pos, sha);
+//	SHA256(buf, pos, sha);
+	merkle_hash(buf, pos, sha);
 	hexlify(sha, newvolumename);
 	strncpy(tmp_map.volume, newvolumename, newvolumenamelen);
 	tmp_map.volumelen = newvolumenamelen;
