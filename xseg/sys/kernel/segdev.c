@@ -117,7 +117,6 @@ int segdev_destroy_segment(struct segdev *dev)
 		goto out_unlock;
 
 	clear_bit(SEGDEV_READY, &dev->flags);
-	XSEGLOG("Usercount: %d", atomic_read(&dev->usercount));
 	ret = wait_event_interruptible(dev->wq, atomic_read(&dev->usercount) <= 1);
 	if (ret)
 		goto out_unlock;
@@ -144,7 +143,6 @@ struct segdev *segdev_get(int minor)
 
 	dev = &segdev;
 	atomic_inc(&dev->usercount);
-	XSEGLOG("Usercount: %d", atomic_read(&dev->usercount));
 	if (!test_bit(SEGDEV_READY, &dev->flags))
 		goto fail_busy;
 out:
@@ -161,7 +159,6 @@ EXPORT_SYMBOL(segdev_get);
 void segdev_put(struct segdev *dev)
 {
 	atomic_dec(&dev->usercount);
-	XSEGLOG("Usercount: %d", atomic_read(&dev->usercount));
 	wake_up(&dev->wq);
 	/* ain't all this too heavy ? */
 }
