@@ -93,7 +93,7 @@ struct peerd {
 	xport defer_portno;
 	struct peer_req *peer_reqs;
 	struct xq free_reqs;
-	int (*custom_peerd_loop)(struct peerd *peer);
+	int (*peerd_loop)(void *arg);
 	void *priv;
 #ifdef MT
 	uint32_t nr_threads;
