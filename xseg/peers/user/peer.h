@@ -122,7 +122,6 @@ void get_submits_stats();
 void get_responds_stats();
 void usage();
 void print_req(struct xseg *xseg, struct xseg_request *req);
-int isTerminate();
 int check_ports(struct peerd *peer);
 
 #ifdef MT
