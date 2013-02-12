@@ -357,7 +357,10 @@ int check_ports(struct peerd *peer)
 	for (i = portno_start; i <= portno_end; i++) {
 		accepted = NULL;
 		received = NULL;
+		//Shouldn't we just leave?
 		if (!isTerminate()) {
+			//Better way than alloc/free all the time?
+			//Cache the allocated peer_req?
 			pr = alloc_peer_req(peer);
 			if (pr) {
 				accepted = xseg_accept(xseg, i, X_NONBLOCK);
@@ -595,6 +598,8 @@ static struct peerd* peerd_init(uint32_t nr_ops, char* spec, long portno_start,
 	int i;
 	struct peerd *peer;
 	struct xseg_port *port;
+	void *sd = NULL;
+	xport p;
 
 #ifdef ST_THREADS
 	st_init();
@@ -635,24 +640,23 @@ malloc_fail:
 
 	peer->portno_start = (xport) portno_start;
 	peer->portno_end= (xport) portno_end;
-	port = xseg_bind_port(peer->xseg, peer->portno_start, NULL);
-	if (!port){
-		printf("cannot bind to port %u\n", (unsigned int) peer->portno_start);
-		return NULL;
-	}
 
-	xport p;
-	for (p = peer->portno_start + 1; p <= peer->portno_end; p++) {
-		struct xseg_port *tmp;
-		tmp = xseg_bind_port(peer->xseg, p, (void *)xseg_get_signal_desc(peer->xseg, port));
-		if (!tmp){
+	/*
+	 * Start binding ports from portno_start to portno_end.
+	 * The first port we bind will have its signal_desc initialized by xseg
+	 * and the same signal_desc will be used for all the other ports.
+	 */
+	for (p = peer->portno_start; p <= peer->portno_end; p++) {
+		port = xseg_bind_port(peer->xseg, p, sd);
+		if (!port){
 			printf("cannot bind to port %u\n", (unsigned int) p);
 			return NULL;
 		}
+		if (p == peer->portno_start)
+			sd = xseg_get_signal_desc(peer->xseg, port);
 	}
 
-	printf("Peer on ports  %u-%u\n", peer->portno_start,
-			peer->portno_end);
+	printf("Peer on ports  %u-%u\n", peer->portno_start, peer->portno_end);
 
 	for (i = 0; i < nr_ops; i++) {
 		peer->peer_reqs[i].peer = peer;
