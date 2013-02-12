@@ -548,7 +548,7 @@ def destroy_segment():
 
 def check_running(name, pid=None):
     for p in psutil.process_iter():
-        if p.name == name:
+        if p.name[0:len(name)] == name:
             if pid:
                 if pid == p.pid:
                     return pid
