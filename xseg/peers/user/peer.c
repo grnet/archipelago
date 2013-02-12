@@ -232,6 +232,11 @@ void log_pr(char *msg, struct peer_req *pr)
 	}
 }
 
+/*
+ * free_reqs is a queue that simply contains pointer offsets to the peer_reqs
+ * queue. If a pointer from peer_reqs is popped, we are certain that the
+ * associated memory in peer_reqs is free to use
+ */
 inline struct peer_req *alloc_peer_req(struct peerd *peer)
 {
 	xqindex idx = xq_pop_head(&peer->free_reqs, 1);
