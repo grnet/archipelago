@@ -536,7 +536,7 @@ static int generic_peerd_loop(void *arg)
 	for (;!(isTerminate() && xq_count(&peer->free_reqs) == peer->nr_ops);) {
 #ifdef MT
 		if (t->func) {
-			XSEGLOG2(&lc, D, "Thread %u executes function\n", (unsigned int) (t- peer->thread));
+			XSEGLOG2(&lc, D, "%s executes function\n", id);
 			xseg_cancel_wait(xseg, peer->portno_start);
 			t->func(t->arg);
 			t->func = NULL;
