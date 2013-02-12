@@ -286,7 +286,7 @@ int send_request(struct peerd *peer, struct bench *prefs)
 }
 
 /*
- * This function substitutes the default peerd_loop of peer.c.
+ * This function substitutes the default generic_peerd_loop of peer.c.
  * It's plugged to struct peerd at custom peer's initialisation
  */
 int custom_peerd_loop(void *arg)
@@ -315,26 +315,23 @@ int custom_peerd_loop(void *arg)
 	while (!isTerminate()
 			&& xq_count(&peer->free_reqs) == peer->nr_ops
 			&& prefs->rec_tm->completed != prefs->ts / prefs->bs ) {
-#if 0
-		//#pragma GCC push_options
-		//#pragma GCC optimize ("O0")
-		timer_start(prefs->total_tm);
-		//for(int i = 0; i<1000; i++){}
-		/*while(prefs->sub_tm->completed < 10000) {
-			timer_start(prefs->sub_tm);
-			timer_stop(prefs->sub_tm);
-		}*/
-		usleep(500000);
-		timer_stop(prefs->total_tm);
-		break;
-		//#pragma GCC pop_options
-
+#ifdef MT
+		if (t->func) {
+			XSEGLOG2(&lc, D, "%s executes function\n", id);
+			xseg_cancel_wait(xseg, peer->portno_start);
+			t->func(t->arg);
+			t->func = NULL;
+			t->arg = NULL;
+			continue;
+		}
+#endif
 		while (prefs->sub_tm->completed - prefs->rec_tm->completed <
 				prefs->iodepth){
 			XSEGLOG2(&lc, I, "Start sending new request\n");
 			send_request(peer, prefs);
 		}
-#endif
+
+		//Heart of peerd_loop. This loop is common for everyone.
 		for (loops = threshold; loops > 0; loops--) {
 			if (loops == 1)
 				xseg_prepare_wait(xseg, peer->portno_start);
@@ -350,7 +347,7 @@ int custom_peerd_loop(void *arg)
 		XSEGLOG2(&lc, I, "%s goes to sleep\n",id);
 		xseg_wait_signal(xseg, 10000000UL);
 		xseg_cancel_wait(xseg, peer->portno_start);
-		XSEGLOG2(&lc, I, "%s woke up\n", pid);
+		XSEGLOG2(&lc, I, "%s woke up\n", id);
 	}
 	return 0;
 }
