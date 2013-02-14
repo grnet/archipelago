@@ -222,8 +222,8 @@ assert_kv(xhashidx k, xhashidx v)
 */
 
 void
-xhash_init__(xhash_t *xhash, xhashidx size_shift, xhashidx minsize_shift, 
-		enum xhash_type type, bool vals)
+xhash_init__(xhash_t *xhash, xhashidx size_shift, xhashidx minsize_shift,
+		xhashidx limit, enum xhash_type type, bool vals)
 {
     xhashidx nr_items = 1UL << size_shift;
     xhashidx *kvs = (xhashidx *) ((char *) xhash + sizeof(struct xhash));
@@ -231,7 +231,7 @@ xhash_init__(xhash_t *xhash, xhashidx size_shift, xhashidx minsize_shift,
 
     XPTRSET(&xhash->kvs, kvs);
 
-    
+
     if (!vals) {
         for (i=0; i < nr_items; i++)
             kvs[i] = UNUSED;
@@ -250,6 +250,7 @@ out:
     xhash->dummies = xhash->used = 0;
     xhash->size_shift = size_shift;
     xhash->minsize_shift = minsize_shift;
+    xhash->limit = limit;
     xhash->type = type;
 
     ZEROSTAT(xhash->inserts);
@@ -269,7 +270,7 @@ get_alloc_size(xhashidx size_shift, bool vals)
 
 
 xhash_t *
-xhash_new__(xhashidx size_shift, xhashidx minsize_shift, 
+xhash_new__(xhashidx size_shift, xhashidx minsize_shift, xhashidx limit, 
 		enum xhash_type type, bool vals) 
 {
     struct xhash *xhash;
@@ -279,16 +280,18 @@ xhash_new__(xhashidx size_shift, xhashidx minsize_shift,
 	return NULL;
     }
 
-    xhash_init__(xhash, size_shift, minsize_shift, type, vals);
+    xhash_init__(xhash, size_shift, minsize_shift, limit, type, vals);
     
     return xhash;
 }
 
 
 xhash_t *
-xhash_resize__(struct xhash *xhash, xhashidx new_size_shift, bool vals)
+xhash_resize__(struct xhash *xhash, xhashidx new_size_shift, xhashidx new_limit,
+		bool vals)
 {
-    return xhash_new__(new_size_shift, xhash->minsize_shift, xhash->type, vals);
+    return xhash_new__(new_size_shift, xhash->minsize_shift, new_limit, 
+		    	xhash->type, vals);
 }
 
 int
@@ -382,9 +385,9 @@ xhash_get_alloc_size(xhashidx size_shift)
 }
 
 xhash_t *
-xhash_new(xhashidx minsize_shift, enum xhash_type type)
+xhash_new(xhashidx minsize_shift, xhashidx limit, enum xhash_type type)
 {
-    return xhash_new__(minsize_shift, minsize_shift, type, true);
+    return xhash_new__(minsize_shift, minsize_shift, limit,  type, true);
 }
 
 void xhash_free(struct xhash *xhash)
@@ -392,9 +395,10 @@ void xhash_free(struct xhash *xhash)
     xtypes_free(xhash);
 }
 
-void xhash_init(struct xhash *xhash, xhashidx minsize_shift, enum xhash_type type)
+void xhash_init(struct xhash *xhash, xhashidx minsize_shift, xhashidx limit,
+		enum xhash_type type)
 {
-	xhash_init__(xhash, minsize_shift, minsize_shift, type, true);
+	xhash_init__(xhash, minsize_shift, minsize_shift, limit, type, true);
 }
 
 /*
@@ -492,6 +496,8 @@ void xhash_insert__(struct xhash *xhash, xhashidx key, xhashidx val)
 
 int xhash_insert(struct xhash *xhash, xhashidx key, xhashidx val)
 {
+    if (xhash->limit && xhash->used >= xhash->limit)
+	return -XHASH_ENOSPC;
     if (grow_check(xhash))
         return -XHASH_ERESIZE;
     xhash_insert__(xhash, key, val);
@@ -517,15 +523,18 @@ int xhash_freql_update(struct xhash *xhash, xhashidx key, xhashidx val)
 }
 
 xhash_t *
-xhash_resize(xhash_t *xhash, xhashidx new_size_shift, xhash_t *new)
+xhash_resize(xhash_t *xhash, xhashidx new_size_shift, xhashidx new_limit,
+		xhash_t *new)
 {
     //XSEGLOG("Resizing xhash from %llu to %llu", xhash->size_shift, new_size_shift);
     xhashidx i;
     int f = !!new;
     if (!f)
-        new = xhash_new__(new_size_shift, xhash->minsize_shift, xhash->type, true);
+        new = xhash_new__(new_size_shift, xhash->minsize_shift, new_limit,
+				xhash->type, true);
     else
-        xhash_init__(new, new_size_shift, xhash->minsize_shift, xhash->type, true);
+        xhash_init__(new, new_size_shift, xhash->minsize_shift, new_limit,
+				xhash->type, true);
 
     if (!new)
 	    return NULL;
