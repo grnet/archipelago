@@ -57,12 +57,24 @@ void timer_start(struct timer *timer)
 	clock_gettime(CLOCK_MONOTONIC_RAW, &timer->start_time);
 }
 
-void timer_stop(struct timer *timer)
+void timer_stop(struct timer *timer, struct timespec *start)
 {
 	struct timespec end_time;
-	struct timespec start_time = timer->start_time;
 	volatile struct timespec elapsed_time;
 	struct timespec2 elapsed_time_sq;
+	struct timespec start_time;
+
+	/*
+	 * There are timers such as rec_tm whose start_time cannot be trusted and
+	 * the submission time is stored in other structs (e.g. struct
+	 * peer_request).
+	 * In this case, the submission time must be passed explicitly to this
+	 * function using the "start" argument.
+	 */
+	if (!start)
+		start_time = timer->start_time;
+	else
+		start_time = *start;
 
 	clock_gettime(CLOCK_MONOTONIC_RAW, &end_time);
 

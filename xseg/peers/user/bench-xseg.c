@@ -235,28 +235,27 @@ static int send_request(struct peerd *peer, struct bench *prefs)
 	xport p;
 
 	int r;
-	uint32_t targetlen=10; //FIXME: handle it better
+	uint32_t targetlen = 10; //FIXME: handle it better
 	uint64_t size = prefs->bs;
 
 	//srcport and dstport must already be provided by the user.
 	//returns struct xseg_request with basic initializations
-	XSEGLOG("Get request %lu\n", prefs->get_tm->completed);
+	XSEGLOG2(&lc, D, "Get request %lu\n", prefs->get_tm->completed);
 	timer_start(prefs->get_tm);
 	req = xseg_get_request(xseg, srcport, dstport, X_ALLOC);
 	if (!req) {
-		fprintf(stderr, "No request\n");
+		XSEGLOG2(&lc, W, "Cannot get request\n");
 		return -1;
 	}
-	timer_stop(prefs->get_tm);
+	timer_stop(prefs->get_tm, NULL);
 
-	XSEGLOG("Prepare request\n");
 	//Allocate enough space for the data and the target's name
+	XSEGLOG2(&lc, D, "Prepare request %lu\n", prefs->sub_tm->completed);
 	r = xseg_prep_request(xseg, req, targetlen, size);
 	if (r < 0) {
-		fprintf(stderr, "Cannot prepare request! (%lu, %llu)\n",
+		XSEGLOG2(&lc, W, "Cannot prepare request! (%lu, %llu)\n",
 			(unsigned long)targetlen, (unsigned long long)size);
-		xseg_put_request(xseg, req, srcport);
-		return -1;
+		goto put_xseg_request;
 	}
 
 #if 0
@@ -274,27 +273,58 @@ static int send_request(struct peerd *peer, struct bench *prefs)
 #endif
 
 	//Measure this?
-	XSEGLOG("Set req data\n");
+	XSEGLOG2(&lc, D, "Allocate peer request\n");
 	pr = alloc_peer_req(peer);
+	if (!pr) {
+		XSEGLOG2(&lc, W, "Cannot allocate peer request (%ld remaining)\n",
+				peer->nr_ops - xq_count(&peer->free_reqs));
+		goto put_xseg_request;
+	}
+	pr->peer = peer;
+	pr->portno = srcport;
+	pr->req = req;
+	pr->priv = malloc(sizeof(struct timespec));
+
+	XSEGLOG2(&lc, D, "Set request data\n");
 	r = xseg_set_req_data(xseg, req, pr);
+	if (r<0) {
+		XSEGLOG2(&lc, W, "Cannot set request data\n");
+		goto put_peer_request;
+	}
 
+	/*
+	 * Start measuring receive time.
+	 * When we receive a request, we need to have its submission time to
+	 * measure elapsed time. Thus, we memcpy its submission time to pr->priv.
+	 * QUESTION: Is this the fastest way?
+	 */
+	timer_start(prefs->rec_tm);
+	memcpy(pr->priv, &prefs->rec_tm->start_time, sizeof(struct timespec));
 
-	XSEGLOG("Submit request %lu\n", prefs->sub_tm->completed);
 	//Submit the request from the source port to the target port
+	XSEGLOG2(&lc, D, "Submit request %lu\n", prefs->sub_tm->completed);
+	//QUESTION: Can't we just use the submision time calculated previously?
 	timer_start(prefs->sub_tm);
 	p = xseg_submit(xseg, req, srcport, X_ALLOC);
 	if (p == NoPort) {
-		fprintf(stderr, "Cannot submit\n");
-		return -1;
+		XSEGLOG2(&lc, W, "Cannot submit request\n");
+		goto put_peer_request;
 	}
-	timer_stop(prefs->sub_tm);
+	timer_stop(prefs->sub_tm, NULL);
 
-	timer_start(prefs->rec_tm);
 	//Send SIGIO to the process that has binded this port to inform that
 	//IO is possible
 	xseg_signal(xseg, p);
 
 	return 0;
+
+put_peer_request:
+	free(pr->priv);
+	free_peer_req(peer, pr);
+put_xseg_request:
+	if (xseg_put_request(xseg, req, srcport))
+		XSEGLOG2(&lc, W, "Cannot put request\n");
+	return -1;
 }
 
 /*
@@ -317,6 +347,7 @@ int custom_peerd_loop(void *arg)
 	xport portno_end = peer->portno_end;
 	uint64_t threshold=1000/(1 + portno_end - portno_start);
 	pid_t pid =syscall(SYS_gettid);
+	int r;
 
 	XSEGLOG2(&lc, I, "%s has tid %u.\n",id, pid);
 	xseg_init_local_signal(xseg, peer->portno_start);
@@ -325,7 +356,8 @@ int custom_peerd_loop(void *arg)
 
 	timer_start(prefs->total_tm);
 
-	while (!isTerminate() && xq_count(&peer->free_reqs) == peer->nr_ops) {
+	//while (!isTerminate() && xq_count(&peer->free_reqs) == peer->nr_ops) {
+	while (!isTerminate()) {
 #ifdef MT
 		if (t->func) {
 			XSEGLOG2(&lc, D, "%s executes function\n", id);
@@ -339,8 +371,10 @@ int custom_peerd_loop(void *arg)
 send_request:
 		while (prefs->sub_tm->completed - prefs->rec_tm->completed <
 				prefs->iodepth){
-			XSEGLOG2(&lc, I, "Start sending new request\n");
-			send_request(peer, prefs);
+			XSEGLOG2(&lc, D, "Start sending new request\n");
+			r = send_request(peer, prefs);
+			if (r<0)
+				break;
 		}
 
 		//Heart of peerd_loop. This loop is common for everyone.
@@ -350,7 +384,7 @@ send_request:
 					return 0;
 				else
 					//If an old request has just been acked, the most sensible
-					//thing to do is immediately to send a new one
+					//thing to do is to immediately send a new one
 					goto send_request;
 			}
 		}
@@ -378,7 +412,7 @@ void custom_peer_finalize(struct peerd *peer)
 	unsigned int s, ms, us, ns;
 
 	if (!prefs->total_tm->completed)
-		timer_stop(prefs->total_tm);
+		timer_stop(prefs->total_tm, NULL);
 
 	struct timespec tm = prefs->total_tm->sum;
 	ns = tm.tv_nsec % 1000;
@@ -402,7 +436,26 @@ static void handle_received(struct peerd *peer, struct peer_req *pr)
 	struct bench *prefs = peer->priv;
 	struct timer *rec = prefs->rec_tm;
 
-	timer_stop(rec);
+	if (!pr->req) {
+		//This is a serious error, so we must stop
+		XSEGLOG2(&lc, E, "Received peer request with no xseg request");
+		terminated++;
+		return;
+	}
+
+	if (!pr->priv) {
+		XSEGLOG2(&lc, W, "Cannot find submission time of request");
+		return;
+	}
+
+	timer_stop(rec, pr->priv);
+
+	if (xseg_put_request(peer->xseg, pr->req, pr->portno))
+		XSEGLOG2(&lc, W, "Cannot put xseg request\n");
+
+	//QUESTION, can't we just keep the malloced memory for future use?
+	free(pr->priv);
+	free_peer_req(peer, pr);
 }
 
 int dispatch(struct peerd *peer, struct peer_req *pr, struct xseg_request *req,
@@ -412,6 +465,7 @@ int dispatch(struct peerd *peer, struct peer_req *pr, struct xseg_request *req,
 		case dispatch_accept:
 			//This is wrong, benchmarking peer should not accept requests,
 			//only receive them.
+			XSEGLOG2(&lc, W, "Bench peer should not accept requests\n");
 			complete(peer, pr);
 			break;
 		case dispatch_receive:

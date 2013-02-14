@@ -58,18 +58,27 @@ struct timespec2 {
 	uint64_t tv_nsec2;
 };
 
+/*
+ * struct timer fields
+ * ====================
+ * completed: number of completed requests
+ * start_time: submission time of a request
+ * sum: the sum of elapsed times of every completed request
+ * sum_sq: the sum of the squares of elapsed times
+ * insanity: benchmarking level, higher means that the request associated with
+ *           this timer is more trivial.
+ */
 struct timer {
 	struct timespec sum;
 	struct timespec2 sum_sq;
-	double mean;
-	double std;
 	struct timespec start_time;
 	unsigned long completed;
+	unsigned int insanity;
 };
 
 int custom_peerd_loop(void *arg);
 
 void timer_start(struct timer *sample_req);
-void timer_stop(struct timer *sample_tm);
+void timer_stop(struct timer *sample_tm, struct timespec *start);
 
 
