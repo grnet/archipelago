@@ -49,6 +49,19 @@
 #define SEC 1000000000 //1sec = 10^9 nsec
 #define SEC2 (uint64_t) SEC*SEC //1sec*1sec = 10^18 nsec^2
 
+int init_timer(struct timer *tm, int insanity)
+{
+	tm = malloc(sizeof(struct timer));
+	if (!tm) {
+		perror("malloc");
+		return -1;
+	}
+
+	memset(tm, 0, sizeof(struct timer));
+	tm->insanity = insanity;
+	return 0;
+}
+
 void timer_start(struct timer *timer)
 {
 	//We need a low-latency way to get current time in nanoseconds.
@@ -115,9 +128,11 @@ void timer_stop(struct timer *timer, struct timespec *start)
 	//TODO: check if we need to make it volatile
 	timer->completed++;
 
+	/*
 	printf("Start: %lu s %lu ns\n", start_time.tv_sec, start_time.tv_nsec);
 	printf("Elpsd: %lu s %lu ns\n", elapsed_time.tv_sec, elapsed_time.tv_nsec);
 	printf("End:   %lu s %lu ns\n", end_time.tv_sec, end_time.tv_nsec);
+	*/
 }
 
 

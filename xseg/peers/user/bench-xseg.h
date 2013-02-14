@@ -34,6 +34,15 @@
 
 #define MAX_ARG_LEN 10
 
+#define TM_SANE 0
+#define TM_ECCENTRIC 1
+#define TM_MANIC 2
+#define TM_PARANOID 3
+
+#define IO_SYNC 0
+#define IO_RAND 1
+
+
 struct bench {
 	uint64_t ts; //Total I/O size
 	uint64_t os; //Object size
@@ -41,17 +50,18 @@ struct bench {
 	uint32_t iodepth; //Num of in-flight xseg reqs
 	xport dst_port;
 	xport src_port;
+	uint32_t op;	//xseg operation
 	uint8_t flags;
-	struct timer *total_tm;
-	struct timer *get_tm;
-	struct timer *sub_tm;
-	struct timer *rec_tm;
+	struct timer *total_tm; //Total time for benchmark
+	struct timer *get_tm;	//Time for xseg_get_request
+	struct timer *sub_tm;	//Time for xseg_submit_request
+	struct timer *rec_tm;	//Time for xseg_receive_request
 };
 
 /*
  * Custom timespec. Made to calculate variance, where we need the square of a
- * timespec structure. This structure should be more than enough to hold the
- * square of the biggest timespec.
+ * timespec struct. This struct should be more than enough to hold the square
+ * of the biggest timespec.
  */
 struct timespec2 {
 	unsigned long tv_sec2;
@@ -74,6 +84,13 @@ struct timer {
 	struct timespec start_time;
 	unsigned long completed;
 	unsigned int insanity;
+};
+
+struct tm_result {
+	unsigned long s;
+	unsigned long ms;
+	unsigned long us;
+	unsigned long ns;
 };
 
 int custom_peerd_loop(void *arg);

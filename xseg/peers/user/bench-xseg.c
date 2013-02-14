@@ -52,6 +52,8 @@ void custom_peer_usage()
 {
 	fprintf(stderr, "Custom peer options: \n"
 		"  --------------------------------------------\n"
+		"    -op       | None    | XSEG operation [read|write|info|delete]\n"
+		"    --pattern | None    | I/O pattern [sync|rand]\n"
 		"    -ts       | None    | Total I/O size\n"
 		"    -os       | 4M      | Object size\n"
 		"    -bs       | 4k      | Block size\n"
@@ -93,6 +95,26 @@ static uint64_t str2num(char *str)
 	return num;
 }
 
+int read_op(char *op) {
+	if (strcmp(op, "read"))
+		return X_READ;
+	if (strcmp(op, "write"))
+		return X_WRITE;
+	if (strcmp(op, "info"))
+		return X_INFO;
+	if (strcmp(op, "delete"))
+		return X_DELETE;
+	return -1;
+}
+
+int read_pattern(char *pattern) {
+	if (strcmp(pattern, "sync"))
+		return IO_SYNC;
+	if (strcmp(pattern, "rand"))
+		return IO_RAND;
+	return -1;
+}
+
 int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 {
 	struct bench *prefs;
@@ -107,6 +129,16 @@ int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 	block_size[0] = 0;
 	object_size[0] = 0;
 
+#ifdef MT
+	for (i = 0; i < nr_threads; i++) {
+		prefs = peer->thread[i]->priv;
+		prefs = malloc(sizeof(struct bench));
+		if (!prefs) {
+			perror("malloc");
+			return -1;
+		}
+	}
+#endif
 	prefs = malloc(sizeof(struct bench));
 	if (!prefs) {
 		perror("malloc");
@@ -115,6 +147,8 @@ int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 
 	//Begin reading the benchmark-specific arguments
 	BEGIN_READ_ARGS(argc, argv);
+	READ_ARG_STRING("-op", op, MAX_ARG_LEN);
+	READ_ARG_STRING("--pattern", pattern, MAX_ARG_LEN);
 	READ_ARG_STRING("-ts", total_size, MAX_ARG_LEN);
 	READ_ARG_STRING("-os", object_size, MAX_ARG_LEN);
 	READ_ARG_STRING("-bs", block_size, MAX_ARG_LEN);
@@ -122,6 +156,11 @@ int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 	READ_ARG_ULONG("-dp", dst_port);
 	END_READ_ARGS();
 
+	/*****************************
+	 * Check I/O type parameters *
+	 *****************************/
+
+	prefs->op = 
 	/*************************
 	 * Check size parameters *
 	 *************************/
@@ -196,19 +235,14 @@ int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 	 * Create timers for all metrics *
 	 *********************************/
 
-	prefs->total_tm = malloc(sizeof(struct timer));
-	prefs->get_tm = malloc(sizeof(struct timer));
-	prefs->sub_tm = malloc(sizeof(struct timer));
-	prefs->rec_tm = malloc(sizeof(struct timer));
-	if (!prefs->total_tm || !prefs->get_tm || !prefs->sub_tm ||
-			!prefs->rec_tm) {
-		perror("malloc");
-		return -1;
-	}
-	memset(prefs->total_tm, 0, sizeof(struct timer));
-	memset(prefs->get_tm, 0, sizeof(struct timer));
-	memset(prefs->sub_tm, 0, sizeof(struct timer));
-	memset(prefs->rec_tm, 0, sizeof(struct timer));
+	if (init_timer(prefs->total_tm, TM_SANE))
+		goto tm_fail;
+	if (init_timer(prefs->sub_tm, TM_MANIC))
+		goto tm_fail;
+	if (init_timer(prefs->get_tm, TM_PARANOID))
+		goto tm_fail;
+	if (init_timer(prefs->rec_tm, TM_ECCENTRIC))
+		goto tm_fail;
 
 	/**************************
 	 * Customize struct peerd *
@@ -219,8 +253,13 @@ int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 	return 0;
 
 arg_fail:
-	free(prefs);
 	custom_peer_usage();
+tm_fail:
+	free(prefs->total_tm);
+	free(prefs->sub_tm);
+	free(prefs->get_tm);
+	free(prefs->rec_tm);
+	free(prefs);
 	return -1;
 }
 
@@ -406,26 +445,37 @@ send_request:
 	return 0;
 }
 
+static void print_res(struct tm_result res, char *type)
+{
+	printf("\n");
+	printf("      %s\n", type);
+	printf("================================\n");
+	printf("       |-s-||-ms-|-us-|-ns-|\n");
+	printf("Time:  %03lu, %03lu  %03lu  %03lu\n",
+			res.s, res.ms, res.us, res.ns);
+}
+
+static void separate_by_order(struct timespec src, struct tm_result *res)
+{
+	res->ns = src.tv_nsec % 1000;
+	src.tv_nsec /= 1000;
+	res->us = src.tv_nsec % 1000;
+	res->ms = src.tv_nsec / 1000;
+	res->s = src.tv_sec;
+}
+
 void custom_peer_finalize(struct peerd *peer)
 {
 	struct bench *prefs = peer->priv;
+	//TODO: Measure mean time, standard variation
+	struct tm_result total, mean, std;
 	unsigned int s, ms, us, ns;
 
 	if (!prefs->total_tm->completed)
 		timer_stop(prefs->total_tm, NULL);
 
-	struct timespec tm = prefs->total_tm->sum;
-	ns = tm.tv_nsec % 1000;
-	tm.tv_nsec /= 1000;
-	us = tm.tv_nsec % 1000;
-	ms = tm.tv_nsec / 1000;
-	s = tm.tv_sec;
-
-	printf("\n");
-	printf("          Total time spent\n");
-	printf("================================\n");
-	printf("      |-s-||-ms-|-us-|-ns-|\n");
-	printf("Time:  %03u, %03u  %03u  %03u\n", s, ms, us, ns);
+	separate_by_order(prefs->total_tm->sum, &total);
+	print_res(total, "Total Time");
 	return;
 }
 

@@ -79,6 +79,7 @@ struct thread {
 	int thread_no;
 	void (*func)(void *arg);
 	void *arg;
+	void *priv;
 };
 
 inline static struct thread* alloc_thread(struct peerd *peer)
