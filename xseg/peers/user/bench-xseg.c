@@ -96,23 +96,45 @@ static uint64_t str2num(char *str)
 }
 
 int read_op(char *op) {
-	if (strcmp(op, "read"))
+	if (strcmp(op, "read") == 0)
 		return X_READ;
-	if (strcmp(op, "write"))
+	if (strcmp(op, "write") == 0)
 		return X_WRITE;
-	if (strcmp(op, "info"))
+	if (strcmp(op, "info") == 0)
 		return X_INFO;
-	if (strcmp(op, "delete"))
+	if (strcmp(op, "delete") == 0)
 		return X_DELETE;
 	return -1;
 }
 
 int read_pattern(char *pattern) {
-	if (strcmp(pattern, "sync"))
+	if (strcmp(pattern, "sync") == 0)
 		return IO_SYNC;
-	if (strcmp(pattern, "rand"))
+	if (strcmp(pattern, "rand") == 0)
 		return IO_RAND;
 	return -1;
+}
+
+static void print_res(struct tm_result res, char *type)
+{
+	printf("\n");
+	printf("      %s\n", type);
+	printf("================================\n");
+	printf("       |-s-||-ms-|-us-|-ns-|\n");
+	printf("Time:   %03lu. %03lu  %03lu  %03lu\n",
+			res.s, res.ms, res.us, res.ns);
+}
+
+/*
+ * Seperates a timespec struct in seconds, msec, usec, nsec
+ */
+static void separate_by_order(struct timespec src, struct tm_result *res)
+{
+	res->ns = src.tv_nsec % 1000;
+	src.tv_nsec /= 1000;
+	res->us = src.tv_nsec % 1000;
+	res->ms = src.tv_nsec / 1000;
+	res->s = src.tv_sec;
 }
 
 int custom_peer_init(struct peerd *peer, int argc, char *argv[])
@@ -121,10 +143,15 @@ int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 	char total_size[MAX_ARG_LEN + 1];
 	char object_size[MAX_ARG_LEN + 1];
 	char block_size[MAX_ARG_LEN + 1];
+	char op[MAX_ARG_LEN + 1];
+	char pattern[MAX_ARG_LEN + 1];
 	struct xseg *xseg = peer->xseg;
 	unsigned int xseg_page_size = 1 << xseg->config.page_shift;
 	long dst_port = -1;
+	int r;
 
+	op[0] = 0;
+	pattern[0] = 0;
 	total_size[0] = 0;
 	block_size[0] = 0;
 	object_size[0] = 0;
@@ -144,6 +171,7 @@ int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 		perror("malloc");
 		return -1;
 	}
+	prefs->flags = 0;
 
 	//Begin reading the benchmark-specific arguments
 	BEGIN_READ_ARGS(argc, argv);
@@ -156,11 +184,32 @@ int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 	READ_ARG_ULONG("-dp", dst_port);
 	END_READ_ARGS();
 
-	/*****************************
+	/*****************************\
 	 * Check I/O type parameters *
-	 *****************************/
+	\*****************************/
 
-	prefs->op = 
+	if (!op[0]) {
+		XSEGLOG2(&lc, E, "xseg operation needs to be supplied\n");
+		goto arg_fail;
+	}
+	r = read_op(op);
+	if (r < 0) {
+		XSEGLOG2(&lc, E, "Invalid syntax: -op %s\n", op);
+		goto arg_fail;
+	}
+	prefs->op = r;
+
+	if (!pattern[0]) {
+		XSEGLOG2(&lc, E, "I/O pattern needs to be supplied\n");
+		goto arg_fail;
+	}
+	r = read_pattern(pattern);
+	if (r < 0) {
+		XSEGLOG2(&lc, E, "Invalid syntax: --pattern %s\n", pattern);
+		goto arg_fail;
+	}
+	prefs->flags |= r << PATTERN_FLAG;
+
 	/*************************
 	 * Check size parameters *
 	 *************************/
@@ -177,7 +226,7 @@ int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 
 	prefs->bs = str2num(block_size);
 	if (!prefs->bs) {
-		XSEGLOG2(&lc, E, "Invalid syntax: %s\n", block_size);
+		XSEGLOG2(&lc, E, "Invalid syntax: -bs %s\n", block_size);
 		goto arg_fail;
 	} else if (prefs->bs % xseg_page_size) {
 		XSEGLOG2(&lc, E, "Misaligned block size: %s\n", block_size);
@@ -194,7 +243,7 @@ int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 
 	prefs->ts = str2num(total_size);
 	if (!prefs->ts) {
-		XSEGLOG2(&lc, E, "Invalid syntax: %s\n", total_size);
+		XSEGLOG2(&lc, E, "Invalid syntax: -ts %s\n", total_size);
 		goto arg_fail;
 	} else if (prefs->ts % prefs->bs) {
 		XSEGLOG2(&lc, E, "Misaligned total I/O size: %s\n", total_size);
@@ -212,7 +261,7 @@ int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 
 	prefs->os = str2num(object_size);
 	if (!prefs->os) {
-		XSEGLOG2(&lc, E, "Invalid syntax: %s\n", object_size);
+		XSEGLOG2(&lc, E, "Invalid syntax: -os %s\n", object_size);
 		goto arg_fail;
 	} else if (prefs->os % prefs->bs) {
 		XSEGLOG2(&lc, E, "Misaligned object size: %s\n", object_size);
@@ -235,13 +284,13 @@ int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 	 * Create timers for all metrics *
 	 *********************************/
 
-	if (init_timer(prefs->total_tm, TM_SANE))
+	if (init_timer(&prefs->total_tm, TM_SANE))
 		goto tm_fail;
-	if (init_timer(prefs->sub_tm, TM_MANIC))
+	if (init_timer(&prefs->sub_tm, TM_MANIC))
 		goto tm_fail;
-	if (init_timer(prefs->get_tm, TM_PARANOID))
+	if (init_timer(&prefs->get_tm, TM_PARANOID))
 		goto tm_fail;
-	if (init_timer(prefs->rec_tm, TM_ECCENTRIC))
+	if (init_timer(&prefs->rec_tm, TM_ECCENTRIC))
 		goto tm_fail;
 
 	/**************************
@@ -394,8 +443,6 @@ int custom_peerd_loop(void *arg)
 	unsigned long max_completed = prefs->ts / prefs->bs;
 
 	timer_start(prefs->total_tm);
-
-	//while (!isTerminate() && xq_count(&peer->free_reqs) == peer->nr_ops) {
 	while (!isTerminate()) {
 #ifdef MT
 		if (t->func) {
@@ -409,13 +456,12 @@ int custom_peerd_loop(void *arg)
 #endif
 send_request:
 		while (prefs->sub_tm->completed - prefs->rec_tm->completed <
-				prefs->iodepth){
+				prefs->iodepth && prefs->sub_tm->completed < max_completed){
 			XSEGLOG2(&lc, D, "Start sending new request\n");
 			r = send_request(peer, prefs);
 			if (r<0)
 				break;
 		}
-
 		//Heart of peerd_loop. This loop is common for everyone.
 		for (loops = threshold; loops > 0; loops--) {
 			if (check_ports(peer)) {
@@ -445,31 +491,11 @@ send_request:
 	return 0;
 }
 
-static void print_res(struct tm_result res, char *type)
-{
-	printf("\n");
-	printf("      %s\n", type);
-	printf("================================\n");
-	printf("       |-s-||-ms-|-us-|-ns-|\n");
-	printf("Time:  %03lu, %03lu  %03lu  %03lu\n",
-			res.s, res.ms, res.us, res.ns);
-}
-
-static void separate_by_order(struct timespec src, struct tm_result *res)
-{
-	res->ns = src.tv_nsec % 1000;
-	src.tv_nsec /= 1000;
-	res->us = src.tv_nsec % 1000;
-	res->ms = src.tv_nsec / 1000;
-	res->s = src.tv_sec;
-}
-
 void custom_peer_finalize(struct peerd *peer)
 {
 	struct bench *prefs = peer->priv;
 	//TODO: Measure mean time, standard variation
-	struct tm_result total, mean, std;
-	unsigned int s, ms, us, ns;
+	struct tm_result total; //mean, std;
 
 	if (!prefs->total_tm->completed)
 		timer_stop(prefs->total_tm, NULL);

@@ -39,9 +39,13 @@
 #define TM_MANIC 2
 #define TM_PARANOID 3
 
+/*
+ * Pattern type occupies first flag bit.
+ * If 1, it's synchronous, if 0, it's random.
+ */
 #define IO_SYNC 0
 #define IO_RAND 1
-
+#define PATTERN_FLAG 0
 
 struct bench {
 	uint64_t ts; //Total I/O size
@@ -97,5 +101,5 @@ int custom_peerd_loop(void *arg);
 
 void timer_start(struct timer *sample_req);
 void timer_stop(struct timer *sample_tm, struct timespec *start);
-
+int init_timer(struct timer **tm, int insanity);
 

@@ -49,16 +49,16 @@
 #define SEC 1000000000 //1sec = 10^9 nsec
 #define SEC2 (uint64_t) SEC*SEC //1sec*1sec = 10^18 nsec^2
 
-int init_timer(struct timer *tm, int insanity)
+int init_timer(struct timer **tm, int insanity)
 {
-	tm = malloc(sizeof(struct timer));
-	if (!tm) {
+	*tm = malloc(sizeof(struct timer));
+	if (!*tm) {
 		perror("malloc");
 		return -1;
 	}
 
-	memset(tm, 0, sizeof(struct timer));
-	tm->insanity = insanity;
+	memset(*tm, 0, sizeof(struct timer));
+	(*tm)->insanity = insanity;
 	return 0;
 }
 
