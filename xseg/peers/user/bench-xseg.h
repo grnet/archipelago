@@ -33,6 +33,8 @@
  */
 
 #define MAX_ARG_LEN 10
+//It's "bench-uint32_t" which means 16 characters at most
+#define TARGETLEN = 16
 
 #define TM_SANE 0
 #define TM_ECCENTRIC 1
@@ -86,7 +88,7 @@ struct timer {
 	struct timespec sum;
 	struct timespec2 sum_sq;
 	struct timespec start_time;
-	unsigned long completed;
+	uint32_t completed;
 	unsigned int insanity;
 };
 

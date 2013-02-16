@@ -76,7 +76,7 @@ mt-sosd: mt-sosd.c peer.c peer.h
 dummy: dummy.c peer.c peer.h
 	$(CC) $(CFLAGS) -o $@ $< peer.c $(INC) -L$(LIB) -lxseg -lpthread -DMT
 
-bench: bench-xseg.c peer.c timer.c bench-xseg.h peer.h
+bench: bench-xseg.c peer.c bench-timer.c bench-xseg.h peer.h
 	$(CC) $(CFLAGS) -o $@ $(CPREQS) $(INC) -L$(LIB) -lxseg -lpthread
 
 monitor: monitor.c peer.c peer.h
