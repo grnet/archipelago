@@ -45,9 +45,9 @@
  * Pattern type occupies first flag bit.
  * If 1, it's synchronous, if 0, it's random.
  */
+#define PATTERN_FLAG 0
 #define IO_SYNC 0
 #define IO_RAND 1
-#define PATTERN_FLAG 0
 
 struct bench {
 	uint64_t ts; //Total I/O size
@@ -99,9 +99,25 @@ struct tm_result {
 	unsigned long ns;
 };
 
+struct validation {
+	//target's name
+	//οffset
+	//hash of data (heavy)
+};
+
 int custom_peerd_loop(void *arg);
 
 void timer_start(struct timer *sample_req);
 void timer_stop(struct timer *sample_tm, struct timespec *start);
 int init_timer(struct timer **tm, int insanity);
+uint64_t str2num(char *str);
+int read_op(char *op);
+int read_pattern(char *pattern);
+void print_res(struct tm_result res, char *type);
+void separate_by_order(struct timespec src, struct tm_result *res);
+void create_target(struct bench *prefs, struct xseg_request *req,
+		uint64_t new);
+void create_chunk(struct bench *prefs, struct xseg_request *req,
+		uint64_t new);
+uint64_t determine_next(struct bench *prefs);
 

@@ -81,7 +81,8 @@ uint64_t str2num(char *str)
 	return num;
 }
 
-int read_op(char *op) {
+int read_op(char *op)
+{
 	if (strcmp(op, "read") == 0)
 		return X_READ;
 	if (strcmp(op, "write") == 0)
@@ -93,7 +94,8 @@ int read_op(char *op) {
 	return -1;
 }
 
-int read_pattern(char *pattern) {
+int read_pattern(char *pattern)
+{
 	if (strcmp(pattern, "sync") == 0)
 		return IO_SYNC;
 	if (strcmp(pattern, "rand") == 0)
@@ -144,7 +146,6 @@ void create_chunk(struct bench *prefs, struct xseg_request *req, uint64_t new)
 
 	req_data = xseg_get_data(xseg, req);
 	//TODO: Fill data depening on validation level
-	//struct validation {timestamp; offset; hash (if heavy validation)}
 }
 
 uint64_t determine_next(struct bench *prefs)
