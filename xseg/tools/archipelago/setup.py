@@ -172,7 +172,7 @@ def find_package_data(
     return out
 
 setup(
-    name='python-archipelago',
+    name='archipelago',
     version=VERSION,
     license='BSD',
     url='http://code.grnet.gr/',
