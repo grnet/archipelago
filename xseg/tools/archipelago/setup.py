@@ -66,7 +66,7 @@ PACKAGES = find_packages(PACKAGES_ROOT)
 CLASSIFIERS = []
 
 # Package requirements
-INSTALL_REQUIRES = ['python-xseg'
+INSTALL_REQUIRES = ['xseg'
                     ]
 
 EXTRAS_REQUIRES = {
