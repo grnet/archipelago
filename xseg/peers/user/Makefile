@@ -35,7 +35,7 @@
 
 include $(XSEG_HOME)/base.mk
 PEERS := xseg mt-sosd dummy mt-mapperd pfiled vlmc-xseg st-vlmcd mt-pfiled \
-	bench
+	lfsr bench
 
 FILES="Makefile"
 FILES+=$(shell ls *.h)
@@ -76,6 +76,9 @@ mt-sosd: mt-sosd.c peer.c peer.h
 dummy: dummy.c peer.c peer.h
 	$(CC) $(CFLAGS) -o $@ $< peer.c $(INC) -L$(LIB) -lxseg -lpthread -DMT
 
+lfsr: bench-lfsr.c bench-xseg.h peer.h
+	$(CC) $(CFLAGS) -o $@ $(CPREQS) $(INC) -L$(LIB) -lm -lxseg -lpthread
+
 bench: bench-xseg.c peer.c bench-timer.c bench-xseg.h peer.h
 	$(CC) $(CFLAGS) -o $@ $(CPREQS) $(INC) -L$(LIB) -lxseg -lpthread
 
@@ -114,4 +117,4 @@ install-src:
 
 clean:
 	rm -f filed xseg sosd vlmcd mapperd mt-sosd dummy monitor mt-mapperd \
-		pfiled vlmc-xseg st-vlmcd mt-vlmcd mt-pfiled bench
+		pfiled vlmc-xseg st-vlmcd mt-vlmcd mt-pfiled lfsr bench

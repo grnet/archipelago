@@ -99,11 +99,12 @@ struct tm_result {
 	unsigned long ns;
 };
 
-struct validation {
+struct signature {
 	//target's name
 	//οffset
 	//hash of data (heavy)
 };
+
 
 int custom_peerd_loop(void *arg);
 
@@ -120,4 +121,31 @@ void create_target(struct bench *prefs, struct xseg_request *req,
 void create_chunk(struct bench *prefs, struct xseg_request *req,
 		uint64_t new);
 uint64_t determine_next(struct bench *prefs);
+
+/**************\
+ * LFSR stuff *
+\**************/
+
+struct lfsr {
+	uint8_t length;
+	uint64_t limit;
+	uint64_t state;
+	uint64_t xnormask;
+};
+
+int lfsr_init(struct lfsr *lfsr, uint64_t size, uint64_t seed);
+
+/*
+ * This loop generates each time a new pseudo-random number. However, if it's
+ * bigger than what we want, we discard it and generate the next one.
+ */
+static inline uint64_t lfsr_next(struct lfsr *lfsr)
+{
+	do {
+		lfsr->state = (lfsr->state >> 1) ^
+			(((lfsr->state & 1UL) - 1UL) & lfsr->xnormask);
+	} while (lfsr->state > lfsr->limit);
+
+	return lfsr->state;
+}
 

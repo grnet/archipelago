@@ -5,32 +5,32 @@
  * without modification, are permitted provided that the following
  * conditions are met:
  *
-*   1. Redistributions of source code must retain the above
-*      copyright notice, this list of conditions and the following
-*      disclaimer.
-*   2. Redistributions in binary form must reproduce the above
-*      copyright notice, this list of conditions and the following
-*      disclaimer in the documentation and/or other materials
-*      provided with the distribution.
-*
-* THIS SOFTWARE IS PROVIDED BY GRNET S.A. ``AS IS'' AND ANY EXPRESS
-* OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
-* WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-* PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL GRNET S.A OR
-* CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
-* SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
-* LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF
-* USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED
-* AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
-* LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
-* ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
-* POSSIBILITY OF SUCH DAMAGE.
-*
-* The views and conclusions contained in the software and
-* documentation are those of the authors and should not be
-* interpreted as representing official policies, either expressed
-* or implied, of GRNET S.A.
-*/
+ *   1. Redistributions of source code must retain the above
+ *      copyright notice, this list of conditions and the following
+ *      disclaimer.
+ *   2. Redistributions in binary form must reproduce the above
+ *      copyright notice, this list of conditions and the following
+ *      disclaimer in the documentation and/or other materials
+ *      provided with the distribution.
+ *
+ * THIS SOFTWARE IS PROVIDED BY GRNET S.A. ``AS IS'' AND ANY EXPRESS
+ * OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+ * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+ * PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL GRNET S.A OR
+ * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+ * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF
+ * USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED
+ * AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
+ * ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ *
+ * The views and conclusions contained in the software and
+ * documentation are those of the authors and should not be
+ * interpreted as representing official policies, either expressed
+ * or implied, of GRNET S.A.
+ */
 
 #define _GNU_SOURCE
 #include <stdio.h>
@@ -48,206 +48,207 @@
 
 void custom_peer_usage()
 {
-fprintf(stderr, "Custom peer options: \n"
-	"  --------------------------------------------\n"
-	"    -op       | None    | XSEG operation [read|write|info|delete]\n"
-	"    --pattern | None    | I/O pattern [sync|rand]\n"
-	"    -ts       | None    | Total I/O size\n"
-	"    -os       | 4M      | Object size\n"
-	"    -bs       | 4k      | Block size\n"
-	"    -dp       | None    | Destination port\n"
-	"    --iodepth | 1       | Number of in-flight I/O requests\n"
-	"\n");
+	fprintf(stderr, "Custom peer options: \n"
+			"  --------------------------------------------\n"
+			"    -op       | None    | XSEG operation [read|write|info|delete]\n"
+			"    --pattern | None    | I/O pattern [sync|rand]\n"
+			"    -ts       | None    | Total I/O size\n"
+			"    -os       | 4M      | Object size\n"
+			"    -bs       | 4k      | Block size\n"
+			"    -dp       | None    | Destination port\n"
+			"    --iodepth | 1       | Number of in-flight I/O requests\n"
+			"    --verify  | no      | Verify written requests [no|meta|hash]"
+			"\n");
 }
 
 int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 {
-struct bench *prefs;
-char total_size[MAX_ARG_LEN + 1];
-char object_size[MAX_ARG_LEN + 1];
-char block_size[MAX_ARG_LEN + 1];
-char op[MAX_ARG_LEN + 1];
-char pattern[MAX_ARG_LEN + 1];
-struct xseg *xseg = peer->xseg;
-unsigned int xseg_page_size = 1 << xseg->config.page_shift;
-long dst_port = -1;
-int r;
+	struct bench *prefs;
+	char total_size[MAX_ARG_LEN + 1];
+	char object_size[MAX_ARG_LEN + 1];
+	char block_size[MAX_ARG_LEN + 1];
+	char op[MAX_ARG_LEN + 1];
+	char pattern[MAX_ARG_LEN + 1];
+	struct xseg *xseg = peer->xseg;
+	unsigned int xseg_page_size = 1 << xseg->config.page_shift;
+	long dst_port = -1;
+	int r;
 
-op[0] = 0;
-pattern[0] = 0;
-total_size[0] = 0;
-block_size[0] = 0;
-object_size[0] = 0;
+	op[0] = 0;
+	pattern[0] = 0;
+	total_size[0] = 0;
+	block_size[0] = 0;
+	object_size[0] = 0;
 
 #ifdef MT
-for (i = 0; i < nr_threads; i++) {
-	prefs = peer->thread[i]->priv;
+	for (i = 0; i < nr_threads; i++) {
+		prefs = peer->thread[i]->priv;
+		prefs = malloc(sizeof(struct bench));
+		if (!prefs) {
+			perror("malloc");
+			return -1;
+		}
+	}
+#endif
 	prefs = malloc(sizeof(struct bench));
 	if (!prefs) {
 		perror("malloc");
 		return -1;
 	}
-}
-#endif
-prefs = malloc(sizeof(struct bench));
-if (!prefs) {
-	perror("malloc");
-	return -1;
-}
-prefs->flags = 0;
+	prefs->flags = 0;
 
-//Begin reading the benchmark-specific arguments
-BEGIN_READ_ARGS(argc, argv);
-READ_ARG_STRING("-op", op, MAX_ARG_LEN);
-READ_ARG_STRING("--pattern", pattern, MAX_ARG_LEN);
-READ_ARG_STRING("-ts", total_size, MAX_ARG_LEN);
-READ_ARG_STRING("-os", object_size, MAX_ARG_LEN);
-READ_ARG_STRING("-bs", block_size, MAX_ARG_LEN);
-READ_ARG_ULONG("--iodepth", prefs->iodepth);
-READ_ARG_ULONG("-dp", dst_port);
-END_READ_ARGS();
+	//Begin reading the benchmark-specific arguments
+	BEGIN_READ_ARGS(argc, argv);
+	READ_ARG_STRING("-op", op, MAX_ARG_LEN);
+	READ_ARG_STRING("--pattern", pattern, MAX_ARG_LEN);
+	READ_ARG_STRING("-ts", total_size, MAX_ARG_LEN);
+	READ_ARG_STRING("-os", object_size, MAX_ARG_LEN);
+	READ_ARG_STRING("-bs", block_size, MAX_ARG_LEN);
+	READ_ARG_ULONG("--iodepth", prefs->iodepth);
+	READ_ARG_ULONG("-dp", dst_port);
+	END_READ_ARGS();
 
-/*****************************\
- * Check I/O type parameters *
-\*****************************/
+	/*****************************\
+	 * Check I/O type parameters *
+	 \*****************************/
 
-if (!op[0]) {
-	XSEGLOG2(&lc, E, "xseg operation needs to be supplied\n");
-	goto arg_fail;
-}
-r = read_op(op);
-if (r < 0) {
-	XSEGLOG2(&lc, E, "Invalid syntax: -op %s\n", op);
-	goto arg_fail;
-}
-prefs->op = r;
+	if (!op[0]) {
+		XSEGLOG2(&lc, E, "xseg operation needs to be supplied\n");
+		goto arg_fail;
+	}
+	r = read_op(op);
+	if (r < 0) {
+		XSEGLOG2(&lc, E, "Invalid syntax: -op %s\n", op);
+		goto arg_fail;
+	}
+	prefs->op = r;
 
-if (!pattern[0]) {
-	XSEGLOG2(&lc, E, "I/O pattern needs to be supplied\n");
-	goto arg_fail;
-}
-r = read_pattern(pattern);
-if (r < 0) {
-	XSEGLOG2(&lc, E, "Invalid syntax: --pattern %s\n", pattern);
-	goto arg_fail;
-}
-prefs->flags |= (uint8_t)r;
+	if (!pattern[0]) {
+		XSEGLOG2(&lc, E, "I/O pattern needs to be supplied\n");
+		goto arg_fail;
+	}
+	r = read_pattern(pattern);
+	if (r < 0) {
+		XSEGLOG2(&lc, E, "Invalid syntax: --pattern %s\n", pattern);
+		goto arg_fail;
+	}
+	prefs->flags |= (uint8_t)r;
 
-/*************************
- * Check size parameters *
- *************************/
+	/*************************
+	 * Check size parameters *
+	 *************************/
 
-//Block size (bs): Defaults to 4K.
-//It must be a number followed by one of these characters: [k|K|m|M|g|G].
-//If not, it will be considered as size in bytes.
-//Must be integer multiple of segment's page size (typically 4k).
-if (!block_size[0])
-	strcpy(block_size,"4k");
+	//Block size (bs): Defaults to 4K.
+	//It must be a number followed by one of these characters: [k|K|m|M|g|G].
+	//If not, it will be considered as size in bytes.
+	//Must be integer multiple of segment's page size (typically 4k).
+	if (!block_size[0])
+		strcpy(block_size,"4k");
 
-if (!prefs->iodepth)
-	prefs->iodepth = 1;
+	if (!prefs->iodepth)
+		prefs->iodepth = 1;
 
-prefs->bs = str2num(block_size);
-if (!prefs->bs) {
-	XSEGLOG2(&lc, E, "Invalid syntax: -bs %s\n", block_size);
-	goto arg_fail;
-} else if (prefs->bs % xseg_page_size) {
-	XSEGLOG2(&lc, E, "Misaligned block size: %s\n", block_size);
-	goto arg_fail;
-}
+	prefs->bs = str2num(block_size);
+	if (!prefs->bs) {
+		XSEGLOG2(&lc, E, "Invalid syntax: -bs %s\n", block_size);
+		goto arg_fail;
+	} else if (prefs->bs % xseg_page_size) {
+		XSEGLOG2(&lc, E, "Misaligned block size: %s\n", block_size);
+		goto arg_fail;
+	}
 
-//Total I/O size (ts): Must be supplied by user.
-//Must have the same format as "total size"
-//Must be integer multiple of "block size"
-if (!total_size[0]) {
-	XSEGLOG2(&lc, E, "Total I/O size needs to be supplied\n");
-	goto arg_fail;
-}
+	//Total I/O size (ts): Must be supplied by user.
+	//Must have the same format as "total size"
+	//Must be integer multiple of "block size"
+	if (!total_size[0]) {
+		XSEGLOG2(&lc, E, "Total I/O size needs to be supplied\n");
+		goto arg_fail;
+	}
 
-prefs->ts = str2num(total_size);
-if (!prefs->ts) {
-	XSEGLOG2(&lc, E, "Invalid syntax: -ts %s\n", total_size);
-	goto arg_fail;
-} else if (prefs->ts % prefs->bs) {
-	XSEGLOG2(&lc, E, "Misaligned total I/O size: %s\n", total_size);
-	goto arg_fail;
-} else if (prefs->ts > xseg->segment_size) {
-	XSEGLOG2(&lc, E, "Total I/O size exceeds segment size\n", total_size);
-	goto arg_fail;
-}
+	prefs->ts = str2num(total_size);
+	if (!prefs->ts) {
+		XSEGLOG2(&lc, E, "Invalid syntax: -ts %s\n", total_size);
+		goto arg_fail;
+	} else if (prefs->ts % prefs->bs) {
+		XSEGLOG2(&lc, E, "Misaligned total I/O size: %s\n", total_size);
+		goto arg_fail;
+	} else if (prefs->ts > xseg->segment_size) {
+		XSEGLOG2(&lc, E, "Total I/O size exceeds segment size\n", total_size);
+		goto arg_fail;
+	}
 
-//Object size (os): Defaults to 4M.
-//Must have the same format as "total size"
-//Must be integer multiple of "block size"
-if (!object_size[0])
-	strcpy(object_size,"4M");
+	//Object size (os): Defaults to 4M.
+	//Must have the same format as "total size"
+	//Must be integer multiple of "block size"
+	if (!object_size[0])
+		strcpy(object_size,"4M");
 
-prefs->os = str2num(object_size);
-if (!prefs->os) {
-	XSEGLOG2(&lc, E, "Invalid syntax: -os %s\n", object_size);
-	goto arg_fail;
-} else if (prefs->os % prefs->bs) {
-	XSEGLOG2(&lc, E, "Misaligned object size: %s\n", object_size);
-	goto arg_fail;
-}
+	prefs->os = str2num(object_size);
+	if (!prefs->os) {
+		XSEGLOG2(&lc, E, "Invalid syntax: -os %s\n", object_size);
+		goto arg_fail;
+	} else if (prefs->os % prefs->bs) {
+		XSEGLOG2(&lc, E, "Misaligned object size: %s\n", object_size);
+		goto arg_fail;
+	}
 
-/*************************
- * Check port parameters *
- *************************/
+	/*************************
+	 * Check port parameters *
+	 *************************/
 
-if (dst_port < 0){
-	XSEGLOG2(&lc, E, "Destination port needs to be supplied\n");
-	goto arg_fail;
-}
+	if (dst_port < 0){
+		XSEGLOG2(&lc, E, "Destination port needs to be supplied\n");
+		goto arg_fail;
+	}
 
-prefs->src_port = peer->portno_start; //TODO: allow user to change this
-prefs->dst_port = (xport) dst_port;
+	prefs->src_port = peer->portno_start; //TODO: allow user to change this
+	prefs->dst_port = (xport) dst_port;
 
-/*********************************
- * Create timers for all metrics *
- *********************************/
+	/*********************************
+	 * Create timers for all metrics *
+	 *********************************/
 
-if (init_timer(&prefs->total_tm, TM_SANE))
-	goto tm_fail;
-if (init_timer(&prefs->sub_tm, TM_MANIC))
-	goto tm_fail;
-if (init_timer(&prefs->get_tm, TM_PARANOID))
-	goto tm_fail;
-if (init_timer(&prefs->rec_tm, TM_ECCENTRIC))
-	goto tm_fail;
+	if (init_timer(&prefs->total_tm, TM_SANE))
+		goto tm_fail;
+	if (init_timer(&prefs->sub_tm, TM_MANIC))
+		goto tm_fail;
+	if (init_timer(&prefs->get_tm, TM_PARANOID))
+		goto tm_fail;
+	if (init_timer(&prefs->rec_tm, TM_ECCENTRIC))
+		goto tm_fail;
 
-/**************************
- * Customize struct peerd *
- **************************/
+	/**************************
+	 * Customize struct peerd *
+	 **************************/
 
-peer->peerd_loop = custom_peerd_loop;
-peer->priv = (void *) prefs;
-return 0;
+	peer->peerd_loop = custom_peerd_loop;
+	peer->priv = (void *) prefs;
+	return 0;
 
 arg_fail:
-custom_peer_usage();
+	custom_peer_usage();
 tm_fail:
-free(prefs->total_tm);
-free(prefs->sub_tm);
-free(prefs->get_tm);
-free(prefs->rec_tm);
-free(prefs);
-return -1;
+	free(prefs->total_tm);
+	free(prefs->sub_tm);
+	free(prefs->get_tm);
+	free(prefs->rec_tm);
+	free(prefs);
+	return -1;
 }
 
 
 static int send_request(struct peerd *peer, struct bench *prefs)
 {
-struct xseg_request *req;
-struct xseg *xseg = peer->xseg;
-struct peer_req *pr;
-xport srcport = prefs->src_port;
-xport dstport = prefs->dst_port;
-xport p;
+	struct xseg_request *req;
+	struct xseg *xseg = peer->xseg;
+	struct peer_req *pr;
+	xport srcport = prefs->src_port;
+	xport dstport = prefs->dst_port;
+	xport p;
 
-int r;
-uint64_t new;
-uint64_t size = prefs->bs;
+	int r;
+	uint64_t new;
+	uint64_t size = prefs->bs;
 
 	//srcport and dstport must already be provided by the user.
 	//returns struct xseg_request with basic initializations
@@ -265,12 +266,14 @@ uint64_t size = prefs->bs;
 	r = xseg_prep_request(xseg, req, TARGETLEN, size);
 	if (r < 0) {
 		XSEGLOG2(&lc, W, "Cannot prepare request! (%lu, %llu)\n",
-			TARGETLEN, (unsigned long long)size);
+				TARGETLEN, (unsigned long long)size);
 		goto put_xseg_request;
 	}
 
 	/************PROPOSED************/
+	//Determine what the next target/chunk will be, based on I/O pattern
 	new = determine_next(prefs);
+	//Create a target of this format: "bench-<obj_no>"
 	create_target(prefs, req, new);
 
 	if(prefs->op == X_WRITE || prefs->op == X_READ) {
