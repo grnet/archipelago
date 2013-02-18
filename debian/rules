@@ -4,7 +4,7 @@
 #export DH_VERBOSE=1
 
 .PHONY: override_dh_dkms override_dh_strip
-export VERSION := $(shell head -n 1 debian/changelog | sed -r 's/.*([0-9]+\.[0-9]+\.[0-9]+.*)-[0-9]+.*/\1/g')
+export VERSION := $(shell head -n 1 debian/changelog | sed -r 's/.*([0-9]+\.[0-9]+.*)-[0-9]+.*/\1/g')
 
 %:
 	dh $@ --with dkms --with python2
