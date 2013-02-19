@@ -146,11 +146,14 @@ void create_target(struct bench *prefs, struct xseg_request *req,
 
 	req_target = xseg_get_target(xseg, req);
 
-	if (prefs->op == X_READ || prefs->op == X_WRITE)
-		new %= prefs->os;
+	//For read/write, the target object does not correspond to `new`, which is
+	//actually the chunk number. We need to div this number with the number of
+	//chunks in an object.
 	//FIXME: Make it more elegant
+	if (prefs->op == X_READ || prefs->op == X_WRITE)
+		new = new / (prefs->os / prefs->ts);
 	snprintf(req_target, TARGETLEN, "%s-%016lu", global_id, new);
-	XSEGLOG2(&lc, D, "Target name of request %lu is %s\n", new, req_target);
+	XSEGLOG2(&lc, D, "Target name of request is %s\n", req_target);
 }
 
 void create_chunk(struct bench *prefs, struct xseg_request *req, uint64_t new)
@@ -166,7 +169,7 @@ void create_chunk(struct bench *prefs, struct xseg_request *req, uint64_t new)
 uint64_t determine_next(struct bench *prefs)
 {
 	if ((prefs->flags & PATTERN_FLAG) == IO_SYNC)
-		return prefs->sub_tm->completed + 1;
+		return prefs->sub_tm->completed;
 	else {
 		return lfsr_next(prefs->lfsr);
 	}

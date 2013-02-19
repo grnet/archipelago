@@ -377,6 +377,7 @@ static int send_request(struct peerd *peer, struct bench *prefs)
 		req->size = size;
 		//Calculate the chunk offset inside the object
 		req->offset = (new * prefs->bs) % prefs->os;
+		XSEGLOG2(&lc, D, "Offset of request %lu is %lu\n", new, req->offset);
 
 		if(prefs->op == X_WRITE)
 			create_chunk(prefs, req, new);
