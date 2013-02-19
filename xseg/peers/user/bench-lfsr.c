@@ -44,6 +44,7 @@
 #include <sys/util.h>
 #include <signal.h>
 #include <bench-xseg.h>
+#include <limits.h>
 
 #include <math.h>
 
@@ -56,6 +57,10 @@
 #endif
 
 #define MAX_TAPS 6
+
+#ifdef STAND_ALONE
+uint64_t global_seed;
+#endif
 
 /*
  * LFSRs are pseudo-random number generators. They are deterministic (meaning
@@ -188,6 +193,7 @@ static uint64_t lfsr_create_xnormask(uint8_t *taps)
  * have (n+1) bits.
  * NOTE3: If an LFSR has n bits, the seed must not be all ones (= 2^(n+1) - 1)
  */
+/*
 int lfsr_init(struct lfsr *lfsr, uint64_t size, uint64_t seed)
 {
 	uint8_t i;
@@ -210,8 +216,42 @@ int lfsr_init(struct lfsr *lfsr, uint64_t size, uint64_t seed)
 	lfsr->state = seed;
 	return 0;
 }
+*/
+int lfsr_init(struct lfsr *lfsr, uint64_t size, uint64_t seed)
+{
+	uint8_t i;
 
+	lfsr->limit = size;
 
+	//i has number of bits of size
+	for (i = 0; size; i++)
+		size = size >> 1;
+
+	//Too small or too big size to create an LFSR out of it
+	if (i < 3 || i > 63)
+		return -1;
+
+	//The all ones state is illegal. Due to the fact that our seed is
+	//nanoseconds taken from clock_gettime, we are sure that the 31st bit will
+	//always be 0. The following codes has that in mind and creates a seed
+	//that has at least one 0.
+	if (seed == UINT64_MAX) {
+		if (i < 32)
+			lfsr->state = global_seed >> (31 - i);
+		else
+			lfsr->state = global_seed << (i - 31);
+	}
+	else {
+		lfsr->state = seed;
+	}
+
+	lfsr->length = i;
+	lfsr->xnormask = lfsr_create_xnormask(taps[i]);
+
+	return 0;
+}
+
+#ifdef STAND_ALONE
 /*
  * Sanity-check every LFSR for wrong tap positions.
  */
@@ -249,7 +289,6 @@ static int lfsr_check()
 	return 0;
 }
 
-
 int main()
 {
 	int r;
@@ -258,4 +297,5 @@ int main()
 
 	return r;
 }
+#endif
 

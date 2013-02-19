@@ -33,8 +33,6 @@
  */
 
 #define MAX_ARG_LEN 10
-//It's "bench-uint32_t" which means 16 characters at most
-#define TARGETLEN = 16
 
 #define TM_SANE 0
 #define TM_ECCENTRIC 1
@@ -45,19 +43,34 @@
  * Pattern type occupies first flag bit.
  * If 1, it's synchronous, if 0, it's random.
  */
-#define PATTERN_FLAG 0
+#define PATTERN_FLAG 1
 #define IO_SYNC 0
 #define IO_RAND 1
 
+/*
+ * FIXME: The following are variables and definitions used to name objects and
+ * seed the lfsr. They can be handled more elegantly (e.g. be a member of a
+ * struct.)
+ */
+#define IDLEN 15
+#define TARGETLEN (IDLEN + 17)
+extern char global_id[IDLEN];
+extern uint64_t global_seed;
+
 struct bench {
+	uint64_t to; //Total number of objects (not for read/write)
 	uint64_t ts; //Total I/O size
 	uint64_t os; //Object size
 	uint64_t bs; //Block size
+	uint64_t max_requests; //Max number of requests for a benchmark
 	uint32_t iodepth; //Num of in-flight xseg reqs
+	int insanity;
 	xport dst_port;
 	xport src_port;
 	uint32_t op;	//xseg operation
 	uint8_t flags;
+	struct peerd *peer;
+	struct lfsr *lfsr;
 	struct timer *total_tm; //Total time for benchmark
 	struct timer *get_tm;	//Time for xseg_get_request
 	struct timer *sub_tm;	//Time for xseg_submit_request
@@ -99,17 +112,20 @@ struct tm_result {
 	unsigned long ns;
 };
 
+/* FILLME
 struct signature {
 	//target's name
 	//οffset
 	//hash of data (heavy)
 };
+*/
 
 
 int custom_peerd_loop(void *arg);
 
-void timer_start(struct timer *sample_req);
-void timer_stop(struct timer *sample_tm, struct timespec *start);
+void timer_start(struct bench *prefs, struct timer *sample_req);
+void timer_stop(struct bench *prefs, struct timer *sample_tm,
+		struct timespec *start);
 int init_timer(struct timer **tm, int insanity);
 uint64_t str2num(char *str);
 int read_op(char *op);
@@ -121,6 +137,8 @@ void create_target(struct bench *prefs, struct xseg_request *req,
 void create_chunk(struct bench *prefs, struct xseg_request *req,
 		uint64_t new);
 uint64_t determine_next(struct bench *prefs);
+void create_id();
+int read_insanity(char *insanity);
 
 /**************\
  * LFSR stuff *

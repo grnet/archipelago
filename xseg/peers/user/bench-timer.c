@@ -62,20 +62,27 @@ int init_timer(struct timer **tm, int insanity)
 	return 0;
 }
 
-void timer_start(struct timer *timer)
+void timer_start(struct bench *prefs, struct timer *timer)
 {
 	//We need a low-latency way to get current time in nanoseconds.
-	//Is this way the best way?
+	//QUESTION: Is this way the best way?
 	//RAW means that we trust the system's oscilator isn't screwed up
+	if (prefs->insanity < timer->insanity)
+		return;
+
 	clock_gettime(CLOCK_MONOTONIC_RAW, &timer->start_time);
 }
 
-void timer_stop(struct timer *timer, struct timespec *start)
+void timer_stop(struct bench *prefs, struct timer *timer,
+		struct timespec *start)
 {
 	struct timespec end_time;
 	volatile struct timespec elapsed_time;
 	struct timespec2 elapsed_time_sq;
 	struct timespec start_time;
+
+	if (prefs->insanity < timer->insanity)
+		return;
 
 	/*
 	 * There are timers such as rec_tm whose start_time cannot be trusted and

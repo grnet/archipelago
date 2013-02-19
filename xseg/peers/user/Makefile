@@ -77,10 +77,11 @@ dummy: dummy.c peer.c peer.h
 	$(CC) $(CFLAGS) -o $@ $< peer.c $(INC) -L$(LIB) -lxseg -lpthread -DMT
 
 lfsr: bench-lfsr.c bench-xseg.h peer.h
-	$(CC) $(CFLAGS) -o $@ $(CPREQS) $(INC) -L$(LIB) -lm -lxseg -lpthread
+	$(CC) $(CFLAGS) -o $@ $(CPREQS) $(INC) -L$(LIB) -lxseg -lpthread -lm \
+		-DSTAND_ALONE
 
-bench: bench-xseg.c peer.c bench-timer.c bench-xseg.h peer.h
-	$(CC) $(CFLAGS) -o $@ $(CPREQS) $(INC) -L$(LIB) -lxseg -lpthread
+bench: bench-xseg.c peer.c bench-timer.c bench-lfsr.c bench-utils.c bench-xseg.h peer.h
+	$(CC) $(CFLAGS) -o $@ $(CPREQS) $(INC) -L$(LIB) -lxseg -lpthread -lm
 
 monitor: monitor.c peer.c peer.h
 	$(CC) $(CFLAGS) -o $@ $< peer.c $(INC) -L$(LIB) -lxseg -lpthread -DMT

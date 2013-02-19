@@ -81,6 +81,19 @@ uint64_t str2num(char *str)
 	return num;
 }
 
+int read_insanity(char *insanity)
+{
+	if (strcmp(insanity, "sane") == 0)
+		return TM_SANE;
+	if (strcmp(insanity, "eccentric") == 0)
+		return TM_ECCENTRIC;
+	if (strcmp(insanity, "manic") == 0)
+		return TM_MANIC;
+	if (strcmp(insanity, "paranoid") == 0)
+		return TM_PARANOID;
+	return -1;
+}
+
 int read_op(char *op)
 {
 	if (strcmp(op, "read") == 0)
@@ -128,20 +141,21 @@ void separate_by_order(struct timespec src, struct tm_result *res)
 void create_target(struct bench *prefs, struct xseg_request *req,
 		uint64_t new)
 {
-	struct xseg *xseg = prefs->xseg;
+	struct xseg *xseg = prefs->peer->xseg;
 	char *req_target;
 
 	req_target = xseg_get_target(xseg, req);
 
 	if (prefs->op == X_READ || prefs->op == X_WRITE)
 		new %= prefs->os;
-	//FIXME: Include timestamp in target name
-	snprintf(req_target, TARGETLEN, "bench-%10lu", new);
+	//FIXME: Make it more elegant
+	snprintf(req_target, TARGETLEN, "%s-%016lu", global_id, new);
+	XSEGLOG2(&lc, D, "Target name of request %lu is %s\n", new, req_target);
 }
 
 void create_chunk(struct bench *prefs, struct xseg_request *req, uint64_t new)
 {
-	struct xseg *xseg = prefs->xseg;
+	struct xseg *xseg = prefs->peer->xseg;
 	char *req_data;
 
 	req_data = xseg_get_data(xseg, req);
@@ -150,10 +164,22 @@ void create_chunk(struct bench *prefs, struct xseg_request *req, uint64_t new)
 
 uint64_t determine_next(struct bench *prefs)
 {
-	if (prefs->flag & PATTERN_FLAG == IO_SYNC)
+	if ((prefs->flags & PATTERN_FLAG) == IO_SYNC)
 		return prefs->sub_tm->completed + 1;
 	else {
-		//Randomly choose
+		return lfsr_next(prefs->lfsr);
 	}
 }
 
+//FIXME: this looks like a hack, handle it more elegantly
+void create_id()
+{
+	struct timespec seed;
+
+	clock_gettime(CLOCK_MONOTONIC_RAW, &seed);
+
+	global_seed = seed.tv_nsec;
+	//nanoseconds can't be more than 9 digits
+	snprintf(global_id, IDLEN, "bench-%09lu", global_seed);
+	XSEGLOG2(&lc, I, "Global ID is %s\n", global_id);
+}
