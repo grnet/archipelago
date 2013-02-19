@@ -154,12 +154,13 @@ void create_target(struct bench *prefs, struct xseg_request *req,
 }
 
 void create_chunk(struct bench *prefs, struct xseg_request *req, uint64_t new)
-{
+{/*
 	struct xseg *xseg = prefs->peer->xseg;
 	char *req_data;
 
-	req_data = xseg_get_data(xseg, req);
 	//TODO: Fill data depening on validation level
+	req_data = xseg_get_data(xseg, req);
+	*/
 }
 
 uint64_t determine_next(struct bench *prefs)

@@ -82,7 +82,7 @@ void timer_stop(struct bench *prefs, struct timer *timer,
 	struct timespec start_time;
 
 	if (prefs->insanity < timer->insanity)
-		return;
+		goto inc_completed;
 
 	/*
 	 * There are timers such as rec_tm whose start_time cannot be trusted and
@@ -132,6 +132,7 @@ void timer_stop(struct bench *prefs, struct timer *timer,
 		timer->sum_sq.tv_sec2 += elapsed_time_sq.tv_sec2;
 	}
 
+inc_completed:
 	//TODO: check if we need to make it volatile
 	timer->completed++;
 

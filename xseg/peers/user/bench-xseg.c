@@ -375,6 +375,7 @@ static int send_request(struct peerd *peer, struct bench *prefs)
 
 	if(prefs->op == X_WRITE || prefs->op == X_READ) {
 		req->size = size;
+		//Calculate the chunk offset inside the object
 		req->offset = (new * prefs->bs) % prefs->os;
 
 		if(prefs->op == X_WRITE)
@@ -482,7 +483,12 @@ int custom_peerd_loop(void *arg)
 		}
 #endif
 send_request:
-		while (CAN_SEND_REQUEST(prefs)){
+		while (CAN_SEND_REQUEST(prefs)) {
+			XSEGLOG2(&lc, D, "Because %lu < %lu && %lu < %lu\n",
+					prefs->sub_tm->completed - prefs->rec_tm->completed,
+					prefs->iodepth, prefs->sub_tm->completed,
+					prefs->max_requests);
+			xseg_cancel_wait(xseg, peer->portno_start);
 			XSEGLOG2(&lc, D, "Start sending new request\n");
 			r = send_request(peer, prefs);
 			if (r < 0)
