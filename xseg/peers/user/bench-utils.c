@@ -109,8 +109,8 @@ int read_op(char *op)
 
 int read_pattern(char *pattern)
 {
-	if (strcmp(pattern, "sync") == 0)
-		return IO_SYNC;
+	if (strcmp(pattern, "seq") == 0)
+		return IO_SEQ;
 	if (strcmp(pattern, "rand") == 0)
 		return IO_RAND;
 	return -1;
@@ -168,7 +168,7 @@ void create_chunk(struct bench *prefs, struct xseg_request *req, uint64_t new)
 
 uint64_t determine_next(struct bench *prefs)
 {
-	if ((prefs->flags & PATTERN_FLAG) == IO_SYNC)
+	if ((prefs->flags & (1 << PATTERN_FLAG)) == IO_SEQ)
 		return prefs->sub_tm->completed;
 	else {
 		return lfsr_next(prefs->lfsr);

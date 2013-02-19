@@ -43,9 +43,9 @@
  * Pattern type occupies first flag bit.
  * If 1, it's synchronous, if 0, it's random.
  */
-#define PATTERN_FLAG 1
-#define IO_SYNC 0
-#define IO_RAND 1
+#define PATTERN_FLAG 0
+#define IO_SEQ 0 << PATTERN_FLAG
+#define IO_RAND 1 << PATTERN_FLAG
 
 /*
  * FIXME: The following are variables and definitions used to name objects and

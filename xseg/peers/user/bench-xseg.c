@@ -64,7 +64,7 @@ void custom_peer_usage()
 	fprintf(stderr, "Custom peer options: \n"
 			"  --------------------------------------------\n"
 			"    -op       | None    | XSEG operation [read|write|info|delete]\n"
-			"    --pattern | None    | I/O pattern [sync|rand]\n"
+			"    --pattern | None    | I/O pattern [seq|rand]\n"
 			"    -to       | None    | Total objects (not for read/write)\n"
 			"    -ts       | None    | Total I/O size\n"
 			"    -os       | 4M      | Object size\n"
@@ -158,7 +158,7 @@ int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 		XSEGLOG2(&lc, E, "Invalid syntax: --pattern %s\n", pattern);
 		goto arg_fail;
 	}
-	prefs->flags |= (uint8_t)r << PATTERN_FLAG;
+	prefs->flags |= (uint8_t)r;
 
 	/**************************\
 	 * Check timer parameters *
@@ -303,7 +303,7 @@ int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 	//variables.
 	create_id();
 
-	if ((prefs->flags & PATTERN_FLAG) == IO_RAND) {
+	if ((prefs->flags & (1 <<PATTERN_FLAG)) == IO_RAND) {
 		prefs->lfsr = malloc(sizeof(struct lfsr));
 		if (!prefs->lfsr) {
 			perror("malloc");
