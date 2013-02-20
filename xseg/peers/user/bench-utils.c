@@ -122,7 +122,7 @@ void print_res(struct tm_result res, char *type)
 	printf("      %s\n", type);
 	printf("================================\n");
 	printf("       |-s-||-ms-|-us-|-ns-|\n");
-	printf("Time:   %03lu. %03lu  %03lu  %03lu\n",
+	printf("Time:   %3lu. %03lu  %03lu  %03lu\n",
 			res.s, res.ms, res.us, res.ns);
 }
 

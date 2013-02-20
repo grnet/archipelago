@@ -78,7 +78,6 @@ void timer_stop(struct bench *prefs, struct timer *timer,
 {
 	struct timespec end_time;
 	volatile struct timespec elapsed_time;
-	struct timespec2 elapsed_time_sq;
 	struct timespec start_time;
 
 	if (prefs->insanity < timer->insanity)
@@ -118,6 +117,9 @@ void timer_stop(struct bench *prefs, struct timer *timer,
 		timer->sum.tv_sec += elapsed_time.tv_sec;
 	}
 
+#if 0
+	struct timespec2 elapsed_time_sq;
+
 	//Add elapsed_time^2 to the current sum of squares for this timer
 	//This is needed to calculate standard deviation.
 	//As above, the sum of square of nanoseconds has to be less than 10^18
@@ -131,7 +133,7 @@ void timer_stop(struct bench *prefs, struct timer *timer,
 		timer->sum_sq.tv_nsec2 += elapsed_time_sq.tv_nsec2;
 		timer->sum_sq.tv_sec2 += elapsed_time_sq.tv_sec2;
 	}
-
+#endif
 inc_completed:
 	//TODO: check if we need to make it volatile
 	timer->completed++;

@@ -215,6 +215,7 @@ int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 		if (!block_size[0])
 			strcpy(block_size,"4k");
 
+		//0 iodepth is an accepted value, but only for debugging purposes
 		if (!prefs->iodepth)
 			prefs->iodepth = 1;
 
@@ -370,7 +371,7 @@ static int send_request(struct peerd *peer, struct bench *prefs)
 
 	//Determine what the next target/chunk will be, based on I/O pattern
 	new = determine_next(prefs);
-	XSEGLOG2(&lc, D, "Our new request is %lu\n", new);
+	XSEGLOG2(&lc, I, "Our new request is %lu\n", new);
 	//Create a target of this format: "bench-<obj_no>"
 	create_target(prefs, req, new);
 
@@ -417,11 +418,11 @@ static int send_request(struct peerd *peer, struct bench *prefs)
 	 * QUESTION: Is this the fastest way?
 	 */
 	timer_start(prefs, prefs->rec_tm);
-	memcpy(pr->priv, &prefs->rec_tm->start_time, sizeof(struct timespec));
+	if (prefs->rec_tm->insanity <= prefs->insanity)
+		memcpy(pr->priv, &prefs->rec_tm->start_time, sizeof(struct timespec));
 
 	//Submit the request from the source port to the target port
 	//XSEGLOG2(&lc, D, "Submit request %lu\n", new);
-	//QUESTION: Can't we just use the submision time calculated previously?
 	timer_start(prefs, prefs->sub_tm);
 	p = xseg_submit(xseg, req, srcport, X_ALLOC);
 	if (p == NoPort) {
@@ -432,7 +433,11 @@ static int send_request(struct peerd *peer, struct bench *prefs)
 
 	//Send SIGIO to the process that has binded this port to inform that
 	//IO is possible
-	xseg_signal(xseg, p);
+	r = xseg_signal(xseg, p);
+	if (r == -1)
+		XSEGLOG2(&lc, W, "Could not associate destination peer\n");
+	else if (r == -2)
+		XSEGLOG2(&lc, W, "Could signal destination peer\n");
 
 	return 0;
 
@@ -464,13 +469,12 @@ int custom_peerd_loop(void *arg)
 	xport portno_start = peer->portno_start;
 	xport portno_end = peer->portno_end;
 	uint64_t threshold=1000/(1 + portno_end - portno_start);
-	pid_t pid =syscall(SYS_gettid);
+	pid_t pid = syscall(SYS_gettid);
 	int r;
-
+	uint64_t loops;
 
 	XSEGLOG2(&lc, I, "%s has tid %u.\n",id, pid);
 	xseg_init_local_signal(xseg, peer->portno_start);
-	uint64_t loops;
 
 	timer_start(prefs, prefs->total_tm);
 	while (!isTerminate()) {
@@ -486,11 +490,11 @@ int custom_peerd_loop(void *arg)
 #endif
 send_request:
 		while (CAN_SEND_REQUEST(prefs)) {
+			xseg_cancel_wait(xseg, peer->portno_start);
 			XSEGLOG2(&lc, D, "Because %lu < %lu && %lu < %lu\n",
 					prefs->sub_tm->completed - prefs->rec_tm->completed,
 					prefs->iodepth, prefs->sub_tm->completed,
 					prefs->max_requests);
-			xseg_cancel_wait(xseg, peer->portno_start);
 			XSEGLOG2(&lc, D, "Start sending new request\n");
 			r = send_request(peer, prefs);
 			if (r < 0)
@@ -499,12 +503,12 @@ send_request:
 		//Heart of peerd_loop. This loop is common for everyone.
 		for (loops = threshold; loops > 0; loops--) {
 			if (check_ports(peer)) {
-				if (prefs->max_requests == prefs->rec_tm->completed)
-					return 0;
-				else
-					//If an old request has just been acked, the most sensible
-					//thing to do is to immediately send a new one
+				//If an old request has just been acked, the most sensible
+				//thing to do is to immediately send a new one
+				if (prefs->rec_tm->completed < prefs->max_requests)
 					goto send_request;
+				else
+					return 0;
 			}
 		}
 		XSEGLOG2(&lc, I, "%s goes to sleep\n",id);
