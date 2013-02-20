@@ -350,7 +350,7 @@ static int send_request(struct peerd *peer, struct bench *prefs)
 
 	//srcport and dstport must already be provided by the user.
 	//returns struct xseg_request with basic initializations
-	XSEGLOG2(&lc, D, "Get new request\n");
+	//XSEGLOG2(&lc, D, "Get new request\n");
 	timer_start(prefs, prefs->get_tm);
 	req = xseg_get_request(xseg, srcport, dstport, X_ALLOC);
 	if (!req) {
@@ -360,7 +360,7 @@ static int send_request(struct peerd *peer, struct bench *prefs)
 	timer_stop(prefs, prefs->get_tm, NULL);
 
 	//Allocate enough space for the data and the target's name
-	XSEGLOG2(&lc, D, "Prepare new request\n");
+	//XSEGLOG2(&lc, D, "Prepare new request\n");
 	r = xseg_prep_request(xseg, req, TARGETLEN, size);
 	if (r < 0) {
 		XSEGLOG2(&lc, W, "Cannot prepare request! (%lu, %llu)\n",
@@ -370,6 +370,7 @@ static int send_request(struct peerd *peer, struct bench *prefs)
 
 	//Determine what the next target/chunk will be, based on I/O pattern
 	new = determine_next(prefs);
+	XSEGLOG2(&lc, D, "Our new request is %lu\n", new);
 	//Create a target of this format: "bench-<obj_no>"
 	create_target(prefs, req, new);
 
@@ -386,7 +387,7 @@ static int send_request(struct peerd *peer, struct bench *prefs)
 	req->op = prefs->op;
 
 	//Measure this?
-	XSEGLOG2(&lc, D, "Allocate peer request\n");
+	//XSEGLOG2(&lc, D, "Allocate peer request\n");
 	pr = alloc_peer_req(peer);
 	if (!pr) {
 		XSEGLOG2(&lc, W, "Cannot allocate peer request (%ld remaining)\n",
@@ -402,7 +403,7 @@ static int send_request(struct peerd *peer, struct bench *prefs)
 		goto put_peer_request;
 	}
 
-	XSEGLOG2(&lc, D, "Set request data\n");
+	//XSEGLOG2(&lc, D, "Set request data\n");
 	r = xseg_set_req_data(xseg, req, pr);
 	if (r < 0) {
 		XSEGLOG2(&lc, W, "Cannot set request data\n");
@@ -419,7 +420,7 @@ static int send_request(struct peerd *peer, struct bench *prefs)
 	memcpy(pr->priv, &prefs->rec_tm->start_time, sizeof(struct timespec));
 
 	//Submit the request from the source port to the target port
-	XSEGLOG2(&lc, D, "Submit request %lu\n", new);
+	//XSEGLOG2(&lc, D, "Submit request %lu\n", new);
 	//QUESTION: Can't we just use the submision time calculated previously?
 	timer_start(prefs, prefs->sub_tm);
 	p = xseg_submit(xseg, req, srcport, X_ALLOC);

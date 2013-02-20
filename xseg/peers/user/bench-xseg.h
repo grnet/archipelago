@@ -145,10 +145,11 @@ int read_insanity(char *insanity);
 \**************/
 
 struct lfsr {
-	uint8_t length;
-	uint64_t limit;
 	uint64_t state;
 	uint64_t xnormask;
+	uint64_t cached_bit; //It's faster if it's on the same cacheline
+	uint64_t limit;
+	uint8_t length;
 };
 
 int lfsr_init(struct lfsr *lfsr, uint64_t size, uint64_t seed);
@@ -160,10 +161,13 @@ int lfsr_init(struct lfsr *lfsr, uint64_t size, uint64_t seed);
 static inline uint64_t lfsr_next(struct lfsr *lfsr)
 {
 	do {
-		lfsr->state = (lfsr->state >> 1) ^
+		lfsr->state = ((lfsr->state >> 1) | lfsr->cached_bit) ^
 			(((lfsr->state & 1UL) - 1UL) & lfsr->xnormask);
-	} while (lfsr->state > lfsr->limit);
-
+		//lfsr->state = (lfsr->state >> 1) ^ (-(lfsr->state & 1UL) & lfsr->xnormask);
+		//printf("State: %lu\n", lfsr->state);
+	} while (lfsr->state >= lfsr->limit);
+	//} while (lfsr->state > lfsr->limit);
+	//printf("------------\n");
 	return lfsr->state;
 }
 

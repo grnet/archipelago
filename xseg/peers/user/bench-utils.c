@@ -151,7 +151,7 @@ void create_target(struct bench *prefs, struct xseg_request *req,
 	//chunks in an object.
 	//FIXME: Make it more elegant
 	if (prefs->op == X_READ || prefs->op == X_WRITE)
-		new = new / (prefs->os / prefs->ts);
+		new = new / (prefs->os / prefs->bs);
 	snprintf(req_target, TARGETLEN, "%s-%016lu", global_id, new);
 	XSEGLOG2(&lc, D, "Target name of request is %s\n", req_target);
 }

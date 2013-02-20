@@ -245,6 +245,7 @@ int lfsr_init(struct lfsr *lfsr, uint64_t size, uint64_t seed)
 		lfsr->state = seed;
 	}
 
+	lfsr->cached_bit = 1UL << (i-1);
 	lfsr->length = i;
 	lfsr->xnormask = lfsr_create_xnormask(taps[i]);
 
@@ -253,7 +254,7 @@ int lfsr_init(struct lfsr *lfsr, uint64_t size, uint64_t seed)
 
 #ifdef STAND_ALONE
 /*
- * Sanity-check every LFSR for wrong tap positions.
+ * Sanity-check every LFSR for mistakes.
  */
 static int lfsr_check()
 {
@@ -266,7 +267,8 @@ static int lfsr_check()
 	for (length = 3; length < 64; length++) {
 		if (lfsr_init(&lfsr, pow(2, length) - 1, 1))
 			return -1;
-
+	//	printf("XNOR-mask: %lu, state: %lu, limit: %lu\n",
+	//			lfsr.xnormask, lfsr.state, lfsr.limit);
 		period = 1; //Already initialized at 1
 		upper_limit = pow(2, length);
 
@@ -274,16 +276,17 @@ static int lfsr_check()
 			lfsr_next(&lfsr);
 
 		if (lfsr.state == 1) {
-			printf("%u-bit LFSR has correct tap positions\n", length);
+			printf("%u-bit LFSR is correct\n", length);
 		}
 		else {
-			printf("%u-bit LFSR has incorrect tap positions\n", length);
+			printf("%u-bit LFSR did not iterate successfully\n", length);
 			printf("Current tap positions: ");
 			for (i = 0; i < MAX_TAPS && taps[length][i] != 0; i++)
 				printf("%u ", taps[length][i]);
 			printf("\n");
 			return -1;
 		}
+	//	return 0;
 	}
 
 	return 0;
