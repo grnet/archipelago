@@ -431,13 +431,11 @@ static int send_request(struct peerd *peer, struct bench *prefs)
 	}
 	timer_stop(prefs, prefs->sub_tm, NULL);
 
-	//Send SIGIO to the process that has binded this port to inform that
+	//Send SIGIO to the process that has bound this port to inform that
 	//IO is possible
 	r = xseg_signal(xseg, p);
-	if (r == -1)
-		XSEGLOG2(&lc, W, "Could not associate destination peer\n");
-	else if (r == -2)
-		XSEGLOG2(&lc, W, "Could signal destination peer\n");
+	if (r < 0)
+		XSEGLOG2(&lc, W, "Cannot signal destination peer (reason %d)\n", r);
 
 	return 0;
 
@@ -491,7 +489,7 @@ int custom_peerd_loop(void *arg)
 send_request:
 		while (CAN_SEND_REQUEST(prefs)) {
 			xseg_cancel_wait(xseg, peer->portno_start);
-			XSEGLOG2(&lc, D, "Because %lu < %lu && %lu < %lu\n",
+			XSEGLOG2(&lc, D, "...because %lu < %lu && %lu < %lu\n",
 					prefs->sub_tm->completed - prefs->rec_tm->completed,
 					prefs->iodepth, prefs->sub_tm->completed,
 					prefs->max_requests);
@@ -502,6 +500,9 @@ send_request:
 		}
 		//Heart of peerd_loop. This loop is common for everyone.
 		for (loops = threshold; loops > 0; loops--) {
+			if (loops == 1)
+				xseg_prepare_wait(xseg, peer->portno_start);
+
 			if (check_ports(peer)) {
 				//If an old request has just been acked, the most sensible
 				//thing to do is to immediately send a new one
@@ -511,8 +512,12 @@ send_request:
 					return 0;
 			}
 		}
-		XSEGLOG2(&lc, I, "%s goes to sleep\n",id);
-		xseg_prepare_wait(xseg, peer->portno_start);
+		//struct xseg_port *port = xseg_get_port(xseg, portno_start);
+		//struct xq *q;
+		//q = XPTR_TAKE(port->request_queue, xseg->segment);
+		//XSEGLOG2(&lc, I, "%s goes to sleep with %u requests pending\n",
+		//		id, xq_count(q));
+		XSEGLOG2(&lc, I, "%s goes to sleep\n", id);
 #ifdef ST_THREADS
 		if (ta){
 			st_sleep(0);

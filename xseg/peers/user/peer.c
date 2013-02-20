@@ -282,6 +282,8 @@ void complete(struct peerd *peer, struct peer_req *pr)
 {
 	struct xseg_request *req = pr->req;
 	uint32_t p;
+	int r;
+
 	req->state |= XS_SERVED;
 	//xseg_set_req_data(peer->xseg, pr->req, NULL);
 	//gettimeofday(&resp_start, NULL);
@@ -291,7 +293,9 @@ void complete(struct peerd *peer, struct peer_req *pr)
 	//timersub(&resp_end, &resp_start, &resp_end);
 	//timeradd(&resp_end, &resp_accum, &resp_accum);
 	//printf("xseg_signal: %u\n", p);
-	xseg_signal(peer->xseg, p);
+	r = xseg_signal(peer->xseg, p);
+	if (r < 0)
+		XSEGLOG2(&lc, W, "Cannot signal destination peer (reason %d)\n", r);
 	free_peer_req(peer, pr);
 #ifdef MT
 	wake_up_next_thread(peer);
@@ -555,10 +559,11 @@ static int generic_peerd_loop(void *arg)
 #endif
 		//Heart of peerd_loop. This loop is common for everyone.
 		for(loops = threshold; loops > 0; loops--) {
+			if (loops == 1)
+				xseg_prepare_wait(xseg, peer->portno_start);
 			if (check_ports(peer))
 				loops = threshold;
 		}
-		xseg_prepare_wait(xseg, peer->portno_start);
 #ifdef ST_THREADS
 		if (ta){
 			st_sleep(0);
