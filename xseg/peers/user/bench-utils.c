@@ -175,7 +175,7 @@ void print_res(struct bench *prefs, struct timer *tm, char *type)
 
 	printf("\n");
 	printf("              %s\n", type);
-	printf("=======================================\n");
+	printf("           ========================\n");
 	printf("             |-s-||-ms-|-us-|-ns-|\n");
 	printf("Total time:   %3u. %03u  %03u  %03u\n",
 			res.s, res.ms, res.us, res.ns);

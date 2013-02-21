@@ -128,7 +128,7 @@ int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 	READ_ARG_STRING("-bs", block_size, MAX_ARG_LEN);
 	READ_ARG_ULONG("--iodepth", prefs->iodepth);
 	READ_ARG_ULONG("-dp", dst_port);
-	READ_ARG_STRING("--insanity", block_size, MAX_ARG_LEN);
+	READ_ARG_STRING("--insanity", insanity, MAX_ARG_LEN);
 	END_READ_ARGS();
 
 	/*****************************\
