@@ -475,6 +475,7 @@ int custom_peerd_loop(void *arg)
 	xseg_init_local_signal(xseg, peer->portno_start);
 
 	timer_start(prefs, prefs->total_tm);
+send_request:
 	while (!isTerminate()) {
 #ifdef MT
 		if (t->func) {
@@ -486,7 +487,6 @@ int custom_peerd_loop(void *arg)
 			continue;
 		}
 #endif
-send_request:
 		while (CAN_SEND_REQUEST(prefs)) {
 			xseg_cancel_wait(xseg, peer->portno_start);
 			XSEGLOG2(&lc, D, "...because %lu < %lu && %lu < %lu\n",
