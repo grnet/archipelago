@@ -538,13 +538,12 @@ void custom_peer_finalize(struct peerd *peer)
 {
 	struct bench *prefs = peer->priv;
 	//TODO: Measure mean time, standard variation
-	struct tm_result total; //mean, std;
 
 	if (!prefs->total_tm->completed)
 		timer_stop(prefs, prefs->total_tm, NULL);
 
-	separate_by_order(prefs->total_tm->sum, &total);
-	print_res(total, "Total Time");
+	print_stats(prefs);
+	print_res(prefs, prefs->total_tm, "Total Requests");
 	return;
 }
 

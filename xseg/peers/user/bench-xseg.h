@@ -101,15 +101,15 @@ struct timer {
 	struct timespec sum;
 	struct timespec2 sum_sq;
 	struct timespec start_time;
-	uint32_t completed;
-	unsigned int insanity;
+	uint64_t completed;
+	int insanity;
 };
 
 struct tm_result {
-	unsigned long s;
-	unsigned long ms;
-	unsigned long us;
-	unsigned long ns;
+	unsigned int s;
+	unsigned int ms;
+	unsigned int us;
+	unsigned int ns;
 };
 
 /* FILLME
@@ -130,15 +130,15 @@ int init_timer(struct timer **tm, int insanity);
 uint64_t str2num(char *str);
 int read_op(char *op);
 int read_pattern(char *pattern);
-void print_res(struct tm_result res, char *type);
-void separate_by_order(struct timespec src, struct tm_result *res);
+int read_insanity(char *insanity);
+void print_res(struct bench *prefs, struct timer *tm, char *type);
+void print_stats(struct bench *prefs);
 void create_target(struct bench *prefs, struct xseg_request *req,
 		uint64_t new);
 void create_chunk(struct bench *prefs, struct xseg_request *req,
 		uint64_t new);
 uint64_t determine_next(struct bench *prefs);
 void create_id();
-int read_insanity(char *insanity);
 
 /**************\
  * LFSR stuff *
