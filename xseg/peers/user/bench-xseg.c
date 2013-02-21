@@ -133,7 +133,7 @@ int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 
 	/*****************************\
 	 * Check I/O type parameters *
-	\*****************************/
+	 \*****************************/
 
 	//We support 4 xseg operations: X_READ, X_WRITE, X_DELETE, X_INFO
 	//The I/O pattern of thesee operations can be either synchronous (sync) or
@@ -162,7 +162,7 @@ int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 
 	/**************************\
 	 * Check timer parameters *
-	\**************************/
+	 \**************************/
 
 	//Most of the times, not all timers need to be used.
 	//We can choose which timers will be used by adjusting the "insanity"
@@ -185,7 +185,7 @@ int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 
 		/***************************\
 		 * Check object parameters *
-		\***************************/
+		 \***************************/
 
 		if (!total_objects[0]) {
 			XSEGLOG2(&lc, E,
@@ -205,7 +205,7 @@ int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 
 		/*************************\
 		 * Check size parameters *
-		\*************************/
+		 \*************************/
 
 		//Block size (bs): Defaults to 4K.
 		//It must be a number followed by one of these characters:
@@ -269,9 +269,9 @@ int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 		prefs->max_requests = prefs->ts / prefs->bs;
 	}
 
-	/*************************
+	/*************************\
 	 * Check port parameters *
-	 *************************/
+	\*************************/
 
 	if (dst_port < 0){
 		XSEGLOG2(&lc, E, "Destination port needs to be supplied\n");
@@ -281,9 +281,9 @@ int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 	prefs->src_port = peer->portno_start; //TODO: allow user to change this
 	prefs->dst_port = (xport) dst_port;
 
-	/*********************************
+	/*********************************\
 	 * Create timers for all metrics *
-	 *********************************/
+	\*********************************/
 
 	if (init_timer(&prefs->total_tm, TM_SANE))
 		goto tm_fail;
@@ -296,7 +296,7 @@ int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 
 	/********************************\
 	 * Customize struct peerd/prefs *
-	 \********************************/
+	\********************************/
 
 	prefs->peer = peer;
 
@@ -375,13 +375,13 @@ static int send_request(struct peerd *peer, struct bench *prefs)
 	//Create a target of this format: "bench-<obj_no>"
 	create_target(prefs, req, new);
 
-	if(prefs->op == X_WRITE || prefs->op == X_READ) {
+	if (prefs->op == X_WRITE || prefs->op == X_READ) {
 		req->size = size;
 		//Calculate the chunk offset inside the object
 		req->offset = (new * prefs->bs) % prefs->os;
 		XSEGLOG2(&lc, D, "Offset of request %lu is %lu\n", new, req->offset);
 
-		if(prefs->op == X_WRITE)
+		if (prefs->op == X_WRITE)
 			create_chunk(prefs, req, new);
 	}
 
@@ -399,7 +399,7 @@ static int send_request(struct peerd *peer, struct bench *prefs)
 	pr->portno = srcport;
 	pr->req = req;
 	pr->priv = malloc(sizeof(struct timespec));
-	if(!pr->priv) {
+	if (!pr->priv) {
 		perror("malloc");
 		goto put_peer_request;
 	}
