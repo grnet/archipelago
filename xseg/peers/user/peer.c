@@ -194,7 +194,7 @@ void print_req(struct xseg *xseg, struct xseg_request *req)
 		strncpy(data, req_data, 63);
 		data[63] = 0;
 		printf("req id:%lu, op:%u %llu:%lu serviced: %lu, reqstate: %u\n"
-				"src: %u, st: %u, dst: %u dt: %u\n"
+				"src: %u, transit: %u, dst: %u effective dst: %u\n"
 				"target[%u]:'%s', data[%llu]:\n%s------------------\n\n",
 				(unsigned long)(req),
 				(unsigned int)req->op,
@@ -203,9 +203,9 @@ void print_req(struct xseg *xseg, struct xseg_request *req)
 				(unsigned long)req->serviced,
 				(unsigned int)req->state,
 				(unsigned int)req->src_portno,
-				(unsigned int)req->src_transit_portno,
+				(unsigned int)req->transit_portno,
 				(unsigned int)req->dst_portno,
-				(unsigned int)req->dst_transit_portno,
+				(unsigned int)req->effective_dst_portno,
 				(unsigned int)req->targetlen, target,
 				(unsigned long long)req->datalen, data);
 	}

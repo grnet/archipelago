@@ -251,15 +251,15 @@ void report_request(struct xseg_request *req)
 	fprintf(stderr,
 		"Request %lx: target[%u](xptr: %llu): %s, data[%llu](xptr: %llu): %s \n\t"
 		"offset: %llu, size: %llu, serviced; %llu, op: %u, state: %u, flags: %u \n\t"
-		"src: %u, src_transit: %u, dst: %u, dst_transit: %u\n",
+		"src: %u, transit: %u, dst: %u, effective dst: %u\n",
 		(unsigned long) req, req->targetlen, (unsigned long long)req->target,
 		target,
 		(unsigned long long) req->datalen, (unsigned long long) req->data,
 		data,
 		(unsigned long long) req->offset, (unsigned long long) req->size,
 		(unsigned long long) req->serviced, req->op, req->state, req->flags,
-		(unsigned int) req->src_portno, (unsigned int) req->src_transit_portno,
-		(unsigned int) req->dst_portno, (unsigned int) req->dst_transit_portno);
+		(unsigned int) req->src_portno, (unsigned int) req->transit_portno,
+		(unsigned int) req->dst_portno, (unsigned int) req->effective_dst_portno);
 
 
 }
@@ -1179,13 +1179,13 @@ int cmd_report(uint32_t portno)
 	lock_status(&port->rq_lock, rls, 64);
 	lock_status(&port->pq_lock, pls, 64);
 	fprintf(stderr, "port %u:\n"
-		"   requests: %llu/%llu  src gw: %u  dst gw: %u\n"
+		"   requests: %llu/%llu  next: %u  dst gw: %u\n"
 		"       free_queue [%p] count : %4llu | %s\n"
 		"    request_queue [%p] count : %4llu | %s\n"
 		"      reply_queue [%p] count : %4llu | %s\n",
 		portno, (unsigned long long)port->alloc_reqs, 
 		(unsigned long long)port->max_alloc_reqs,
-		xseg->src_gw[portno],
+		xseg->path_next[portno],
 		xseg->dst_gw[portno],
 		(void *)fq, (unsigned long long)xq_count(fq), fls,
 		(void *)rq, (unsigned long long)xq_count(rq), rls,
@@ -1754,6 +1754,12 @@ int cmd_signal(uint32_t portno)
 	return xseg_signal(xseg, portno);
 }
 
+int cmd_set_next(xport portno, xport next)
+{
+	xseg->path_next[portno] = next;
+	return 0;
+}
+
 int parse_ports(char *str)
 {
 	int ret = 0;
@@ -1843,6 +1849,12 @@ int main(int argc, char **argv)
 		if (!strcmp(argv[i], "bind") && (i + 1 < argc)) {
 			ret = cmd_bind(atol(argv[i+1]));
 			i += 1;
+			continue;
+		}
+
+		if (!strcmp(argv[i], "set-next") && (i + 2 < argc)) {
+			ret = cmd_set_next(atol(argv[i+1]), atol(argv[i+2]));
+			i += 2;
 			continue;
 		}
 
