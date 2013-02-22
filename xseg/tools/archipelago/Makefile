@@ -47,7 +47,7 @@ default:
 	python setup.py build
 
 clean:
-	rm -r build/ python_archipelago.egg-info/ distribute_setup.pyc \
+	rm -rf build/ archipelago.egg-info/ distribute_setup.pyc \
 		archipelago/__init__.pyc archipelago/archipelago.pyc \
 		archipelago/version.pyc
 
