@@ -90,6 +90,7 @@ int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 	char insanity[MAX_ARG_LEN + 1];
 	struct xseg *xseg = peer->xseg;
 	unsigned int xseg_page_size = 1 << xseg->config.page_shift;
+	long iodepth = -1;
 	long dst_port = -1;
 	int r;
 
@@ -126,14 +127,14 @@ int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 	READ_ARG_STRING("-ts", total_size, MAX_ARG_LEN);
 	READ_ARG_STRING("-os", object_size, MAX_ARG_LEN);
 	READ_ARG_STRING("-bs", block_size, MAX_ARG_LEN);
-	READ_ARG_ULONG("--iodepth", prefs->iodepth);
+	READ_ARG_ULONG("--iodepth", iodepth);
 	READ_ARG_ULONG("-dp", dst_port);
 	READ_ARG_STRING("--insanity", insanity, MAX_ARG_LEN);
 	END_READ_ARGS();
 
 	/*****************************\
 	 * Check I/O type parameters *
-	 \*****************************/
+	\*****************************/
 
 	//We support 4 xseg operations: X_READ, X_WRITE, X_DELETE, X_INFO
 	//The I/O pattern of thesee operations can be either synchronous (sync) or
@@ -160,9 +161,15 @@ int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 	}
 	prefs->flags |= (uint8_t)r;
 
+	//Defailt iodepth value is 1
+	if (iodepth < -1)
+		prefs->iodepth = 1;
+	else
+		prefs->iodepth = iodepth;
+
 	/**************************\
 	 * Check timer parameters *
-	 \**************************/
+	\**************************/
 
 	//Most of the times, not all timers need to be used.
 	//We can choose which timers will be used by adjusting the "insanity"
@@ -185,7 +192,7 @@ int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 
 		/***************************\
 		 * Check object parameters *
-		 \***************************/
+		\***************************/
 
 		if (!total_objects[0]) {
 			XSEGLOG2(&lc, E,
@@ -205,7 +212,7 @@ int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 
 		/*************************\
 		 * Check size parameters *
-		 \*************************/
+		\*************************/
 
 		//Block size (bs): Defaults to 4K.
 		//It must be a number followed by one of these characters:
@@ -214,10 +221,6 @@ int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 		//Must be integer multiple of segment's page size (typically 4k).
 		if (!block_size[0])
 			strcpy(block_size,"4k");
-
-		//0 iodepth is an accepted value, but only for debugging purposes
-		if (!prefs->iodepth)
-			prefs->iodepth = 1;
 
 		prefs->bs = str2num(block_size);
 		if (!prefs->bs) {
