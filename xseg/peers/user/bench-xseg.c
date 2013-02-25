@@ -53,7 +53,7 @@ uint64_t global_seed;
 /*
  * This function checks two things:
  * a) If in-flight requests are less than given iodepth
- * b) If we have submitted al of the requests
+ * b) If we have submitted all of the requests
  */
 #define CAN_SEND_REQUEST(prefs)	\
 	prefs->sub_tm->completed - prefs->rec_tm->completed < prefs->iodepth &&	\
@@ -162,7 +162,7 @@ int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 	prefs->flags |= (uint8_t)r;
 
 	//Defailt iodepth value is 1
-	if (iodepth < -1)
+	if (iodepth < 0)
 		prefs->iodepth = 1;
 	else
 		prefs->iodepth = iodepth;
@@ -437,8 +437,8 @@ static int send_request(struct peerd *peer, struct bench *prefs)
 	//Send SIGIO to the process that has bound this port to inform that
 	//IO is possible
 	r = xseg_signal(xseg, p);
-	if (r < 0)
-		XSEGLOG2(&lc, W, "Cannot signal destination peer (reason %d)\n", r);
+	//if (r < 0)
+	//	XSEGLOG2(&lc, W, "Cannot signal destination peer (reason %d)\n", r);
 
 	return 0;
 

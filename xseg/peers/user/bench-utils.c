@@ -180,6 +180,9 @@ void print_res(struct bench *prefs, struct timer *tm, char *type)
 	printf("Total time:   %3u. %03u  %03u  %03u\n",
 			res.s, res.ms, res.us, res.ns);
 
+	if (!prefs->rec_tm->completed)
+		return;
+
 	res = separate_by_order(sum / prefs->rec_tm->completed);
 
 	printf("Mean Time:    %3u. %03u  %03u  %03u\n",
