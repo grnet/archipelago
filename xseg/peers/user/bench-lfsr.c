@@ -223,12 +223,11 @@ int lfsr_init(struct lfsr *lfsr, uint64_t size, uint64_t seed)
 
 	lfsr->limit = size;
 
-	//i has number of bits of size
-	for (i = 0; size; i++)
-		size = size >> 1;
+	//`i` has required number of bits for LFSR
+	for (i = 3; size >= (1UL << i); i++) {}
 
-	//Too small or too big size to create an LFSR out of it
-	if (i < 3 || i > 63)
+	//Will not create LFSR longer than 63 bits
+	if (i > 63)
 		return -1;
 
 	//The all ones state is illegal. Due to the fact that our seed is
@@ -240,8 +239,7 @@ int lfsr_init(struct lfsr *lfsr, uint64_t size, uint64_t seed)
 			lfsr->state = global_seed >> (31 - i);
 		else
 			lfsr->state = global_seed << (i - 31);
-	}
-	else {
+	} else {
 		lfsr->state = seed;
 	}
 
