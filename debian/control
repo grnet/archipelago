@@ -2,7 +2,9 @@ Source: archipelago
 Section: otherosfs
 Priority: extra
 Maintainer: Filippos Giannakos <philipgian@grnet.gr>
-Build-Depends: debhelper (>= 7.0.50~), dkms(>=2.1.0.0), python
+Build-Depends: debhelper (>= 7.0.50~), dkms(>=2.1.0.0), python, libst1,
+ librados-dev(=0.56.1-grnet-1), libssl-dev(<< 1), gccxml,
+ python-ctypeslib
 Standards-Version: 3.9.1
 X-Python-Version: >=2.6
 
@@ -37,11 +39,11 @@ Description: Python archipelago module
 
 Package: archipelago
 Architecture: amd64
-Depends: ${misc:Depends}, ${python:Depends}, ${shlibs:Depends},
-	 libxseg0(=${binary:Version}), libst1(>=1.9-3), python-xseg(=${binary:Version}),
-	 librados2(=0.56.1-grnet-1), python-psutil(>=0.1.3), python-argparse,
-	 libssl0.9.8,  archipelago-kernel-dkms(=${binary:Version}),
-	 python-archipelago(=${binary:Version})
+Depends: ${misc:Depends},  ${shlibs:Depends}, ${python:Depends},
+ libxseg0(=${binary:Version}), python-xseg(=${binary:Version}),
+ python-archipelago(=${binary:Version}),
+ libst1, librados2(=0.56.1-grnet-1), libssl0.9.8,
+ archipelago-kernel-dkms(=${binary:Version})
 Description:  Provides archipelago infrastructure
  Extended Description here
 
@@ -54,14 +56,14 @@ Description:  Provides archipelago-dbg infrastructure
 
 Package: archipelago-ganeti
 Architecture: any
-Depends: ${misc:Depends}, ${python:Depends}, archipelago(=${binary:Version}),
-	 python-xseg(=${binary:Version})
+Depends: ${misc:Depends}, python(>=2.6), archipelago(=${binary:Version}),
+ python-archipelago(=${binary:Version})
 Description:  Provides archipelago ganeti ext storage scripts
  Extended Description here
 
 Package: archipelago-kernel-dkms
 Architecture: any
-Depends: ${misc:Depends}, linux-headers-amd64(>= 3.2)
+Depends: ${misc:Depends}, dkms(>=2.1.0.0), linux-headers-amd64(>= 3.2)
 Description:  Provides archipelago-kernel infrastructure
  Extended Description here
 
