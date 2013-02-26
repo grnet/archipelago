@@ -32,7 +32,8 @@ Description: Python xseg bindings
 Package: python-archipelago
 Section: python
 Architecture: any
-Depends: ${misc:Depends}, ${python:Depends}, python-xseg(=${binary:Version})
+Depends: ${misc:Depends}, ${python:Depends}, python-xseg(=${binary:Version}),
+ python-ceph
 Provides: ${python:Provides}
 Description: Python archipelago module
  Extended Description here
