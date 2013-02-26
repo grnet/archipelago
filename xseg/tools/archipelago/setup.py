@@ -66,7 +66,7 @@ PACKAGES = find_packages(PACKAGES_ROOT)
 CLASSIFIERS = []
 
 # Package requirements
-INSTALL_REQUIRES = ['xseg', 'argparse', 'psutil', 'ceph'
+INSTALL_REQUIRES = ['xseg', 'argparse', 'psutil'
                     ]
 
 EXTRAS_REQUIRES = {
