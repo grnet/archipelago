@@ -234,6 +234,7 @@ int lfsr_init(struct lfsr *lfsr, uint64_t size, uint64_t seed)
 	//nanoseconds taken from clock_gettime, we are sure that the 31st bit will
 	//always be 0. The following codes has that in mind and creates a seed
 	//that has at least one 0.
+	//FIXME: The above wrong, we cannot assume seed is taken from timer.
 	if (seed == UINT64_MAX) {
 		if (i < 32)
 			lfsr->state = global_seed >> (31 - i);

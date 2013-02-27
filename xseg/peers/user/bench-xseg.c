@@ -92,6 +92,7 @@ int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 	unsigned int xseg_page_size = 1 << xseg->config.page_shift;
 	long iodepth = -1;
 	long dst_port = -1;
+	unsigned long seed = -1;
 	int r;
 
 	op[0] = 0;
@@ -129,6 +130,7 @@ int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 	READ_ARG_STRING("-bs", block_size, MAX_ARG_LEN);
 	READ_ARG_ULONG("--iodepth", iodepth);
 	READ_ARG_ULONG("-dp", dst_port);
+	READ_ARG_ULONG("--seed", seed);
 	READ_ARG_STRING("--insanity", insanity, MAX_ARG_LEN);
 	END_READ_ARGS();
 
@@ -305,7 +307,7 @@ int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 
 	//The following function initializes the global_id, global_seed extern
 	//variables.
-	create_id();
+	create_id(seed);
 
 	if ((prefs->flags & (1 <<PATTERN_FLAG)) == IO_RAND) {
 		prefs->lfsr = malloc(sizeof(struct lfsr));
@@ -313,9 +315,8 @@ int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 			perror("malloc");
 			goto lfsr_fail;
 		}
-		//FIXME: Give a name to max requests, not just prefs->ts / prefs->bs
 		//FIXME: handle better the seed passing than just giving UINT64_MAX
-		if (lfsr_init(prefs->lfsr, prefs->max_requests, UINT64_MAX)) {
+		if (lfsr_init(prefs->lfsr, prefs->max_requests, seed)) {
 			XSEGLOG2(&lc, E, "LFSR could not be initialized\n");
 			goto lfsr_fail;
 		}

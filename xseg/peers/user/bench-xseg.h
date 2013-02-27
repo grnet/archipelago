@@ -52,7 +52,7 @@
  * seed the lfsr. They can be handled more elegantly (e.g. be a member of a
  * struct.)
  */
-#define IDLEN 15
+#define IDLEN 16
 #define TARGETLEN (IDLEN + 17)
 extern char global_id[IDLEN];
 extern uint64_t global_seed;

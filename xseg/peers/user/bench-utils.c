@@ -229,13 +229,16 @@ uint64_t determine_next(struct bench *prefs)
 }
 
 //FIXME: this looks like a hack, handle it more elegantly
-void create_id()
+void create_id(unsigned long seed)
 {
-	struct timespec seed;
+	struct timespec timer_seed;
 
-	clock_gettime(CLOCK_MONOTONIC_RAW, &seed);
-
-	global_seed = seed.tv_nsec;
+	if (seed != -1) {
+		global_seed = seed;
+	} else {
+		clock_gettime(CLOCK_MONOTONIC_RAW, &timer_seed);
+		global_seed = timer_seed.tv_nsec;
+	}
 	//nanoseconds can't be more than 9 digits
 	snprintf(global_id, IDLEN, "bench-%09lu", global_seed);
 	XSEGLOG2(&lc, I, "Global ID is %s\n", global_id);
