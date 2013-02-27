@@ -483,12 +483,26 @@ int peerd_start_threads(struct peerd *peer)
 #endif
 
 
-void defer_request(struct peerd *peer, struct peer_req *pr)
+int defer_request(struct peerd *peer, struct peer_req *pr)
 {
-	// assert canDefer(peer);
-//	xseg_submit(peer->xseg, peer->defer_portno, pr->req);
-//	xseg_signal(peer->xseg, peer->defer_portno);
-//	free_peer_req(peer, pr);
+	int r;
+	xport p;
+	if (!canDefer(peer)){
+		XSEGLOG2(&lc, E, "Peer cannot defer requests");
+		return -1;
+	}
+	p = xseg_forward(peer->xseg, pr->req, peer->defer_portno, pr->portno,
+			X_ALLOC);
+	if (p == NoPort){
+		XSEGLOG2(&lc, E, "Cannot defer request %lx", pr->req);
+		return -1;
+	}
+	r = xseg_signal(peer->xseg, p);
+	if (r < 0) {
+		XSEGLOG2(&lc, W, "Cannot signal port %lu", p);
+	}
+	free_peer_req(peer, pr);
+	return 0;
 }
 
 static int peerd_loop(struct peerd *peer) 
@@ -551,7 +565,7 @@ static struct xseg *join(char *spec)
 }
 
 static struct peerd* peerd_init(uint32_t nr_ops, char* spec, long portno_start,
-			long portno_end, uint32_t nr_threads, uint32_t defer_portno)
+			long portno_end, uint32_t nr_threads, xport defer_portno)
 {
 	int i;
 	struct peerd *peer;
@@ -717,7 +731,7 @@ int main(int argc, char *argv[])
 	uint32_t nr_ops = 16;
 	uint32_t nr_threads = 1;
 	unsigned int debug_level = 0;
-	uint32_t defer_portno = NoPort;
+	xport defer_portno = NoPort;
 	pid_t old_pid;
 	int pid_fd = -1;
 
@@ -743,7 +757,7 @@ int main(int argc, char *argv[])
 #ifdef MT
 	READ_ARG_ULONG("-t", nr_threads);
 #endif
-//	READ_ARG_ULONG("-dp", defer_portno);
+	READ_ARG_ULONG("-dp", defer_portno);
 	READ_ARG_STRING("-l", logfile, MAX_LOGFILE_LEN);
 	READ_ARG_BOOL("-d", daemonize);
 	READ_ARG_BOOL("-h", help);
