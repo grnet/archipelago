@@ -9,4 +9,4 @@
 #xseg/tools/ext_scripts/vlmc_wrapper.py usr/share/ganeti/extstorage/vlmc
 #
 usr/share/ganeti/*
-
+var/log/ganeti/extstorage

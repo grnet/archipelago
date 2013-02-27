@@ -3,7 +3,8 @@
 
 #export DH_VERBOSE=1
 
-.PHONY: override_dh_dkms override_dh_strip
+.PHONY: override_dh_dkms override_dh_strip override_dh_installinit \
+	override_dh_auto_build override_dh_fixperms
 export VERSION := $(shell head -n 1 debian/changelog | sed -r 's/.*([0-9]+\.[0-9]+.*)-[0-9]+.*/\1/g')
 
 %:
@@ -21,3 +22,7 @@ override_dh_installinit:
 
 override_dh_auto_build:
 	dh_auto_build -- build
+
+override_dh_fixperms:
+	dh_fixperms --exclude var/log/ganeti/extstorage
+#	chmod 0750 $(DESTDIR)/var/log/ganeti/extstorage
