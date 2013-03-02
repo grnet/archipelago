@@ -69,7 +69,7 @@ void custom_peer_usage()
 			"    -ts       | None    | Total I/O size\n"
 			"    -os       | 4M      | Object size\n"
 			"    -bs       | 4k      | Block size\n"
-			"    -dp       | None    | Destination port\n"
+			"    -tp       | None    | Target port\n"
 			"    --iodepth | 1       | Number of in-flight I/O requests\n"
 			"    --verify  | no      | Verify written requests [no|meta|hash]\n"
 			"    --seed    | None    | Inititalize LFSR and target names\n"
@@ -129,7 +129,7 @@ int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 	READ_ARG_STRING("-os", object_size, MAX_ARG_LEN);
 	READ_ARG_STRING("-bs", block_size, MAX_ARG_LEN);
 	READ_ARG_ULONG("--iodepth", iodepth);
-	READ_ARG_ULONG("-dp", dst_port);
+	READ_ARG_ULONG("-tp", dst_port);
 	READ_ARG_ULONG("--seed", seed);
 	READ_ARG_STRING("--insanity", insanity, MAX_ARG_LEN);
 	END_READ_ARGS();
@@ -279,7 +279,7 @@ int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 	\*************************/
 
 	if (dst_port < 0){
-		XSEGLOG2(&lc, E, "Destination port needs to be supplied\n");
+		XSEGLOG2(&lc, E, "Target port needs to be supplied\n");
 		goto arg_fail;
 	}
 
