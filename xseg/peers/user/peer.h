@@ -90,7 +90,7 @@ struct peerd {
 	xport portno_start;
 	xport portno_end;
 	long nr_ops;
-	uint32_t defer_portno;
+	xport defer_portno;
 	struct peer_req *peer_reqs;
 	struct xq free_reqs;
 	void *priv;
@@ -110,7 +110,7 @@ enum dispatch_reason {
 
 void fail(struct peerd *peer, struct peer_req *pr);
 void complete(struct peerd *peer, struct peer_req *pr);
-void defer_request(struct peerd *peer, struct peer_req *pr);
+int defer_request(struct peerd *peer, struct peer_req *pr);
 void pending(struct peerd *peer, struct peer_req *req);
 void log_pr(char *msg, struct peer_req *pr);
 int canDefer(struct peerd *peer);
