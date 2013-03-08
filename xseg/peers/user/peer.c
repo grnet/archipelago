@@ -43,7 +43,6 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <errno.h>
-
 #ifdef MT
 #include <pthread.h>
 #endif
@@ -266,11 +265,13 @@ void fail(struct peerd *peer, struct peer_req *pr)
 {
 	struct xseg_request *req = pr->req;
 	uint32_t p;
-	XSEGLOG2(&lc, D, "failing req %u", (unsigned int) (pr - peer->peer_reqs));
-	req->state |= XS_FAILED;
-	//xseg_set_req_data(peer->xseg, pr->req, NULL);
-	p = xseg_respond(peer->xseg, req, pr->portno, X_ALLOC);
-	xseg_signal(peer->xseg, p);
+	if (req){
+		XSEGLOG2(&lc, D, "failing req %u", (unsigned int) (pr - peer->peer_reqs));
+		req->state |= XS_FAILED;
+		//xseg_set_req_data(peer->xseg, pr->req, NULL);
+		p = xseg_respond(peer->xseg, req, pr->portno, X_ALLOC);
+		xseg_signal(peer->xseg, p);
+	}
 	free_peer_req(peer, pr);
 #ifdef MT
 	wake_up_next_thread(peer);
@@ -282,20 +283,18 @@ void complete(struct peerd *peer, struct peer_req *pr)
 {
 	struct xseg_request *req = pr->req;
 	uint32_t p;
-	int r;
-
-	req->state |= XS_SERVED;
-	//xseg_set_req_data(peer->xseg, pr->req, NULL);
-	//gettimeofday(&resp_start, NULL);
-	p = xseg_respond(peer->xseg, req, pr->portno, X_ALLOC);
-	//gettimeofday(&resp_end, NULL);
-	//responds++;
-	//timersub(&resp_end, &resp_start, &resp_end);
-	//timeradd(&resp_end, &resp_accum, &resp_accum);
-	//printf("xseg_signal: %u\n", p);
-	r = xseg_signal(peer->xseg, p);
-	if (r < 0)
-		XSEGLOG2(&lc, W, "Cannot signal destination peer (reason %d)\n", r);
+	if (req){
+		req->state |= XS_SERVED;
+		//xseg_set_req_data(peer->xseg, pr->req, NULL);
+		//gettimeofday(&resp_start, NULL);
+		p = xseg_respond(peer->xseg, req, pr->portno, X_ALLOC);
+		//gettimeofday(&resp_end, NULL);
+		//responds++;
+		//timersub(&resp_end, &resp_start, &resp_end);
+		//timeradd(&resp_end, &resp_accum, &resp_accum);
+		//printf("xseg_signal: %u\n", p);
+		xseg_signal(peer->xseg, p);
+	}
 	free_peer_req(peer, pr);
 #ifdef MT
 	wake_up_next_thread(peer);
