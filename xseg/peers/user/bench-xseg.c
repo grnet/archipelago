@@ -65,13 +65,13 @@ void custom_peer_usage()
 			"  --------------------------------------------\n"
 			"    -op       | None    | XSEG operation [read|write|info|delete]\n"
 			"    --pattern | None    | I/O pattern [seq|rand]\n"
+			"    --verify  | no      | Verify written requests [no|meta|hash]\n"
 			"    -to       | None    | Total objects (not for read/write)\n"
 			"    -ts       | None    | Total I/O size\n"
 			"    -os       | 4M      | Object size\n"
 			"    -bs       | 4k      | Block size\n"
 			"    -tp       | None    | Target port\n"
 			"    --iodepth | 1       | Number of in-flight I/O requests\n"
-			"    --verify  | no      | Verify written requests [no|meta|hash]\n"
 			"    --seed    | None    | Initialize LFSR and target names\n"
 			"    --insanity| sane    | Adjust insanity level of benchmark:\n"
 			"              |         |     [sane|eccentric|manic|paranoid]\n"
@@ -175,7 +175,6 @@ int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 		XSEGLOG2(&lc, E, "Invalid syntax: --verify %s\n", verify);
 		goto arg_fail;
 	}
-
 
 	//Default iodepth value is 1
 	if (iodepth < 0)

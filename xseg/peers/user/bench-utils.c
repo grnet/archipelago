@@ -47,8 +47,20 @@
 #include <bench-xseg.h>
 
 #include <math.h>
+#include <string.h>
 
 struct timespec delay = {0, 4000000};
+
+static inline uint64_t _get_id()
+{
+	return atol(global_id + 6); /* cut the "bench-" part*/
+}
+
+static inline uint64_t _get_object(struct bench *prefs, uint64_t new)
+{
+	return new / (prefs->os / prefs->bs);
+}
+
 
 /*
  * Convert string to size in bytes.
@@ -200,7 +212,6 @@ void print_res(struct bench *prefs, struct timer *tm, char *type)
 	//TODO: Add std
 }
 
-//FIXME: this looks like a hack, handle it more elegantly
 void create_id(unsigned long seed)
 {
 	if (seed > pow(10, 9))
@@ -220,23 +231,55 @@ void create_target(struct bench *prefs, struct xseg_request *req,
 	req_target = xseg_get_target(xseg, req);
 
 	//For read/write, the target object does not correspond to `new`, which is
-	//actually the chunk number. We need to div this number with the number of
-	//chunks in an object.
-	//FIXME: Make it more elegant
+	//actually the chunk number.
 	if (prefs->op == X_READ || prefs->op == X_WRITE)
-		new = new / (prefs->os / prefs->bs);
+		new = _get_object(prefs, new);
 	snprintf(req_target, TARGETLEN, "%s-%016lu", global_id, new);
 	XSEGLOG2(&lc, D, "Target name of request is %s\n", req_target);
 }
 
 void create_chunk(struct bench *prefs, struct xseg_request *req, uint64_t new)
-{/*
+{
 	struct xseg *xseg = prefs->peer->xseg;
-	char *req_data;
+	void *req_data;
+	uint64_t id;
+	uint64_t object;
+	struct bench_lfsr id_lfsr, obj_lfsr, off_lfsr;
+	uint64_t i;
 
-	//TODO: Fill data depening on validation level
+
+	id = _get_id();
+	object = _get_object(prefs, new);
+
 	req_data = xseg_get_data(xseg, req);
-	*/
+
+	lfsr_init(&id_lfsr, 0xFFFFFFFF, id, 0);
+	lfsr_init(&obj_lfsr, 0xFFFFFFFF, object, 0);
+	lfsr_init(&off_lfsr, 0xFFFFFFFF, req->offset, 0);
+
+	for (i = 0; i < req->size; i += 192) {
+		/*
+		 * lfsr-next
+		 * copy to memory
+		 */
+	}
+	/* check for left-overs chunk */
+
+	for (i = 64; i < req->size; i += 192) {
+		/*
+		 * lfsr-next
+		 * copy to memory
+		 */
+	}
+	/* check for left-overs chunk */
+
+	for (i = 128; i < req->size; i += 192) {
+		/*
+		 * lfsr-next
+		 * copy to memory
+		 */
+	}
+	/* check for left-overs chunk */
 }
 
 uint64_t determine_next(struct bench *prefs)
