@@ -32,6 +32,8 @@
  * or implied, of GRNET S.A.
  */
 
+#include <bench-lfsr.h>
+
 #define MAX_ARG_LEN 10
 
 #define TM_SANE 0
@@ -48,14 +50,22 @@
 #define IO_RAND 1 << PATTERN_FLAG
 
 /*
- * FIXME: The following are variables and definitions used to name objects and
- * seed the lfsr. They can be handled more elegantly (e.g. be a member of a
- * struct.)
+ * Verify mode occupies second flag bit.
+ * If 1, it uses metadata for verification, if 0, it's off.
+ */
+#define VERIFY_FLAG 1
+#define VERIFY_NO 0 << VERIFY_FLAG
+#define	VERIFY_META 1 << VERIFY_FLAG
+
+/*
+ * The benchark ID (IDLEN) is global for the test, calculated once and is a
+ * string of the following form: {"bench-" + 9-digit number + "\0"}.
+ * The target string (TARGETLEN) is per object, concatenated with the string
+ * above and is of the following form: {"-" +16-digit number + "\0"}.
  */
 #define IDLEN 16
 #define TARGETLEN (IDLEN + 17)
 extern char global_id[IDLEN];
-extern uint64_t global_seed;
 
 struct bench {
 	uint64_t to; //Total number of objects (not for read/write)
@@ -70,7 +80,7 @@ struct bench {
 	uint32_t op;	//xseg operation
 	uint8_t flags;
 	struct peerd *peer;
-	struct lfsr *lfsr;
+	struct bench_lfsr *lfsr;
 	struct timer *total_tm; //Total time for benchmark
 	struct timer *get_tm;	//Time for xseg_get_request
 	struct timer *sub_tm;	//Time for xseg_submit_request
@@ -112,13 +122,14 @@ struct tm_result {
 	unsigned int ns;
 };
 
-/* FILLME
+/* FILLME */
 struct signature {
-	//target's name
-	//οffset
+	char obj_name[TARGETLEN];
+	uint64_t offset;
+	uint64_t size;
+
 	//hash of data (heavy)
 };
-*/
 
 
 int custom_peerd_loop(void *arg);
@@ -131,6 +142,7 @@ uint64_t str2num(char *str);
 int read_op(char *op);
 int read_pattern(char *pattern);
 int read_insanity(char *insanity);
+int read_verify(char *insanity);
 void print_res(struct bench *prefs, struct timer *tm, char *type);
 void print_stats(struct bench *prefs);
 void create_target(struct bench *prefs, struct xseg_request *req,
@@ -138,36 +150,5 @@ void create_target(struct bench *prefs, struct xseg_request *req,
 void create_chunk(struct bench *prefs, struct xseg_request *req,
 		uint64_t new);
 uint64_t determine_next(struct bench *prefs);
-void create_id();
-
-/**************\
- * LFSR stuff *
-\**************/
-
-struct lfsr {
-	uint64_t state;
-	uint64_t xnormask;
-	uint64_t cached_bit; //It's faster if it's on the same cacheline
-	uint64_t limit;
-	uint8_t length;
-};
-
-int lfsr_init(struct lfsr *lfsr, uint64_t size, uint64_t seed);
-
-/*
- * This loop generates each time a new pseudo-random number. However, if it's
- * bigger than what we want, we discard it and generate the next one.
- */
-static inline uint64_t lfsr_next(struct lfsr *lfsr)
-{
-	do {
-		lfsr->state = ((lfsr->state >> 1) | lfsr->cached_bit) ^
-			(((lfsr->state & 1UL) - 1UL) & lfsr->xnormask);
-		//lfsr->state = (lfsr->state >> 1) ^ (-(lfsr->state & 1UL) & lfsr->xnormask);
-		//printf("State: %lu\n", lfsr->state);
-	} while (lfsr->state >= lfsr->limit);
-	//} while (lfsr->state > lfsr->limit);
-	//printf("------------\n");
-	return lfsr->state;
-}
+void create_id(unsigned long seed);
 

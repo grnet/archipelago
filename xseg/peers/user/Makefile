@@ -35,7 +35,7 @@
 
 include $(XSEG_HOME)/base.mk
 PEERS := xseg mt-sosd dummy mt-mapperd pfiled vlmc-xseg st-vlmcd mt-pfiled \
-	lfsr bench
+	bench
 
 FILES="Makefile"
 FILES+=$(shell ls *.h)
@@ -72,15 +72,10 @@ xseg: xseg-tool.c $(BASE)/xtypes/xheap.c $(BASE)/xseg/xseg.h
 mt-sosd: mt-sosd.c peer.c peer.h
 	$(CC) $(CFLAGS) -o $@ $< peer.c $(INC) -L$(LIB) -lxseg -lrados -lpthread \
 							-lcrypto -DMT
-
 dummy: dummy.c peer.c peer.h
 	$(CC) $(CFLAGS) -o $@ $< peer.c $(INC) -L$(LIB) -lxseg -lpthread -DMT
 
-lfsr: bench-lfsr.c bench-xseg.h peer.h
-	$(CC) $(CFLAGS) -o $@ $(CPREQS) $(INC) -L$(LIB) -lxseg -lpthread -lm \
-		-DSTAND_ALONE
-
-bench: bench-xseg.c peer.c bench-timer.c bench-lfsr.c bench-utils.c bench-xseg.h peer.h
+bench: bench-xseg.c peer.c bench-timer.c bench-lfsr.c bench-utils.c bench-xseg.h peer.h bench-lfsr.h
 	$(CC) $(CFLAGS) -o $@ $(CPREQS) $(INC) -L$(LIB) -lxseg -lpthread -lm
 
 monitor: monitor.c peer.c peer.h

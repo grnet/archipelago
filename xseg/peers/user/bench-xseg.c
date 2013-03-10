@@ -45,13 +45,13 @@
 #include <sys/util.h>
 #include <signal.h>
 #include <bench-xseg.h>
+#include <bench-lfsr.h>
 #include <limits.h>
 
 char global_id[IDLEN];
-uint64_t global_seed;
 
 /*
- * This function checks two things:
+ * This macro checks two things:
  * a) If in-flight requests are less than given iodepth
  * b) If we have submitted all of the requests
  */
@@ -72,7 +72,7 @@ void custom_peer_usage()
 			"    -tp       | None    | Target port\n"
 			"    --iodepth | 1       | Number of in-flight I/O requests\n"
 			"    --verify  | no      | Verify written requests [no|meta|hash]\n"
-			"    --seed    | None    | Inititalize LFSR and target names\n"
+			"    --seed    | None    | Initialize LFSR and target names\n"
 			"    --insanity| sane    | Adjust insanity level of benchmark:\n"
 			"              |         |     [sane|eccentric|manic|paranoid]\n"
 			"\n");
@@ -88,11 +88,14 @@ int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 	char op[MAX_ARG_LEN + 1];
 	char pattern[MAX_ARG_LEN + 1];
 	char insanity[MAX_ARG_LEN + 1];
+	char verify[MAX_ARG_LEN + 1];
 	struct xseg *xseg = peer->xseg;
 	unsigned int xseg_page_size = 1 << xseg->config.page_shift;
 	long iodepth = -1;
 	long dst_port = -1;
 	unsigned long seed = -1;
+	struct timespec timer_seed;
+	int set_by_hand = 0;
 	int r;
 
 	op[0] = 0;
@@ -102,6 +105,7 @@ int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 	block_size[0] = 0;
 	object_size[0] = 0;
 	insanity[0] = 0;
+	verify[0] = 0;
 
 #ifdef MT
 	for (i = 0; i < nr_threads; i++) {
@@ -132,6 +136,7 @@ int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 	READ_ARG_ULONG("-tp", dst_port);
 	READ_ARG_ULONG("--seed", seed);
 	READ_ARG_STRING("--insanity", insanity, MAX_ARG_LEN);
+	READ_ARG_STRING("--verify", verify, MAX_ARG_LEN);
 	END_READ_ARGS();
 
 	/*****************************\
@@ -139,7 +144,7 @@ int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 	\*****************************/
 
 	//We support 4 xseg operations: X_READ, X_WRITE, X_DELETE, X_INFO
-	//The I/O pattern of thesee operations can be either synchronous (sync) or
+	//The I/O pattern of these operations can be either sequential (seq) or
 	//random (rand)
 	if (!op[0]) {
 		XSEGLOG2(&lc, E, "xseg operation needs to be supplied\n");
@@ -163,7 +168,16 @@ int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 	}
 	prefs->flags |= (uint8_t)r;
 
-	//Defailt iodepth value is 1
+	if (!verify[0])
+		strcpy(verify, "no");
+	r = read_verify(verify);
+	if (r < 0) {
+		XSEGLOG2(&lc, E, "Invalid syntax: --verify %s\n", verify);
+		goto arg_fail;
+	}
+
+
+	//Default iodepth value is 1
 	if (iodepth < 0)
 		prefs->iodepth = 1;
 	else
@@ -305,22 +319,33 @@ int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 
 	prefs->peer = peer;
 
-	//The following function initializes the global_id, global_seed extern
-	//variables.
+reseed:
+	//We proceed to initialise the global_id, and seed variables.
+	if (seed == -1) {
+		clock_gettime(CLOCK_MONOTONIC_RAW, &timer_seed);
+		seed = timer_seed.tv_nsec;
+	} else {
+		set_by_hand = 1;
+	}
 	create_id(seed);
 
-	if ((prefs->flags & (1 <<PATTERN_FLAG)) == IO_RAND) {
-		prefs->lfsr = malloc(sizeof(struct lfsr));
+	if ((prefs->flags & (1 << PATTERN_FLAG)) == IO_RAND) {
+		prefs->lfsr = malloc(sizeof(struct bench_lfsr));
 		if (!prefs->lfsr) {
 			perror("malloc");
 			goto lfsr_fail;
 		}
-		//FIXME: handle better the seed passing than just giving UINT64_MAX
-		if (lfsr_init(prefs->lfsr, prefs->max_requests, seed)) {
+
+		r = lfsr_init(prefs->lfsr, prefs->max_requests, seed, seed & 0xF);
+		if (r && set_by_hand) {
 			XSEGLOG2(&lc, E, "LFSR could not be initialized\n");
 			goto lfsr_fail;
+		} else if (r) {
+			seed = -1;
+			goto reseed;
 		}
 	}
+	XSEGLOG2(&lc, I, "Global ID is %s\n", global_id);
 
 	peer->peerd_loop = custom_peerd_loop;
 	peer->priv = (void *) prefs;
@@ -355,7 +380,7 @@ static int send_request(struct peerd *peer, struct bench *prefs)
 
 	//srcport and dstport must already be provided by the user.
 	//returns struct xseg_request with basic initializations
-	//XSEGLOG2(&lc, D, "Get new request\n");
+	XSEGLOG2(&lc, D, "Get new request\n");
 	timer_start(prefs, prefs->get_tm);
 	req = xseg_get_request(xseg, srcport, dstport, X_ALLOC);
 	if (!req) {
@@ -365,7 +390,7 @@ static int send_request(struct peerd *peer, struct bench *prefs)
 	timer_stop(prefs, prefs->get_tm, NULL);
 
 	//Allocate enough space for the data and the target's name
-	//XSEGLOG2(&lc, D, "Prepare new request\n");
+	XSEGLOG2(&lc, D, "Prepare new request\n");
 	r = xseg_prep_request(xseg, req, TARGETLEN, size);
 	if (r < 0) {
 		XSEGLOG2(&lc, W, "Cannot prepare request! (%lu, %llu)\n",
@@ -376,7 +401,7 @@ static int send_request(struct peerd *peer, struct bench *prefs)
 	//Determine what the next target/chunk will be, based on I/O pattern
 	new = determine_next(prefs);
 	XSEGLOG2(&lc, I, "Our new request is %lu\n", new);
-	//Create a target of this format: "bench-<obj_no>"
+	//Create a target of this format: "bench-<global_id>-<obj_no>"
 	create_target(prefs, req, new);
 
 	if (prefs->op == X_WRITE || prefs->op == X_READ) {
@@ -392,7 +417,7 @@ static int send_request(struct peerd *peer, struct bench *prefs)
 	req->op = prefs->op;
 
 	//Measure this?
-	//XSEGLOG2(&lc, D, "Allocate peer request\n");
+	XSEGLOG2(&lc, D, "Allocate peer request\n");
 	pr = alloc_peer_req(peer);
 	if (!pr) {
 		XSEGLOG2(&lc, W, "Cannot allocate peer request (%ld remaining)\n",
@@ -426,7 +451,7 @@ static int send_request(struct peerd *peer, struct bench *prefs)
 		memcpy(pr->priv, &prefs->rec_tm->start_time, sizeof(struct timespec));
 
 	//Submit the request from the source port to the target port
-	//XSEGLOG2(&lc, D, "Submit request %lu\n", new);
+	XSEGLOG2(&lc, D, "Submit request %lu\n", new);
 	timer_start(prefs, prefs->sub_tm);
 	p = xseg_submit(xseg, req, srcport, X_ALLOC);
 	if (p == NoPort) {

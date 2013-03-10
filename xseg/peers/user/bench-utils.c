@@ -93,35 +93,44 @@ static double timespec2double(struct timespec num)
 
 int read_insanity(char *insanity)
 {
-	if (strcmp(insanity, "sane") == 0)
+	if (strncmp(insanity, "sane", MAX_ARG_LEN + 1) == 0)
 		return TM_SANE;
-	if (strcmp(insanity, "eccentric") == 0)
+	if (strncmp(insanity, "eccentric", MAX_ARG_LEN + 1) == 0)
 		return TM_ECCENTRIC;
-	if (strcmp(insanity, "manic") == 0)
+	if (strncmp(insanity, "manic", MAX_ARG_LEN + 1) == 0)
 		return TM_MANIC;
-	if (strcmp(insanity, "paranoid") == 0)
+	if (strncmp(insanity, "paranoid", MAX_ARG_LEN + 1) == 0)
 		return TM_PARANOID;
 	return -1;
 }
 
 int read_op(char *op)
 {
-	if (strcmp(op, "read") == 0)
+	if (strncmp(op, "read", MAX_ARG_LEN + 1) == 0)
 		return X_READ;
-	if (strcmp(op, "write") == 0)
+	if (strncmp(op, "write", MAX_ARG_LEN + 1) == 0)
 		return X_WRITE;
-	if (strcmp(op, "info") == 0)
+	if (strncmp(op, "info", MAX_ARG_LEN + 1) == 0)
 		return X_INFO;
-	if (strcmp(op, "delete") == 0)
+	if (strncmp(op, "delete", MAX_ARG_LEN + 1) == 0)
 		return X_DELETE;
+	return -1;
+}
+
+int read_verify(char *verify)
+{
+	if (strncmp(verify, "no", MAX_ARG_LEN + 1) == 0)
+		return VERIFY_NO;
+	if (strncmp(verify, "meta", MAX_ARG_LEN + 1) == 0)
+		return VERIFY_META;
 	return -1;
 }
 
 int read_pattern(char *pattern)
 {
-	if (strcmp(pattern, "seq") == 0)
+	if (strncmp(pattern, "seq", MAX_ARG_LEN + 1) == 0)
 		return IO_SEQ;
-	if (strcmp(pattern, "rand") == 0)
+	if (strncmp(pattern, "rand", MAX_ARG_LEN + 1) == 0)
 		return IO_RAND;
 	return -1;
 }
@@ -191,6 +200,17 @@ void print_res(struct bench *prefs, struct timer *tm, char *type)
 	//TODO: Add std
 }
 
+//FIXME: this looks like a hack, handle it more elegantly
+void create_id(unsigned long seed)
+{
+	if (seed > pow(10, 9))
+		XSEGLOG2(&lc, W, "Seed larger than 10^9, only its first 9 digits will "
+				"be used\n");
+
+	//nanoseconds can't be more than 9 digits
+	snprintf(global_id, IDLEN, "bench-%09lu", seed);
+}
+
 void create_target(struct bench *prefs, struct xseg_request *req,
 		uint64_t new)
 {
@@ -228,18 +248,3 @@ uint64_t determine_next(struct bench *prefs)
 	}
 }
 
-//FIXME: this looks like a hack, handle it more elegantly
-void create_id(unsigned long seed)
-{
-	struct timespec timer_seed;
-
-	if (seed != -1) {
-		global_seed = seed;
-	} else {
-		clock_gettime(CLOCK_MONOTONIC_RAW, &timer_seed);
-		global_seed = timer_seed.tv_nsec;
-	}
-	//nanoseconds can't be more than 9 digits
-	snprintf(global_id, IDLEN, "bench-%09lu", global_seed);
-	XSEGLOG2(&lc, I, "Global ID is %s\n", global_id);
-}
