@@ -49,15 +49,17 @@
 #include <limits.h>
 
 char global_id[IDLEN];
-
 /*
  * This macro checks two things:
  * a) If in-flight requests are less than given iodepth
  * b) If we have submitted all of the requests
  */
-#define CAN_SEND_REQUEST(prefs)	\
-	prefs->sub_tm->completed - prefs->rec_tm->completed < prefs->iodepth &&	\
-	prefs->sub_tm->completed < prefs->max_requests	\
+#define CAN_SEND_REQUEST(prefs)												  \
+	((prefs->status->submitted - prefs->status->received < prefs->iodepth) && \
+	(prefs->status->submitted < prefs->status->max))
+
+#define CAN_VERIFY(prefs)													  \
+	((GET_FLAG(VERIFY, prefs->flags) != VERIFY_NO) && prefs->op == X_READ)
 
 void custom_peer_usage()
 {
@@ -124,6 +126,13 @@ int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 	}
 	prefs->flags = 0;
 
+	prefs->status = malloc(sizeof(struct req_status));
+	if (!prefs->status) {
+		perror("malloc");
+		return -1;
+	}
+	memset(prefs->status, 0, sizeof(struct req_status));
+
 	//Begin reading the benchmark-specific arguments
 	BEGIN_READ_ARGS(argc, argv);
 	READ_ARG_STRING("-op", op, MAX_ARG_LEN);
@@ -166,7 +175,7 @@ int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 		XSEGLOG2(&lc, E, "Invalid syntax: --pattern %s\n", pattern);
 		goto arg_fail;
 	}
-	prefs->flags |= (uint8_t)r;
+	SET_FLAG(PATTERN, prefs->flags, r);
 
 	if (!verify[0])
 		strcpy(verify, "no");
@@ -175,6 +184,7 @@ int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 		XSEGLOG2(&lc, E, "Invalid syntax: --verify %s\n", verify);
 		goto arg_fail;
 	}
+	SET_FLAG(VERIFY, prefs->flags, r);
 
 	//Default iodepth value is 1
 	if (iodepth < 0)
@@ -193,11 +203,12 @@ int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 	if (!insanity[0])
 		strcpy(insanity, "sane");
 
-	prefs->insanity = read_insanity(insanity);
-	if (prefs->insanity < 0) {
+	r = read_insanity(insanity);
+	if (r < 0) {
 		XSEGLOG2(&lc, E, "Invalid syntax: --insanity %s\n", insanity);
 		goto arg_fail;
 	}
+	SET_FLAG(INSANITY, prefs->flags, r);
 
 	/*
 	 * If we have a request other than read/write, we don't need to check
@@ -222,7 +233,7 @@ int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 
 		//In this case, the maximum number of requests is the total number of
 		//objects we will handle
-		prefs->max_requests = prefs->to;
+		prefs->status->max = prefs->to;
 	} else {
 
 		/*************************\
@@ -284,7 +295,7 @@ int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 
 		//In this case, the maximum number of requests is the number of blocks
 		//we need to cover the total I/O size
-		prefs->max_requests = prefs->ts / prefs->bs;
+		prefs->status->max = prefs->ts / prefs->bs;
 	}
 
 	/*************************\
@@ -303,13 +314,13 @@ int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 	 * Create timers for all metrics *
 	\*********************************/
 
-	if (init_timer(&prefs->total_tm, TM_SANE))
+	if (init_timer(&prefs->total_tm, INSANITY_SANE))
 		goto tm_fail;
-	if (init_timer(&prefs->sub_tm, TM_MANIC))
+	if (init_timer(&prefs->sub_tm, INSANITY_MANIC))
 		goto tm_fail;
-	if (init_timer(&prefs->get_tm, TM_PARANOID))
+	if (init_timer(&prefs->get_tm, INSANITY_PARANOID))
 		goto tm_fail;
-	if (init_timer(&prefs->rec_tm, TM_ECCENTRIC))
+	if (init_timer(&prefs->rec_tm, INSANITY_ECCENTRIC))
 		goto tm_fail;
 
 	/********************************\
@@ -328,14 +339,14 @@ reseed:
 	}
 	create_id(seed);
 
-	if ((prefs->flags & (1 << PATTERN_FLAG)) == IO_RAND) {
+	if (GET_FLAG(PATTERN, prefs->flags) == PATTERN_RAND) {
 		prefs->lfsr = malloc(sizeof(struct bench_lfsr));
 		if (!prefs->lfsr) {
 			perror("malloc");
 			goto lfsr_fail;
 		}
 
-		r = lfsr_init(prefs->lfsr, prefs->max_requests, seed, seed & 0xF);
+		r = lfsr_init(prefs->lfsr, prefs->status->max, seed, seed & 0xF);
 		if (r && set_by_hand) {
 			XSEGLOG2(&lc, E, "LFSR could not be initialized\n");
 			goto lfsr_fail;
@@ -346,7 +357,7 @@ reseed:
 	}
 	XSEGLOG2(&lc, I, "Global ID is %s\n", global_id);
 
-	peer->peerd_loop = custom_peerd_loop;
+	peer->peerd_loop = bench_peerd_loop;
 	peer->priv = (void *) prefs;
 	return 0;
 
@@ -399,6 +410,7 @@ static int send_request(struct peerd *peer, struct bench *prefs)
 
 	//Determine what the next target/chunk will be, based on I/O pattern
 	new = determine_next(prefs);
+	req->op = prefs->op;
 	XSEGLOG2(&lc, I, "Our new request is %lu\n", new);
 	//Create a target of this format: "bench-<global_id>-<obj_no>"
 	create_target(prefs, req, new);
@@ -413,7 +425,6 @@ static int send_request(struct peerd *peer, struct bench *prefs)
 			create_chunk(prefs, req, new);
 	}
 
-	req->op = prefs->op;
 
 	//Measure this?
 	XSEGLOG2(&lc, D, "Allocate peer request\n");
@@ -446,7 +457,7 @@ static int send_request(struct peerd *peer, struct bench *prefs)
 	 * QUESTION: Is this the fastest way?
 	 */
 	timer_start(prefs, prefs->rec_tm);
-	if (prefs->rec_tm->insanity <= prefs->insanity)
+	if (prefs->rec_tm->insanity <= GET_FLAG(INSANITY, prefs->flags))
 		memcpy(pr->priv, &prefs->rec_tm->start_time, sizeof(struct timespec));
 
 	//Submit the request from the source port to the target port
@@ -457,6 +468,7 @@ static int send_request(struct peerd *peer, struct bench *prefs)
 		XSEGLOG2(&lc, W, "Cannot submit request\n");
 		goto put_peer_request;
 	}
+	prefs->status->submitted++;
 	timer_stop(prefs, prefs->sub_tm, NULL);
 
 	//Send SIGIO to the process that has bound this port to inform that
@@ -480,7 +492,7 @@ put_xseg_request:
  * This function substitutes the default generic_peerd_loop of peer.c.
  * It's plugged to struct peerd at custom peer's initialisation
  */
-int custom_peerd_loop(void *arg)
+int bench_peerd_loop(void *arg)
 {
 #ifdef MT
 	struct thread *t = (struct thread *) arg;
@@ -518,9 +530,9 @@ send_request:
 		while (CAN_SEND_REQUEST(prefs)) {
 			xseg_cancel_wait(xseg, peer->portno_start);
 			XSEGLOG2(&lc, D, "...because %lu < %lu && %lu < %lu\n",
-					prefs->sub_tm->completed - prefs->rec_tm->completed,
-					prefs->iodepth, prefs->sub_tm->completed,
-					prefs->max_requests);
+					prefs->status->submitted - prefs->status->received,
+					prefs->iodepth, prefs->status->received,
+					prefs->status->max);
 			XSEGLOG2(&lc, D, "Start sending new request\n");
 			r = send_request(peer, prefs);
 			if (r < 0)
@@ -534,7 +546,7 @@ send_request:
 			if (check_ports(peer)) {
 				//If an old request has just been acked, the most sensible
 				//thing to do is to immediately send a new one
-				if (prefs->rec_tm->completed < prefs->max_requests)
+				if (prefs->status->received < prefs->status->max)
 					goto send_request;
 				else
 					return 0;
@@ -582,6 +594,7 @@ static void handle_received(struct peerd *peer, struct peer_req *pr)
 	struct bench *prefs = peer->priv;
 	struct timer *rec = prefs->rec_tm;
 
+	prefs->status->received++;
 	if (!pr->req) {
 		//This is a serious error, so we must stop
 		XSEGLOG2(&lc, E, "Received peer request with no xseg request");
@@ -589,7 +602,7 @@ static void handle_received(struct peerd *peer, struct peer_req *pr)
 		return;
 	}
 
-	if (!pr->priv) {
+	if ((GET_FLAG(INSANITY, prefs->flags) < rec->insanity) && !pr->priv) {
 		XSEGLOG2(&lc, W, "Cannot find submission time of request");
 		return;
 	}

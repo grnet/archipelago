@@ -67,7 +67,7 @@ void timer_start(struct bench *prefs, struct timer *timer)
 	//We need a low-latency way to get current time in nanoseconds.
 	//QUESTION: Is this way the best way?
 	//RAW means that we trust the system's oscilator isn't screwed up
-	if (prefs->insanity < timer->insanity)
+	if (GET_FLAG(INSANITY, prefs->flags) < timer->insanity)
 		return;
 
 	clock_gettime(CLOCK_MONOTONIC_RAW, &timer->start_time);
@@ -80,8 +80,8 @@ void timer_stop(struct bench *prefs, struct timer *timer,
 	volatile struct timespec elapsed_time;
 	struct timespec start_time;
 
-	if (prefs->insanity < timer->insanity)
-		goto inc_completed;
+	if (GET_FLAG(INSANITY, prefs->flags)< timer->insanity)
+		return;
 
 	/*
 	 * There are timers such as rec_tm whose start_time cannot be trusted and
@@ -134,7 +134,6 @@ void timer_stop(struct bench *prefs, struct timer *timer,
 		timer->sum_sq.tv_sec2 += elapsed_time_sq.tv_sec2;
 	}
 #endif
-inc_completed:
 	//TODO: check if we need to make it volatile
 	timer->completed++;
 

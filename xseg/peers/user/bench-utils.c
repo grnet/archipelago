@@ -49,6 +49,9 @@
 #include <math.h>
 #include <string.h>
 
+/******************************\
+ * Static miscellaneous tools *
+\******************************/
 struct timespec delay = {0, 4000000};
 
 static inline uint64_t _get_id()
@@ -56,11 +59,46 @@ static inline uint64_t _get_id()
 	return atol(global_id + 6); /* cut the "bench-" part*/
 }
 
+static inline uint64_t _get_object_from_name(char *name)
+{
+	return atol(name + IDLEN); /* cut the "bench-908135-" part*/
+}
+
 static inline uint64_t _get_object(struct bench *prefs, uint64_t new)
 {
 	return new / (prefs->os / prefs->bs);
 }
 
+static inline double timespec2double(struct timespec num)
+{
+	return (double) (num.tv_sec * pow(10, 9) + num.tv_nsec);
+}
+
+/*
+ * Seperates a double number in seconds, msec, usec, nsec
+ * Expects a number in nanoseconds (e.g. a number from timespec2double)
+ */
+static struct tm_result separate_by_order(double num)
+{
+	struct tm_result res;
+
+	//The format we expect is the following:
+	//
+	//		|-s-|-ms-|-us-|-ns|
+	//num =	 123 456  789  012 . 000000000000
+	res.s = num / pow(10,9);
+	num = fmod(num, pow(10,9));
+	res.ms = num / pow(10,6);
+	num = fmod(num, pow(10,6));
+	res.us = num / 1000;
+	res.ns = fmod(num, 1000);
+
+	return res;
+}
+
+/******************************\
+ * Argument-parsing functions *
+\******************************/
 
 /*
  * Convert string to size in bytes.
@@ -98,21 +136,16 @@ uint64_t str2num(char *str)
 /*
  * Converts struct timespec to double (units in nanoseconds)
  */
-static double timespec2double(struct timespec num)
-{
-	return (double) (num.tv_sec * pow(10, 9) + num.tv_nsec);
-}
-
 int read_insanity(char *insanity)
 {
 	if (strncmp(insanity, "sane", MAX_ARG_LEN + 1) == 0)
-		return TM_SANE;
+		return INSANITY_SANE;
 	if (strncmp(insanity, "eccentric", MAX_ARG_LEN + 1) == 0)
-		return TM_ECCENTRIC;
+		return INSANITY_ECCENTRIC;
 	if (strncmp(insanity, "manic", MAX_ARG_LEN + 1) == 0)
-		return TM_MANIC;
+		return INSANITY_MANIC;
 	if (strncmp(insanity, "paranoid", MAX_ARG_LEN + 1) == 0)
-		return TM_PARANOID;
+		return INSANITY_PARANOID;
 	return -1;
 }
 
@@ -135,51 +168,38 @@ int read_verify(char *verify)
 		return VERIFY_NO;
 	if (strncmp(verify, "meta", MAX_ARG_LEN + 1) == 0)
 		return VERIFY_META;
+	if (strncmp(verify, "full", MAX_ARG_LEN + 1) == 0)
+		return VERIFY_FULL;
 	return -1;
 }
 
 int read_pattern(char *pattern)
 {
 	if (strncmp(pattern, "seq", MAX_ARG_LEN + 1) == 0)
-		return IO_SEQ;
+		return PATTERN_SEQ;
 	if (strncmp(pattern, "rand", MAX_ARG_LEN + 1) == 0)
-		return IO_RAND;
+		return PATTERN_RAND;
 	return -1;
 }
 
-/*
- * Seperates a double number in seconds, msec, usec, nsec
- * Expects a number in nanoseconds (e.g. a number from timespec2double)
- */
-static struct tm_result separate_by_order(double num)
-{
-	struct tm_result res;
-
-	//The format we expect is the following:
-	//
-	//		|-s-|-ms-|-us-|-ns|
-	//num =	 123 456  789  012 . 000000000000
-	res.s = num / pow(10,9);
-	num = fmod(num, pow(10,9));
-	res.ms = num / pow(10,6);
-	num = fmod(num, pow(10,6));
-	res.us = num / 1000;
-	res.ns = fmod(num, 1000);
-
-	return res;
-}
+/*******************\
+ * Print functions *
+\*******************/
 
 void print_stats(struct bench *prefs)
 {
 	uint64_t remaining;
 
 	printf("\n");
-	printf("Requests total:     %10lu\n", prefs->max_requests);
-	printf("Requests submitted: %10lu\n", prefs->sub_tm->completed);
-	printf("Requests received:  %10lu\n", prefs->rec_tm->completed);
+	printf("Requests total:     %10lu\n", prefs->status->max);
+	printf("Requests submitted: %10lu\n", prefs->status->submitted);
+	printf("Requests received:  %10lu\n", prefs->status->received);
+	printf("Requests failed:    %10lu\n", prefs->status->failed);
+	if ((prefs->op == X_READ) && (GET_FLAG(VERIFY, prefs->flags) != VERIFY_NO))
+		printf("Requests corrupted: %10lu\n", prefs->status->corrupted);
 	printf("\n");
 
-	remaining = prefs->max_requests - prefs->rec_tm->completed;
+	remaining = prefs->status->max - prefs->status->received;
 	if (remaining)
 		printf("Requests remaining: %10lu\n", remaining);
 	else
@@ -201,16 +221,20 @@ void print_res(struct bench *prefs, struct timer *tm, char *type)
 	printf("Total time:   %3u. %03u  %03u  %03u\n",
 			res.s, res.ms, res.us, res.ns);
 
-	if (!prefs->rec_tm->completed)
+	if (!prefs->status->received)
 		return;
 
-	res = separate_by_order(sum / prefs->rec_tm->completed);
+	res = separate_by_order(sum / prefs->status->received);
 
 	printf("Mean Time:    %3u. %03u  %03u  %03u\n",
 			res.s, res.ms, res.us, res.ns);
 
 	//TODO: Add std
 }
+
+/**************************\
+ * Benchmarking functions *
+\**************************/
 
 void create_id(unsigned long seed)
 {
@@ -247,6 +271,13 @@ void create_chunk(struct bench *prefs, struct xseg_request *req, uint64_t new)
 	struct bench_lfsr id_lfsr, obj_lfsr, off_lfsr;
 	uint64_t i;
 
+uint64_t determine_next(struct bench *prefs)
+{
+	if (GET_FLAG(PATTERN, prefs->flags) == PATTERN_SEQ)
+		return prefs->status->submitted;
+	else
+		return lfsr_next(prefs->lfsr);
+}
 
 	id = _get_id();
 	object = _get_object(prefs, new);
@@ -282,7 +313,7 @@ void create_chunk(struct bench *prefs, struct xseg_request *req, uint64_t new)
 	/* check for left-overs chunk */
 }
 
-uint64_t determine_next(struct bench *prefs)
+int read_chunk(struct bench *prefs, struct xseg_request *req)
 {
 	if ((prefs->flags & (1 << PATTERN_FLAG)) == IO_SEQ)
 		return prefs->sub_tm->completed;
