@@ -67,7 +67,7 @@ void custom_peer_usage()
 			"  --------------------------------------------\n"
 			"    -op       | None    | XSEG operation [read|write|info|delete]\n"
 			"    --pattern | None    | I/O pattern [seq|rand]\n"
-			"    --verify  | no      | Verify written requests [no|meta|hash]\n"
+			"    --verify  | no      | Verify written requests [no|meta|full]\n"
 			"    -to       | None    | Total objects (not for read/write)\n"
 			"    -ts       | None    | Total I/O size\n"
 			"    -os       | 4M      | Object size\n"
@@ -587,7 +587,11 @@ void custom_peer_finalize(struct peerd *peer)
 	return;
 }
 
-
+/*
+ * handle_received: +1 to our received requests.
+ * Do some sanity checks and then check if request is failed.
+ * If not try to verify the request if asked.
+ */
 static void handle_received(struct peerd *peer, struct peer_req *pr)
 {
 	//FIXME: handle null pointer
@@ -608,6 +612,11 @@ static void handle_received(struct peerd *peer, struct peer_req *pr)
 	}
 
 	timer_stop(prefs, rec, pr->priv);
+
+	if (!(pr->req->state & XS_SERVED))
+		prefs->status->failed++;
+	else if (CAN_VERIFY(prefs) && read_chunk(prefs, pr->req))
+		prefs->status->corrupted++;
 
 	if (xseg_put_request(peer->xseg, pr->req, pr->portno))
 		XSEGLOG2(&lc, W, "Cannot put xseg request\n");

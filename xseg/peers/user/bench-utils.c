@@ -49,6 +49,13 @@
 #include <math.h>
 #include <string.h>
 
+#define PRINT_SIG(__who, __sig)									\
+	printf("%s (%lu): id %lu, object %lu, offset %lu\n",		\
+			#__who, (uint64_t)(__sig),							\
+			((struct signature *)__sig)->id,					\
+			((struct signature *)__sig)->object,				\
+			((struct signature *)__sig)->offset);
+
 /******************************\
  * Static miscellaneous tools *
 \******************************/
@@ -69,9 +76,53 @@ static inline uint64_t _get_object(struct bench *prefs, uint64_t new)
 	return new / (prefs->os / prefs->bs);
 }
 
+static inline int _snap_to_bound8(uint64_t space)
+{
+	return space > 8 ? 8 : space;
+}
+
 static inline double timespec2double(struct timespec num)
 {
 	return (double) (num.tv_sec * pow(10, 9) + num.tv_nsec);
+}
+
+static inline void write_sig(struct bench_lfsr *sg,	uint64_t *d, uint64_t s,
+		int pos)
+{
+	uint64_t i;
+	uint64_t last_val;
+	uint64_t space_left;
+
+	/* Write random numbers (based on global_id) every 24 bytes */
+	/* TODO: Should we use memcpy? */
+	for (i = pos; i < s - (3 - pos); i += 3)
+		*(d + i) = lfsr_next(sg);
+
+	/* special care for last chunk */
+	last_val = lfsr_next(sg);
+	space_left = s - (i * 8);
+	memcpy(d + i, &last_val, _snap_to_bound8(space_left));
+}
+
+static inline int read_sig(struct bench_lfsr *sg, uint64_t *d, uint64_t s,
+		int pos)
+{
+	uint64_t i;
+	uint64_t last_val;
+	uint64_t space_left;
+
+	/* TODO: Should we use memcmp? */
+	for (i = pos; i < s - (3 - pos); i += 3) {
+		if (*(d + i) != lfsr_next(sg))
+			return 1;
+	}
+	/* special care for last chunk */
+	last_val = lfsr_next(sg);
+	space_left = s - (i * 8);
+	if (memcmp(d + i, &last_val, _snap_to_bound8(space_left)))
+		return 1;
+
+	return 0;
 }
 
 /*
@@ -262,14 +313,6 @@ void create_target(struct bench *prefs, struct xseg_request *req,
 	XSEGLOG2(&lc, D, "Target name of request is %s\n", req_target);
 }
 
-void create_chunk(struct bench *prefs, struct xseg_request *req, uint64_t new)
-{
-	struct xseg *xseg = prefs->peer->xseg;
-	void *req_data;
-	uint64_t id;
-	uint64_t object;
-	struct bench_lfsr id_lfsr, obj_lfsr, off_lfsr;
-	uint64_t i;
 
 uint64_t determine_next(struct bench *prefs)
 {
@@ -279,46 +322,169 @@ uint64_t determine_next(struct bench *prefs)
 		return lfsr_next(prefs->lfsr);
 }
 
-	id = _get_id();
-	object = _get_object(prefs, new);
+/*
+ * ***********************************************
+ * `create_chunk` handles 3 identifiers:
+ * 1. The benchmark's global_id
+ * 2. The object's number
+ * 3. The chunk offset in the object
+ *
+ * ************************************************
+ * `_create_chunk_full` takes the above 3 identifiers and feeds them as seeds
+ * in 63-bit LFSRs. The numbers generated are written consecutively in chunk's
+ * memory range. For example, for a 72-byte chunk:
+ *
+ * || 1 | 2 | 3 | 1 | 2 | 3 | 1 | 2 | 3 ||
+ *  ^   8  16  24  32  40  48  56  64   ^
+ *  |                                   |
+ *  |                                   |
+ * start                               end
+ *
+ * 1,2,3 differ between each iteration
+ *
+ * **************************************************
+ * `_create_chunk_meta` simply writes the above 3 ids in the start and end of
+ * the chunk's memory range, so it should be much faster (but less safe)
+ *
+ * **************************************************
+ * In both cases, special care is taken not to exceed the chunk's memory range.
+ * Also, the bare minimum chunk to verify should be 48 bytes. This limit is set
+ * by _create_chunk_meta, which expects to write in a memory at least this big.
+ */
+static int _readwrite_chunk_full(struct xseg *xseg, struct xseg_request *req,
+		uint64_t id, uint64_t object)
+{
+	struct bench_lfsr id_lfsr;
+	struct bench_lfsr obj_lfsr;
+	struct bench_lfsr off_lfsr;
+	uint64_t *d = (uint64_t *)xseg_get_data(xseg, req);
+	uint64_t s = req->size;
 
-	req_data = xseg_get_data(xseg, req);
+	/* Create 63-bit LFSRs */
+	lfsr_init(&id_lfsr, 0x7FFFFFFF, id, 0);
+	lfsr_init(&obj_lfsr, 0x7FFFFFFF, object, 0);
+	lfsr_init(&off_lfsr, 0x7FFFFFFF, req->offset, 0);
 
-	lfsr_init(&id_lfsr, 0xFFFFFFFF, id, 0);
-	lfsr_init(&obj_lfsr, 0xFFFFFFFF, object, 0);
-	lfsr_init(&off_lfsr, 0xFFFFFFFF, req->offset, 0);
-
-	for (i = 0; i < req->size; i += 192) {
-		/*
-		 * lfsr-next
-		 * copy to memory
-		 */
+	if (s < sizeof(struct signature)) {
+		XSEGLOG2(&lc, E, "Too small chunk size (%lu butes). Leaving.", s);
+		return 1;
 	}
-	/* check for left-overs chunk */
 
-	for (i = 64; i < req->size; i += 192) {
-		/*
-		 * lfsr-next
-		 * copy to memory
-		 */
-	}
-	/* check for left-overs chunk */
+	/*
+	 * Every write operation has its read counterpart which, if it finds any
+	 * corruption, returns 1
+	 */
 
-	for (i = 128; i < req->size; i += 192) {
-		/*
-		 * lfsr-next
-		 * copy to memory
-		 */
+	if (req->op == X_WRITE) {
+		write_sig(&id_lfsr, d, s, 1);
+		write_sig(&obj_lfsr, d, s, 2);
+		write_sig(&off_lfsr, d, s, 3);
+	} else {
+		if (read_sig(&id_lfsr, d, s, 1))
+			return 1;
+		if (read_sig(&obj_lfsr, d, s, 2))
+			return 1;
+		if(read_sig(&off_lfsr, d, s, 3))
+			return 1;
 	}
-	/* check for left-overs chunk */
+
+	return 0;
+}
+
+static int _readwrite_chunk_meta(struct xseg *xseg, struct xseg_request *req,
+		uint64_t id, uint64_t object)
+{
+	char *d = xseg_get_data(xseg, req);
+	uint64_t s = req->size;
+	struct signature sig;
+	int sig_s = sizeof(struct signature);
+	int r = 0;
+
+	sig.id = id;
+	sig.object = object;
+	sig.offset = req->offset;
+
+	if (s < sig_s) {
+		XSEGLOG2(&lc, E, "Too small chunk size (%lu butes). Leaving.", s);
+		return 1;
+	}
+
+	//PRINT_SIG(expected, (&sig));
+	/* Read/Write chunk signature both at its start and at its end */
+	if (req->op == X_WRITE) {
+		memcpy(d, &sig, sig_s);
+		memcpy(d + s - sig_s, &sig, sig_s);
+	} else {
+		if (memcmp(d, &sig, sig_s))
+			r = 1;
+		else if (memcmp(d + s - sig_s, &sig, sig_s))
+			r = 1;
+	}
+	//PRINT_SIG(start, d);
+	//PRINT_SIG(end, (d + s - sig_s));
+	return r;
+}
+
+/*
+ * We want these functions to be as fast as possible in case we haven't asked
+ * for verification
+ * TODO: Make them prettier but keep the speed of this implementation
+ */
+void create_chunk(struct bench *prefs, struct xseg_request *req, uint64_t new)
+{
+	struct xseg *xseg = prefs->peer->xseg;
+	uint64_t id;
+	uint64_t object;
+	int verify;
+
+	verify = GET_FLAG(VERIFY, prefs->flags);
+	switch (verify) {
+		case VERIFY_NO:
+			break;
+		case VERIFY_META:
+			id = _get_id();
+			object = _get_object(prefs, new);
+			_readwrite_chunk_meta(xseg, req, id, object);
+			break;
+		case VERIFY_FULL:
+			id = _get_id();
+			object = _get_object(prefs, new);
+			_readwrite_chunk_full(xseg, req, id, object);
+			break;
+		default:
+			XSEGLOG2(&lc, W, "Unexpected verification mode: %d\n", verify);
+	}
 }
 
 int read_chunk(struct bench *prefs, struct xseg_request *req)
 {
-	if ((prefs->flags & (1 << PATTERN_FLAG)) == IO_SEQ)
-		return prefs->sub_tm->completed;
-	else {
-		return lfsr_next(prefs->lfsr);
+	struct xseg *xseg = prefs->peer->xseg;
+	uint64_t id;
+	uint64_t object;
+	char *target;
+	int verify;
+	int r = 0;
+
+	verify = GET_FLAG(VERIFY, prefs->flags);
+	switch (verify) {
+		case VERIFY_NO:
+			break;
+		case VERIFY_META:
+			id = _get_id();
+			target = xseg_get_target(xseg, req);
+			object = _get_object_from_name(target);
+			r = _readwrite_chunk_meta(xseg, req, id, object);
+			break;
+		case VERIFY_FULL:
+			id = _get_id();
+			target = xseg_get_target(xseg, req);
+			object = _get_object_from_name(target);
+			r = _readwrite_chunk_full(xseg, req, id, object);
+			break;
+		default:
+			XSEGLOG2(&lc, W, "Unexpected verification mode: %d\n", verify);
 	}
+	return r;
 }
+
 
