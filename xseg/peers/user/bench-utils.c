@@ -95,7 +95,7 @@ static inline void write_sig(struct bench_lfsr *sg,	uint64_t *d, uint64_t s,
 
 	/* Write random numbers (based on global_id) every 24 bytes */
 	/* TODO: Should we use memcpy? */
-	for (i = pos; i < s - (3 - pos); i += 3)
+	for (i = pos; i < (s / 8) - (3 - pos); i += 3)
 		*(d + i) = lfsr_next(sg);
 
 	/* special care for last chunk */
@@ -112,7 +112,7 @@ static inline int read_sig(struct bench_lfsr *sg, uint64_t *d, uint64_t s,
 	uint64_t space_left;
 
 	/* TODO: Should we use memcmp? */
-	for (i = pos; i < s - (3 - pos); i += 3) {
+	for (i = pos; i < (s / 8) - (3 - pos); i += 3) {
 		if (*(d + i) != lfsr_next(sg))
 			return 1;
 	}
@@ -376,15 +376,15 @@ static int _readwrite_chunk_full(struct xseg *xseg, struct xseg_request *req,
 	 */
 
 	if (req->op == X_WRITE) {
-		write_sig(&id_lfsr, d, s, 1);
-		write_sig(&obj_lfsr, d, s, 2);
-		write_sig(&off_lfsr, d, s, 3);
+		write_sig(&id_lfsr, d, s, 0);
+		write_sig(&obj_lfsr, d, s, 1);
+		write_sig(&off_lfsr, d, s, 2);
 	} else {
-		if (read_sig(&id_lfsr, d, s, 1))
+		if (read_sig(&id_lfsr, d, s, 0))
 			return 1;
-		if (read_sig(&obj_lfsr, d, s, 2))
+		if (read_sig(&obj_lfsr, d, s, 1))
 			return 1;
-		if(read_sig(&off_lfsr, d, s, 3))
+		if(read_sig(&off_lfsr, d, s, 2))
 			return 1;
 	}
 
