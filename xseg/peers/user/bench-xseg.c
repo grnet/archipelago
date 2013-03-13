@@ -68,6 +68,7 @@ void custom_peer_usage()
 			"    -op       | None    | XSEG operation [read|write|info|delete]\n"
 			"    --pattern | None    | I/O pattern [seq|rand]\n"
 			"    --verify  | no      | Verify written requests [no|meta|full]\n"
+			"    -rc       | None    | Request cap\n"
 			"    -to       | None    | Total objects (not for read/write)\n"
 			"    -ts       | None    | Total I/O size\n"
 			"    -os       | 4M      | Object size\n"
@@ -83,6 +84,7 @@ void custom_peer_usage()
 int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 {
 	struct bench *prefs;
+	char request_cap[MAX_ARG_LEN + 1];
 	char total_objects[MAX_ARG_LEN + 1];
 	char total_size[MAX_ARG_LEN + 1];
 	char object_size[MAX_ARG_LEN + 1];
@@ -96,6 +98,7 @@ int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 	long iodepth = -1;
 	long dst_port = -1;
 	unsigned long seed = -1;
+	uint64_t rc;
 	struct timespec timer_seed;
 	int set_by_hand = 0;
 	int r;
@@ -108,6 +111,7 @@ int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 	object_size[0] = 0;
 	insanity[0] = 0;
 	verify[0] = 0;
+	request_cap[0] = 0;
 
 #ifdef MT
 	for (i = 0; i < nr_threads; i++) {
@@ -135,6 +139,7 @@ int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 
 	//Begin reading the benchmark-specific arguments
 	BEGIN_READ_ARGS(argc, argv);
+	READ_ARG_STRING("-rc", request_cap, MAX_ARG_LEN);
 	READ_ARG_STRING("-op", op, MAX_ARG_LEN);
 	READ_ARG_STRING("--pattern", pattern, MAX_ARG_LEN);
 	READ_ARG_STRING("-to", total_objects, MAX_ARG_LEN);
@@ -323,12 +328,9 @@ int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 	if (init_timer(&prefs->rec_tm, INSANITY_ECCENTRIC))
 		goto tm_fail;
 
-	/********************************\
-	 * Customize struct peerd/prefs *
-	\********************************/
-
-	prefs->peer = peer;
-
+	/*************************************\
+	 * Initialize the LFSR and global_id *
+	\*************************************/
 reseed:
 	//We proceed to initialise the global_id, and seed variables.
 	if (seed == -1) {
@@ -348,17 +350,35 @@ reseed:
 
 		r = lfsr_init(prefs->lfsr, prefs->status->max, seed, seed & 0xF);
 		if (r && set_by_hand) {
-			XSEGLOG2(&lc, E, "LFSR could not be initialized\n");
+			XSEGLOG2(&lc, E, "LFSR could not be initialized.\n");
 			goto lfsr_fail;
 		} else if (r) {
 			seed = -1;
 			goto reseed;
 		}
 	}
-	XSEGLOG2(&lc, I, "Global ID is %s\n", global_id);
 
+	/****************************\
+	 * Finalize initializations *
+	\****************************/
+
+	/* The request cap must be enforced only after the LFSR is initialized */
+	if (request_cap[0]) {
+		rc = str2num(request_cap);
+		if (!rc) {
+			XSEGLOG2(&lc, E, "Invalid syntax: -rc %s\n", request_cap);
+			goto arg_fail;
+		} else if (rc > prefs->status->max) {
+			XSEGLOG2(&lc, E, "Request cap exceeds current request total.\n");
+			goto arg_fail;
+		}
+		prefs->status->max = rc;
+	}
+
+	prefs->peer = peer;
 	peer->peerd_loop = bench_peerd_loop;
 	peer->priv = (void *) prefs;
+	XSEGLOG2(&lc, I, "Global ID is %s\n", global_id);
 	return 0;
 
 arg_fail:
