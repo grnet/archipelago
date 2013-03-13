@@ -73,7 +73,9 @@ static inline uint64_t _get_object_from_name(char *name)
 
 static inline uint64_t _get_object(struct bench *prefs, uint64_t new)
 {
-	return new / (prefs->os / prefs->bs);
+	if (prefs->to < 0)
+		new = new / (prefs->os / prefs->bs);
+	return new;
 }
 
 static inline int _snap_to_bound8(uint64_t space)
@@ -305,10 +307,9 @@ void create_target(struct bench *prefs, struct xseg_request *req,
 
 	req_target = xseg_get_target(xseg, req);
 
-	//For read/write, the target object does not correspond to `new`, which is
+	//For read/write, the target object may not correspond to `new`, which is
 	//actually the chunk number.
-	if (prefs->op == X_READ || prefs->op == X_WRITE)
-		new = _get_object(prefs, new);
+	new = _get_object(prefs, new);
 	snprintf(req_target, TARGETLEN, "%s-%016lu", global_id, new);
 	XSEGLOG2(&lc, D, "Target name of request is %s\n", req_target);
 }
@@ -320,6 +321,14 @@ uint64_t determine_next(struct bench *prefs)
 		return prefs->status->submitted;
 	else
 		return lfsr_next(prefs->lfsr);
+}
+
+uint64_t calculate_offset(struct bench *prefs, uint64_t new)
+{
+	if (prefs->to < 0)
+		return (new * prefs->bs) % prefs->os;
+	else
+		return 0;
 }
 
 /*

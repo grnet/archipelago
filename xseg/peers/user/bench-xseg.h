@@ -179,5 +179,6 @@ void create_target(struct bench *prefs, struct xseg_request *req,
 void create_chunk(struct bench *prefs, struct xseg_request *req, uint64_t new);
 int read_chunk(struct bench *prefs, struct xseg_request *req);
 uint64_t determine_next(struct bench *prefs);
+uint64_t calculate_offset(struct bench *prefs, uint64_t new);
 void create_id(unsigned long seed);
 

@@ -69,7 +69,7 @@ void custom_peer_usage()
 			"    --pattern | None    | I/O pattern [seq|rand]\n"
 			"    --verify  | no      | Verify written requests [no|meta|full]\n"
 			"    -rc       | None    | Request cap\n"
-			"    -to       | None    | Total objects (not for read/write)\n"
+			"    -to       | None    | Total objects\n"
 			"    -ts       | None    | Total I/O size\n"
 			"    -os       | 4M      | Object size\n"
 			"    -bs       | 4k      | Block size\n"
@@ -78,6 +78,10 @@ void custom_peer_usage()
 			"    --seed    | None    | Initialize LFSR and target names\n"
 			"    --insanity| sane    | Adjust insanity level of benchmark:\n"
 			"              |         |     [sane|eccentric|manic|paranoid]\n"
+			"\n"
+			"Additional information:\n"
+			"  --------------------------------------------\n"
+			"  The -to and -ts options are mutually exclusive\n"
 			"\n");
 }
 
@@ -215,61 +219,48 @@ int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 	}
 	SET_FLAG(INSANITY, prefs->flags, r);
 
-	/*
-	 * If we have a request other than read/write, we don't need to check
-	 * about size parameters, but only how many objects we want to affect
-	 */
-	if (prefs->op != X_READ && prefs->op != X_WRITE) {
+	/*****************************\
+	 * Check I/O size parameters *
+	\*****************************/
 
-		/***************************\
-		 * Check object parameters *
-		\***************************/
+	//Block size (bs): Defaults to 4K.
+	//It must be a number followed by one of these characters:
+	//						[k|K|m|M|g|G]
+	//If not, it will be considered as size in bytes.
+	//Must be integer multiple of segment's page size (typically 4k).
+	if (!block_size[0])
+		strcpy(block_size,"4k");
 
-		if (!total_objects[0]) {
-			XSEGLOG2(&lc, E,
-					"Total number of objects needs to be supplied\n");
-			goto arg_fail;
-		}
+	prefs->bs = str2num(block_size);
+	if (!prefs->bs) {
+		XSEGLOG2(&lc, E, "Invalid syntax: -bs %s\n", block_size);
+		goto arg_fail;
+	} else if (prefs->bs % xseg_page_size) {
+		XSEGLOG2(&lc, E, "Misaligned block size: %s\n", block_size);
+		goto arg_fail;
+	}
+
+	//Total objects (to) or total I/O size (ts).
+	//Must have the same format as "block size"
+	//They are mutually exclusive
+	if (total_objects[0] && total_size[0]) {
+		XSEGLOG2(&lc, E, "Total objects and total size are mutually exclusive\n");
+		goto arg_fail;
+	} else if (total_objects[0]) {
 		prefs->to = str2num(total_objects);
 		if (!prefs->to) {
 			XSEGLOG2(&lc, E, "Invalid syntax: -to %s\n", total_objects);
 			goto arg_fail;
 		}
-
 		//In this case, the maximum number of requests is the total number of
 		//objects we will handle
 		prefs->status->max = prefs->to;
-	} else {
-
-		/*************************\
-		 * Check size parameters *
-		\*************************/
-
-		//Block size (bs): Defaults to 4K.
-		//It must be a number followed by one of these characters:
-		//						[k|K|m|M|g|G]
-		//If not, it will be considered as size in bytes.
-		//Must be integer multiple of segment's page size (typically 4k).
-		if (!block_size[0])
-			strcpy(block_size,"4k");
-
-		prefs->bs = str2num(block_size);
-		if (!prefs->bs) {
-			XSEGLOG2(&lc, E, "Invalid syntax: -bs %s\n", block_size);
-			goto arg_fail;
-		} else if (prefs->bs % xseg_page_size) {
-			XSEGLOG2(&lc, E, "Misaligned block size: %s\n", block_size);
+	} else if (total_size[0]) {
+		if (prefs->op != X_READ && prefs->op != X_WRITE) {
+			XSEGLOG2(&lc, E,
+					"Total objects must be supplied (required by op %s)\n", op);
 			goto arg_fail;
 		}
-
-		//Total I/O size (ts): Must be supplied by user.
-		//Must have the same format as "total size"
-		//Must be integer multiple of "block size"
-		if (!total_size[0]) {
-			XSEGLOG2(&lc, E, "Total I/O size needs to be supplied\n");
-			goto arg_fail;
-		}
-
 		prefs->ts = str2num(total_size);
 		if (!prefs->ts) {
 			XSEGLOG2(&lc, E, "Invalid syntax: -ts %s\n", total_size);
@@ -277,31 +268,30 @@ int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 		} else if (prefs->ts % prefs->bs) {
 			XSEGLOG2(&lc, E, "Misaligned total I/O size: %s\n", total_size);
 			goto arg_fail;
-		} else if (prefs->ts > xseg->segment_size) {
-			XSEGLOG2(&lc, E,
-					"Total I/O size exceeds segment size\n", total_size);
-			goto arg_fail;
 		}
-
-		//Object size (os): Defaults to 4M.
-		//Must have the same format as "total size"
-		//Must be integer multiple of "block size"
-		if (!object_size[0])
-			strcpy(object_size,"4M");
-
-		prefs->os = str2num(object_size);
-		if (!prefs->os) {
-			XSEGLOG2(&lc, E, "Invalid syntax: -os %s\n", object_size);
-			goto arg_fail;
-		} else if (prefs->os % prefs->bs) {
-			XSEGLOG2(&lc, E, "Misaligned object size: %s\n", object_size);
-			goto arg_fail;
-		}
-
 		//In this case, the maximum number of requests is the number of blocks
 		//we need to cover the total I/O size
 		prefs->status->max = prefs->ts / prefs->bs;
+	} else {
+		XSEGLOG2(&lc, E, "Total objects or total size must be supplied\n");
+		goto arg_fail;
 	}
+
+	//Object size (os): Defaults to 4M.
+	//Must have the same format as "block size"
+	//Must be integer multiple of "block size"
+	if (!object_size[0])
+		strcpy(object_size,"4M");
+
+	prefs->os = str2num(object_size);
+	if (!prefs->os) {
+		XSEGLOG2(&lc, E, "Invalid syntax: -os %s\n", object_size);
+		goto arg_fail;
+	} else if (prefs->os % prefs->bs) {
+		XSEGLOG2(&lc, E, "Misaligned object size: %s\n", object_size);
+		goto arg_fail;
+	}
+
 
 	/*************************\
 	 * Check port parameters *
@@ -437,8 +427,8 @@ static int send_request(struct peerd *peer, struct bench *prefs)
 
 	if (prefs->op == X_WRITE || prefs->op == X_READ) {
 		req->size = size;
-		//Calculate the chunk offset inside the object
-		req->offset = (new * prefs->bs) % prefs->os;
+		//Calculate the chunk's offset inside the object
+		req->offset = calculate_offset(prefs, new);
 		XSEGLOG2(&lc, D, "Offset of request %lu is %lu\n", new, req->offset);
 
 		if (prefs->op == X_WRITE)
