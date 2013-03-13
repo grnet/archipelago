@@ -298,7 +298,7 @@ int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 	\*************************/
 
 	if (dst_port < 0){
-		XSEGLOG2(&lc, E, "Target port needs to be supplied\n");
+		XSEGLOG2(&lc, E, "Target port must be supplied\n");
 		goto arg_fail;
 	}
 

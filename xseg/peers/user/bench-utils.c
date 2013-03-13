@@ -83,12 +83,12 @@ static inline int _snap_to_bound8(uint64_t space)
 	return space > 8 ? 8 : space;
 }
 
-static inline double timespec2double(struct timespec num)
+static inline double _timespec2double(struct timespec num)
 {
 	return (double) (num.tv_sec * pow(10, 9) + num.tv_nsec);
 }
 
-static inline void write_sig(struct bench_lfsr *sg,	uint64_t *d, uint64_t s,
+static inline void _write_sig(struct bench_lfsr *sg,	uint64_t *d, uint64_t s,
 		int pos)
 {
 	uint64_t i;
@@ -106,7 +106,7 @@ static inline void write_sig(struct bench_lfsr *sg,	uint64_t *d, uint64_t s,
 	memcpy(d + i, &last_val, _snap_to_bound8(space_left));
 }
 
-static inline int read_sig(struct bench_lfsr *sg, uint64_t *d, uint64_t s,
+static inline int _read_sig(struct bench_lfsr *sg, uint64_t *d, uint64_t s,
 		int pos)
 {
 	uint64_t i;
@@ -131,7 +131,7 @@ static inline int read_sig(struct bench_lfsr *sg, uint64_t *d, uint64_t s,
  * Seperates a double number in seconds, msec, usec, nsec
  * Expects a number in nanoseconds (e.g. a number from timespec2double)
  */
-static struct tm_result separate_by_order(double num)
+static struct tm_result _separate_by_order(double num)
 {
 	struct tm_result res;
 
@@ -264,8 +264,8 @@ void print_res(struct bench *prefs, struct timer *tm, char *type)
 	struct tm_result res;
 	double sum;
 
-	sum = timespec2double(tm->sum);
-	res = separate_by_order(sum);
+	sum = _timespec2double(tm->sum);
+	res = _separate_by_order(sum);
 
 	printf("\n");
 	printf("              %s\n", type);
@@ -277,7 +277,7 @@ void print_res(struct bench *prefs, struct timer *tm, char *type)
 	if (!prefs->status->received)
 		return;
 
-	res = separate_by_order(sum / prefs->status->received);
+	res = _separate_by_order(sum / prefs->status->received);
 
 	printf("Mean Time:    %3u. %03u  %03u  %03u\n",
 			res.s, res.ms, res.us, res.ns);
@@ -385,15 +385,15 @@ static int _readwrite_chunk_full(struct xseg *xseg, struct xseg_request *req,
 	 */
 
 	if (req->op == X_WRITE) {
-		write_sig(&id_lfsr, d, s, 0);
-		write_sig(&obj_lfsr, d, s, 1);
-		write_sig(&off_lfsr, d, s, 2);
+		_write_sig(&id_lfsr, d, s, 0);
+		_write_sig(&obj_lfsr, d, s, 1);
+		_write_sig(&off_lfsr, d, s, 2);
 	} else {
-		if (read_sig(&id_lfsr, d, s, 0))
+		if (_read_sig(&id_lfsr, d, s, 0))
 			return 1;
-		if (read_sig(&obj_lfsr, d, s, 1))
+		if (_read_sig(&obj_lfsr, d, s, 1))
 			return 1;
-		if(read_sig(&off_lfsr, d, s, 2))
+		if(_read_sig(&off_lfsr, d, s, 2))
 			return 1;
 	}
 
@@ -495,5 +495,3 @@ int read_chunk(struct bench *prefs, struct xseg_request *req)
 	}
 	return r;
 }
-
-
