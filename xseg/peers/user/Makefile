@@ -111,5 +111,5 @@ install-src:
 	done
 
 clean:
-	rm -f filed xseg sosd vlmcd mapperd mt-sosd dummy monitor mt-mapperd \
-		pfiled vlmc-xseg st-vlmcd mt-vlmcd mt-pfiled lfsr bench
+	rm -f filed xseg sosd vlmcd mapperd mt-sosd monitor mt-mapperd \
+		pfiled vlmc-xseg st-vlmcd mt-vlmcd mt-pfiled bench
