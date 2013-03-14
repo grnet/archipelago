@@ -34,12 +34,14 @@
 .PHONY: default all clean install install-src
 
 include $(XSEG_HOME)/base.mk
-PEERS := xseg mt-sosd dummy mt-mapperd pfiled vlmc-xseg st-vlmcd mt-pfiled
+PEERS := xseg mt-sosd mt-mapperd st-vlmcd mt-pfiled bench
 
 FILES="Makefile"
 FILES+=$(shell ls *.h)
 FILES+=$(shell ls *.c)
 FILES+=""
+
+CPREQS=$(filter %.c,$^)
 
 SUBDIR:=$(subst $(XSEG_HOME),,$(CURDIR))
 
@@ -63,29 +65,31 @@ mapperd: mapperd.c common.c $(BASE)/xseg/xseg.h $(BASE)/xseg/protocol.h common.h
 sosd: sosd.c $(BASE)/xseg/xseg.h $(BASE)/util_libs/user/sos/sos.h
 	$(CC) $(CFLAGS) -o $@ $< $(INC) -L$(LIB) -lxseg -lsos
 
-xseg: xseg-tool.c $(BASE)/xseg/xseg.h
+xseg: xseg-tool.c $(BASE)/xtypes/xheap.c $(BASE)/xseg/xseg.h
 	$(CC) $(CFLAGS) -o $@ $< $(BASE)/xtypes/xheap.c $(INC) -L$(LIB) -lxseg
 
 mt-sosd: mt-sosd.c peer.c peer.h
 	$(CC) $(CFLAGS) -o $@ $< peer.c $(INC) -L$(LIB) -lxseg -lrados -lpthread \
 							-lcrypto -DMT
-
 dummy: dummy.c peer.c peer.h
 	$(CC) $(CFLAGS) -o $@ $< peer.c $(INC) -L$(LIB) -lxseg -lpthread -DMT
+
+bench: bench-xseg.c peer.c bench-timer.c bench-lfsr.c bench-utils.c bench-xseg.h peer.h bench-lfsr.h
+	$(CC) $(CFLAGS) -o $@ $(CPREQS) $(INC) -L$(LIB) -lxseg -lpthread -lm
 
 monitor: monitor.c peer.c peer.h
 	$(CC) $(CFLAGS) -o $@ $< peer.c $(INC) -L$(LIB) -lxseg -lpthread -DMT
 
-mt-vlmcd: mt-vlmcd.c peer.c peer.h $(BASE)/xseg/protocol.h 
+mt-vlmcd: mt-vlmcd.c peer.c peer.h $(BASE)/xseg/protocol.h
 	$(CC) $(CFLAGS) -o $@ $< peer.c $(INC) -L$(LIB) -lxseg -lpthread -DMT
 
-mt-pfiled: mt-pfiled.c peer.c peer.h $(BASE)/xseg/protocol.h 
+mt-pfiled: mt-pfiled.c peer.c peer.h $(BASE)/xseg/protocol.h
 	$(CC) $(CFLAGS) -o $@ $< peer.c $(INC) -L$(LIB) -lxseg -lpthread -DMT
 
-st-vlmcd: mt-vlmcd.c peer.c peer.h $(BASE)/xseg/protocol.h 
-	$(CC) $(CFLAGS) -o $@ $< peer.c $(INC) -L$(LIB) -lxseg 
+st-vlmcd: mt-vlmcd.c peer.c peer.h $(BASE)/xseg/protocol.h
+	$(CC) $(CFLAGS) -o $@ $< peer.c $(INC) -L$(LIB) -lxseg
 
-mt-mapperd: mt-mapperd.c peer.c peer.h $(BASE)/xseg/protocol.h 
+mt-mapperd: mt-mapperd.c peer.c peer.h $(BASE)/xseg/protocol.h
 	$(CC) $(CFLAGS) -o $@ $< peer.c $(INC) -L$(LIB) -DST_THREADS -lxseg -lst -lcrypto
 
 pfiled: pfiled.c common.c $(BASE)/xseg/xseg.h $(BASE)/xseg/protocol.h common.h
@@ -101,11 +105,11 @@ install:
 	done
 
 install-src:
-	install -d $(DESTDIR)$(srcdir)$(SUBDIR) 
+	install -d $(DESTDIR)$(srcdir)$(SUBDIR)
 	@for f in $(FILES) ; do \
 		install -o 0 -g 0 -m 644 -t $(DESTDIR)$(srcdir)$(SUBDIR) $$f ; \
 	done
 
 clean:
 	rm -f filed xseg sosd vlmcd mapperd mt-sosd dummy monitor mt-mapperd \
-		pfiled vlmc-xseg st-vlmcd mt-vlmcd mt-pfiled
+		pfiled vlmc-xseg st-vlmcd mt-vlmcd mt-pfiled lfsr bench

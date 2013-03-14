@@ -44,7 +44,7 @@ EFILES+="make_symbol_map.sh"
 SUBDIR:=$(subst $(XSEG_HOME),,$(CURDIR))
 
 MAJOR=0
-MINOR=0.1
+MINOR=2
 AR=ar
 
 DRIVERS=xseg_posix xseg_segdev xseg_pthread

@@ -96,20 +96,23 @@ static long segdev_allocate(const char *name, uint64_t size)
 		goto out;
 	}
 
+	/*
 	if (segdev->segment) {
 		XSEGLOG("destroying existing segdev segment");
 		r = segdev_destroy_segment(segdev);
 		if (r)
 			goto out;
 	}
+	*/
 
 	XSEGLOG("creating segdev segment size %llu", size);
 	r = segdev_create_segment(segdev, size, 1);
 	if (r)
-		goto out;
+		goto out_put;
 
-	segdev_put(segdev);
 	r = 0;
+out_put:
+	segdev_put(segdev);
 out:
 	return r;
 }
@@ -392,6 +395,7 @@ static int segdev_init(void)
 	segdev->callback = segdev_callback;
 	segdev->priv = segpriv;
 
+	segdev_put(segdev);
 	return 0;
 
 err3:

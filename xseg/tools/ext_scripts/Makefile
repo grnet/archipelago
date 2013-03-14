@@ -22,7 +22,7 @@ clean:
 
 install:
 	install -d $(DESTDIR)$(ganetidir)
-	install -d $(DESTDIR)/var/log/ganeti/extstorage/
+	install -m 750 -d $(DESTDIR)/var/log/ganeti/extstorage/
 	@for f in $(FILES) ; do \
 		install -o 0 -g 0 -m 644 -t $(DESTDIR)$(ganetidir) $$f ; \
 	done
