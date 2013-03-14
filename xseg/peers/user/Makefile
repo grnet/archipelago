@@ -34,8 +34,7 @@
 .PHONY: default all clean install install-src
 
 include $(XSEG_HOME)/base.mk
-PEERS := xseg mt-sosd dummy mt-mapperd pfiled vlmc-xseg st-vlmcd mt-pfiled \
-	bench
+PEERS := xseg mt-sosd mt-mapperd st-vlmcd mt-pfiled bench
 
 FILES="Makefile"
 FILES+=$(shell ls *.h)
