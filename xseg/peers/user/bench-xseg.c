@@ -324,7 +324,7 @@ int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 reseed:
 	//We proceed to initialise the global_id, and seed variables.
 	if (seed == -1) {
-		clock_gettime(CLOCK_MONOTONIC_RAW, &timer_seed);
+		clock_gettime(CLOCK_BENCH, &timer_seed);
 		seed = timer_seed.tv_nsec;
 	} else {
 		set_by_hand = 1;

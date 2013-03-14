@@ -34,6 +34,18 @@
 
 #include <bench-lfsr.h>
 
+/*
+ * If CLOCK_MONOTONIC_RAW is not defined in our system, use CLOCK_MONOTONIC
+ * instead. CLOCK_MONOTONIC_RAW is preferred since we are guaranteed that the
+ * clock won't skew.
+ */
+#ifdef CLOCK_MONOTONIC_RAW
+#define CLOCK_BENCH CLOCK_MONOTONIC_RAW
+#else
+#define CLOCK_BENCH CLOCK_MONOTONIC
+#endif
+
+
 #define MAX_ARG_LEN 10
 
 /*
