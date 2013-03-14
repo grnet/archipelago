@@ -1351,7 +1351,7 @@ xport xseg_submit (struct xseg *xseg, struct xseg_request *xreq,
 
 	/* submit */
 
-	__update_timestamp(xreq);
+	//__update_timestamp(xreq);
 
 	xqi = XPTR_MAKE(xreq, xseg->segment);
 
@@ -1416,7 +1416,7 @@ retry:
 		return NULL;
 
 	req = XPTR_TAKE(xqi, xseg->segment);
-	__update_timestamp(req);
+//	__update_timestamp(req);
 	serial = __xq_pop_head(&req->path);
 	if (serial == Noneidx){
                 /* this should never happen */
