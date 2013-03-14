@@ -93,6 +93,7 @@ struct peerd {
 	xport defer_portno;
 	struct peer_req *peer_reqs;
 	struct xq free_reqs;
+	int (*peerd_loop)(void *arg);
 	void *priv;
 #ifdef MT
 	uint32_t nr_threads;
@@ -121,6 +122,8 @@ void get_submits_stats();
 void get_responds_stats();
 void usage();
 void print_req(struct xseg *xseg, struct xseg_request *req);
+int check_ports(struct peerd *peer);
+
 #ifdef MT
 int thread_execute(struct peerd *peer, void (*func)(void *arg), void *arg);
 #endif
@@ -131,12 +134,18 @@ static inline struct peerd * __get_peerd(void * custom_peerd)
 }
 
 
+
 /* decration of "common" variables */
+extern volatile unsigned int terminated;
 extern struct log_ctx lc;
 #ifdef ST_THREADS
 extern uint32_t ta;
 #endif
 
+inline int isTerminate(void)
+{
+	return terminated;
+}
 
 /********************************
  *   mandatory peer functions   *

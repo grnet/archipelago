@@ -76,10 +76,11 @@ struct thread {
 	pthread_t tid;
 	pthread_cond_t cond;
 	pthread_mutex_t lock;
+	int thread_no;
 	void (*func)(void *arg);
 	void *arg;
+	void *priv;
 };
-
 
 inline static struct thread* alloc_thread(struct peerd *peer)
 {
@@ -116,21 +117,10 @@ inline static int wake_up_next_thread(struct peerd *peer)
 }
 #endif
 
-
-static inline int isTerminate()
-{
-/* ta doesn't need to be taken into account, because the main loops
- * doesn't check the terminated flag if ta is not 0.
+/*
+ * extern is needed if this function is going to be called by another file
+ * such as bench-xseg.c
  */
-	/*
-#ifdef ST_THREADS
-	return (!ta & terminated);
-#else
-	return terminated;
-#endif
-	*/
-	return terminated;
-}
 
 void signal_handler(int signal)
 {
@@ -243,6 +233,11 @@ void log_pr(char *msg, struct peer_req *pr)
 	}
 }
 
+/*
+ * free_reqs is a queue that simply contains pointer offsets to the peer_reqs
+ * queue. If a pointer from peer_reqs is popped, we are certain that the
+ * associated memory in peer_reqs is free to use
+ */
 inline struct peer_req *alloc_peer_req(struct peerd *peer)
 {
 	xqindex idx = xq_pop_head(&peer->free_reqs, 1);
@@ -287,6 +282,8 @@ void complete(struct peerd *peer, struct peer_req *pr)
 {
 	struct xseg_request *req = pr->req;
 	uint32_t p;
+	int r;
+
 	req->state |= XS_SERVED;
 	//xseg_set_req_data(peer->xseg, pr->req, NULL);
 	//gettimeofday(&resp_start, NULL);
@@ -296,14 +293,16 @@ void complete(struct peerd *peer, struct peer_req *pr)
 	//timersub(&resp_end, &resp_start, &resp_end);
 	//timeradd(&resp_end, &resp_accum, &resp_accum);
 	//printf("xseg_signal: %u\n", p);
-	xseg_signal(peer->xseg, p);
+	r = xseg_signal(peer->xseg, p);
+	if (r < 0)
+		XSEGLOG2(&lc, W, "Cannot signal destination peer (reason %d)\n", r);
 	free_peer_req(peer, pr);
 #ifdef MT
 	wake_up_next_thread(peer);
 #endif
 }
 
-static void handle_accepted(struct peerd *peer, struct peer_req *pr, 
+static void handle_accepted(struct peerd *peer, struct peer_req *pr,
 				struct xseg_request *req)
 {
 	struct xseg_request *xreq = pr->req;
@@ -355,7 +354,7 @@ int submit_peer_req(struct peerd *peer, struct peer_req *pr)
 	return 0;
 }
 
-static int check_ports(struct peerd *peer)
+int check_ports(struct peerd *peer)
 {
 	struct xseg *xseg = peer->xseg;
 	xport portno_start = peer->portno_start;
@@ -368,7 +367,10 @@ static int check_ports(struct peerd *peer)
 	for (i = portno_start; i <= portno_end; i++) {
 		accepted = NULL;
 		received = NULL;
+		//Shouldn't we just leave?
 		if (!isTerminate()) {
+			//Better way than alloc/free all the time?
+			//Cache the allocated peer_req?
 			pr = alloc_peer_req(peer);
 			if (pr) {
 				accepted = xseg_accept(xseg, i, X_NONBLOCK);
@@ -410,19 +412,6 @@ static int check_ports(struct peerd *peer)
 }
 
 #ifdef MT
-int thread_execute(struct peerd *peer, void (*func)(void *arg), void *arg)
-{
-	struct thread *t = alloc_thread(peer);
-	if (t) {
-		t->func = func;
-		t->arg = arg;
-		wake_up_thread(t);
-		return 0;
-	} else
-		// we could hijack a thread
-		return -1;
-}
-
 static void* thread_loop(void *arg)
 {
 	struct thread *t = (struct thread *) arg;
@@ -435,20 +424,10 @@ static void* thread_loop(void *arg)
 	uint64_t threshold=1000/(1 + portno_end - portno_start);
 
 	XSEGLOG2(&lc, D, "thread %u\n",  (unsigned int) (t- peer->thread));
-
 	XSEGLOG2(&lc, I, "Thread %u has tid %u.\n", (unsigned int) (t- peer->thread), pid);
 	xseg_init_local_signal(xseg, peer->portno_start);
 	for (;!(isTerminate() && xq_count(&peer->free_reqs) == peer->nr_ops);) {
-		if (t->func) {
-			XSEGLOG2(&lc, D, "Thread %u executes function\n", (unsigned int) (t- peer->thread));
-			xseg_cancel_wait(xseg, peer->portno_start);
-			t->func(t->arg);
-			t->func = NULL;
-			t->arg = NULL;
-			continue;
-		}
-
-		for(loops= threshold; loops > 0; loops--) {
+		for(loops =  threshold; loops > 0; loops--) {
 			if (loops == 1)
 				xseg_prepare_wait(xseg, peer->portno_start);
 			if (check_ports(peer))
@@ -464,24 +443,63 @@ static void* thread_loop(void *arg)
 	return NULL;
 }
 
+void *init_thread_loop(void *arg)
+{
+	struct thread *t = (struct thread *) arg;
+	struct peerd *peer = t->peer;
+	char *thread_id;
+	int i;
+
+	/*
+	 * We need an identifier for every thread that will spin in peerd_loop.
+	 * The following code is a way to create a string of this format:
+	 *		"Thread <num>"
+	 * minus the null terminator. What we do is we create this string with
+	 * snprintf and then resize it to exclude the null terminator with
+	 * realloc. Finally, the result string is passed to the (void *arg) field
+	 * of struct thread.
+	 *
+	 * Since the highest thread number can't be more than 5 digits, using 13
+	 * chars should be more than enough.
+	 */
+	thread_id = malloc(13 * sizeof(char));
+	snprintf(thread_id, 13, "Thread %ld", t - t->peer->thread);
+	for (i = 0; thread_id[i]; i++) {}
+	t->arg = (void *)realloc(thread_id, i-1);
+
+	//Start thread loop
+	(void)peer->peerd_loop(t);
+
+	wake_up_next_thread(peer);
+	custom_peer_finalize(peer);
+
+	return NULL;
+}
+
 int peerd_start_threads(struct peerd *peer)
 {
 	int i;
 	uint32_t nr_threads = peer->nr_threads;
 	//TODO err check
 	for (i = 0; i < nr_threads; i++) {
+		peer->thread[i].func = NULL;
+		peer->thread[i].arg = NULL;
 		peer->thread[i].peer = peer;
 		pthread_cond_init(&peer->thread[i].cond,NULL);
 		pthread_mutex_init(&peer->thread[i].lock, NULL);
-		pthread_create(&peer->thread[i].tid, NULL, thread_loop, (void *)(peer->thread + i));
-		peer->thread[i].func = NULL;
-		peer->thread[i].arg = NULL;
-
+		pthread_create(&peer->thread[i].tid, NULL,
+					init_thread_loop, (void *)(peer->thread + i));
 	}
+
+	if (peer->interactive_func)
+		peer->interactive_func();
+	for (i = 0; i < nr_threads; i++) {
+		pthread_join(peer->thread[i].tid, NULL);
+	}
+
 	return 0;
 }
 #endif
-
 
 int defer_request(struct peerd *peer, struct peer_req *pr)
 {
@@ -505,27 +523,42 @@ int defer_request(struct peerd *peer, struct peer_req *pr)
 	return 0;
 }
 
-static int peerd_loop(struct peerd *peer) 
+/*
+ * generic_peerd_loop is a general-purpose port-checker loop that is
+ * suitable both for multi-threaded and single-threaded peers.
+ */
+static int generic_peerd_loop(void *arg)
 {
 #ifdef MT
-	int i;
-	if (peer->interactive_func)
-		peer->interactive_func();
-	for (i = 0; i < peer->nr_threads; i++) {
-		pthread_join(peer->thread[i].tid, NULL);
-	}
+	struct thread *t = (struct thread *) arg;
+	struct peerd *peer = t->peer;
+	char *id = t->arg;
 #else
+	struct peerd *peer = (struct peerd *) arg;
+	char id[4] = {'P','e','e','r'};
+#endif
 	struct xseg *xseg = peer->xseg;
 	xport portno_start = peer->portno_start;
 	xport portno_end = peer->portno_end;
+	pid_t pid = syscall(SYS_gettid);
 	uint64_t threshold=1000/(1 + portno_end - portno_start);
-	pid_t pid =syscall(SYS_gettid);
 	uint64_t loops;
 
-	XSEGLOG2(&lc, I, "Peer has tid %u.\n", pid);
+	XSEGLOG2(&lc, I, "%s has tid %u.\n", id, pid);
 	xseg_init_local_signal(xseg, peer->portno_start);
 	for (;!(isTerminate() && xq_count(&peer->free_reqs) == peer->nr_ops);) {
-		for(loops= threshold; loops > 0; loops--) {
+#ifdef MT
+		if (t->func) {
+			XSEGLOG2(&lc, D, "%s executes function\n", id);
+			xseg_cancel_wait(xseg, peer->portno_start);
+			t->func(t->arg);
+			t->func = NULL;
+			t->arg = NULL;
+			continue;
+		}
+#endif
+		//Heart of peerd_loop. This loop is common for everyone.
+		for(loops = threshold; loops > 0; loops--) {
 			if (loops == 1)
 				xseg_prepare_wait(xseg, peer->portno_start);
 			if (check_ports(peer))
@@ -534,19 +567,25 @@ static int peerd_loop(struct peerd *peer)
 #ifdef ST_THREADS
 		if (ta){
 			st_sleep(0);
-		} else {
-#endif
-			XSEGLOG2(&lc, I, "Peer goes to sleep\n");
-			xseg_wait_signal(xseg, 10000000UL);
-			xseg_cancel_wait(xseg, peer->portno_start);
-			XSEGLOG2(&lc, I, "Peer woke up\n");
-#ifdef ST_THREADS
+			continue;
 		}
 #endif
+		XSEGLOG2(&lc, I, "%s goes to sleep\n", id);
+		xseg_wait_signal(xseg, 10000000UL);
+		xseg_cancel_wait(xseg, peer->portno_start);
+		XSEGLOG2(&lc, I, "%s woke up\n", id);
 	}
+	return 0;
+}
+
+static int init_peerd_loop(struct peerd *peer)
+{
+	struct xseg *xseg = peer->xseg;
+
+	peer->peerd_loop(peer);
 	custom_peer_finalize(peer);
 	xseg_quit_local_signal(xseg, peer->portno_start);
-#endif
+
 	return 0;
 }
 
@@ -570,6 +609,8 @@ static struct peerd* peerd_init(uint32_t nr_ops, char* spec, long portno_start,
 	int i;
 	struct peerd *peer;
 	struct xseg_port *port;
+	void *sd = NULL;
+	xport p;
 
 #ifdef ST_THREADS
 	st_init();
@@ -605,29 +646,28 @@ malloc_fail:
 		return NULL;
 	}
 	peer->xseg = join(spec);
-	if (!peer->xseg) 
+	if (!peer->xseg)
 		return NULL;
 
 	peer->portno_start = (xport) portno_start;
 	peer->portno_end= (xport) portno_end;
-	port = xseg_bind_port(peer->xseg, peer->portno_start, NULL);
-	if (!port){
-		printf("cannot bind to port %u\n", (unsigned int) peer->portno_start);
-		return NULL;
-	}
 
-	xport p;
-	for (p = peer->portno_start + 1; p <= peer->portno_end; p++) {
-		struct xseg_port *tmp;
-		tmp = xseg_bind_port(peer->xseg, p, (void *)xseg_get_signal_desc(peer->xseg, port));
-		if (!tmp){
+	/*
+	 * Start binding ports from portno_start to portno_end.
+	 * The first port we bind will have its signal_desc initialized by xseg
+	 * and the same signal_desc will be used for all the other ports.
+	 */
+	for (p = peer->portno_start; p <= peer->portno_end; p++) {
+		port = xseg_bind_port(peer->xseg, p, sd);
+		if (!port){
 			printf("cannot bind to port %u\n", (unsigned int) p);
 			return NULL;
 		}
+		if (p == peer->portno_start)
+			sd = xseg_get_signal_desc(peer->xseg, port);
 	}
 
-	printf("Peer on ports  %u-%u\n", peer->portno_start,
-			peer->portno_end);
+	printf("Peer on ports  %u-%u\n", peer->portno_start, peer->portno_end);
 
 	for (i = 0; i < nr_ops; i++) {
 		peer->peer_reqs[i].peer = peer;
@@ -635,6 +675,10 @@ malloc_fail:
 		peer->peer_reqs[i].retval = 0;
 		peer->peer_reqs[i].priv = NULL;
 		peer->peer_reqs[i].portno = NoPort;
+
+	//Plug default peerd_loop. This can change later on by custom_peer_init.
+	peer->peerd_loop = generic_peerd_loop;
+
 #ifdef ST_THREADS
 		peer->peer_reqs[i].cond = st_cond_new(); //FIXME err check
 #endif
@@ -688,7 +732,7 @@ int pidfile_read(char *path, pid_t *pid)
 int pidfile_open(char *path, pid_t *old_pid)
 {
 	//nfs version > 3
-	int fd = open(path, O_CREAT|O_EXCL|O_WRONLY);
+	int fd = open(path, O_CREAT|O_EXCL|O_WRONLY, S_IWUSR);
 	if (fd < 0){
 		if (errno == EEXIST)
 			pidfile_read(path, old_pid);
@@ -822,16 +866,14 @@ int main(int argc, char *argv[])
 	r = custom_peer_init(peer, argc, argv);
 	if (r < 0)
 		goto out;
-#ifdef MT
+#if defined(MT)
 	//TODO err check
 	peerd_start_threads(peer);
-#endif
-
-#ifdef ST_THREADS
-	st_thread_t st = st_thread_create(peerd_loop, peer, 1, 0);
+#elif defined(ST_THREADS)
+	st_thread_t st = st_thread_create(init_peerd_loop, peer, 1, 0);
 	r = st_thread_join(st, NULL);
 #else
-	r = peerd_loop(peer);
+	r = init_peerd_loop(peer);
 #endif
 out:
 	if (pid_fd > 0)
