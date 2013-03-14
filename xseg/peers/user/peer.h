@@ -115,6 +115,7 @@ struct peerd {
 	struct thread *thread;
 	struct xq threads;
 	void (*interactive_func)(void);
+#else
 #endif
 };
 
@@ -136,6 +137,7 @@ void get_submits_stats();
 void get_responds_stats();
 void usage();
 void print_req(struct xseg *xseg, struct xseg_request *req);
+int all_peer_reqs_free(struct peerd *peer);
 
 #ifdef MT
 int thread_execute(struct peerd *peer, void (*func)(void *arg), void *arg);
