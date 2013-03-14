@@ -51,6 +51,12 @@
 #include <peer.h>
 
 #ifdef MT
+#ifdef ST_THREADS
+#error "MT and ST_THREADS defines are mutually exclusive"
+#endif
+#endif
+
+#ifdef MT
 #define PEER_TYPE "pthread"
 #else
 #define PEER_TYPE "posix"
