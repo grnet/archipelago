@@ -700,7 +700,7 @@ static struct peerd* peerd_init(uint32_t nr_ops, char* spec, long portno_start,
 	for (i = 0; i < nr_threads; i++) {
 		peer->thread[i].thread_no = i;
 		peer->thread[i].peer = peer;
-		if (!xq_alloc_empty(&peer->thread[i].free_thread_reqs, nr_ops/nr_threads))
+		if (!xq_alloc_empty(&peer->thread[i].free_thread_reqs, nr_ops))
 			goto malloc_fail;
 	}
 	for (i = 0; i < nr_ops; i++) {
