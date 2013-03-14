@@ -38,6 +38,5 @@
 #define MAGIC_PTHREAD_SD 7
 
 struct pthread_signal_desc{
-	struct xpool waiters;
-	struct xpool_node bufs[MAX_WAITERS];
-};  
+	volatile pid_t pids[MAX_WAITERS];
+};

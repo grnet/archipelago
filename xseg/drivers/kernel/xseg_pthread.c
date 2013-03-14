@@ -86,10 +86,10 @@ static int pthread_wait_signal(struct xseg *xseg, uint32_t timeout)
 static int pthread_signal(struct xseg *xseg, uint32_t portno)
 {
 	struct pid *pid;
+	int i;
+	pid_t cue = 0;
 	struct task_struct *task;
 	int ret = -ENOENT;
-	xpool_data data;
-	xpool_index idx;
 	struct pthread_signal_desc *psd;
 	struct xseg_port *port = xseg_get_port(xseg, portno);
 	if (!port) 
@@ -100,14 +100,20 @@ static int pthread_signal(struct xseg *xseg, uint32_t portno)
 
 	rcu_read_lock();
 	/* XXX Security: xseg peers can kill anyone */
-	idx = xpool_peek(&psd->waiters, &data, portno); //FIXME portno is not the caller but the callee
-	if (idx == NoIndex){
-		/* no waiters */
+
+	for (i = 0; i < MAX_WAITERS; i++) {
+		cue = psd->pids[i];
+		if (cue)
+			break;
+	}
+	if (!cue){
+		/* no waiters found */
 		ret = 0;
 		goto out;
 	}
 
-	pid = find_vpid((pid_t) data);
+
+	pid = find_vpid(cue);
 	if (!pid)
 		goto out;
 	task = pid_task(pid, PIDTYPE_PID);
