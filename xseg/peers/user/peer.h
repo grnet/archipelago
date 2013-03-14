@@ -89,15 +89,12 @@ struct peer_req {
 };
 
 struct thread {
-	struct peerd *peer;
 	pthread_t tid;
-	pthread_cond_t cond;
-	pthread_mutex_t lock;
+	struct peerd *peer;
 	int thread_no;
-	void (*func)(void *arg);
-	void *arg;
-	void *priv;
 	struct xq free_thread_reqs;
+	void *priv;
+	void *arg;
 };
 
 struct peerd {
