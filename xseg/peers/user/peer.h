@@ -83,6 +83,18 @@ struct peer_req {
 #ifdef ST_THREADS
 	st_cond_t cond;
 #endif
+#ifdef MT
+	int thread_no;
+#endif
+};
+
+struct thread {
+	pthread_t tid;
+	struct peerd *peer;
+	int thread_no;
+	struct xq free_thread_reqs;
+	void *priv;
+	void *arg;
 };
 
 struct peerd {
@@ -100,6 +112,7 @@ struct peerd {
 	struct thread *thread;
 	struct xq threads;
 	void (*interactive_func)(void);
+#else
 #endif
 };
 
@@ -115,17 +128,21 @@ int defer_request(struct peerd *peer, struct peer_req *pr);
 void pending(struct peerd *peer, struct peer_req *req);
 void log_pr(char *msg, struct peer_req *pr);
 int canDefer(struct peerd *peer);
-int submit_peer_req(struct peerd *peer, struct peer_req *pr);
-struct peer_req *alloc_peer_req(struct peerd *peer);
 void free_peer_req(struct peerd *peer, struct peer_req *pr);
+int submit_peer_req(struct peerd *peer, struct peer_req *pr);
 void get_submits_stats();
 void get_responds_stats();
 void usage();
 void print_req(struct xseg *xseg, struct xseg_request *req);
-int check_ports(struct peerd *peer);
+int all_peer_reqs_free(struct peerd *peer);
 
 #ifdef MT
 int thread_execute(struct peerd *peer, void (*func)(void *arg), void *arg);
+struct peer_req *alloc_peer_req(struct peerd *peer, struct thread *t);
+int check_ports(struct peerd *peer, struct thread *t);
+#else
+struct peer_req *alloc_peer_req(struct peerd *peer);
+int check_ports(struct peerd *peer);
 #endif
 
 static inline struct peerd * __get_peerd(void * custom_peerd)
