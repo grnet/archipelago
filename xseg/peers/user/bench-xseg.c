@@ -54,12 +54,17 @@ char global_id[IDLEN];
  * a) If in-flight requests are less than given iodepth
  * b) If we have submitted all of the requests
  */
-#define CAN_SEND_REQUEST(prefs)												  \
-	((prefs->status->submitted - prefs->status->received < prefs->iodepth) && \
-	(prefs->status->submitted < prefs->status->max))
+#define CAN_SEND_REQUEST(__p)											\
+	((__p->status->submitted - __p->status->received < __p->iodepth) && \
+	(__p->status->submitted < __p->status->max) &&						\
+	!isTerminate())
 
-#define CAN_VERIFY(prefs)													  \
-	((GET_FLAG(VERIFY, prefs->flags) != VERIFY_NO) && prefs->op == X_READ)
+#define CAN_VERIFY(__p)													\
+	((GET_FLAG(VERIFY, __p->flags) != VERIFY_NO) && __p->op == X_READ)
+
+#define CAN_PRINT_PROGRESS(__p, __q)									\
+	((GET_FLAG(PROGRESS, __p->flags) == PROGRESS_YES) &&				\
+	(__p->status->received == __q))
 
 void custom_peer_usage()
 {
@@ -78,6 +83,7 @@ void custom_peer_usage()
 			"    --seed    | None    | Initialize LFSR and target names\n"
 			"    --insanity| sane    | Adjust insanity level of benchmark:\n"
 			"              |         |     [sane|eccentric|manic|paranoid]\n"
+			"    --progress| yes     | Show progress of requests\n"
 			"\n"
 			"Additional information:\n"
 			"  --------------------------------------------\n"
@@ -97,6 +103,7 @@ int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 	char pattern[MAX_ARG_LEN + 1];
 	char insanity[MAX_ARG_LEN + 1];
 	char verify[MAX_ARG_LEN + 1];
+	char progress[MAX_ARG_LEN + 1];
 	struct xseg *xseg = peer->xseg;
 	unsigned int xseg_page_size = 1 << xseg->config.page_shift;
 	long iodepth = -1;
@@ -116,6 +123,7 @@ int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 	insanity[0] = 0;
 	verify[0] = 0;
 	request_cap[0] = 0;
+	progress[0] = 0;
 
 #ifdef MT
 	for (i = 0; i < nr_threads; i++) {
@@ -155,6 +163,7 @@ int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 	READ_ARG_ULONG("--seed", seed);
 	READ_ARG_STRING("--insanity", insanity, MAX_ARG_LEN);
 	READ_ARG_STRING("--verify", verify, MAX_ARG_LEN);
+	READ_ARG_STRING("--progress", progress, MAX_ARG_LEN);
 	END_READ_ARGS();
 
 	/*****************************\
@@ -348,9 +357,9 @@ reseed:
 		}
 	}
 
-	/****************************\
-	 * Finalize initializations *
-	\****************************/
+	/*********************************\
+	 * Miscellaneous initializations *
+	\*********************************/
 
 	/* The request cap must be enforced only after the LFSR is initialized */
 	if (request_cap[0]) {
@@ -364,6 +373,16 @@ reseed:
 		}
 		prefs->status->max = rc;
 	}
+
+	/* Benchmarking progress printing is on by default */
+	if (!progress[0])
+		strcpy(progress, "yes");
+	r = read_progress(progress);
+	if (r < 0) {
+		XSEGLOG2(&lc, E, "Invalid syntax: --progress %s\n", progress);
+		goto arg_fail;
+	}
+	SET_FLAG(PROGRESS, prefs->flags, r);
 
 	prefs->peer = peer;
 	peer->peerd_loop = bench_peerd_loop;
@@ -516,27 +535,25 @@ int bench_peerd_loop(void *arg)
 	struct bench *prefs = peer->priv;
 	xport portno_start = peer->portno_start;
 	xport portno_end = peer->portno_end;
-	uint64_t threshold=1000/(1 + portno_end - portno_start);
 	pid_t pid = syscall(SYS_gettid);
+	uint64_t threshold=1000/(1 + portno_end - portno_start);
+	uint64_t cached_prog_quantum = 0;
+	uint64_t prog_quantum = 0;
 	int r;
 	uint64_t loops;
+
+	if (GET_FLAG(PROGRESS, prefs->flags) == PROGRESS_YES) {
+		prog_quantum = calculate_prog_quantum(prefs);
+		cached_prog_quantum = prog_quantum;
+		print_stats(prefs);
+	}
 
 	XSEGLOG2(&lc, I, "%s has tid %u.\n",id, pid);
 	xseg_init_local_signal(xseg, peer->portno_start);
 
 	timer_start(prefs, prefs->total_tm);
 send_request:
-	while (!isTerminate()) {
-#ifdef MT
-		if (t->func) {
-			XSEGLOG2(&lc, D, "%s executes function\n", id);
-			xseg_cancel_wait(xseg, peer->portno_start);
-			t->func(t->arg);
-			t->func = NULL;
-			t->arg = NULL;
-			continue;
-		}
-#endif
+	while (!(isTerminate() && all_peer_reqs_free(peer))) {
 		while (CAN_SEND_REQUEST(prefs)) {
 			xseg_cancel_wait(xseg, peer->portno_start);
 			XSEGLOG2(&lc, D, "...because %lu < %lu && %lu < %lu\n",
@@ -553,6 +570,11 @@ send_request:
 			if (loops == 1)
 				xseg_prepare_wait(xseg, peer->portno_start);
 
+			if (UNLIKELY(CAN_PRINT_PROGRESS(prefs, prog_quantum))) {
+				prog_quantum += cached_prog_quantum;
+				print_progress(prefs);
+			}
+
 			if (check_ports(peer)) {
 				//If an old request has just been acked, the most sensible
 				//thing to do is to immediately send a new one
@@ -568,12 +590,6 @@ send_request:
 		//XSEGLOG2(&lc, I, "%s goes to sleep with %u requests pending\n",
 		//		id, xq_count(q));
 		XSEGLOG2(&lc, I, "%s goes to sleep\n", id);
-#ifdef ST_THREADS
-		if (ta){
-			st_sleep(0);
-			continue;
-		}
-#endif
 		xseg_wait_signal(xseg, 10000000UL);
 		xseg_cancel_wait(xseg, peer->portno_start);
 		XSEGLOG2(&lc, I, "%s woke up\n", id);
@@ -592,7 +608,12 @@ void custom_peer_finalize(struct peerd *peer)
 	if (!prefs->total_tm->completed)
 		timer_stop(prefs, prefs->total_tm, NULL);
 
-	print_stats(prefs);
+	if (GET_FLAG(PROGRESS, prefs->flags) == PROGRESS_YES)
+		print_progress(prefs);
+	else
+		print_stats(prefs);
+
+	print_remaining(prefs);
 	print_res(prefs, prefs->total_tm, "Total Requests");
 	return;
 }

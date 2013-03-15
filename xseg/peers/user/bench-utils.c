@@ -226,6 +226,15 @@ int read_verify(char *verify)
 	return -1;
 }
 
+int read_progress(char *progress)
+{
+	if (strncmp(progress, "no", MAX_ARG_LEN + 1) == 0)
+		return PROGRESS_NO;
+	if (strncmp(progress, "yes", MAX_ARG_LEN + 1) == 0)
+		return PROGRESS_YES;
+	return -1;
+}
+
 int read_pattern(char *pattern)
 {
 	if (strncmp(pattern, "seq", MAX_ARG_LEN + 1) == 0)
@@ -241,16 +250,23 @@ int read_pattern(char *pattern)
 
 void print_stats(struct bench *prefs)
 {
-	uint64_t remaining;
-
-	printf("\n");
-	printf("Requests total:     %10lu\n", prefs->status->max);
-	printf("Requests submitted: %10lu\n", prefs->status->submitted);
-	printf("Requests received:  %10lu\n", prefs->status->received);
-	printf("Requests failed:    %10lu\n", prefs->status->failed);
+	printf("\n"
+			"Requests total:     %10lu\n"
+			"Requests submitted: %10lu\n"
+			"Requests received:  %10lu\n"
+			"Requests failed:    %10lu\n",
+			prefs->status->max,
+			prefs->status->submitted,
+			prefs->status->received,
+			prefs->status->failed);
 	if ((prefs->op == X_READ) && (GET_FLAG(VERIFY, prefs->flags) != VERIFY_NO))
 		printf("Requests corrupted: %10lu\n", prefs->status->corrupted);
 	printf("\n");
+}
+
+void print_remaining(struct bench *prefs)
+{
+	uint64_t remaining;
 
 	remaining = prefs->status->max - prefs->status->received;
 	if (remaining)
@@ -283,6 +299,17 @@ void print_res(struct bench *prefs, struct timer *tm, char *type)
 			res.s, res.ms, res.us, res.ns);
 
 	//TODO: Add std
+}
+
+void print_progress(struct bench *prefs)
+{
+	int lines = 6;
+
+	if ((prefs->op == X_READ) && (GET_FLAG(VERIFY, prefs->flags) != VERIFY_NO))
+		lines++;
+
+	printf("\033[%dA\033[J", lines);
+	print_stats(prefs);
 }
 
 /**************************\
@@ -330,6 +357,12 @@ uint64_t calculate_offset(struct bench *prefs, uint64_t new)
 	else
 		return 0;
 }
+
+uint64_t calculate_prog_quantum(struct bench *prefs)
+{
+	return round((double)prefs->status->max / 20.0);
+}
+
 
 /*
  * ***********************************************
