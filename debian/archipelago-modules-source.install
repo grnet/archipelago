@@ -1,0 +1,5 @@
+usr/src/archipelago-kernel-dkms-*/xseg usr/src/modules/archipelago-modules/
+debian/changelog usr/src/modules/archipelago-modules/debian/
+debian/copyright usr/src/modules/archipelago-modules/debian/
+debian/compat usr/src/modules/archipelago-modules/debian/
+debian/archipelago-modules-source-files/* usr/src/modules/archipelago-modules/debian/

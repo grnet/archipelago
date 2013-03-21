@@ -26,3 +26,13 @@ override_dh_auto_build:
 override_dh_fixperms:
 	dh_fixperms --exclude var/log/ganeti/extstorage
 #	chmod 0750 $(DESTDIR)/var/log/ganeti/extstorage
+
+override_dh_install:
+	cat debian/archipelago-kernel-dkms.install.in | sed "s/#VERSION#/$(VERSION)/g" \
+		> debian/archipelago-kernel-dkms.install
+	dh_install
+	(cd debian/archipelago-modules-source/usr/src \
+		&& chown -R root:root modules \
+		&& tar -c modules | bzip2 > archipelago-modules.tar.bz2 \
+		&& rm -rf modules)
+
