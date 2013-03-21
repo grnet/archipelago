@@ -1,0 +1,20 @@
+Source: archipelago
+Section: otherosfs
+Priority: extra
+Maintainer: Filippos Giannakos <philipgian@grnet.gr>
+Build-Depends: debhelper (>= 7.0.50~), kernel-package
+Standards-Version: 3.9.1
+X-Python-Version: >=2.6
+
+Package: archipelago-modules-#KVERS#
+Architecture: amd64
+Recommends: linux-image-#KVERS# | kernel-image-#KVERS#
+Description: Provides archipelago-modules infrastructure for #KVERS#
+ Extended Description here
+
+Package: archipelago-modules
+Architecture: all
+Conflicts: archipelago-kernel-dkms
+Depends: archipelago-modules-#KVERS#(=${binary:Version})
+Description: Provides archipelago-modules infrastructure
+ Extended Description here
