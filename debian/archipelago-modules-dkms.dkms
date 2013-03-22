@@ -1,5 +1,5 @@
 PACKAGE_VERSION="#MODULE_VERSION#"
-PACKAGE_NAME="archipelago-kernel-dkms"
+PACKAGE_NAME="archipelago-modules-dkms"
 CLEAN="make clean"
 
 BUILT_MODULE_NAME[0]="xseg_posix"
