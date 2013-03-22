@@ -66,7 +66,7 @@ bindir=/usr/bin/
 libdir=/usr/lib/
 pythondir=/usr/lib/python2.7/
 moduledir=/lib/modules/$(KVER)/extra/
-srcdir=/usr/src/archipelago-kernel-dkms-$(VERSION)/xseg/
+srcdir=/usr/src/archipelago-modules-dkms-$(VERSION)/xseg/
 ganetidir=/usr/share/ganeti/extstorage/vlmc/
 
 INC=-I$(BASE)
