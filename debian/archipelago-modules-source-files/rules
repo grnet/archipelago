@@ -16,19 +16,13 @@
 #     REV=$(KDREV)
 #endif
 
-export VERSION := $(shell head -n 1 debian/changelog | sed -r 's/.*([0-9]+\.[0-9]+.*-[0-9]+).*/\1/g')
-
-#ifeq ($(REV),)
-#PKG_VERSION=$(EPOCH)$(VERSION)
-PKG_VERSION=$(VERSION)
-#else
-#PKG_VERSION=$(EPOCH)$(VERSION)+$(REV)
-#PKG_VERSION=$(VERSION)-$(REV)
-#endif
+export VERSION := $(shell head -n 1 debian/changelog | sed -r 's/.*([0-9]+\.[0-9]+.*)-[0-9]+.*/\1/g')
+export RAW_VERSION := $(shell echo $(VERSION) | sed 's/~//g')
+export PKG_VERSION := $(shell head -n 1 debian/changelog | sed -r 's/.*([0-9]+\.[0-9]+.*-[0-9]+).*/\1/g')
 
 # determine fglrx-source package version and warn user if it doesn't match
 SRC_PKG_VERSION := $(shell dpkg -s archipelago-modules-source | grep '^Version:' | cut -d' ' -f2)
-ifneq ($(SRC_PKG_VERSION),$(VERSION))
+ifneq ($(SRC_PKG_VERSION),$(PKG_VERSION))
 $(warning *** the unpacked source ($(VERSION)) doesnt match the archipelago-modules-source package ($(SRC_PKG_VERSION)))
 $(warning *** if this is not what you want, erase $(CURDIR) and start over)
 endif
@@ -39,15 +33,15 @@ KVERS := ${KVERS}
 
 export KVER=$(KVERS)
 ifeq ($(CHANGES_FILE),)
-export CHANGES_FILE="../../archipelago-modules_$(VERSION).changes"
+export CHANGES_FILE="../../archipelago-modules_$(VERSION)_amd64.changes"
 endif
 
 configure: configure-stamp
 
 configure-stamp:
 	if [ -f $(CURDIR)/debian/control.in ]; then \
-	        cat $(CURDIR)/debian/control.in | sed "s/#KVERS#/$(KVERS)/g" \
-			> $(CURDIR)/debian/control; \
+		sed -e 's/#KVERS#/$(KVERS)/g' -e 's/#VERSION#/$(RAW_VERSION)/g' \
+			debian/control.in > $(CURDIR)/debian/control ; \
 	fi
 	dh_testdir
 	touch configure-stamp
@@ -61,8 +55,10 @@ install: build
 	dh_testroot
 	dh_prep
 	rm -f $(CURDIR)/debian/control $(CURDIR)/debian/install
-	sed -e 's/#KVERS#/$(KVERS)/g' debian/control.in > $(CURDIR)/debian/control
-	sed -e 's/#KVERS#/$(KVERS)/g' debian/install.in > $(CURDIR)/debian/archipelago-modules-$(KVERS).install
+	sed -e 's/#KVERS#/$(KVERS)/g' -e 's/#VERSION#/$(RAW_VERSION)/g' \
+		debian/control.in > $(CURDIR)/debian/control
+	sed -e 's/#KVERS#/$(KVERS)/g' debian/install.in \
+		> $(CURDIR)/debian/archipelago-modules-$(KVERS).install
 	$(MAKE) -C xseg XSEG_DOMAIN_TARGETS="kernel" install DESTDIR="$(CURDIR)/debian/tmp"
 	dh_installdirs
 	dh_install
