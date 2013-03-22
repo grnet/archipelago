@@ -72,6 +72,6 @@ Description:  Provides archipelago-kernel infrastructure
 Package: archipelago-modules-source
 Architecture: any
 Depends: ${misc:Depends}, debhelper(>= 5), make, bzip2
-Recommends: kernel-package
+Recommends: module-assistant
 Description:  Provides archipelago-modules source infrastructure
  Extended Description here
