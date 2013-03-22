@@ -38,6 +38,9 @@ KSRC  := $(KSRC)
 KVERS := ${KVERS}
 
 export KVER=$(KVERS)
+ifeq ($(CHANGES_FILE),)
+export CHANGES_FILE="../../archipelago-modules_$(VERSION).changes"
+endif
 
 configure: configure-stamp
 
@@ -79,11 +82,13 @@ binary_modules: build install
 	dh_md5sums
 ifdef KPKG_DEST_DIR
 	dh_builddeb --destdir=$(KPKG_DEST_DIR)
-else   
+	dpkg-genchanges -b -u$(KPKG_DEST_DIR) > $(CHANGES_FILE)
+else
 	dh_builddeb --destdir=$(CURDIR)/../..
+	dpkg-genchanges -b -u$(CURDIR)/../.. > $(CHANGES_FILE)
 endif
 
-clean: 
+clean:
 	dh_testroot
 	rm -f configure-stamp
 	dh_clean
