@@ -28,8 +28,8 @@ override_dh_fixperms:
 #	chmod 0750 $(DESTDIR)/var/log/ganeti/extstorage
 
 override_dh_install:
-	cat debian/archipelago-kernel-dkms.install.in | sed "s/#VERSION#/$(VERSION)/g" \
-		> debian/archipelago-kernel-dkms.install
+	cat debian/archipelago-modules-dkms.install.in | sed "s/#VERSION#/$(VERSION)/g" \
+		> debian/archipelago-modules-dkms.install
 	dh_install
 	(cd debian/archipelago-modules-source/usr/src \
 		&& chown -R root:root modules \

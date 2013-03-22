@@ -14,7 +14,7 @@ Description: Provides archipelago-modules infrastructure for #KVERS#
 
 Package: archipelago-modules
 Architecture: all
-Conflicts: archipelago-kernel-dkms
+Conflicts: archipelago-modules-dkms
 Depends: archipelago-modules-#KVERS#(=${binary:Version})
 Description: Provides archipelago-modules infrastructure
  Extended Description here
