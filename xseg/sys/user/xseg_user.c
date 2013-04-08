@@ -275,12 +275,16 @@ void __xseg_log2(struct log_ctx *lc, enum log_level level, char *fmt, ...)
 		if (r < 0){
 			if (errno == EBADF)
 				fd = *(volatile int *)&lc->logfile;
-			else
+			else {
 				//XSEGLOG("Error while writing log");
 				break;
+			}
+		} else {
+			sum += r;
 		}
-		sum += r;
 	} while (sum < count);
+	/* No need to check for error */
+	//fsync(fd);
 	va_end(ap);
 
 	return;
