@@ -90,7 +90,7 @@ inline static int wake_up_next_thread(struct peerd *peer)
 
 void signal_handler(int signal)
 {
-	XSEGLOG2(&lc, I, "Caught signal. Terminating gracefully");
+//	XSEGLOG2(&lc, I, "Caught signal. Terminating gracefully");
 	terminated = 1;
 #ifdef MT
 	wake_up_next_thread(global_peer);
@@ -99,7 +99,7 @@ void signal_handler(int signal)
 
 void renew_logfile(int signal)
 {
-	XSEGLOG2(&lc, I, "Caught signal. Renewing logfile");
+//	XSEGLOG2(&lc, I, "Caught signal. Renewing logfile");
 	renew_logctx(&lc, NULL, verbose, NULL, REOPEN_FILE);
 }
 
