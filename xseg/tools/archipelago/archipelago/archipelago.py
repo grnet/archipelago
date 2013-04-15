@@ -59,6 +59,7 @@ def start_peer(peer):
         sys.stdout.write("\n")
         raise Error("Cannot start %s" % peer.role)
 
+    time.sleep(3)
     pid = check_pidfile(peer.role)
     if pid < 0 or not check_running(peer.executable, pid):
         sys.stdout.write(red("FAILED".ljust(SECOND_COLUMN_WIDTH)))
