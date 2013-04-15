@@ -48,8 +48,8 @@
 
 
 struct log_ctx {
-	int stdout_orig;
-	int stderr_orig;
+//	int stdout_orig;
+//	int stderr_orig;
 	char filename[MAX_LOGFILE_LEN];
 	volatile int logfile;
 	char peer_name[MAX_PEER_NAME];
