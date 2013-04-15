@@ -861,6 +861,9 @@ int main(int argc, char *argv[])
 	}
 
 	if (daemonize){
+		if (close(STDIN_FILENO)){
+			XSEGLOG2(&lc, W, "Could not close stdin");
+		}
 		if (daemon(0, 1) < 0){
 			XSEGLOG2(&lc, E, "Cannot daemonize");
 			r = -1;
