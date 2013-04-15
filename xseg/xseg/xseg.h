@@ -257,7 +257,7 @@ struct xseg_request {
 	xptr target;
 	uint32_t targetlen;
 	uint32_t op;
-	uint32_t state;
+	volatile uint32_t state;
 	uint32_t flags;
 	xport src_portno;
 	xport transit_portno;
