@@ -184,7 +184,7 @@ int __init_logctx(struct log_ctx *lc, char *peer_name,
 
 	/* set logfile to stderr by default */
 	lc->logfile = STDERR_FILENO;
-
+#if 0
 	/* duplicate stdout, stderr */
 	fd = dup(STDOUT_FILENO);
 	if (fd < 0){
@@ -197,10 +197,10 @@ int __init_logctx(struct log_ctx *lc, char *peer_name,
 		return -1;
 	}
 	lc->stderr_orig = fd;
-
+#endif
 	lc->log_level = log_level;
 	if (!logfile || !logfile[0]) {
-		lc->logfile = lc->stderr_orig;
+//		lc->logfile = lc->stderr_orig;
 		return 0;
 	}
 
@@ -208,7 +208,7 @@ int __init_logctx(struct log_ctx *lc, char *peer_name,
 	lc->filename[MAX_LOGFILE_LEN - 1] = 0;
 	fd = open(lc->filename, O_WRONLY|O_CREAT|O_APPEND, S_IRUSR|S_IWUSR);
 	if (fd < 1){
-		lc->logfile = lc->stderr_orig;
+//		lc->logfile = lc->stderr_orig;
 		return -1;
 	}
 	lc->logfile = fd;
