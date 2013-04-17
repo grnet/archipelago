@@ -137,30 +137,30 @@ struct map_node {
 
 
 #define wait_on_pr(__pr, __condition__) 	\
-	while (__condition__){			\
+	do {					\
 		ta--;				\
 		__get_mapper_io(pr)->active = 0;\
 		XSEGLOG2(&lc, D, "Waiting on pr %lx, ta: %u",  pr, ta); \
 		st_cond_wait(__pr->cond);	\
-	}
+	} while (__condition__)
 
 #define wait_on_mapnode(__mn, __condition__)	\
-	while (__condition__){			\
+	do {					\
 		ta--;				\
 		__mn->waiters++;		\
 		XSEGLOG2(&lc, D, "Waiting on map node %lx %s, waiters: %u, \
 			ta: %u",  __mn, __mn->object, __mn->waiters, ta);  \
 		st_cond_wait(__mn->cond);	\
-	}
+	} while (__condition__)
 
 #define wait_on_map(__map, __condition__)	\
-	while (__condition__){			\
+	do {					\
 		ta--;				\
 		__map->waiters++;		\
 		XSEGLOG2(&lc, D, "Waiting on map %lx %s, waiters: %u, ta: %u",\
 				   __map, __map->volume, __map->waiters, ta); \
 		st_cond_wait(__map->cond);	\
-	}
+	} while (__condition__)
 
 #define signal_pr(__pr)				\
 	do { 					\
@@ -1635,7 +1635,8 @@ static inline void put_map(struct map *map)
 			if (mn) {
 				//make sure all pending operations on all objects are completed
 				//this should never happen...
-				wait_on_mapnode(mn, mn->flags & MF_OBJECT_NOT_READY);
+				if (mn->flags & MF_OBJECT_NOT_READY)
+					wait_on_mapnode(mn, mn->flags & MF_OBJECT_NOT_READY);
 				mn->flags |= MF_OBJECT_DESTROYED;
 				put_mapnode(mn); //matchin mn->ref = 1 on mn init
 				put_mapnode(mn); //matcing get_mapnode;
@@ -2033,7 +2034,8 @@ static int req2objs(struct peer_req *pr, struct map *map, int write)
 				if (mn->flags & MF_OBJECT_NOT_READY){
 					if (!can_wait)
 						continue;
-					wait_on_mapnode(mn, mn->flags & MF_OBJECT_NOT_READY);
+					if (mn->flags & MF_OBJECT_NOT_READY)
+						wait_on_mapnode(mn, mn->flags & MF_OBJECT_NOT_READY);
 					if (mn->flags & MF_OBJECT_DESTROYED){
 						mio->err = 1;
 						continue;
@@ -2057,7 +2059,8 @@ static int req2objs(struct peer_req *pr, struct map *map, int write)
 			}
 			can_wait = 1;
 		}
-		wait_on_pr(pr, mio->copyups > 0);
+		if (mio->copyups > 0)
+			wait_on_pr(pr, mio->copyups > 0);
 	}
 
 	if (mio->err){
@@ -2108,7 +2111,8 @@ static int do_dropcache(struct peer_req *pr, struct map *map)
 		if (mn) {
 			if (!(mn->flags & MF_OBJECT_DESTROYED)){
 				//make sure all pending operations on all objects are completed
-				wait_on_mapnode(mn, mn->flags & MF_OBJECT_NOT_READY);
+				if (mn->flags & MF_OBJECT_NOT_READY)
+					wait_on_mapnode(mn, mn->flags & MF_OBJECT_NOT_READY);
 				mn->flags |= MF_OBJECT_DESTROYED;
 			}
 			put_mapnode(mn);
@@ -2176,7 +2180,8 @@ static int do_snapshot(struct peer_req *pr, struct map *map)
 		 * this should be nr_ops of the blocker, but since we don't know
 		 * that, we assume based on our own nr_ops
 		 */
-		wait_on_pr(pr, mio->snap_pending >= peer->nr_ops);
+		if (mio->snap_pending >= peer->nr_ops)
+			wait_on_pr(pr, mio->snap_pending >= peer->nr_ops);
 
 		mn = get_mapnode(map, i);
 		if (!mn)
@@ -2187,7 +2192,8 @@ static int do_snapshot(struct peer_req *pr, struct map *map)
 			continue;
 		}
 		// make sure all pending operations on all objects are completed
-		wait_on_mapnode(mn, mn->flags & MF_OBJECT_NOT_READY);
+		if (mn->flags & MF_OBJECT_NOT_READY)
+			wait_on_mapnode(mn, mn->flags & MF_OBJECT_NOT_READY);
 
 		/* TODO will this ever happen?? */
 		if (mn->flags & MF_OBJECT_DESTROYED){
@@ -2205,7 +2211,8 @@ static int do_snapshot(struct peer_req *pr, struct map *map)
 		/* do not put_mapnode here. cb does that */
 	}
 
-	wait_on_pr(pr, mio->snap_pending > 0);
+	if (mio->snap_pending > 0)
+		wait_on_pr(pr, mio->snap_pending > 0);
 	mio->cb = NULL;
 
 	if (mio->err)
@@ -2303,7 +2310,8 @@ static int do_destroy(struct peer_req *pr, struct map *map)
 		 * this should be nr_ops of the blocker, but since we don't know
 		 * that, we assume based on our own nr_ops
 		 */
-		wait_on_pr(pr, mio->del_pending >= peer->nr_ops);
+		if (mio->del_pending >= peer->nr_ops)
+			wait_on_pr(pr, mio->del_pending >= peer->nr_ops);
 
 		mn = get_mapnode(map, i);
 		if (!mn)
@@ -2319,7 +2327,8 @@ static int do_destroy(struct peer_req *pr, struct map *map)
 		}
 
 		// make sure all pending operations on all objects are completed
-		wait_on_mapnode(mn, mn->flags & MF_OBJECT_NOT_READY);
+		if (mn->flags & MF_OBJECT_NOT_READY)
+			wait_on_mapnode(mn, mn->flags & MF_OBJECT_NOT_READY);
 
 		req = __delete_object(pr, mn);
 		if (!req){
@@ -2331,7 +2340,8 @@ static int do_destroy(struct peer_req *pr, struct map *map)
 		/* do not put_mapnode here. cb does that */
 	}
 
-	wait_on_pr(pr, mio->del_pending > 0);
+	if (mio->del_pending > 0)
+		wait_on_pr(pr, mio->del_pending > 0);
 
 	mio->cb = NULL;
 	map->flags &= ~MF_MAP_DELETING;
