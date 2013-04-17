@@ -56,39 +56,39 @@
 			((struct signature *)__sig)->object,				\
 			((struct signature *)__sig)->offset);
 
+struct timespec delay = {0, 4000000};
+
 /******************************\
  * Static miscellaneous tools *
 \******************************/
-struct timespec delay = {0, 4000000};
-
-static inline uint64_t _get_id()
+static inline uint64_t __get_id()
 {
 	return atol(global_id + 6); /* cut the "bench-" part*/
 }
 
-static inline uint64_t _get_object_from_name(char *name)
+static inline uint64_t __get_object_from_name(char *name)
 {
 	return atol(name + IDLEN); /* cut the "bench-908135-" part*/
 }
 
-static inline uint64_t _get_object(struct bench *prefs, uint64_t new)
+static inline uint64_t __get_object(struct bench *prefs, uint64_t new)
 {
 	if (prefs->to < 0)
 		new = new / (prefs->os / prefs->bs);
 	return new;
 }
 
-static inline int _snap_to_bound8(uint64_t space)
+static inline int __snap_to_bound8(uint64_t space)
 {
 	return space > 8 ? 8 : space;
 }
 
-static inline double _timespec2double(struct timespec num)
+static inline double __timespec2double(struct timespec num)
 {
 	return (double) (num.tv_sec * pow(10, 9) + num.tv_nsec);
 }
 
-static inline void _write_sig(struct bench_lfsr *sg,	uint64_t *d, uint64_t s,
+static inline void __write_sig(struct bench_lfsr *sg,	uint64_t *d, uint64_t s,
 		int pos)
 {
 	uint64_t i;
@@ -103,10 +103,10 @@ static inline void _write_sig(struct bench_lfsr *sg,	uint64_t *d, uint64_t s,
 	/* special care for last chunk */
 	last_val = lfsr_next(sg);
 	space_left = s - (i * 8);
-	memcpy(d + i, &last_val, _snap_to_bound8(space_left));
+	memcpy(d + i, &last_val, __snap_to_bound8(space_left));
 }
 
-static inline int _read_sig(struct bench_lfsr *sg, uint64_t *d, uint64_t s,
+static inline int __read_sig(struct bench_lfsr *sg, uint64_t *d, uint64_t s,
 		int pos)
 {
 	uint64_t i;
@@ -121,7 +121,7 @@ static inline int _read_sig(struct bench_lfsr *sg, uint64_t *d, uint64_t s,
 	/* special care for last chunk */
 	last_val = lfsr_next(sg);
 	space_left = s - (i * 8);
-	if (memcmp(d + i, &last_val, _snap_to_bound8(space_left)))
+	if (memcmp(d + i, &last_val, __snap_to_bound8(space_left)))
 		return 1;
 
 	return 0;
@@ -131,7 +131,7 @@ static inline int _read_sig(struct bench_lfsr *sg, uint64_t *d, uint64_t s,
  * Seperates a double number in seconds, msec, usec, nsec
  * Expects a number in nanoseconds (e.g. a number from timespec2double)
  */
-static struct tm_result _separate_by_order(double num)
+static struct tm_result __separate_by_order(double num)
 {
 	struct tm_result res;
 
@@ -280,8 +280,8 @@ void print_res(struct bench *prefs, struct timer *tm, char *type)
 	struct tm_result res;
 	double sum;
 
-	sum = _timespec2double(tm->sum);
-	res = _separate_by_order(sum);
+	sum = __timespec2double(tm->sum);
+	res = __separate_by_order(sum);
 
 	printf("\n");
 	printf("              %s\n", type);
@@ -293,7 +293,7 @@ void print_res(struct bench *prefs, struct timer *tm, char *type)
 	if (!prefs->status->received)
 		return;
 
-	res = _separate_by_order(sum / prefs->status->received);
+	res = __separate_by_order(sum / prefs->status->received);
 
 	printf("Mean Time:    %3u. %03u  %03u  %03u\n",
 			res.s, res.ms, res.us, res.ns);
@@ -336,7 +336,7 @@ void create_target(struct bench *prefs, struct xseg_request *req,
 
 	//For read/write, the target object may not correspond to `new`, which is
 	//actually the chunk number.
-	new = _get_object(prefs, new);
+	new = __get_object(prefs, new);
 	snprintf(req_target, TARGETLEN, "%s-%016lu", global_id, new);
 	XSEGLOG2(&lc, D, "Target name of request is %s\n", req_target);
 }
@@ -418,15 +418,15 @@ static int _readwrite_chunk_full(struct xseg *xseg, struct xseg_request *req,
 	 */
 
 	if (req->op == X_WRITE) {
-		_write_sig(&id_lfsr, d, s, 0);
-		_write_sig(&obj_lfsr, d, s, 1);
-		_write_sig(&off_lfsr, d, s, 2);
+		__write_sig(&id_lfsr, d, s, 0);
+		__write_sig(&obj_lfsr, d, s, 1);
+		__write_sig(&off_lfsr, d, s, 2);
 	} else {
-		if (_read_sig(&id_lfsr, d, s, 0))
+		if (__read_sig(&id_lfsr, d, s, 0))
 			return 1;
-		if (_read_sig(&obj_lfsr, d, s, 1))
+		if (__read_sig(&obj_lfsr, d, s, 1))
 			return 1;
-		if(_read_sig(&off_lfsr, d, s, 2))
+		if(__read_sig(&off_lfsr, d, s, 2))
 			return 1;
 	}
 
@@ -484,13 +484,13 @@ void create_chunk(struct bench *prefs, struct xseg_request *req, uint64_t new)
 		case VERIFY_NO:
 			break;
 		case VERIFY_META:
-			id = _get_id();
-			object = _get_object(prefs, new);
+			id = __get_id();
+			object = __get_object(prefs, new);
 			_readwrite_chunk_meta(xseg, req, id, object);
 			break;
 		case VERIFY_FULL:
-			id = _get_id();
-			object = _get_object(prefs, new);
+			id = __get_id();
+			object = __get_object(prefs, new);
 			_readwrite_chunk_full(xseg, req, id, object);
 			break;
 		default:
@@ -512,15 +512,15 @@ int read_chunk(struct bench *prefs, struct xseg_request *req)
 		case VERIFY_NO:
 			break;
 		case VERIFY_META:
-			id = _get_id();
+			id = __get_id();
 			target = xseg_get_target(xseg, req);
-			object = _get_object_from_name(target);
+			object = __get_object_from_name(target);
 			r = _readwrite_chunk_meta(xseg, req, id, object);
 			break;
 		case VERIFY_FULL:
-			id = _get_id();
+			id = __get_id();
 			target = xseg_get_target(xseg, req);
-			object = _get_object_from_name(target);
+			object = __get_object_from_name(target);
 			r = _readwrite_chunk_full(xseg, req, id, object);
 			break;
 		default:
