@@ -192,6 +192,11 @@ struct signature {
 	uint64_t offset;
 };
 
+struct bw {
+	double val;
+	char unit[5];
+};
+
 int bench_peerd_loop(void *arg);
 
 void timer_start(struct bench *prefs, struct timer *sample_req);

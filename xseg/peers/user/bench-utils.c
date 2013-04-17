@@ -149,6 +149,37 @@ static struct tm_result __separate_by_order(double num)
 	return res;
 }
 
+static void __calculate_bw(struct bench *prefs, double iops, struct bw *bw)
+{
+	bw->val = iops * prefs->bs;
+	strcpy(bw->unit, "B/s");
+
+	if (bw->val < 1024)
+		return;
+
+	bw->val = bw->val / 1024;
+	strcpy(bw->unit, "KB/s");
+
+	if (bw->val < 1024)
+		return;
+
+	bw->val = bw->val / 1024;
+	strcpy(bw->unit, "MB/s");
+
+	if (bw->val < 1024)
+		return;
+
+	bw->val = bw->val / 1024;
+	strcpy(bw->unit, "GB/s");
+}
+
+static double __calculate_iops(struct bench *prefs, double elapsed_ns)
+{
+	/* elapsed_ns is in nanoseconds, so we convert it to seconds */
+	double elapsed = elapsed_ns / pow(10,9);
+	return (prefs->status->received / elapsed);
+}
+
 /******************************\
  * Argument-parsing functions *
 \******************************/
@@ -248,6 +279,23 @@ int read_pattern(char *pattern)
  * Print functions *
 \*******************/
 
+void print_io_stats(struct bench *prefs, double elapsed)
+{
+	struct bw bw;
+	double iops;
+
+	/*
+	 * We could malloc struct bw in __calculate_bw, but it's safer in cases when
+	 * there is no memory left.
+	 */
+	iops = __calculate_iops(prefs, elapsed);
+	__calculate_bw(prefs, iops, &bw);
+
+	printf("           ~~~~~~~~~~~~~~~~~~~~~~~~\n");
+	printf("Bandwidth:    %.3lf %s\n", bw.val, bw.unit);
+	printf("IOPS:         %.3lf\n", iops);
+}
+
 void print_stats(struct bench *prefs)
 {
 	printf("\n"
@@ -299,6 +347,8 @@ void print_res(struct bench *prefs, struct timer *tm, char *type)
 			res.s, res.ms, res.us, res.ns);
 
 	//TODO: Add std
+
+	print_io_stats(prefs, sum);
 }
 
 void print_progress(struct bench *prefs)
