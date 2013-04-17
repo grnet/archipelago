@@ -608,6 +608,15 @@ static int init_peerd_loop(struct peerd *peer)
 	return 0;
 }
 
+#ifdef ST_THREADS
+static void * st_peerd_loop(void *peer)
+{
+	struct peerd *peerd = peer;
+	peerd->peerd_loop(peerd);
+	return 0;
+}
+#endif
+
 static struct xseg *join(char *spec)
 {
 	struct xseg_config config;
@@ -899,7 +908,7 @@ int main(int argc, char *argv[])
 	//TODO err check
 	peerd_start_threads(peer);
 #elif defined(ST_THREADS)
-	st_thread_t st = st_thread_create(init_peerd_loop, peer, 1, 0);
+	st_thread_t st = st_thread_create(st_peerd_loop, peer, 1, 0);
 	r = st_thread_join(st, NULL);
 #else
 	r = init_peerd_loop(peer);
