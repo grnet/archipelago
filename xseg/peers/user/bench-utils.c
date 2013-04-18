@@ -73,7 +73,7 @@ static inline uint64_t __get_object_from_name(char *name)
 
 static inline uint64_t __get_object(struct bench *prefs, uint64_t new)
 {
-	if (prefs->to < 0)
+	if (prefs->ts > 0)
 		new = new / (prefs->os / prefs->bs);
 	return new;
 }
@@ -402,7 +402,7 @@ uint64_t determine_next(struct bench *prefs)
 
 uint64_t calculate_offset(struct bench *prefs, uint64_t new)
 {
-	if (prefs->to < 0)
+	if (prefs->ts > 0)
 		return (new * prefs->bs) % prefs->os;
 	else
 		return 0;

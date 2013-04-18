@@ -140,13 +140,14 @@ int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 		perror("malloc");
 		return -1;
 	}
-	prefs->flags = 0;
+	memset(prefs, 0, sizeof(struct bench));
 
 	prefs->status = malloc(sizeof(struct req_status));
 	if (!prefs->status) {
 		perror("malloc");
 		return -1;
 	}
+
 	memset(prefs->status, 0, sizeof(struct req_status));
 
 	//Begin reading the benchmark-specific arguments
@@ -267,7 +268,7 @@ int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 	} else if (total_size[0]) {
 		if (prefs->op != X_READ && prefs->op != X_WRITE) {
 			XSEGLOG2(&lc, E,
-					"Total objects must be supplied (required by op %s)\n", op);
+					"Total objects must be supplied (required by -op %s)\n", op);
 			goto arg_fail;
 		}
 		prefs->ts = str2num(total_size);
