@@ -175,11 +175,11 @@ struct map_node {
 #define signal_map(__map)			\
 	do { 					\
 		if (__map->waiters) {		\
-			ta += 1;		\
+			ta += __map->waiters;		\
 			XSEGLOG2(&lc, D, "Signaling map %lx %s, waiters: %u, \
 			ta: %u",  __map, __map->volume, __map->waiters, ta); \
-			__map->waiters--;	\
-			st_cond_signal(__map->cond);	\
+			__map->waiters = 0;	\
+			st_cond_broadcast(__map->cond);	\
 		}				\
 	}while(0)
 
