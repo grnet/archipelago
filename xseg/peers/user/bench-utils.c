@@ -50,7 +50,7 @@
 #include <string.h>
 
 #define PRINT_SIG(__who, __sig)									\
-	printf("%s (%lu): id %lu, object %lu, offset %lu\n",		\
+	fprintf(stdout, "%s (%lu): id %lu, object %lu, offset %lu\n",		\
 			#__who, (uint64_t)(__sig),							\
 			((struct signature *)__sig)->id,					\
 			((struct signature *)__sig)->object,				\
@@ -291,14 +291,15 @@ void print_io_stats(struct bench *prefs, double elapsed)
 	iops = __calculate_iops(prefs, elapsed);
 	__calculate_bw(prefs, iops, &bw);
 
-	printf("           ~~~~~~~~~~~~~~~~~~~~~~~~\n");
-	printf("Bandwidth:    %.3lf %s\n", bw.val, bw.unit);
-	printf("IOPS:         %.3lf\n", iops);
+	fprintf(stdout, "           ~~~~~~~~~~~~~~~~~~~~~~~~\n");
+	fprintf(stdout, "Bandwidth:    %.3lf %s\n", bw.val, bw.unit);
+	fprintf(stdout, "IOPS:         %.3lf\n", iops);
+	fflush(stdout);
 }
 
 void print_stats(struct bench *prefs)
 {
-	printf("\n"
+	fprintf(stdout, "\n"
 			"Requests total:     %10lu\n"
 			"Requests submitted: %10lu\n"
 			"Requests received:  %10lu\n"
@@ -308,8 +309,9 @@ void print_stats(struct bench *prefs)
 			prefs->status->received,
 			prefs->status->failed);
 	if ((prefs->op == X_READ) && (GET_FLAG(VERIFY, prefs->flags) != VERIFY_NO))
-		printf("Requests corrupted: %10lu\n", prefs->status->corrupted);
-	printf("\n");
+		fprintf(stdout, "Requests corrupted: %10lu\n", prefs->status->corrupted);
+	fprintf(stdout, "\n");
+	fflush(stdout);
 }
 
 void print_remaining(struct bench *prefs)
@@ -318,9 +320,10 @@ void print_remaining(struct bench *prefs)
 
 	remaining = prefs->status->max - prefs->status->received;
 	if (remaining)
-		printf("Requests remaining: %10lu\n", remaining);
+		fprintf(stdout, "Requests remaining: %10lu\n", remaining);
 	else
-		printf("All requests have been served.\n");
+		fprintf(stdout, "All requests have been served.\n");
+	fflush(stdout);
 }
 
 void print_res(struct bench *prefs, struct timer *tm, char *type)
@@ -331,20 +334,22 @@ void print_res(struct bench *prefs, struct timer *tm, char *type)
 	sum = __timespec2double(tm->sum);
 	res = __separate_by_order(sum);
 
-	printf("\n");
-	printf("              %s\n", type);
-	printf("           ========================\n");
-	printf("             |-s-||-ms-|-us-|-ns-|\n");
-	printf("Total time:   %3u. %03u  %03u  %03u\n",
+	fprintf(stdout, "\n");
+	fprintf(stdout, "              %s\n", type);
+	fprintf(stdout, "           ========================\n");
+	fprintf(stdout, "             |-s-||-ms-|-us-|-ns-|\n");
+	fprintf(stdout, "Total time:   %3u. %03u  %03u  %03u\n",
 			res.s, res.ms, res.us, res.ns);
+	fflush(stdout);
 
 	if (!prefs->status->received)
 		return;
 
 	res = __separate_by_order(sum / prefs->status->received);
 
-	printf("Mean Time:    %3u. %03u  %03u  %03u\n",
+	fprintf(stdout, "Mean Time:    %3u. %03u  %03u  %03u\n",
 			res.s, res.ms, res.us, res.ns);
+	fflush(stdout);
 
 	//TODO: Add std
 
@@ -358,7 +363,7 @@ void print_progress(struct bench *prefs)
 	if ((prefs->op == X_READ) && (GET_FLAG(VERIFY, prefs->flags) != VERIFY_NO))
 		lines++;
 
-	printf("\033[%dA\033[J", lines);
+	fprintf(stdout, "\033[%dA\033[J", lines);
 	print_stats(prefs);
 }
 
