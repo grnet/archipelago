@@ -52,15 +52,26 @@ DRVDIR=$(BASE)/drivers/user
 DRVOBJS=$(addsuffix .o, $(addprefix $(DRVDIR)/, $(DRIVERS)))
 SHELL=/bin/bash
 
+XTYPE_OBJS = $(addsuffix .o, $(XTYPES))
+XTYPES_PICS = $(addsuffix .pic.o, $(XTYPES))
+XTYPES_EXPORTS = $(addsuffix _exports.h, $(XTYPES))
+
+EXPORT_DEPENDENCIES = $(addprefix $(BASE)/xtypes/, $(XTYPES_EXPORTS))
+EXPORT_DEPENDENCIES += $(BASE)/xseg/xseg_exports.h
+
+PIC_DEPENDENCIES = $(foreach xt, $(XTYPES), $(xt)/$(xt).pic.o)
+PIC_DEPENDENCIES += xseg.pic.o
+
+OBJ_DEPENDENCIES = $(foreach xt, $(XTYPES), $(xt)/$(xt).o)
+OBJ_DEPENDENCIES += xseg.o _initialize.o
+
 default: all
 
 all: libxseg.a libxseg.so
 	make -C python all MAJOR=$(MAJOR) MINOR=$(MINOR)
-	make -C xq all
-	make -C xpool all
-	make -C xhash all
-	make -C xheap all
-	make -C xobj all
+	@for xt in $(XTYPES) ; do \
+		make -C $$xt all ; \
+	done
 
 COMMA=,
 _initialize.c: drivers
@@ -116,46 +127,36 @@ xobj/xobj.pic.o:
 xseg_user.o: xseg_user.c
 	$(CC) $(CFLAGS) $(INC) -Wall -O2 -finline-functions -fPIC -c -o $@ $<
 
-libxseg.map: $(BASE)/xtypes/xq_exports.h $(BASE)/xseg/xseg_exports.h \
-		$(BASE)/xtypes/xpool_exports.h $(BASE)/xtypes/xhash_exports.h\
-		$(BASE)/xtypes/xobj_exports.h
-	cat $(BASE)/xtypes/xq_exports.h $(BASE)/xseg/xseg_exports.h \
-		$(BASE)/xtypes/xpool_exports.h $(BASE)/xtypes/xhash_exports.h \
-		$(BASE)/xtypes/xobj_exports.h | ./make_symbol_map.sh > $@
+libxseg.map: $(EXPORT_DEPENDENCIES)
+	cat $(EXPORT_DEPENDENCIES) | ./make_symbol_map.sh > $@
 
-libxseg.so.$(MAJOR).$(MINOR): xseg.pic.o xseg_user.o libxseg.map \
-				 xq/xq.pic.o xpool/xpool.pic.o xhash/xhash.pic.o \
-				 xheap/xheap.pic.o xobj/xobj.pic.o $(DRVOBJS)
+libxseg.so.$(MAJOR).$(MINOR): xseg_user.o libxseg.map \
+				$(PIC_DEPENDENCIES) $(DRVOBJS)
 	$(CC) $(CFLAGS) -shared \
                         -Wl,-soname=libxseg.so.$(MAJOR) \
                         -o libxseg.so.$(MAJOR).$(MINOR) \
-                        xseg.pic.o xseg_user.o xq/xq.pic.o \
-			xpool/xpool.pic.o xhash/xhash.pic.o\
-			xheap/xheap.pic.o xobj/xobj.pic.o \
-			 _initialize.o $(DRVOBJS) \
+                        xseg_user.o \
+			$(PIC_DEPENDENCIES) $(DRVOBJS) \
+			 _initialize.o \
                         -Wl,--version-script=libxseg.map \
                         -ldl -lrt -pthread
 	cp -vaf $@ $(LIB)
 
-libxseg.a: xseg.o xq/xq.o drivers _initialize.o
-	$(AR) r libxseg.a xseg.o xq/xq.o _initialize.o $(DRVOBJS)
+libxseg.a: $(OBJ_DEPENDENCIES) drivers
+	$(AR) r libxseg.a $(OBJ_DEPENDENCIES) $(DRVOBJS)
 	cp -vaf $@ $(LIB)
 
 install:
 	make -C python install
 	install -d $(DESTDIR)$(libdir)
-	#install -t $(DESTDIR)$(libdir) libxseg.so
-	#install -t $(DESTDIR)$(libdir) libxseg.so.$(MAJOR)
 	install -o 0 -g 0 -m 644 -t $(DESTDIR)$(libdir) libxseg.so.$(MAJOR).$(MINOR)
 	cp -vaf libxseg.so.$(MAJOR) $(DESTDIR)$(libdir)
 	cp -vaf libxseg.so $(DESTDIR)$(libdir)
 
 install-src:
-	make -C xq install-src
-	make -C xpool install-src
-	make -C xhash install-src
-	make -C xheap install-src
-	make -C xobj install-src
+	@for xt in $(XTYPES) ; do \
+		make -C $$xt install-src ; \
+	done
 	make -C python install-src
 	install -d $(DESTDIR)$(srcdir)$(SUBDIR) ;
 	@for f in $(FILES) ; do \
@@ -167,11 +168,9 @@ install-src:
 
 
 clean:
-	make -C xq clean
-	make -C xpool clean
-	make -C xhash clean
-	make -C xheap clean
-	make -C xobj clean
+	@for xt in $(XTYPES) ; do \
+		make -C $$xt clean ; \
+	done
 	make -C python clean
 	rm -f _initialize.c _initialize.o
 	rm -f xseg.o xseg.pic.o xseg_user.o

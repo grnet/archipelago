@@ -2,6 +2,14 @@
 
 include $(XSEG_HOME)/base.mk
 
+XTYPES = xq
+XTYPES += xpool
+XTYPES += xhash
+XTYPES += xheap
+XTYPES += xobj
+
+export XTYPES
+
 FILES="Makefile"
 FILES+=$(shell ls *.h)
 
