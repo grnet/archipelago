@@ -143,6 +143,12 @@ xbinheap/xbinheap.o:
 xbinheap/xbinheap.pic.o:
 	make -C xbinheap xbinheap.pic.o
 
+xcache/xcache.o:
+	make -C xcache xcache.o
+
+xcache/xcache.pic.o:
+	make -C xcache xcache.pic.o
+
 xseg_user.o: xseg_user.c
 	$(CC) $(CFLAGS) $(INC) -Wall -O2 -finline-functions -fPIC -c -o $@ $<
 
