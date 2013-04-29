@@ -124,6 +124,12 @@ xobj/xobj.o:
 xobj/xobj.pic.o:
 	make -C xobj xobj.pic.o
 
+xworkq/xworkq.o:
+	make -C xworkq xworkq.o
+
+xworkq/xworkq.pic.o:
+	make -C xworkq xworkq.pic.o
+
 xseg_user.o: xseg_user.c
 	$(CC) $(CFLAGS) $(INC) -Wall -O2 -finline-functions -fPIC -c -o $@ $<
 

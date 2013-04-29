@@ -6,6 +6,7 @@ XTYPES = xq
 XTYPES += xpool
 XTYPES += xhash
 XTYPES += xheap
+XTYPES += xworkq
 XTYPES += xobj
 
 export XTYPES
