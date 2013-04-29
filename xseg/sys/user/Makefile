@@ -130,6 +130,12 @@ xworkq/xworkq.o:
 xworkq/xworkq.pic.o:
 	make -C xworkq xworkq.pic.o
 
+xwaitq/xwaitq.o:
+	make -C xwaitq xwaitq.o
+
+xwaitq/xwaitq.pic.o:
+	make -C xwaitq xwaitq.pic.o
+
 xseg_user.o: xseg_user.c
 	$(CC) $(CFLAGS) $(INC) -Wall -O2 -finline-functions -fPIC -c -o $@ $<
 
