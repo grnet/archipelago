@@ -701,19 +701,18 @@ malloc_fail:
 		peer->peer_reqs[i].retval = 0;
 		peer->peer_reqs[i].priv = NULL;
 		peer->peer_reqs[i].portno = NoPort;
-
-	//Plug default peerd_loop. This can change later on by custom_peer_init.
-	peer->peerd_loop = generic_peerd_loop;
-
 #ifdef ST_THREADS
 		peer->peer_reqs[i].cond = st_cond_new(); //FIXME err check
 #endif
 	}
+
+	//Plug default peerd_loop. This can change later on by custom_peer_init.
+	peer->peerd_loop = generic_peerd_loop;
+
 #ifdef MT
 	peer->interactive_func = NULL;
 #endif
 	return peer;
-
 }
 
 int pidfile_remove(char *path, int fd)
