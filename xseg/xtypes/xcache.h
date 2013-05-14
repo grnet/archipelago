@@ -25,31 +25,35 @@ typedef xqindex xcache_handler;
 /*
  * Called with out cache lock held:
  *
- * on_init: 	 called on cache entry initialization.
- * 		 Should return negative on error to abort cache entry
- * 		 initialization.
+ * on_init:		called on cache entry initialization.
+ *				Should return negative on error to abort cache entry
+ *				initialization.
  *
- * on_put:	 called when the last reference to the cache entry is put
+ * on_put:		called when the last reference to the cache entry is put
  *
- * on_evict:	 called when a cache entry is evicted. It is called with the old
- * 		 cache entry that gets evicted and the new cache entry that
- * 		 trigger the eviction as arguments.
- * 		 Return value interpretation:
- * 		 	< 0 : Failure.
- * 		 	= 0 : Success. Finished with the old cache entry.
- * 		 	> 0 : Success. Pending actions on the old cache entry.
+ * on_evict:	called when a cache entry is evicted. It is called with the old
+ *				cache entry that gets evicted and the new cache entry that
+ *				trigger the eviction as arguments.
+ *				Return value interpretation:
+ *					< 0 : Failure.
+ *					= 0 : Success. Finished with the old cache entry.
+ *					> 0 : Success. Pending actions on the old cache entry.
  *
- * on_node_init: called on initial node preparation.
- * 		 Must return NULL on error, to abort cache initialization.
- * post_evict:	 called after an eviction has occured, with cache lock held.
- * 		 Must return 0 if there are no pending actions to the entry.
- * 		 On non-zero value, user should get the entry which will be put
- * 		 to the evicted table.
- * on_free:	 called when a cache entry is freed.
- * on_finalize:	 FILLME
- * 		 Must return 0 if there are no pending actions to the entry.
- * 		 On non-zero value, user should get the entry which will be put
- * 		 to the evicted table.
+ * on_node_init:
+ *				called on initial node preparation.
+ *				Must return NULL on error, to abort cache initialization.
+ *
+ * post_evict:	called after an eviction has occured, with cache lock held.
+ *				Must return 0 if there are no pending actions to the entry.
+ *				On non-zero value, user should get the entry which will be put
+ *				to the evicted table.
+ *
+ * on_free:		called when a cache entry is freed.
+ *
+ * on_finalize:	FILLME
+ *				Must return 0 if there are no pending actions to the entry.
+ *				On non-zero value, user should get the entry which will be put
+ *				to the evicted table.
  */
 struct xcache_ops {
 	int (*on_init)(void *cache_data, void *user_data);
@@ -95,14 +99,15 @@ static int __validate_idx(struct xcache *cache, xqindex idx)
 }
 
 /*
- * Return a pointer to a the associated cache entry.
+ * Return a pointer to the associated cache entry.
  */
-static void * xcache_get_entry(struct xcache *cache, xcache_handler h)
+static void *xcache_get_entry(struct xcache *cache, xcache_handler h)
 {
 	xqindex idx = (xqindex)h;
-	//validate idx
+
 	if (!__validate_idx(cache, idx))
 		return NULL;
+
 	return cache->nodes[idx].priv;
 }
 
@@ -110,12 +115,13 @@ static void * xcache_get_entry(struct xcache *cache, xcache_handler h)
  * Return a pointer to a NULL terminated string holding the name of the
  * associated cache entry.
  */
-static char * xcache_get_name(struct xcache *cache, xcache_handler h)
+static char *xcache_get_name(struct xcache *cache, xcache_handler h)
 {
 	xqindex idx = (xqindex)h;
-	//validate idx
+
 	if (!__validate_idx(cache, idx))
 		return NULL;
+
 	return cache->nodes[idx].name;
 }
 

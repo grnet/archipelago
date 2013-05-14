@@ -74,20 +74,25 @@ static int __table_insert(xhash_t **table, struct xcache * cache, xcache_handler
 	struct xcache_entry *ce = &cache->nodes[idx];
 	int r = 0;
 
-	do {
-		r = xhash_insert(*table, (xhashidx)ce->name, idx);
-		if (r == -XHASH_ERESIZE){
-			XSEGLOG("Rebuilding internal hash table");
-			new = xhash_resize(*table,
-					cache->rm_entries->size_shift,
-					cache->rm_entries->limit, NULL);
-			if (!new) {
-				XSEGLOG("Error resizing hash table");
-				return -1;
-			}
-			*table = new;
+	r = xhash_insert(*table, (xhashidx)ce->name, idx);
+	if (r == -XHASH_ERESIZE){
+		XSEGLOG("Rebuilding internal hash table");
+		new = xhash_resize(*table,
+				cache->rm_entries->size_shift,
+				cache->rm_entries->limit, NULL);
+		if (!new) {
+			XSEGLOG("Error resizing hash table");
+			return -1;
 		}
-	} while (r == -XHASH_ERESIZE);
+		*table = new;
+
+		/* We give insertion a second shot */
+		r = xhash_insert(*table, (xhashidx)ce->name, idx);
+		if (r == -XHASH_ERESIZE) {
+			XSEGLOG("BUG: failed to insert entry after resize");
+			return -1;
+		}
+	}
 
 	return r;
 }
@@ -105,9 +110,6 @@ static int __table_remove(xhash_t *table, char *name)
 	}
 	return r;
 }
-
-
-
 
 static xqindex alloc_cache_entry(struct xcache *cache)
 {
@@ -200,8 +202,8 @@ static void __xcache_entry_get(struct xcache *cache, xqindex idx)
 }
 
 /*
- * __xcache_entry_get_and_update must be called with cache->lock held, due to the race for
- * __update_access_time.
+ * __xcache_entry_get_and_update must be called with cache->lock held, due to
+ * the race for __update_access_time.
  */
 static void __xcache_entry_get_and_update(struct xcache *cache, xqindex idx)
 {
@@ -256,7 +258,6 @@ static int __xcache_remove_rm(struct xcache *cache, xcache_handler h)
 		XSEGLOG("Couldn't delete cache entry from hash table:\n"
 				"h: %llu, name: %s, cache->nodes[h].priv: %p, ref: %llu",
 				h, ce->name, cache->nodes[idx].priv, cache->nodes[idx].ref);
-		return r;
 	}
 
 	return r;
@@ -274,10 +275,12 @@ static xcache_handler __xcache_lookup_rm(struct xcache *cache, char *name)
 static xcache_handler __xcache_lookup_and_get_rm(struct xcache *cache, char *name)
 {
 	xcache_handler h;
+
 	h = __xcache_lookup_rm(cache, name);
 	if (h != NoEntry){
 		__xcache_entry_get_and_update(cache, h);
 	}
+
 	return h;
 }
 
@@ -289,10 +292,12 @@ static xcache_handler __xcache_lookup_entries(struct xcache *cache, char *name)
 static xcache_handler __xcache_lookup_and_get_entries(struct xcache *cache, char *name)
 {
 	xcache_handler h;
+
 	h = __xcache_lookup_entries(cache, name);
 	if (h != NoEntry){
 		__xcache_entry_get_and_update(cache, h);
 	}
+
 	return h;
 }
 
@@ -305,6 +310,7 @@ static xcache_handler __xcache_insert_entries(struct xcache *cache, xcache_handl
 {
 	return __table_insert(&cache->entries, cache, h);
 }
+
 /*
  * xcache_entry_put is thread-safe even without cache->lock (cache->rm_lock is
  * crucial though). This is why:
@@ -338,8 +344,16 @@ static void xcache_entry_put(struct xcache *cache, xqindex idx)
 
 	if (ce->state == NODE_EVICTED) {
 		xlock_acquire(&cache->rm_lock, 1);
+		/*
+		 * FIXME: BUG! Why? Say that on finalize has deemed that ce is clear.
+		 * If we get descheduled before getting rm_lock and in the meantime, the
+		 * cache entry is reinserted, dirtied and evicted? The ce->ref will be
+		 * zero but we shouldn't leave since there are still dirty buckets.
+		 */
 		if (ce->ref == 0)
 			r = __xcache_remove_rm(cache, idx);
+		else
+			r = -1;
 		xlock_release(&cache->rm_lock);
 	}
 
@@ -363,8 +377,10 @@ static int xcache_entry_init(struct xcache *cache, xqindex idx, char *name)
 	ce->name[XSEG_MAX_TARGETLEN] = 0;
 	ce->h = NoNode;
 	ce->state = NODE_ACTIVE;
+
 	if (cache->ops.on_init)
 		r = cache->ops.on_init(cache->priv, ce->priv);
+
 	return r;
 }
 
@@ -400,11 +416,12 @@ static int __xcache_evict(struct xcache *cache, xcache_handler h)
 {
 	//pre_evict
 	//remove from entries
-	//insert to rm_entries
 	//post_evict
+	//insert to rm_entries
 
 	struct xcache_entry *ce;
 	int r;
+
 	r = __xcache_remove_entries(cache, h);
 	if (r < 0) {
 		XSEGLOG("Failed to evict %llu from entries", h);
@@ -466,8 +483,7 @@ static int __xcache_remove(struct xcache *cache, xcache_handler h)
  * 2. Then, we search in "rm_entries", to check if the target has been removed.
  *    If so we update its ref and try to insert it in cache.
  *
- * <if any of these steps fail, we return NoEntry. If the node is invalid, we
- * return DelEntry>
+ * <if any of these steps fail, we return NoEntry.>
  *
  * 3. We now have a valid handler, either the one we started with or the one we
  *    re-insert. We check if there is space for it in "entries". If no space
@@ -501,18 +517,22 @@ static xcache_handler __xcache_insert(struct xcache *cache, xcache_handler h,
 	xlock_acquire(&cache->rm_lock, 1);
 	tmp_h = __xcache_lookup_rm(cache, ce->name);
 	if (tmp_h != NoEntry) {
+		/* if so then remove it from rm table */
 		r = __xcache_remove_rm(cache, tmp_h);
-		if (r < 0) {
+		if (UNLIKELY(r < 0)) {
 			XSEGLOG("Could not remove found entry (%llu) for %s"
 				"from rm_entries", tmp_h, ce->name);
 			xlock_release(&cache->rm_lock);
 			return NoEntry;
 		}
+
+		/* and prepare it for reinsertion */
 		ce = &cache->nodes[tmp_h];
-		//assert state = NODE_EVICTED
+		if (UNLIKELY(ce->state != NODE_EVICTED))
+			XSEGLOG("BUG: Entry (%llu) in rm table not in evicted state", tmp_h);
 		ce->state = NODE_ACTIVE;
-		/* we need to 'get' entry with rm_lock */
-		__xcache_entry_get_and_update(cache, tmp_h);
+
+		__xcache_entry_get(cache, tmp_h);
 		h = tmp_h;
 		*reinsert_handler = tmp_h;
 	}
@@ -523,10 +543,11 @@ static xcache_handler __xcache_insert(struct xcache *cache, xcache_handler h,
 	if (r == -XHASH_ENOSPC){
 		lru = __xcache_evict_lru(cache);
 		if (UNLIKELY(lru == NoEntry)) {
-			XSEGLOG("Failed to evict lru entry");
+			XSEGLOG("BUG: Failed to evict lru entry");
 			return NoEntry;
 		}
 		*lru_handler = lru;
+
 		/*
 		 * Cache entry is put when this function returns, without the
 		 * cache lock held.
@@ -537,12 +558,11 @@ static xcache_handler __xcache_insert(struct xcache *cache, xcache_handler h,
 			return NoEntry;
 		}
 	}
-	if (r >= 0) {
-		if (h != tmp_h)
-			__xcache_entry_get_and_update(cache, h);
-	}
 
-	return ((r < 0) ? NoEntry : h);
+	if (r >= 0)
+		__xcache_entry_get_and_update(cache, h);
+
+	return (r < 0 ? NoEntry : h);
 }
 
 /*
@@ -569,10 +589,10 @@ xcache_handler xcache_insert(struct xcache *cache, xcache_handler h)
 	if (lru != NoEntry) {
 		if (UNLIKELY(ret == NoEntry))
 			XSEGLOG("BUG: Unsuccessful insertion lead to LRU eviction.");
-		xcache_entry_put(cache, lru);
 		ce = &cache->nodes[lru];
 		if (cache->ops.on_evict)
 			cache->ops.on_evict(cache->priv, ce->priv);
+		xcache_entry_put(cache, lru);
 	}
 
 	if (reinsert_handler != NoEntry) {
@@ -587,10 +607,10 @@ xcache_handler xcache_insert(struct xcache *cache, xcache_handler h)
 }
 
 /*
- * xcache_lookup looks only in "entries". The are several arguments behind this
- * choice:
+ * xcache_lookup looks only in "entries". There are several arguments behind
+ * this choice:
  *
- * a. Speed: xcache_lookup won't bother with geting rm->lock or re-insert
+ * a. Speed: xcache_lookup won't bother with geting rm->lock or re-inserting
  *    entries in other hash tables this way.
  * b. Common case: Rarely will we ever need to lookup in "rm_entries"
  * c. Simplicity: <self-explanatory>
@@ -598,9 +618,11 @@ xcache_handler xcache_insert(struct xcache *cache, xcache_handler h)
 xcache_handler xcache_lookup(struct xcache *cache, char *name)
 {
 	xcache_handler h = NoEntry;
+
 	xlock_acquire(&cache->lock, 1);
 	h = __xcache_lookup_and_get_entries(cache, name);
 	xlock_release(&cache->lock);
+
 	return h;
 }
 
@@ -609,15 +631,17 @@ xcache_handler xcache_alloc_init(struct xcache *cache, char *name)
 	int r;
 	xcache_handler h;
 	xqindex idx = alloc_cache_entry(cache);
+
 	if (idx == Noneidx)
 		return NoEntry;
-//	h = (xcache_handle)idx
+
 	r = xcache_entry_init(cache, idx, name);
 	if (r < 0){
 		free_cache_entry(cache, idx);
 		return NoEntry;
 	}
 	h = idx;
+
 	return h;
 }
 
@@ -684,7 +708,9 @@ int xcache_init(struct xcache *cache, uint32_t xcache_size,
 	cache->priv = priv;
 	cache->flags = flags;
 
-	/* TODO: assert cache->nodes isn't UINT64_MAX */
+	/* FIXME: If cache->size is UINT64_MAX then cache->nodes has overflowed */
+	if (cache->size == (uint64_t)(-1))
+		return -1;
 
 	if (!xq_alloc_seq(&cache->free_nodes, cache->nr_nodes,
 				cache->nr_nodes)){
@@ -724,6 +750,7 @@ int xcache_init(struct xcache *cache, uint32_t xcache_size,
 		for (i = 0; i < cache->nr_nodes; i++) {
 			ce = &cache->nodes[i];
 			ce->ref = 0;
+			/* FIXME: Is (void *) typecast necessary? */
 			ce->priv = cache->ops.on_node_init(cache->priv, (void *)&i);
 			if (!ce->priv)
 				goto out_free_times;
@@ -769,9 +796,9 @@ int xcache_invalidate(struct xcache *cache, char *name)
 {
 	int r = 0;
 	xcache_handler h;
+
 	xlock_acquire(&cache->lock, 1);
 	xlock_acquire(&cache->rm_lock, 1);
-
 
 	h = __xcache_lookup_entries(cache, name);
 	if (h != NoEntry){
@@ -784,7 +811,6 @@ int xcache_invalidate(struct xcache *cache, char *name)
 		r = __xcache_remove_rm(cache, h);
 	}
 
-out:
 	xlock_release(&cache->rm_lock);
 	xlock_release(&cache->lock);
 
@@ -794,7 +820,7 @@ out_put:
 	xlock_release(&cache->rm_lock);
 	xlock_release(&cache->lock);
 
-	if (r >=0)
+	if (r >= 0)
 		xcache_put(cache, h);
 	return r;
 
@@ -808,9 +834,7 @@ out_put:
 void xcache_get(struct xcache *cache, xcache_handler h)
 {
 	xqindex idx = (xqindex)h;
-	//xlock_acquire(&cache->lock, 1);
 	__xcache_entry_get(cache, idx);
-	//xlock_release(&cache->lock);
 }
 
 /*
@@ -821,16 +845,14 @@ void xcache_get(struct xcache *cache, xcache_handler h)
 void xcache_put(struct xcache *cache, xcache_handler h)
 {
 	xqindex idx = (xqindex)h;
-	//xlock_acquire(&cache->lock, 1);
 	xcache_entry_put(cache, idx);
-	//xlock_release(&cache->lock);
 }
 
 /*
  * xcache_free_new is called with no locking and will not hold any lock too.
  * It must be called when an entry has not been inserted in cache (e.g. due to
  * re-insertion) and we want to free it. In this case, the refcount can safely
- * drop manually to zero
+ * drop to zero
  */
 void xcache_free_new(struct xcache *cache, xcache_handler h)
 {
