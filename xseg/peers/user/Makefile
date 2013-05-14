@@ -85,7 +85,8 @@ mt-vlmcd: mt-vlmcd.c peer.c peer.h $(BASE)/xseg/protocol.h
 	$(CC) $(CFLAGS) -o $@ $< peer.c $(INC) -L$(LIB) -lxseg -lpthread -DMT
 
 archip-pfiled: mt-pfiled.c peer.c peer.h $(BASE)/xseg/protocol.h
-	$(CC) $(CFLAGS) -o $@ $< peer.c $(INC) -L$(LIB) -lxseg -lpthread -DMT
+	$(CC) $(CFLAGS) -o $@ $< peer.c $(INC) -L$(LIB) -lxseg -lpthread -DMT \
+							-lcrypto
 
 archip-vlmcd: mt-vlmcd.c peer.c peer.h $(BASE)/xseg/protocol.h
 	$(CC) $(CFLAGS) -o $@ $< peer.c $(INC) -L$(LIB) -lxseg
