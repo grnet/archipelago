@@ -142,13 +142,18 @@ void free_safe(void *c, void *e)
 	__sync_add_and_fetch(&sum_free, 1);
 }
 
+void put_safe(void *c, void *e)
+{
+	__sync_add_and_fetch(&sum_put, 1);
+}
+
 int put_unsafe(void *c, void *e)
 {
 	sum_put++;
 	return 0;
 }
 
-int put_safe(void *c, void *e)
+int finalize_safe(void *c, void *e)
 {
 	__sync_add_and_fetch(&sum_put, 1);
 	return 0;
@@ -182,7 +187,7 @@ int test1(unsigned long n)
 	struct xcache_ops c_ops = {
 		.on_init = NULL,
 		.on_evict = NULL,
-		.on_finalize = put_safe,
+		.on_finalize = finalize_safe,
 		.on_free = free_safe,
 		.on_node_init = NULL,
 		.post_evict = post_evict
@@ -418,14 +423,14 @@ int test2(unsigned long cache_size, unsigned long nr_threads)
 	}
 
 	if (lookups != n) {
-		fprintf(stderr, "lookups: %lu, expected %lu\n",
+		fprintf(stderr, "lookups: %lu, expected %lu\n.",
 				lookups, n);
 		return -1;
 	}
 
 	if (sum_put != 0){
-		fprintf(stderr, "After lookups: sum_put: %lu, expected %lu\n",
-				sum_put, 0);
+		fprintf(stderr, "After lookups: sum_put: %lu, expected 0.\n",
+				sum_put);
 		return -1;
 	}
 
@@ -712,7 +717,7 @@ int test3(unsigned long cache_size, unsigned long nr_threads)
 	struct xcache cache;
 	struct xcache_ops c_ops = {
 		.on_init = init,
-		.on_finalize = put_safe,
+		.on_finalize = finalize_safe,
 		.on_free = free_safe,
 		.on_node_init = node_init
 	};
