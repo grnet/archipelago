@@ -88,7 +88,7 @@ static inline double __timespec2double(struct timespec num)
 	return (double) (num.tv_sec * pow(10, 9) + num.tv_nsec);
 }
 
-static inline void __write_sig(struct bench_lfsr *sg,	uint64_t *d, uint64_t s,
+static inline void __write_sig(struct bench_lfsr *sg, uint64_t *d, uint64_t s,
 		int pos)
 {
 	uint64_t i;
@@ -429,7 +429,7 @@ uint64_t calculate_prog_quantum(struct bench *prefs)
  * 3. The chunk offset in the object
  *
  * ************************************************
- * `_create_chunk_full` takes the above 3 identifiers and feeds them as seeds
+ * `readwrite_chunk_full` takes the above 3 identifiers and feeds them as seeds
  * in 63-bit LFSRs. The numbers generated are written consecutively in chunk's
  * memory range. For example, for a 72-byte chunk:
  *
@@ -448,9 +448,15 @@ uint64_t calculate_prog_quantum(struct bench *prefs)
  * **************************************************
  * In both cases, special care is taken not to exceed the chunk's memory range.
  * Also, the bare minimum chunk to verify should be 48 bytes. This limit is set
- * by _create_chunk_meta, which expects to write in a memory at least this big.
+ * by reeadwrite_chunk_meta, which expects to write in a memory at least this
+ * big.
+ *
+ * **************************************************
+ * Note: The diagram above also represents the x86_64's endianness.
+ * Endianness must be taken into careful consideration when examining a memory
+ * chunk.
  */
-static int _readwrite_chunk_full(struct xseg *xseg, struct xseg_request *req,
+static int readwrite_chunk_full(struct xseg *xseg, struct xseg_request *req,
 		uint64_t id, uint64_t object)
 {
 	struct bench_lfsr id_lfsr;
@@ -460,9 +466,9 @@ static int _readwrite_chunk_full(struct xseg *xseg, struct xseg_request *req,
 	uint64_t s = req->size;
 
 	/* Create 63-bit LFSRs */
-	lfsr_init(&id_lfsr, 0x7FFFFFFF, id, 0);
-	lfsr_init(&obj_lfsr, 0x7FFFFFFF, object, 0);
-	lfsr_init(&off_lfsr, 0x7FFFFFFF, req->offset, 0);
+	lfsr_init(&id_lfsr, 0x7FFFFFFFFFFFFFFF, id, 0);
+	lfsr_init(&obj_lfsr, 0x7FFFFFFFFFFFFFFF, object, 0);
+	lfsr_init(&off_lfsr, 0x7FFFFFFFFFFFFFFF, req->offset, 0);
 
 	if (s < sizeof(struct signature)) {
 		XSEGLOG2(&lc, E, "Too small chunk size (%lu butes). Leaving.", s);
@@ -490,7 +496,7 @@ static int _readwrite_chunk_full(struct xseg *xseg, struct xseg_request *req,
 	return 0;
 }
 
-static int _readwrite_chunk_meta(struct xseg *xseg, struct xseg_request *req,
+static int readwrite_chunk_meta(struct xseg *xseg, struct xseg_request *req,
 		uint64_t id, uint64_t object)
 {
 	char *d = xseg_get_data(xseg, req);
@@ -543,12 +549,12 @@ void create_chunk(struct bench *prefs, struct xseg_request *req, uint64_t new)
 		case VERIFY_META:
 			id = __get_id();
 			object = __get_object(prefs, new);
-			_readwrite_chunk_meta(xseg, req, id, object);
+			readwrite_chunk_meta(xseg, req, id, object);
 			break;
 		case VERIFY_FULL:
 			id = __get_id();
 			object = __get_object(prefs, new);
-			_readwrite_chunk_full(xseg, req, id, object);
+			readwrite_chunk_full(xseg, req, id, object);
 			break;
 		default:
 			XSEGLOG2(&lc, W, "Unexpected verification mode: %d\n", verify);
@@ -572,13 +578,13 @@ int read_chunk(struct bench *prefs, struct xseg_request *req)
 			id = __get_id();
 			target = xseg_get_target(xseg, req);
 			object = __get_object_from_name(target);
-			r = _readwrite_chunk_meta(xseg, req, id, object);
+			r = readwrite_chunk_meta(xseg, req, id, object);
 			break;
 		case VERIFY_FULL:
 			id = __get_id();
 			target = xseg_get_target(xseg, req);
 			object = __get_object_from_name(target);
-			r = _readwrite_chunk_full(xseg, req, id, object);
+			r = readwrite_chunk_full(xseg, req, id, object);
 			break;
 		default:
 			XSEGLOG2(&lc, W, "Unexpected verification mode: %d\n", verify);

@@ -455,8 +455,6 @@ static int send_request(struct peerd *peer, struct bench *prefs)
 			create_chunk(prefs, req, new);
 	}
 
-
-	//Measure this?
 	XSEGLOG2(&lc, D, "Allocate peer request\n");
 	pr = alloc_peer_req(peer);
 	if (!pr) {
