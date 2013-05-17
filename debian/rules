@@ -6,8 +6,16 @@
 .PHONY: override_dh_dkms override_dh_strip override_dh_installinit \
 	override_dh_auto_build override_dh_fixperms
 export VERSION := $(shell head -n 1 debian/changelog | sed -r 's/.*([0-9]+\.[0-9]+.*)-[0-9]+.*/\1/g')
+ifeq ($(RAW_VERSION),)
+export RAW_VERSION := $(shell cat $(CURDIR)/version)
+endif
 
 %:
+	if [ -d $(CURDIR)/debian ] && [ ! -e $(CURDIR)/debian/control ] && \
+		[ -e $(CURDIR)/debian/control.in ] ; then \
+		cat $(CURDIR)/debian/control.in | sed "s/#VERSION#/$(RAW_VERSION)/g" \
+			> $(CURDIR)/debian/control ; git add $(CURDIR)/debian/control ;\
+	fi
 	dh $@ --with dkms --with python2
 
 override_dh_dkms:
@@ -26,3 +34,13 @@ override_dh_auto_build:
 override_dh_fixperms:
 	dh_fixperms --exclude var/log/ganeti/extstorage
 #	chmod 0750 $(DESTDIR)/var/log/ganeti/extstorage
+
+override_dh_install:
+	cat $(CURDIR)/debian/archipelago-modules-dkms.install.in | sed "s/#VERSION#/$(VERSION)/g" \
+		> $(CURDIR)/debian/archipelago-modules-dkms.install
+	dh_install
+	(cd debian/archipelago-modules-source/usr/src \
+		&& chown -R root:root modules \
+		&& tar -c modules | bzip2 > archipelago-modules.tar.bz2 \
+		&& rm -rf modules)
+
