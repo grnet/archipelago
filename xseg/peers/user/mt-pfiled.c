@@ -243,7 +243,7 @@ static int create_path(char *buf, char *path, char *target, uint32_t targetlen,
 			buf[pathlen + i + 3] = '\0';
 retry:
 			if (stat(buf, &st) < 0) 
-				if (mkdir(buf, 0700) < 0) {
+				if (mkdir(buf, 0750) < 0) {
 					if (errno == EEXIST)
 						goto retry;
 					perror(buf);
@@ -266,28 +266,14 @@ static int is_target_valid_len(struct pfiled *pfiled, char *target,
 				targetlen, XSEG_MAX_TARGETLEN);
 		return -1;
 	}
-	if (mode == WRITE) {
-		/*
-		 * assert targetlen > prefix_len + 6
-		 * assert target starts with prefix
-		 */
-		/* 6 chars are needed for the directory structrure */
-		if (targetlen < pfiled->prefix_len + 6) {
-			XSEGLOG2(&lc, E, "Targetlen should be at least prefix "
-					"len(%u) + 6", pfiled->prefix_len);
-			return -1;
-		}
-		if (pfiled->prefix_len && strncmp(target, pfiled->prefix, pfiled->prefix_len)) {
-			XSEGLOG2(&lc, E, "Write target should start with the given prefix.");
-			return -1;
-		}
-	} else if (mode == READ) {
+	if (mode == WRITE || mode == READ) {
 		/*
 		 * if name starts with prefix
 		 * 	assert targetlen >= prefix_len + 6
 		 * else
 		 * 	assert targetlen >= 6
 		 */
+		/* 6 chars are needed for the directory structrure */
 		if (!pfiled->prefix_len || strncmp(target, pfiled->prefix, pfiled->prefix_len)) {
 			if (targetlen < 6) {
 				XSEGLOG2(&lc, E, "Targetlen should be at least 6");
@@ -318,8 +304,17 @@ static int open_file_write(struct pfiled *pfiled, char *target, uint32_t targetl
 	int r, fd;
 	char tmp[XSEG_MAX_TARGETLEN + MAX_PATH_SIZE + 1];
 	char error_str[1024];
-	/* On write, check/create file only in VPATH */
-	r = create_path(tmp, pfiled->vpath, target, targetlen,
+	char *path;
+
+	if (!pfiled->prefix_len ||
+	    !pfiled->pathlen    ||
+	    !strncmp(target, pfiled->prefix, pfiled->prefix_len)) {
+		path = pfiled->vpath;
+	} else {
+		path = pfiled->path;
+	}
+
+	r = create_path(tmp, path, target, targetlen,
 			pfiled->prefix_len, 1);
 	if (r < 0) {
 		XSEGLOG2(&lc, E, "Could not create path");
@@ -340,31 +335,31 @@ static int open_file_read(struct pfiled *pfiled, char *target, uint32_t targetle
 	char tmp[XSEG_MAX_TARGETLEN + MAX_PATH_SIZE + 1];
 	char error_str[1024];
 
-	if (!strncmp(target, pfiled->prefix, pfiled->prefix_len)) {
+	if (!pfiled->prefix_len || !strncmp(target, pfiled->prefix, pfiled->prefix_len)) {
 		r = create_path(tmp, pfiled->vpath, target, targetlen,
 				pfiled->prefix_len, 0);
 		if (r < 0) {
 			XSEGLOG2(&lc, E, "Could not create path");
 			return -1;
 		}
-		XSEGLOG2(&lc, D, "Opening file %s with O_RDWR|O_CREAT", tmp);
-		fd = open(tmp, O_RDWR|O_CREAT, S_IRUSR|S_IWUSR|S_IRGRP|S_IWGRP);
+		XSEGLOG2(&lc, D, "Opening file %s with O_RDWR", tmp);
+		fd = open(tmp, O_RDWR, S_IRUSR|S_IWUSR|S_IRGRP|S_IWGRP);
 	} else if (!pfiled->path_len) {
 		r = create_path(tmp, pfiled->vpath, target, targetlen, 0, 0);
 		if (r < 0) {
 			XSEGLOG2(&lc, E, "Could not create path");
 			return -1;
 		}
-		XSEGLOG2(&lc, D, "Opening file %s with O_RDONLY", tmp);
-		fd = open(tmp, O_RDONLY, S_IRUSR|S_IWUSR|S_IRGRP|S_IWGRP);
+		XSEGLOG2(&lc, D, "Opening file %s with O_RDWR", tmp);
+		fd = open(tmp, O_RDWR, S_IRUSR|S_IWUSR|S_IRGRP|S_IWGRP);
 	} else {
 		r = create_path(tmp, pfiled->path, target, targetlen, 0, 0);
 		if (r < 0) {
 			XSEGLOG2(&lc, E, "Could not create path");
 			return -1;
 		}
-		XSEGLOG2(&lc, D, "Opening file %s with O_RDONLY", tmp);
-		fd = open(tmp, O_RDONLY, S_IRUSR|S_IWUSR|S_IRGRP|S_IWGRP);
+		XSEGLOG2(&lc, D, "Opening file %s with O_RDWR", tmp);
+		fd = open(tmp, O_RDWR, S_IRUSR|S_IWUSR|S_IRGRP|S_IWGRP);
 	}
 	if (fd < 0){
 		XSEGLOG2(&lc, E, "Could not open file %s. Error: %s", tmp, strerror_r(errno, error_str, 1023));
@@ -386,12 +381,6 @@ static int open_file(struct pfiled *pfiled, char *target, uint32_t targetlen, in
 	return -1;
 }
 
-/*
- * cache additions
- * split alloc_init to
- * 	alloc(..)
- * 	init(.., params)
- */
 static int dir_open(struct pfiled *pfiled, struct fio *fio,
 		char *target, uint32_t targetlen, int mode)
 {
@@ -487,20 +476,28 @@ static void handle_read(struct peerd *peer, struct peer_req *pr)
 	char *data = xseg_get_data(peer->xseg, req);
 
 	XSEGLOG2(&lc, I, "Handle read started for pr: %p, req: %p", pr, pr->req);
-	fd = dir_open(pfiled, fio, target, req->targetlen, READ);
-	if (fd < 0){
-		XSEGLOG2(&lc, E, "Open failed");
-		pfiled_fail(peer, pr);
-		return;
-	}
 
 	if (!req->size) {
 		pfiled_complete(peer, pr);
 		return;
 	}
 
+	fd = dir_open(pfiled, fio, target, req->targetlen, READ);
+	if (fd < 0){
+		if (errno != ENOENT) {
+			XSEGLOG2(&lc, E, "Open failed");
+			pfiled_fail(peer, pr);
+			return;
+		} else {
+			memset(data, 0, req->datalen);
+			req->serviced = req->datalen;
+			goto out;
+		}
+	}
+
+
 	while (req->serviced < req->datalen) {
-		r = pread(fd, data + req->serviced, 
+		r = pread(fd, data + req->serviced,
 				req->datalen - req->serviced,
 				req->offset + req->serviced);
 		if (r < 0) {
@@ -517,6 +514,7 @@ static void handle_read(struct peerd *peer, struct peer_req *pr)
 		}
 	}
 
+out:
 	if (req->serviced > 0 ) {
 		XSEGLOG2(&lc, I, "Handle read completed for pr: %p, req: %p",
 				pr, pr->req);
@@ -935,7 +933,7 @@ static void handle_snapshot(struct peerd *peer, struct peer_req *pr)
 	}
 
 	r = link(tmpfile_pathname, pathname);
-	if (r < 0 && errno != -EEXIST) {
+	if (r < 0 && errno != EEXIST) {
 		XSEGLOG2(&lc, E, "Error linking snapshot file %s. Errno %d",
 				pathname, errno);
 		r = -1;
