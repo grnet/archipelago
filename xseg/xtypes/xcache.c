@@ -125,6 +125,10 @@ static void __free_cache_entry(struct xcache *cache, xqindex idx)
 static void free_cache_entry(struct xcache *cache, xqindex idx)
 {
 	struct xcache_entry *ce = &cache->nodes[idx];
+
+	if (ce->ref != 0)
+		XSEGLOG("BUG: Free entry has ref %lu (priv: %p, h: %p)", ce->priv, idx);
+
 	__free_cache_entry(cache, idx);
 	if (cache->ops.on_free)
 		cache->ops.on_free(cache->priv, ce->priv);
@@ -325,43 +329,43 @@ static xcache_handler __xcache_insert_entries(struct xcache *cache, xcache_handl
  *    someone beat us to it and has a job to do. If it's 0 though, then by
  *    removing the entry from "rm_entries" we are safe to free that entry
  *    without rm_lock.
- *
- * NOTE: the peer must guarantee that the refcount does not drop to zero twice
- * while xcache_entry_put runs.
  */
 static void xcache_entry_put(struct xcache *cache, xqindex idx)
 {
 	struct xcache_entry *ce = &cache->nodes[idx];
-	unsigned long ref = __sync_sub_and_fetch(&ce->ref, 1);
-	int r = 0;
+	unsigned long ref;
 
+	xlock_acquire(&cache->rm_lock, 1);
+
+	ref = __sync_sub_and_fetch(&ce->ref, 1);
 	if (ref > 0)
-		return;
+		goto out;
 
-	if (cache->ops.on_finalize &&
-			cache->ops.on_finalize(cache->priv, ce->priv))
-		return;
+	if (cache->ops.on_finalize)
+		cache->ops.on_finalize(cache->priv, ce->priv);
 
-	if (ce->state == NODE_EVICTED) {
-		xlock_acquire(&cache->rm_lock, 1);
-		/*
-		 * FIXME: BUG! Why? Say that on finalize has deemed that ce is clear.
-		 * If we get descheduled before getting rm_lock and in the meantime, the
-		 * cache entry is reinserted, dirtied and evicted? The ce->ref will be
-		 * zero but we shouldn't leave since there are still dirty buckets.
-		 */
-		if (ce->ref == 0)
-			r = __xcache_remove_rm(cache, idx);
-		else
-			r = -1;
-		xlock_release(&cache->rm_lock);
-	}
+	/*
+	 * FIXME: BUG! Why? Say that on finalize has deemed that ce is clear.
+	 * If we get descheduled before getting rm_lock and in the meantime, the
+	 * cache entry is reinserted, dirtied and evicted? The ce->ref will be
+	 * zero but we shouldn't leave since there are still dirty buckets.
+	 */
+	if (ce->ref != 0)
+		goto out;
+	if (__xcache_remove_rm(cache, idx) < 0)
+		goto out;
+
+	xlock_release(&cache->rm_lock);
 
 	if (cache->ops.on_put)
 		cache->ops.on_put(cache->priv, ce->priv);
 
-	if (r >= 0)
-		free_cache_entry(cache, idx);
+	free_cache_entry(cache, idx);
+
+	return;
+
+out:
+	xlock_release(&cache->rm_lock);
 }
 
 static int xcache_entry_init(struct xcache *cache, xqindex idx, char *name)
@@ -371,7 +375,8 @@ static int xcache_entry_init(struct xcache *cache, xqindex idx, char *name)
 
 	xlock_release(&ce->lock);
 	if (UNLIKELY(ce->ref != 0))
-		XSEGLOG("BUG: New entry has ref != 0 (h: %lu, ref: %lu)", idx, ce->ref);
+		XSEGLOG("BUG: New entry has ref != 0 (h: %lu, ref: %lu, priv: %p)",
+				idx, ce->ref, ce->priv);
 	ce->ref = 1;
 	strncpy(ce->name, name, XSEG_MAX_TARGETLEN);
 	ce->name[XSEG_MAX_TARGETLEN] = 0;
@@ -433,6 +438,10 @@ static int __xcache_evict(struct xcache *cache, xcache_handler h)
 		return 0;
 	*/
 	ce = &cache->nodes[h];
+
+	if (UNLIKELY(ce->state == NODE_EVICTED))
+		XSEGLOG("BUG: Evicting an already evicted entry (h: %lu, priv: %p)",
+			 h, ce->priv);
 	if (!cache->ops.post_evict ||
 			!cache->ops.post_evict(cache->priv, ce->priv))
 		return 0;
@@ -504,8 +513,6 @@ static xcache_handler __xcache_insert(struct xcache *cache, xcache_handler h,
 	xcache_handler tmp_h, lru;
 
 	lru = NoEntry;
-	*lru_handler = NoEntry;
-	*reinsert_handler = NoEntry;
 	ce = &cache->nodes[h];
 
 	/* lookup first to ensure we don't overwrite entries */
@@ -559,6 +566,10 @@ static xcache_handler __xcache_insert(struct xcache *cache, xcache_handler h,
 		}
 	}
 
+	if (UNLIKELY(r >= 0 && ce->ref == 0))
+		XSEGLOG("BUG: (Re)inserted entry has ref 0 (priv: %p, h: %lu)",
+				ce->priv, h);
+
 	if (r >= 0)
 		__xcache_entry_get_and_update(cache, h);
 
@@ -596,8 +607,9 @@ xcache_handler xcache_insert(struct xcache *cache, xcache_handler h)
 	}
 
 	if (reinsert_handler != NoEntry) {
-		if (UNLIKELY(ret == reinsert_handler))
-			XSEGLOG("BUG: Reinsertion, return another handler");
+		if (UNLIKELY(ret != reinsert_handler))
+			XSEGLOG("BUG: Re-insert handler is different from returned handler"
+					"(rei_h = %llu, ret_h = %llu)", reinsert_handler, ret);
 		ce = &cache->nodes[reinsert_handler];
 		if (cache->ops.on_reinsert)
 			cache->ops.on_reinsert(cache->priv, ce->priv);
