@@ -373,7 +373,7 @@ void print_progress(struct bench *prefs)
 
 void create_id(unsigned long seed)
 {
-	if (seed > pow(10, 9))
+	if (seed >= pow(10, 9))
 		XSEGLOG2(&lc, W, "Seed larger than 10^9, only its first 9 digits will "
 				"be used\n");
 
