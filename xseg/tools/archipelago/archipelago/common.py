@@ -49,6 +49,9 @@ import psutil
 import errno
 from subprocess import check_call
 from collections import namedtuple
+import socket
+
+hostname = socket.gethostname()
 
 #archipelago peer roles. Order matters!
 roles = ['blockerb', 'blockerm', 'mapperd', 'vlmcd']
@@ -323,22 +326,7 @@ def construct_peers():
     executables['mapperd'] = MAPPER
     executables['vlmcd'] = VLMC
 
-    if BLOCKER == "pfiled":
-        config_opts['blockerb'] = [
-            "-p", str(config['BPORT']), "-g",
-            str(config['SPEC']).encode(), "-n",
-            str(config['NR_OPS_BLOCKERB']),
-            str(config['PITHOS']), str(config['FILED_IMAGES']), "-d",
-            "-f", os.path.join(PIDFILE_PATH, "blockerb" + PID_SUFFIX)
-        ]
-        config_opts['blockerm'] = [
-            "-p", str(config['MBPORT']), "-g",
-            str(config['SPEC']).encode(), "-n",
-            str(config['NR_OPS_BLOCKERM']),
-            str(config['PITHOSMAPS']), str(config['FILED_MAPS']), "-d",
-            "-f", os.path.join(PIDFILE_PATH, "blockerm" + PID_SUFFIX)
-        ]
-    elif BLOCKER == "archip-sosd":
+    if BLOCKER == "archip-sosd":
         config_opts['blockerb'] = [
             "-p", str(config['BPORT']), "-g",
             str(config['SPEC']).encode(), "-n",
@@ -366,25 +354,25 @@ def construct_peers():
             "-p", str(config['BPORT']), "-g",
             str(config['SPEC']).encode(), "-n",
             str(config['NR_OPS_BLOCKERB']),
-            "--pithos", str(config['PITHOS']), "--archip",
-            str(config['FILED_IMAGES']),
+            "--archip", str(config['FILED_IMAGES']),
             "-v", str(config['VERBOSITY_BLOCKERB']),
             "-d",
             "--pidfile", os.path.join(PIDFILE_PATH, "blockerb" + PID_SUFFIX),
             "-l", os.path.join(str(LOGS_PATH), "blockerb" + LOG_SUFFIX),
-            "-t", str(config['NR_OPS_BLOCKERB']), "--prefix", ARCHIP_PREFIX
+            "-t", str(config['NR_OPS_BLOCKERB']), "--prefix", ARCHIP_PREFIX,
+            "--uniquestr", str(hostname) + '_' + str(config['BPORT'])
         ]
         config_opts['blockerm'] = [
             "-p", str(config['MBPORT']), "-g",
             str(config['SPEC']).encode(), "-n",
             str(config['NR_OPS_BLOCKERM']),
-            "--pithos", str(config['PITHOSMAPS']), "--archip",
-            str(config['FILED_MAPS']),
+            "--archip", str(config['FILED_MAPS']),
             "-v", str(config['VERBOSITY_BLOCKERM']),
             "-d",
             "--pidfile", os.path.join(PIDFILE_PATH, "blockerm" + PID_SUFFIX),
             "-l", os.path.join(str(LOGS_PATH), "blockerm" + LOG_SUFFIX),
-            "-t", str(config['NR_OPS_BLOCKERM']), "--prefix", ARCHIP_PREFIX
+            "-t", str(config['NR_OPS_BLOCKERM']), "--prefix", ARCHIP_PREFIX,
+            "--uniquestr", str(hostname) + '_' + str(config['MBPORT'])
         ]
     else:
             sys.exit(-1)
