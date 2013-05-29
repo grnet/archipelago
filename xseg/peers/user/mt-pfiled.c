@@ -115,7 +115,6 @@ struct pfiled {
 	uint32_t prefix_len;
 	uint32_t uniquestr_len;
 	long maxfds;
-	char path[MAX_PATH_SIZE + 1];
 	char vpath[MAX_PATH_SIZE + 1];
 	char prefix[MAX_PREFIX_LEN + 1];
 	char uniquestr[MAX_UNIQUESTR_LEN + 1];
@@ -638,7 +637,7 @@ static void handle_copy(struct peerd *peer, struct peer_req *pr)
 		goto out;
 	}
 
-	r = create_path(buf, pfiled->path, xcopy->target, xcopy->targetlen,
+	r = create_path(buf, pfiled->vpath, xcopy->target, xcopy->targetlen,
 			pfiled->prefix, pfiled->prefix_len, 0);
 	if (r < 0)  {
 		XSEGLOG2(&lc, E, "Create path failed");
@@ -1287,7 +1286,6 @@ int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 	}
 
 	pfiled->vpath[0] = 0;
-	pfiled->path[0] = 0;
 	pfiled->prefix[0] = 0;
 	pfiled->uniquestr[0] = 0;
 
