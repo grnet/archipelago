@@ -246,8 +246,8 @@ retry:
 				if (mkdir(buf, 0750) < 0) {
 					if (errno == EEXIST)
 						goto retry;
-					perror(buf);
-					return errno;
+					//perror(buf);
+					return -1;
 				}
 		}
 	}
@@ -307,7 +307,7 @@ static int open_file_write(struct pfiled *pfiled, char *target, uint32_t targetl
 	char *path;
 
 	if (!pfiled->prefix_len ||
-	    !pfiled->pathlen    ||
+	    !pfiled->path_len    ||
 	    !strncmp(target, pfiled->prefix, pfiled->prefix_len)) {
 		path = pfiled->vpath;
 	} else {
@@ -578,12 +578,12 @@ static void handle_write(struct peerd *peer, struct peer_req *pr)
 	}
 
 	if (req->serviced > 0 ) {
-		XSEGLOG2(&lc, I, "Handle read completed for pr: %p, req: %p",
+		XSEGLOG2(&lc, I, "Handle write completed for pr: %p, req: %p",
 				pr, pr->req);
 		pfiled_complete(peer, pr);
 	}
 	else {
-		XSEGLOG2(&lc, E, "Handle read failed for pr: %p, req: %p",
+		XSEGLOG2(&lc, E, "Handle write failed for pr: %p, req: %p",
 				pr, pr->req);
 		pfiled_fail(peer, pr);
 	}
@@ -911,7 +911,6 @@ static void handle_snapshot(struct peerd *peer, struct peer_req *pr)
 	if (dst < 0) {
 		if (errno != EEXIST){
 			XSEGLOG2(&lc, E, "Error opening %s", tmpfile_pathname);
-			goto out;
 		} else {
 			XSEGLOG2(&lc, E, "Error opening %s. Stale data found.",
 					tmpfile_pathname);
@@ -991,6 +990,7 @@ static int __locked_by(char *lockfile, char *expected, uint32_t expected_len)
 	r = pread(fd, tmpbuf, MAX_UNIQUESTR_LEN, 0);
 	if (r < 0) {
 		XSEGLOG2(&lc, E, "Error reading from %s", lockfile);
+		close(fd);
 		goto out;
 	}
 	len = (uint32_t)r;
@@ -1018,7 +1018,11 @@ static int __try_lock(struct pfiled *pfiled, char *tmpfile, char *lockfile,
 	if (r < 0) {
 		return -1;
 	}
-	fsync(fd);
+	r = fsync(fd);
+	if (r < 0) {
+		return -1;
+	}
+
 	while (link(tmpfile, lockfile) < 0) {
 		//actual error
 		if (errno != EEXIST){
@@ -1349,7 +1353,9 @@ int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 				rlim.rlim_cur, pfiled->maxfds + peer->nr_ops - 4);
 		return -1;
 	}
-	xcache_init(&pfiled->cache, pfiled->maxfds, &c_ops, XCACHE_LRU_HEAP, peer);
+	r = xcache_init(&pfiled->cache, pfiled->maxfds, &c_ops, XCACHE_LRU_HEAP, peer);
+	if (r < 0)
+		return -1;
 
 out:
 	return ret;
