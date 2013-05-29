@@ -226,17 +226,21 @@ static void handle_unknown(struct peerd *peer, struct peer_req *pr)
 }
 
 static int create_path(char *buf, char *path, char *target, uint32_t targetlen,
-		uint32_t prefixlen, int mkdirs)
+		char *prefix, uint32_t prefixlen, int mkdirs)
 {
 	int i;
 	struct stat st;
+	uint32_t skip = 0;
 	uint32_t pathlen = strlen(path);
+
+	if (!strncmp(target, prefix, prefixlen))
+		skip = prefixlen;
 
 	strncpy(buf, path, pathlen);
 
 	for (i = 0; i < 9; i+= 3) {
-		buf[pathlen + i] = target[prefixlen + i - (i/3)];
-		buf[pathlen + i +1] = target[prefixlen + i + 1 - (i/3)];
+		buf[pathlen + i] = target[skip + i - (i/3)];
+		buf[pathlen + i +1] = target[skip + i + 1 - (i/3)];
 		buf[pathlen + i + 2] = '/';
 		if (mkdirs == 1) {
 			buf[pathlen + i + 3] = '\0';
@@ -306,7 +310,7 @@ static int open_file_write(struct pfiled *pfiled, char *target, uint32_t targetl
 	char *path;
 
 	path = pfiled->vpath;
-	r = create_path(tmp, path, target, targetlen,
+	r = create_path(tmp, path, target, targetlen, pfiled->prefix,
 			pfiled->prefix_len, 1);
 	if (r < 0) {
 		XSEGLOG2(&lc, E, "Could not create path");
@@ -330,7 +334,7 @@ static int open_file_read(struct pfiled *pfiled, char *target, uint32_t targetle
 
 	path = pfiled->vpath;
 
-	r = create_path(tmp, pfiled->vpath, target, targetlen,
+	r = create_path(tmp, path, target, targetlen, pfiled->prefix,
 			pfiled->prefix_len, 0);
 	if (r < 0) {
 		XSEGLOG2(&lc, E, "Could not create path");
@@ -634,7 +638,8 @@ static void handle_copy(struct peerd *peer, struct peer_req *pr)
 		goto out;
 	}
 
-	r = create_path(buf, pfiled->path, xcopy->target, xcopy->targetlen, 0, 0);
+	r = create_path(buf, pfiled->path, xcopy->target, xcopy->targetlen,
+			pfiled->prefix, pfiled->prefix_len, 0);
 	if (r < 0)  {
 		XSEGLOG2(&lc, E, "Create path failed");
 		r = -1;
@@ -705,7 +710,7 @@ static void handle_delete(struct peerd *peer, struct peer_req *pr)
 		goto out;
 	}
 
-	r = create_path(buf, pfiled->vpath, target, req->targetlen,
+	r = create_path(buf, pfiled->vpath, target, req->targetlen, pfiled->prefix,
 				pfiled->prefix_len, 0);
 	if (r< 0) {
 		XSEGLOG2(&lc, E, "Create path failed");
@@ -830,7 +835,8 @@ static void handle_snapshot(struct peerd *peer, struct peer_req *pr)
 
 
 	path = pfiled->vpath;
-	r = create_path(pathname, path, xreply->target, xreply->targetlen, 0, 1);
+	r = create_path(pathname, path, xreply->target, xreply->targetlen,
+			pfiled->prefix, pfiled->prefix_len, 1);
 	if (r < 0)  {
 		XSEGLOG2(&lc, E, "Create path failed");
 		r = -1;
@@ -871,7 +877,8 @@ static void handle_snapshot(struct peerd *peer, struct peer_req *pr)
 	pos += FIO_STR_ID_LEN;
 	tmpfile[pos] = 0;
 
-	r = create_path(tmpfile_pathname, path, tmpfile, pos, 0, 0);
+	r = create_path(tmpfile_pathname, path, tmpfile, pos, pfiled->prefix,
+			pfiled->prefix_len, 0);
 	if (r < 0)  {
 		XSEGLOG2(&lc, E, "Create path failed");
 		r = -1;
@@ -1068,13 +1075,13 @@ static void handle_acquire(struct peerd *peer, struct peer_req *pr)
 	XSEGLOG2(&lc, I, "Trying to acquire lock %s", buf);
 
 	if (create_path(tmpfile_pathname, pfiled->vpath, tmpfile,
-			tmpfile_len, pfiled->prefix_len, 1) < 0) {
+			tmpfile_len, pfiled->prefix, pfiled->prefix_len, 1) < 0) {
 		XSEGLOG2(&lc, E, "Create path failed for %s", buf);
 		goto out;
 	}
 
 	if (create_path(lockfile_pathname, pfiled->vpath, buf,
-			buf_len, pfiled->prefix_len, 1) < 0) {
+			buf_len, pfiled->prefix, pfiled->prefix_len, 1) < 0) {
 		XSEGLOG2(&lc, E, "Create path failed for %s", buf);
 		goto out;
 	}
@@ -1172,7 +1179,7 @@ static void handle_release(struct peerd *peer, struct peer_req *pr)
 
 	r = create_path(pathname, pfiled->vpath, buf,
 			req->targetlen + strlen(LOCK_SUFFIX),
-			pfiled->prefix_len, 0);
+			pfiled->prefix, pfiled->prefix_len, 0);
 	if (r < 0) {
 		XSEGLOG2(&lc, E, "Create path failed for %s", buf);
 		goto out;
