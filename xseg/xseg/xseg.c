@@ -1188,6 +1188,7 @@ done:
 	req->timestamp.tv_sec = 0;
 	req->timestamp.tv_usec = 0;
 	req->flags = 0;
+	req->serviced = 0;
 
 	xq_init_empty(&req->path, MAX_PATH_LEN, req->path_bufs); 
 
@@ -1223,7 +1224,8 @@ int xseg_put_request (struct xseg *xseg, struct xseg_request *xreq,
 	xreq->dst_portno = NoPort;
 	xreq->transit_portno = NoPort;
 	xreq->effective_dst_portno = NoPort;	
-	
+	xreq->serviced = 0;
+
 	if (xreq->elapsed != 0) {
 		__lock_segment(xseg);
 		++(xseg->counters.req_cnt);
