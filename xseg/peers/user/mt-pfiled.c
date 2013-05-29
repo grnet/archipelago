@@ -111,7 +111,6 @@ struct fdcache_entry {
 
 /* pfiled context */
 struct pfiled {
-	uint32_t path_len;
 	uint32_t vpath_len;
 	uint32_t prefix_len;
 	uint32_t uniquestr_len;
@@ -306,14 +305,7 @@ static int open_file_write(struct pfiled *pfiled, char *target, uint32_t targetl
 	char error_str[1024];
 	char *path;
 
-	if (!pfiled->prefix_len ||
-	    !pfiled->path_len    ||
-	    !strncmp(target, pfiled->prefix, pfiled->prefix_len)) {
-		path = pfiled->vpath;
-	} else {
-		path = pfiled->path;
-	}
-
+	path = pfiled->vpath;
 	r = create_path(tmp, path, target, targetlen,
 			pfiled->prefix_len, 1);
 	if (r < 0) {
@@ -334,33 +326,18 @@ static int open_file_read(struct pfiled *pfiled, char *target, uint32_t targetle
 	int r, fd;
 	char tmp[XSEG_MAX_TARGETLEN + MAX_PATH_SIZE + 1];
 	char error_str[1024];
+	char *path;
 
-	if (!pfiled->prefix_len || !strncmp(target, pfiled->prefix, pfiled->prefix_len)) {
-		r = create_path(tmp, pfiled->vpath, target, targetlen,
-				pfiled->prefix_len, 0);
-		if (r < 0) {
-			XSEGLOG2(&lc, E, "Could not create path");
-			return -1;
-		}
-		XSEGLOG2(&lc, D, "Opening file %s with O_RDWR", tmp);
-		fd = open(tmp, O_RDWR, S_IRUSR|S_IWUSR|S_IRGRP|S_IWGRP);
-	} else if (!pfiled->path_len) {
-		r = create_path(tmp, pfiled->vpath, target, targetlen, 0, 0);
-		if (r < 0) {
-			XSEGLOG2(&lc, E, "Could not create path");
-			return -1;
-		}
-		XSEGLOG2(&lc, D, "Opening file %s with O_RDWR", tmp);
-		fd = open(tmp, O_RDWR, S_IRUSR|S_IWUSR|S_IRGRP|S_IWGRP);
-	} else {
-		r = create_path(tmp, pfiled->path, target, targetlen, 0, 0);
-		if (r < 0) {
-			XSEGLOG2(&lc, E, "Could not create path");
-			return -1;
-		}
-		XSEGLOG2(&lc, D, "Opening file %s with O_RDWR", tmp);
-		fd = open(tmp, O_RDWR, S_IRUSR|S_IWUSR|S_IRGRP|S_IWGRP);
+	path = pfiled->vpath;
+
+	r = create_path(tmp, pfiled->vpath, target, targetlen,
+			pfiled->prefix_len, 0);
+	if (r < 0) {
+		XSEGLOG2(&lc, E, "Could not create path");
+		return -1;
 	}
+	XSEGLOG2(&lc, D, "Opening file %s with O_RDWR", tmp);
+	fd = open(tmp, O_RDWR, S_IRUSR|S_IWUSR|S_IRGRP|S_IWGRP);
 	if (fd < 0){
 		XSEGLOG2(&lc, E, "Could not open file %s. Error: %s", tmp, strerror_r(errno, error_str, 1023));
 		return -1;
@@ -852,12 +829,7 @@ static void handle_snapshot(struct peerd *peer, struct peer_req *pr)
 	snapshot_name[HEXLIFIED_SHA256_DIGEST_SIZE] = 0;
 
 
-	if (pfiled->path_len) {
-		path = pfiled->path;
-	} else {
-		path = pfiled->vpath;
-	}
-
+	path = pfiled->vpath;
 	r = create_path(pathname, path, xreply->target, xreply->targetlen, 0, 1);
 	if (r < 0)  {
 		XSEGLOG2(&lc, E, "Create path failed");
@@ -1314,7 +1286,6 @@ int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 
 	BEGIN_READ_ARGS(argc, argv);
 	READ_ARG_ULONG("--fdcache", pfiled->maxfds);
-	READ_ARG_STRING("--pithos", pfiled->path, MAX_PATH_SIZE);
 	READ_ARG_STRING("--archip", pfiled->vpath, MAX_PATH_SIZE);
 	READ_ARG_STRING("--prefix", pfiled->prefix, MAX_PREFIX_LEN);
 	READ_ARG_STRING("--uniquestr", pfiled->uniquestr, MAX_UNIQUESTR_LEN);
@@ -1323,13 +1294,7 @@ int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 	pfiled->uniquestr_len = strlen(pfiled->uniquestr);
 	pfiled->prefix_len = strlen(pfiled->prefix);
 
-	//TODO test path exist
-	pfiled->path_len = strlen(pfiled->path);
-	if (pfiled->path_len && pfiled->path[pfiled->path_len -1] != '/'){
-		pfiled->path[pfiled->path_len] = '/';
-		pfiled->path[++pfiled->path_len]= 0;
-	}
-
+	//TODO test path exist/is_dir/have_access
 	pfiled->vpath_len = strlen(pfiled->vpath);
 	if (!pfiled->vpath_len){
 		XSEGLOG2(&lc, E, "Archipelago path was not provided");
