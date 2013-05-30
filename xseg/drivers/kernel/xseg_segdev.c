@@ -96,20 +96,23 @@ static long segdev_allocate(const char *name, uint64_t size)
 		goto out;
 	}
 
+	/*
 	if (segdev->segment) {
 		XSEGLOG("destroying existing segdev segment");
 		r = segdev_destroy_segment(segdev);
 		if (r)
 			goto out;
 	}
+	*/
 
 	XSEGLOG("creating segdev segment size %llu", size);
 	r = segdev_create_segment(segdev, size, 1);
 	if (r)
-		goto out;
+		goto out_put;
 
-	segdev_put(segdev);
 	r = 0;
+out_put:
+	segdev_put(segdev);
 out:
 	return r;
 }
@@ -235,6 +238,7 @@ static int segdev_local_signal_init(struct xseg *xseg, xport portno)
 {
 	//assert xsegments[portno] == NULL;
 	xsegments[portno] = xseg;
+	return 0;
 }
 
 static void segdev_local_signal_quit(struct xseg *xseg, xport portno)
@@ -311,10 +315,11 @@ static void segdev_free_data(struct xseg *xseg, void *data)
 
 static void *segdev_alloc_signal_desc(struct xseg *xseg, void *data)
 {
+	struct segdev_signal_desc *ssd;
 	struct xobject_h *sd_h = (struct xobject_h *) data;
 	if (!sd_h)
 		return NULL;
-	struct segdev_signal_desc *ssd = xobj_get_obj(sd_h, X_ALLOC);
+	ssd = xobj_get_obj(sd_h, X_ALLOC);
 	if (!ssd)
 		return NULL;
 	ssd->waitcue = 0;
@@ -390,6 +395,7 @@ static int segdev_init(void)
 	segdev->callback = segdev_callback;
 	segdev->priv = segpriv;
 
+	segdev_put(segdev);
 	return 0;
 
 err3:

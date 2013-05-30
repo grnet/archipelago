@@ -180,13 +180,17 @@ void xheap_free(void *ptr)
 {
 	struct xheap_header *h = __get_header(ptr);
 	struct xheap *heap = XPTR(&h->heap);
+	void *mem;
+	uint64_t size;
+	int r;
+	xptr *free_list;
 	if (h->magic != 0xdeadbeaf) {
 		XSEGLOG("for ptr: %lx, magic %lx != 0xdeadbeaf", ptr, h->magic);
 	}
-	void *mem = XPTR(&heap->mem);
-	uint64_t size = xheap_get_chunk_size(ptr);
-	xptr *free_list = (xptr *) mem;
-	int r = __get_index(heap, size);
+	mem = XPTR(&heap->mem);
+	size = xheap_get_chunk_size(ptr);
+	free_list = (xptr *) mem;
+	r = __get_index(heap, size);
 	//printf("size: %llu, r: %d\n", size, r);
 	__add_in_free_list(heap, &free_list[r], ptr);
 //	printf("freed %lx (size: %llu)\n", ptr, __get_header(ptr)->size);

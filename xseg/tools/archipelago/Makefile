@@ -40,44 +40,20 @@ FILES+=$(shell ls *.py)
 
 SUBDIR:=$(subst $(XSEG_HOME),,$(CURDIR))
 
-
-H2XML = h2xml
-XML2PY = xml2py
-
-default: all
-
-all: xseg/xseg_api.py xseg/xprotocol.py
-	if [ ! -e xseg/version.py ] ; then \
-		echo '__version__ = "'`devflow-version python`'"' > xseg/version.py ; \
+default:
+	if [ ! -e archipelago/version.py ] ; then \
+		echo '__version__ = "'`devflow-version python`'"' > archipelago/version.py ; \
 	fi
 	python setup.py build
 
-$(BASE)/sys/user/libxseg.so:
-	make -C $(BASE)/sys/user libxseg.so
-
-xseg.xml: $(BASE)/xseg/xseg.h $(BASE)/xtypes/xq.h $(BASE)/xtypes/xlock.h \
-	$(BASE)/xtypes/xpool.h $(BASE)/xtypes/xhash.h \
-	$(BASE)/xtypes/xheap.h $(BASE)/xtypes/xobj.h \
-	$(BASE)/sys/domain.h $(BASE)/sys/util.h $(BASE)/sys/user/_sysutil.h $(BASE)/xseg/protocol.h
-	$(H2XML) -c $(INC) -o $@ $(BASE)/xseg/xseg.h
-
-xprotocol.xml: 
-	$(H2XML) -c $(INC) -o $@ $(BASE)/xseg/protocol.h
-
-xseg/xseg_api.py: xseg.xml
-	$(XML2PY) -d -k defst -l $(BASE)/lib/user/libxseg.so.$(MAJOR) -c $< -o $@
-	sed -i -e 's/xseg_get_data_nonstatic.restype = STRING/xseg_get_data_nonstatic.restype = POINTER(c_char)/g' xseg/xseg_api.py
-	sed -i -e 's/xseg_get_target_nonstatic.restype = STRING/xseg_get_target_nonstatic.restype = POINTER(c_char)/g' xseg/xseg_api.py
-	sed -i -e 's/STRING = 1//g' xseg/xseg_api.py
-	sed -i -e 's,$(BASE)/lib/user/libxseg.so.$(MAJOR),libxseg.so.$(MAJOR),g' xseg/xseg_api.py
-
-
-xseg/xprotocol.py: xprotocol.xml
-	$(XML2PY) -d -k defst -c $< -o $@
+clean:
+	rm -rf build/ archipelago.egg-info/ distribute_setup.pyc \
+		archipelago/__init__.pyc archipelago/archipelago.pyc \
+		archipelago/version.pyc
 
 install:
-	if [ ! -e xseg/version.py ] ; then \
-		echo '__version__ = "'`devflow-version python`'"' > xseg/version.py ; \
+	if [ ! -e archipelago/version.py ] ; then \
+		echo '__version__ = "'`devflow-version python`'"' > archipelago/version.py ; \
 	fi
 	python setup.py install --install-layout=deb --root=$(DESTDIR)
 
@@ -86,12 +62,10 @@ install-src:
 	@for f in $(FILES) ; do \
 		install -o 0 -g 0 -m 644 -t $(DESTDIR)$(srcdir)$(SUBDIR) $$f ; \
 	done
-	install -d $(DESTDIR)$(srcdir)$(SUBDIR)/xseg ;
-	install -o 0 -g 0 -m 644 -t $(DESTDIR)$(srcdir)$(SUBDIR)/xseg xseg/__init__.py ; \
+	install -d $(DESTDIR)$(srcdir)$(SUBDIR)/archipelago ;
+	install -o 0 -g 0 -m 644 -t $(DESTDIR)$(srcdir)$(SUBDIR)/archipelago archipelago/__init__.py ; 
+	install -o 0 -g 0 -m 644 -t $(DESTDIR)$(srcdir)$(SUBDIR)/archipelago archipelago/archipelago.py ; 
+	install -o 0 -g 0 -m 644 -t $(DESTDIR)$(srcdir)$(SUBDIR)/archipelago archipelago/vlmc.py ; 
+	install -o 0 -g 0 -m 644 -t $(DESTDIR)$(srcdir)$(SUBDIR)/archipelago archipelago/version.py ; 
 
 
-
-clean:
-	rm -rf build/ xseg.egg-info/ xseg.xml xprotocol.xml xseg/xseg_api.py \
-		xseg/xseg_api.pyc xseg/xprotocol.py xseg/xprotocol.pyc \
-		xseg/__init__.pyc

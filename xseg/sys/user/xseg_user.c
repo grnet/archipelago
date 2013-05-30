@@ -43,8 +43,11 @@
 #include <sys/syscall.h>
 #include <errno.h>
 #include <sys/util.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
 #include <sys/time.h>
-
+#include <execinfo.h>
 #include <sys/domain.h>
 #include <xtypes/domain.h>
 #include <xseg/domain.h>
@@ -124,7 +127,7 @@ void __get_current_time(struct timeval *tv) {
 int __renew_logctx(struct log_ctx *lc, char *peer_name,
 		enum log_level log_level, char *logfile, uint32_t flags)
 {
-	FILE *file;
+	int fd, tmp_fd;
 
 	if (peer_name){
 		strncpy(lc->peer_name, peer_name, MAX_PEER_NAME);
@@ -136,24 +139,29 @@ int __renew_logctx(struct log_ctx *lc, char *peer_name,
 		strncpy(lc->filename, logfile, MAX_LOGFILE_LEN);
 		lc->filename[MAX_LOGFILE_LEN - 1] = 0;
 	}
-	else if (!(flags & REOPEN_FILE) || lc->logfile == stderr)
+	else if (!(flags & REOPEN_FILE) || lc->logfile == STDERR_FILENO)
 		return 0;
 
-	if (lc->logfile == stderr)
-		file = fopen(lc->filename, "a");
-	else
-		file = freopen(lc->filename, "a", lc->logfile);
-	if (!file) {
+	fd = open(lc->filename, O_WRONLY|O_CREAT|O_APPEND, S_IRUSR|S_IWUSR);
+	if (fd < 1){
 		return -1;
 	}
 
+	tmp_fd = lc->logfile;
+	lc->logfile = fd;
+	close(tmp_fd);
+
 	flags &= ~REOPEN_FILE;
-	if ((flags|lc->flags) & REDIRECT_STDOUT)
-		if (!freopen(lc->filename, "a", stdout))
+	if ((flags|lc->flags) & REDIRECT_STDOUT){
+		fd = dup2(lc->logfile, STDOUT_FILENO);
+		if (fd < 0)
 			return -1;
-	if ((flags|lc->flags) & REDIRECT_STDERR)
-		if (!freopen(lc->filename, "a", stderr))
+	}
+	if ((flags|lc->flags) & REDIRECT_STDERR){
+		fd = dup2(lc->logfile, STDERR_FILENO);
+		if (fd < 0)
 			return -1;
+	}
 	lc->flags |= flags;
 
 	return 0;
@@ -164,7 +172,7 @@ int (*renew_logctx)(struct log_ctx *lc, char *peer_name,
 int __init_logctx(struct log_ctx *lc, char *peer_name,
 		enum log_level log_level, char *logfile, uint32_t flags)
 {
-	FILE *file;
+	int fd;
 
 	if (peer_name){
 		strncpy(lc->peer_name, peer_name, MAX_PEER_NAME);
@@ -174,27 +182,47 @@ int __init_logctx(struct log_ctx *lc, char *peer_name,
 		return -1;
 	}
 
+	/* set logfile to stderr by default */
+	lc->logfile = STDERR_FILENO;
+#if 0
+	/* duplicate stdout, stderr */
+	fd = dup(STDOUT_FILENO);
+	if (fd < 0){
+		return -1;
+	}
+	lc->stdout_orig = fd;
+
+	fd = dup(STDERR_FILENO);
+	if (fd < 0){
+		return -1;
+	}
+	lc->stderr_orig = fd;
+#endif
 	lc->log_level = log_level;
 	if (!logfile || !logfile[0]) {
-		lc->logfile = stderr;
+//		lc->logfile = lc->stderr_orig;
 		return 0;
 	}
 
 	strncpy(lc->filename, logfile, MAX_LOGFILE_LEN);
 	lc->filename[MAX_LOGFILE_LEN - 1] = 0;
-	file = fopen(lc->filename, "a");
-	if (!file) {
-		lc->logfile = stderr;
+	fd = open(lc->filename, O_WRONLY|O_CREAT|O_APPEND, S_IRUSR|S_IWUSR);
+	if (fd < 1){
+//		lc->logfile = lc->stderr_orig;
 		return -1;
 	}
-	lc->logfile = file;
+	lc->logfile = fd;
 
-	if (flags & REDIRECT_STDOUT)
-		if (!freopen(lc->filename, "a", stdout))
+	if (flags & REDIRECT_STDOUT){
+		fd = dup2(lc->logfile, STDOUT_FILENO);
+		if (fd < 0)
 			return -1;
-	if (flags & REDIRECT_STDERR)
-		if (!freopen(lc->filename, "a", stderr))
+	}
+	if (flags & REDIRECT_STDERR){
+		fd = dup2(lc->logfile, STDERR_FILENO);
+		if (fd < 0)
 			return -1;
+	}
 	lc->flags = flags;
 
 	return 0;
@@ -209,6 +237,9 @@ void __xseg_log2(struct log_ctx *lc, enum log_level level, char *fmt, ...)
 	char timebuf[1024], buffer[4096];
 	char *buf = buffer;
 	char *t = NULL, *pn = NULL;
+	ssize_t r, sum;
+	size_t count;
+	int fd;
 
 	va_start(ap, fmt);
 	switch (level) {
@@ -235,8 +266,25 @@ void __xseg_log2(struct log_ctx *lc, enum log_level level, char *fmt, ...)
 		buf = buffer + sizeof(buffer) - 2;/* enough to hold \n and \0 */
 	buf += sprintf(buf, "\n");
 
-	fprintf(lc->logfile, "%s", buffer);
-	fflush(lc->logfile);
+	count = buf-buffer;
+	sum = 0;
+	r = 0;
+	fd = *(volatile int *)&lc->logfile;
+	do {
+		r = write(fd, buffer + sum, count - sum);
+		if (r < 0){
+			if (errno == EBADF)
+				fd = *(volatile int *)&lc->logfile;
+			else {
+				//XSEGLOG("Error while writing log");
+				break;
+			}
+		} else {
+			sum += r;
+		}
+	} while (sum < count);
+	/* No need to check for error */
+	//fsync(fd);
 	va_end(ap);
 
 	return;

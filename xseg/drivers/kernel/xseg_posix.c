@@ -84,6 +84,7 @@ static int posix_wait_signal(struct xseg *xseg, uint32_t timeout)
 
 static int posix_signal(struct xseg *xseg, uint32_t portno)
 {
+	struct posix_signal_desc *psd;
 	struct pid *pid;
 	struct task_struct *task;
 	int ret = -ENOENT;
@@ -92,7 +93,7 @@ static int posix_signal(struct xseg *xseg, uint32_t portno)
 	if (!port) 
 		return -1;
 
-	struct posix_signal_desc *psd = xseg_get_signal_desc(xseg, port);
+	psd = xseg_get_signal_desc(xseg, port);
 	if (!psd)
 		return -1;
 

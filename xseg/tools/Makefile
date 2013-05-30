@@ -5,24 +5,25 @@ include $(XSEG_HOME)/base.mk
 FILES="Makefile"
 FILES+="xseg_devshell.sh"
 
-EFILES="archipelago"
-EFILES+="vlmc"
 EFILES+="create_initializer"
 EFILES+="xseg-domain-targets"
 
 SUBDIR:=$(subst $(XSEG_HOME),,$(CURDIR))
 
 default:
+	make -C archipelago
+	make -C ext_scripts
 
 clean:
+	make -C archipelago clean
+	make -C ext_scripts clean
 
 install:
+	make -C archipelago install
 	make -C ext_scripts install
-	install -d $(DESTDIR)$(bindir)
-	install -o 0 -g 0 -m 755 -t $(DESTDIR)$(bindir) archipelago
-	install -o 0 -g 0 -m 755 -t $(DESTDIR)$(bindir) vlmc
 
 install-src:
+	make -C archipelago install-src
 	make -C ext_scripts install-src
 	install -d $(DESTDIR)$(srcdir)$(SUBDIR) ;
 	@for f in $(FILES) ; do \
