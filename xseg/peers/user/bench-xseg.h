@@ -34,6 +34,27 @@
 
 #include <bench-lfsr.h>
 
+
+#ifdef __GNUC__
+#define LIKELY(x)       __builtin_expect(!!(x),1)
+#define UNLIKELY(x)     __builtin_expect(!!(x),0)
+#else
+#define LIKELY(x)       (x)
+#define UNLIKELY(x)     (x)
+#endif
+
+/*
+ * If CLOCK_MONOTONIC_RAW is not defined in our system, use CLOCK_MONOTONIC
+ * instead. CLOCK_MONOTONIC_RAW is preferred since we are guaranteed that the
+ * clock won't skew.
+ */
+#ifdef CLOCK_MONOTONIC_RAW
+#define CLOCK_BENCH CLOCK_MONOTONIC_RAW
+#else
+#define CLOCK_BENCH CLOCK_MONOTONIC
+#endif
+
+
 #define MAX_ARG_LEN 10
 
 /*
@@ -64,24 +85,35 @@
 #define INSANITY_MANIC 2
 #define INSANITY_PARANOID 3
 
+/* Progress bar option occupies 6th flag bit */
+#define PROGRESS_FLAG_POS 5
+#define PROGRESS_BITMASK 1	/* i.e. "11" in binary form */
+#define PROGRESS_NO 0
+#define PROGRESS_YES 1
 
 /*
  * Current bench flags representation:
  * 64 7  6  5  4  3  2  1 : bits
  * ...0  0  0  0  0  0  0
- *         |____||____||_|
- *			  ^	    ^   ^
- *			  |		|   |
- *		   insanity	| pattern
- *				 verify
+ *      |_||____||____||_|
+ *		 ^	  ^	    ^   ^
+ *		 |	  |		|   |
+ *		 | insanity	| pattern
+ *	  progress	 verify
  */
-/* Add flag bit according to its position */
+
+/*
+ * Find position of flag, make it zero, get requested flag value, store it to
+ * this position
+ */
 #define SET_FLAG(__ftype, __flag, __val)	\
-	__flag |= __val << __ftype##_FLAG_POS;
+	__flag = (__flag & ~(__ftype##_BITMASK << __ftype##_FLAG_POS)) | \
+	(__val << __ftype##_FLAG_POS);
 
 /* Apply bitmask to flags, shift result to the right to get correct value */
 #define GET_FLAG(__ftype, __flag)			\
 	(__flag & (__ftype##_BITMASK << __ftype##_FLAG_POS)) >> __ftype##_FLAG_POS
+
 /*
  * The benchark ID (IDLEN) is global for the test, calculated once and is a
  * string of the following form: {"bench-" + 9-digit number + "\0"}.
@@ -160,6 +192,10 @@ struct signature {
 	uint64_t offset;
 };
 
+struct bw {
+	double val;
+	char unit[5];
+};
 
 int bench_peerd_loop(void *arg);
 
@@ -172,13 +208,17 @@ int read_op(char *op);
 int read_pattern(char *pattern);
 int read_insanity(char *insanity);
 int read_verify(char *insanity);
+int read_progress(char *progress);
 void print_res(struct bench *prefs, struct timer *tm, char *type);
 void print_stats(struct bench *prefs);
+void print_progress(struct bench *prefs);
+void print_remaining(struct bench *prefs);
 void create_target(struct bench *prefs, struct xseg_request *req,
 		uint64_t new);
 void create_chunk(struct bench *prefs, struct xseg_request *req, uint64_t new);
 int read_chunk(struct bench *prefs, struct xseg_request *req);
 uint64_t determine_next(struct bench *prefs);
 uint64_t calculate_offset(struct bench *prefs, uint64_t new);
+uint64_t calculate_prog_quantum(struct bench *prefs);
 void create_id(unsigned long seed);
 

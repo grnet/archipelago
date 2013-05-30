@@ -66,8 +66,7 @@ PACKAGES = find_packages(PACKAGES_ROOT)
 CLASSIFIERS = []
 
 # Package requirements
-INSTALL_REQUIRES = [ 'ctypeslib'
-]
+INSTALL_REQUIRES = []
 
 EXTRAS_REQUIRES = {
 }

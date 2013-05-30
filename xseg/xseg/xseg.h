@@ -257,7 +257,7 @@ struct xseg_request {
 	xptr target;
 	uint32_t targetlen;
 	uint32_t op;
-	uint32_t state;
+	volatile uint32_t state;
 	uint32_t flags;
 	xport src_portno;
 	xport transit_portno;
@@ -464,7 +464,6 @@ void xseg_put_objh(struct xseg *xseg, struct xobject_h *objh);
 #define xseg_get_queue(__xseg, __port, __queue) \
 	((struct xq *) XPTR_TAKE(__port->__queue, __xseg->segment))
 
-#endif
 
 int xseg_set_path_next(struct xseg *xseg, xport portno, xport next);
 
@@ -485,3 +484,5 @@ int xseg_set_freequeue_size(struct xseg *xseg, xport portno, xqindex size,
 
 xport xseg_forward(struct xseg *xseg, struct xseg_request *req, xport new_dst,
 		xport portno, uint32_t flags);
+
+#endif

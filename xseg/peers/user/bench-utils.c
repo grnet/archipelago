@@ -50,45 +50,45 @@
 #include <string.h>
 
 #define PRINT_SIG(__who, __sig)									\
-	printf("%s (%lu): id %lu, object %lu, offset %lu\n",		\
+	fprintf(stdout, "%s (%lu): id %lu, object %lu, offset %lu\n",		\
 			#__who, (uint64_t)(__sig),							\
 			((struct signature *)__sig)->id,					\
 			((struct signature *)__sig)->object,				\
 			((struct signature *)__sig)->offset);
 
+struct timespec delay = {0, 4000000};
+
 /******************************\
  * Static miscellaneous tools *
 \******************************/
-struct timespec delay = {0, 4000000};
-
-static inline uint64_t _get_id()
+static inline uint64_t __get_id()
 {
 	return atol(global_id + 6); /* cut the "bench-" part*/
 }
 
-static inline uint64_t _get_object_from_name(char *name)
+static inline uint64_t __get_object_from_name(char *name)
 {
 	return atol(name + IDLEN); /* cut the "bench-908135-" part*/
 }
 
-static inline uint64_t _get_object(struct bench *prefs, uint64_t new)
+static inline uint64_t __get_object(struct bench *prefs, uint64_t new)
 {
-	if (prefs->to < 0)
+	if (prefs->ts > 0)
 		new = new / (prefs->os / prefs->bs);
 	return new;
 }
 
-static inline int _snap_to_bound8(uint64_t space)
+static inline int __snap_to_bound8(uint64_t space)
 {
 	return space > 8 ? 8 : space;
 }
 
-static inline double _timespec2double(struct timespec num)
+static inline double __timespec2double(struct timespec num)
 {
 	return (double) (num.tv_sec * pow(10, 9) + num.tv_nsec);
 }
 
-static inline void _write_sig(struct bench_lfsr *sg,	uint64_t *d, uint64_t s,
+static inline void __write_sig(struct bench_lfsr *sg,	uint64_t *d, uint64_t s,
 		int pos)
 {
 	uint64_t i;
@@ -103,10 +103,10 @@ static inline void _write_sig(struct bench_lfsr *sg,	uint64_t *d, uint64_t s,
 	/* special care for last chunk */
 	last_val = lfsr_next(sg);
 	space_left = s - (i * 8);
-	memcpy(d + i, &last_val, _snap_to_bound8(space_left));
+	memcpy(d + i, &last_val, __snap_to_bound8(space_left));
 }
 
-static inline int _read_sig(struct bench_lfsr *sg, uint64_t *d, uint64_t s,
+static inline int __read_sig(struct bench_lfsr *sg, uint64_t *d, uint64_t s,
 		int pos)
 {
 	uint64_t i;
@@ -121,7 +121,7 @@ static inline int _read_sig(struct bench_lfsr *sg, uint64_t *d, uint64_t s,
 	/* special care for last chunk */
 	last_val = lfsr_next(sg);
 	space_left = s - (i * 8);
-	if (memcmp(d + i, &last_val, _snap_to_bound8(space_left)))
+	if (memcmp(d + i, &last_val, __snap_to_bound8(space_left)))
 		return 1;
 
 	return 0;
@@ -131,7 +131,7 @@ static inline int _read_sig(struct bench_lfsr *sg, uint64_t *d, uint64_t s,
  * Seperates a double number in seconds, msec, usec, nsec
  * Expects a number in nanoseconds (e.g. a number from timespec2double)
  */
-static struct tm_result _separate_by_order(double num)
+static struct tm_result __separate_by_order(double num)
 {
 	struct tm_result res;
 
@@ -147,6 +147,37 @@ static struct tm_result _separate_by_order(double num)
 	res.ns = fmod(num, 1000);
 
 	return res;
+}
+
+static void __calculate_bw(struct bench *prefs, double iops, struct bw *bw)
+{
+	bw->val = iops * prefs->bs;
+	strcpy(bw->unit, "B/s");
+
+	if (bw->val < 1024)
+		return;
+
+	bw->val = bw->val / 1024;
+	strcpy(bw->unit, "KB/s");
+
+	if (bw->val < 1024)
+		return;
+
+	bw->val = bw->val / 1024;
+	strcpy(bw->unit, "MB/s");
+
+	if (bw->val < 1024)
+		return;
+
+	bw->val = bw->val / 1024;
+	strcpy(bw->unit, "GB/s");
+}
+
+static double __calculate_iops(struct bench *prefs, double elapsed_ns)
+{
+	/* elapsed_ns is in nanoseconds, so we convert it to seconds */
+	double elapsed = elapsed_ns / pow(10,9);
+	return (prefs->status->received / elapsed);
 }
 
 /******************************\
@@ -226,6 +257,15 @@ int read_verify(char *verify)
 	return -1;
 }
 
+int read_progress(char *progress)
+{
+	if (strncmp(progress, "no", MAX_ARG_LEN + 1) == 0)
+		return PROGRESS_NO;
+	if (strncmp(progress, "yes", MAX_ARG_LEN + 1) == 0)
+		return PROGRESS_YES;
+	return -1;
+}
+
 int read_pattern(char *pattern)
 {
 	if (strncmp(pattern, "seq", MAX_ARG_LEN + 1) == 0)
@@ -239,24 +279,51 @@ int read_pattern(char *pattern)
  * Print functions *
 \*******************/
 
+void print_io_stats(struct bench *prefs, double elapsed)
+{
+	struct bw bw;
+	double iops;
+
+	/*
+	 * We could malloc struct bw in __calculate_bw, but it's safer in cases when
+	 * there is no memory left.
+	 */
+	iops = __calculate_iops(prefs, elapsed);
+	__calculate_bw(prefs, iops, &bw);
+
+	fprintf(stdout, "           ~~~~~~~~~~~~~~~~~~~~~~~~\n");
+	fprintf(stdout, "Bandwidth:    %.3lf %s\n", bw.val, bw.unit);
+	fprintf(stdout, "IOPS:         %.3lf\n", iops);
+	fflush(stdout);
+}
+
 void print_stats(struct bench *prefs)
+{
+	fprintf(stdout, "\n"
+			"Requests total:     %10lu\n"
+			"Requests submitted: %10lu\n"
+			"Requests received:  %10lu\n"
+			"Requests failed:    %10lu\n",
+			prefs->status->max,
+			prefs->status->submitted,
+			prefs->status->received,
+			prefs->status->failed);
+	if ((prefs->op == X_READ) && (GET_FLAG(VERIFY, prefs->flags) != VERIFY_NO))
+		fprintf(stdout, "Requests corrupted: %10lu\n", prefs->status->corrupted);
+	fprintf(stdout, "\n");
+	fflush(stdout);
+}
+
+void print_remaining(struct bench *prefs)
 {
 	uint64_t remaining;
 
-	printf("\n");
-	printf("Requests total:     %10lu\n", prefs->status->max);
-	printf("Requests submitted: %10lu\n", prefs->status->submitted);
-	printf("Requests received:  %10lu\n", prefs->status->received);
-	printf("Requests failed:    %10lu\n", prefs->status->failed);
-	if ((prefs->op == X_READ) && (GET_FLAG(VERIFY, prefs->flags) != VERIFY_NO))
-		printf("Requests corrupted: %10lu\n", prefs->status->corrupted);
-	printf("\n");
-
 	remaining = prefs->status->max - prefs->status->received;
 	if (remaining)
-		printf("Requests remaining: %10lu\n", remaining);
+		fprintf(stdout, "Requests remaining: %10lu\n", remaining);
 	else
-		printf("All requests have been served.\n");
+		fprintf(stdout, "All requests have been served.\n");
+	fflush(stdout);
 }
 
 void print_res(struct bench *prefs, struct timer *tm, char *type)
@@ -264,25 +331,40 @@ void print_res(struct bench *prefs, struct timer *tm, char *type)
 	struct tm_result res;
 	double sum;
 
-	sum = _timespec2double(tm->sum);
-	res = _separate_by_order(sum);
+	sum = __timespec2double(tm->sum);
+	res = __separate_by_order(sum);
 
-	printf("\n");
-	printf("              %s\n", type);
-	printf("           ========================\n");
-	printf("             |-s-||-ms-|-us-|-ns-|\n");
-	printf("Total time:   %3u. %03u  %03u  %03u\n",
+	fprintf(stdout, "\n");
+	fprintf(stdout, "              %s\n", type);
+	fprintf(stdout, "           ========================\n");
+	fprintf(stdout, "             |-s-||-ms-|-us-|-ns-|\n");
+	fprintf(stdout, "Total time:   %3u. %03u  %03u  %03u\n",
 			res.s, res.ms, res.us, res.ns);
+	fflush(stdout);
 
 	if (!prefs->status->received)
 		return;
 
-	res = _separate_by_order(sum / prefs->status->received);
+	res = __separate_by_order(sum / prefs->status->received);
 
-	printf("Mean Time:    %3u. %03u  %03u  %03u\n",
+	fprintf(stdout, "Mean Time:    %3u. %03u  %03u  %03u\n",
 			res.s, res.ms, res.us, res.ns);
+	fflush(stdout);
 
 	//TODO: Add std
+
+	print_io_stats(prefs, sum);
+}
+
+void print_progress(struct bench *prefs)
+{
+	int lines = 6;
+
+	if ((prefs->op == X_READ) && (GET_FLAG(VERIFY, prefs->flags) != VERIFY_NO))
+		lines++;
+
+	fprintf(stdout, "\033[%dA\033[J", lines);
+	print_stats(prefs);
 }
 
 /**************************\
@@ -309,7 +391,7 @@ void create_target(struct bench *prefs, struct xseg_request *req,
 
 	//For read/write, the target object may not correspond to `new`, which is
 	//actually the chunk number.
-	new = _get_object(prefs, new);
+	new = __get_object(prefs, new);
 	snprintf(req_target, TARGETLEN, "%s-%016lu", global_id, new);
 	XSEGLOG2(&lc, D, "Target name of request is %s\n", req_target);
 }
@@ -325,11 +407,17 @@ uint64_t determine_next(struct bench *prefs)
 
 uint64_t calculate_offset(struct bench *prefs, uint64_t new)
 {
-	if (prefs->to < 0)
+	if (prefs->ts > 0)
 		return (new * prefs->bs) % prefs->os;
 	else
 		return 0;
 }
+
+uint64_t calculate_prog_quantum(struct bench *prefs)
+{
+	return round((double)prefs->status->max / 20.0);
+}
+
 
 /*
  * ***********************************************
@@ -385,15 +473,15 @@ static int _readwrite_chunk_full(struct xseg *xseg, struct xseg_request *req,
 	 */
 
 	if (req->op == X_WRITE) {
-		_write_sig(&id_lfsr, d, s, 0);
-		_write_sig(&obj_lfsr, d, s, 1);
-		_write_sig(&off_lfsr, d, s, 2);
+		__write_sig(&id_lfsr, d, s, 0);
+		__write_sig(&obj_lfsr, d, s, 1);
+		__write_sig(&off_lfsr, d, s, 2);
 	} else {
-		if (_read_sig(&id_lfsr, d, s, 0))
+		if (__read_sig(&id_lfsr, d, s, 0))
 			return 1;
-		if (_read_sig(&obj_lfsr, d, s, 1))
+		if (__read_sig(&obj_lfsr, d, s, 1))
 			return 1;
-		if(_read_sig(&off_lfsr, d, s, 2))
+		if(__read_sig(&off_lfsr, d, s, 2))
 			return 1;
 	}
 
@@ -451,13 +539,13 @@ void create_chunk(struct bench *prefs, struct xseg_request *req, uint64_t new)
 		case VERIFY_NO:
 			break;
 		case VERIFY_META:
-			id = _get_id();
-			object = _get_object(prefs, new);
+			id = __get_id();
+			object = __get_object(prefs, new);
 			_readwrite_chunk_meta(xseg, req, id, object);
 			break;
 		case VERIFY_FULL:
-			id = _get_id();
-			object = _get_object(prefs, new);
+			id = __get_id();
+			object = __get_object(prefs, new);
 			_readwrite_chunk_full(xseg, req, id, object);
 			break;
 		default:
@@ -479,15 +567,15 @@ int read_chunk(struct bench *prefs, struct xseg_request *req)
 		case VERIFY_NO:
 			break;
 		case VERIFY_META:
-			id = _get_id();
+			id = __get_id();
 			target = xseg_get_target(xseg, req);
-			object = _get_object_from_name(target);
+			object = __get_object_from_name(target);
 			r = _readwrite_chunk_meta(xseg, req, id, object);
 			break;
 		case VERIFY_FULL:
-			id = _get_id();
+			id = __get_id();
 			target = xseg_get_target(xseg, req);
-			object = _get_object_from_name(target);
+			object = __get_object_from_name(target);
 			r = _readwrite_chunk_full(xseg, req, id, object);
 			break;
 		default:

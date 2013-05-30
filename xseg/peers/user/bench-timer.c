@@ -70,7 +70,7 @@ void timer_start(struct bench *prefs, struct timer *timer)
 	if (GET_FLAG(INSANITY, prefs->flags) < timer->insanity)
 		return;
 
-	clock_gettime(CLOCK_MONOTONIC_RAW, &timer->start_time);
+	clock_gettime(CLOCK_BENCH, &timer->start_time);
 }
 
 void timer_stop(struct bench *prefs, struct timer *timer,
@@ -95,7 +95,7 @@ void timer_stop(struct bench *prefs, struct timer *timer,
 	else
 		start_time = *start;
 
-	clock_gettime(CLOCK_MONOTONIC_RAW, &end_time);
+	clock_gettime(CLOCK_BENCH, &end_time);
 
 	//Get elapsed time by subtracting start time from end time.
 	//Subtraction can result to a negative value, so we check for both cases
