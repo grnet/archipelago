@@ -137,30 +137,30 @@ struct map_node {
 
 
 #define wait_on_pr(__pr, __condition__) 	\
-	while (__condition__){			\
+	do {					\
 		ta--;				\
 		__get_mapper_io(pr)->active = 0;\
 		XSEGLOG2(&lc, D, "Waiting on pr %lx, ta: %u",  pr, ta); \
 		st_cond_wait(__pr->cond);	\
-	}
+	} while (__condition__)
 
 #define wait_on_mapnode(__mn, __condition__)	\
-	while (__condition__){			\
+	do {					\
 		ta--;				\
 		__mn->waiters++;		\
 		XSEGLOG2(&lc, D, "Waiting on map node %lx %s, waiters: %u, \
 			ta: %u",  __mn, __mn->object, __mn->waiters, ta);  \
 		st_cond_wait(__mn->cond);	\
-	}
+	} while (__condition__)
 
 #define wait_on_map(__map, __condition__)	\
-	while (__condition__){			\
+	do {					\
 		ta--;				\
 		__map->waiters++;		\
 		XSEGLOG2(&lc, D, "Waiting on map %lx %s, waiters: %u, ta: %u",\
 				   __map, __map->volume, __map->waiters, ta); \
 		st_cond_wait(__map->cond);	\
-	}
+	} while (__condition__)
 
 #define signal_pr(__pr)				\
 	do { 					\
@@ -175,11 +175,11 @@ struct map_node {
 #define signal_map(__map)			\
 	do { 					\
 		if (__map->waiters) {		\
-			ta += 1;		\
+			ta += __map->waiters;		\
 			XSEGLOG2(&lc, D, "Signaling map %lx %s, waiters: %u, \
 			ta: %u",  __map, __map->volume, __map->waiters, ta); \
-			__map->waiters--;	\
-			st_cond_signal(__map->cond);	\
+			__map->waiters = 0;	\
+			st_cond_broadcast(__map->cond);	\
 		}				\
 	}while(0)
 
@@ -298,9 +298,10 @@ static uint32_t calc_nr_obj(struct xseg_request *req)
 	return r;
 }
 
-/* hexlify function. 
+/* hexlify function.
  * Unsafe. Doesn't check if data length is odd!
  */
+
 static void hexlify(unsigned char *data, char *hex)
 {
 	int i;
@@ -344,6 +345,39 @@ static void unhexlify(char *hex, unsigned char *data)
 		data[i] |= c & 0x0F;
 	}
 }
+
+void merkle_hash(unsigned char *hashes, unsigned long len,
+		unsigned char hash[SHA256_DIGEST_SIZE])
+{
+	uint32_t i, l, s = 2;
+	uint32_t nr = len/SHA256_DIGEST_SIZE;
+	unsigned char *buf;
+	unsigned char tmp_hash[SHA256_DIGEST_SIZE];
+
+	if (!nr){
+		SHA256(hashes, 0, hash);
+		return;
+	}
+	if (nr == 1){
+		memcpy(hash, hashes, SHA256_DIGEST_SIZE);
+		return;
+	}
+	while (s < nr)
+		s = s << 1;
+	buf = malloc(sizeof(unsigned char)* SHA256_DIGEST_SIZE * s);
+	memcpy(buf, hashes, nr * SHA256_DIGEST_SIZE);
+	memset(buf + nr * SHA256_DIGEST_SIZE, 0, (s - nr) * SHA256_DIGEST_SIZE);
+	for (l = s; l > 1; l = l/2) {
+		for (i = 0; i < l; i += 2) {
+			SHA256(buf + (i * SHA256_DIGEST_SIZE),
+					2 * SHA256_DIGEST_SIZE, tmp_hash);
+			memcpy(buf + (i/2 * SHA256_DIGEST_SIZE),
+					tmp_hash, SHA256_DIGEST_SIZE);
+		}
+	}
+	memcpy(hash, buf, SHA256_DIGEST_SIZE);
+}
+
 /*
  * Maps handling functions
  */
@@ -1601,7 +1635,8 @@ static inline void put_map(struct map *map)
 			if (mn) {
 				//make sure all pending operations on all objects are completed
 				//this should never happen...
-				wait_on_mapnode(mn, mn->flags & MF_OBJECT_NOT_READY);
+				if (mn->flags & MF_OBJECT_NOT_READY)
+					wait_on_mapnode(mn, mn->flags & MF_OBJECT_NOT_READY);
 				mn->flags |= MF_OBJECT_DESTROYED;
 				put_mapnode(mn); //matchin mn->ref = 1 on mn init
 				put_mapnode(mn); //matcing get_mapnode;
@@ -1999,7 +2034,8 @@ static int req2objs(struct peer_req *pr, struct map *map, int write)
 				if (mn->flags & MF_OBJECT_NOT_READY){
 					if (!can_wait)
 						continue;
-					wait_on_mapnode(mn, mn->flags & MF_OBJECT_NOT_READY);
+					if (mn->flags & MF_OBJECT_NOT_READY)
+						wait_on_mapnode(mn, mn->flags & MF_OBJECT_NOT_READY);
 					if (mn->flags & MF_OBJECT_DESTROYED){
 						mio->err = 1;
 						continue;
@@ -2023,7 +2059,8 @@ static int req2objs(struct peer_req *pr, struct map *map, int write)
 			}
 			can_wait = 1;
 		}
-		wait_on_pr(pr, mio->copyups > 0);
+		if (mio->copyups > 0)
+			wait_on_pr(pr, mio->copyups > 0);
 	}
 
 	if (mio->err){
@@ -2074,7 +2111,8 @@ static int do_dropcache(struct peer_req *pr, struct map *map)
 		if (mn) {
 			if (!(mn->flags & MF_OBJECT_DESTROYED)){
 				//make sure all pending operations on all objects are completed
-				wait_on_mapnode(mn, mn->flags & MF_OBJECT_NOT_READY);
+				if (mn->flags & MF_OBJECT_NOT_READY)
+					wait_on_mapnode(mn, mn->flags & MF_OBJECT_NOT_READY);
 				mn->flags |= MF_OBJECT_DESTROYED;
 			}
 			put_mapnode(mn);
@@ -2142,7 +2180,8 @@ static int do_snapshot(struct peer_req *pr, struct map *map)
 		 * this should be nr_ops of the blocker, but since we don't know
 		 * that, we assume based on our own nr_ops
 		 */
-		wait_on_pr(pr, mio->snap_pending >= peer->nr_ops);
+		if (mio->snap_pending >= peer->nr_ops)
+			wait_on_pr(pr, mio->snap_pending >= peer->nr_ops);
 
 		mn = get_mapnode(map, i);
 		if (!mn)
@@ -2153,7 +2192,8 @@ static int do_snapshot(struct peer_req *pr, struct map *map)
 			continue;
 		}
 		// make sure all pending operations on all objects are completed
-		wait_on_mapnode(mn, mn->flags & MF_OBJECT_NOT_READY);
+		if (mn->flags & MF_OBJECT_NOT_READY)
+			wait_on_mapnode(mn, mn->flags & MF_OBJECT_NOT_READY);
 
 		/* TODO will this ever happen?? */
 		if (mn->flags & MF_OBJECT_DESTROYED){
@@ -2171,7 +2211,8 @@ static int do_snapshot(struct peer_req *pr, struct map *map)
 		/* do not put_mapnode here. cb does that */
 	}
 
-	wait_on_pr(pr, mio->snap_pending > 0);
+	if (mio->snap_pending > 0)
+		wait_on_pr(pr, mio->snap_pending > 0);
 	mio->cb = NULL;
 
 	if (mio->err)
@@ -2197,7 +2238,8 @@ static int do_snapshot(struct peer_req *pr, struct map *map)
 		v0_object_to_map(mn, buf+pos);
 		pos += v0_objectsize_in_map;
 	}
-	SHA256(buf, pos, sha);
+//	SHA256(buf, pos, sha);
+	merkle_hash(buf, pos, sha);
 	hexlify(sha, newvolumename);
 	strncpy(tmp_map.volume, newvolumename, newvolumenamelen);
 	tmp_map.volumelen = newvolumenamelen;
@@ -2268,7 +2310,8 @@ static int do_destroy(struct peer_req *pr, struct map *map)
 		 * this should be nr_ops of the blocker, but since we don't know
 		 * that, we assume based on our own nr_ops
 		 */
-		wait_on_pr(pr, mio->del_pending >= peer->nr_ops);
+		if (mio->del_pending >= peer->nr_ops)
+			wait_on_pr(pr, mio->del_pending >= peer->nr_ops);
 
 		mn = get_mapnode(map, i);
 		if (!mn)
@@ -2284,7 +2327,8 @@ static int do_destroy(struct peer_req *pr, struct map *map)
 		}
 
 		// make sure all pending operations on all objects are completed
-		wait_on_mapnode(mn, mn->flags & MF_OBJECT_NOT_READY);
+		if (mn->flags & MF_OBJECT_NOT_READY)
+			wait_on_mapnode(mn, mn->flags & MF_OBJECT_NOT_READY);
 
 		req = __delete_object(pr, mn);
 		if (!req){
@@ -2296,7 +2340,8 @@ static int do_destroy(struct peer_req *pr, struct map *map)
 		/* do not put_mapnode here. cb does that */
 	}
 
-	wait_on_pr(pr, mio->del_pending > 0);
+	if (mio->del_pending > 0)
+		wait_on_pr(pr, mio->del_pending > 0);
 
 	mio->cb = NULL;
 	map->flags &= ~MF_MAP_DELETING;

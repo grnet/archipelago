@@ -66,8 +66,7 @@ PACKAGES = find_packages(PACKAGES_ROOT)
 CLASSIFIERS = []
 
 # Package requirements
-INSTALL_REQUIRES = [
-]
+INSTALL_REQUIRES = []
 
 EXTRAS_REQUIRES = {
 }
@@ -172,7 +171,7 @@ def find_package_data(
     return out
 
 setup(
-    name='python-xseg',
+    name='xseg',
     version=VERSION,
     license='BSD',
     url='http://code.grnet.gr/',
@@ -198,9 +197,5 @@ setup(
     dependency_links=['http://docs.dev.grnet.gr/pypi'],
 
     entry_points={
-        'console_scripts': [
-            'archipelago = archipelago.cli:main',
-            'vlmc = archipelago.cli:main',
-        ],
     }
 )

@@ -66,7 +66,7 @@ PACKAGES = find_packages(PACKAGES_ROOT)
 CLASSIFIERS = []
 
 # Package requirements
-INSTALL_REQUIRES = ['python-xseg'
+INSTALL_REQUIRES = ['xseg', 'argparse', 'psutil'
                     ]
 
 EXTRAS_REQUIRES = {
@@ -172,7 +172,7 @@ def find_package_data(
     return out
 
 setup(
-    name='python-archipelago',
+    name='archipelago',
     version=VERSION,
     license='BSD',
     url='http://code.grnet.gr/',
