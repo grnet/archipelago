@@ -174,6 +174,8 @@ struct map_node {
 
 #define signal_map(__map)			\
 	do { 					\
+		XSEGLOG2(&lc, D, "Checking map %lx %s. Waiters %u, ta: %u", \
+				__map, __map->volume, __map->waiters, ta);  \
 		if (__map->waiters) {		\
 			ta += __map->waiters;		\
 			XSEGLOG2(&lc, D, "Signaling map %lx %s, waiters: %u, \
@@ -1625,6 +1627,7 @@ static inline void __get_map(struct map *map)
 static inline void put_map(struct map *map)
 {
 	struct map_node *mn;
+	XSEGLOG2(&lc, D, "Putting map %lx %s. ref %u", map, map->volume, map->ref);
 	map->ref--;
 	if (!map->ref){
 		XSEGLOG2(&lc, I, "Freeing map %s", map->volume);
