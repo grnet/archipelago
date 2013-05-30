@@ -18,7 +18,7 @@ set -e
 
 
 case "$1" in
-	remove|deconfigure|upgrade)
+	remove|deconfigure)
 		if [ -x "/etc/init.d/archipelago" ]; then
 			if [ -x "`which invoke-rc.d 2>/dev/null`" ];
 			then
@@ -27,6 +27,8 @@ case "$1" in
 				/etc/init.d/archipelago	stop ||	exit $?
 			fi
 		fi
+		;;
+	upgrade)
 		;;
 	failed-upgrade)
 		;;

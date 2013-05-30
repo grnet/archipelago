@@ -2,7 +2,9 @@
 
 default: xseg
 
-build: xseg
+build:
+	make -C xseg XSEG_DOMAIN_TARGETS="user"
+	rm xseg/config.mk
 
 xseg:
 	make -C xseg

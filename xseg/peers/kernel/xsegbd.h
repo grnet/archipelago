@@ -65,7 +65,7 @@ struct xsegbd_device {
 	spinlock_t rqlock;
 	struct request_queue *blk_queue;
 	struct gendisk *gd;
-	int id;
+	long id;
 	int major;
 	sector_t sectors;
 	uint64_t segsize;
@@ -78,6 +78,7 @@ struct xsegbd_device {
 	struct list_head node;
 	char target[XSEGBD_TARGET_NAMELEN + 1];
 	uint32_t targetlen;
+	long user_count;
 };
 
 void __xsegbd_get(struct xsegbd_device *xsegbd_dev);

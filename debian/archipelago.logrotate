@@ -7,7 +7,7 @@
 	notifempty
 	create 664 root root
 	postrotate
-		kill -USR1 $(cat /var/run/archipelago/blockerb.pid)
+		kill -USR1 `cat /var/run/archipelago/blockerb.pid` 2>/dev/null || true
 	endscript
 }
 
@@ -20,7 +20,7 @@
 	notifempty
 	create 664 root root
 	postrotate
-		kill -USR1 $(cat /var/run/archipelago/blockerm.pid)
+		kill -USR1 `cat /var/run/archipelago/blockerm.pid` 2>/dev/null || true
 	endscript
 }
 
@@ -33,7 +33,7 @@
 	notifempty
 	create 664 root root
 	postrotate
-		kill -USR1 $(cat /var/run/archipelago/mapperd.pid)
+		kill -USR1 `cat /var/run/archipelago/mapperd.pid` 2>/dev/null || true
 	endscript
 }
 
@@ -46,6 +46,6 @@
 	notifempty
 	create 664 root root
 	postrotate
-		kill -USR1 $(cat /var/run/archipelago/vlmcd.pid)
+		kill -USR1 `cat /var/run/archipelago/vlmcd.pid` 2>/dev/null || true
 	endscript
 }

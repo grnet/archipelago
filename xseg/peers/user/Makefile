@@ -34,7 +34,7 @@
 .PHONY: default all clean install install-src
 
 include $(XSEG_HOME)/base.mk
-PEERS := xseg mt-sosd dummy mt-mapperd pfiled vlmc-xseg st-vlmcd mt-pfiled
+PEERS := xseg mt-sosd mt-mapperd st-vlmcd mt-pfiled
 
 FILES="Makefile"
 FILES+=$(shell ls *.h)
@@ -97,7 +97,7 @@ vlmc-xseg: vlmc-tool.c $(BASE)/xseg/xseg.h
 install:
 	install -d $(DESTDIR)$(bindir)
 	@for p in $(PEERS); do\
-		install -o root -g root -m 755 -t $(DESTDIR)$(bindir) $$p ; \
+		install -o 0 -g 0 -m 755 -t $(DESTDIR)$(bindir) $$p ; \
 	done
 
 install-src:

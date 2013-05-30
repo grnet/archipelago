@@ -47,7 +47,7 @@ TOPDIR = os.environ['TOPDIR']
 DEBIANDIR = os.path.join(TOPDIR, 'debian')
 DEBIANDIR = os.path.normpath(DEBIANDIR)
 
-from xseg.version import __version__
+from archipelago.version import __version__
 VERSION = __version__
 # Package info
 if os.path.isdir(DEBIANDIR):
@@ -66,7 +66,8 @@ PACKAGES = find_packages(PACKAGES_ROOT)
 CLASSIFIERS = []
 
 # Package requirements
-INSTALL_REQUIRES = []
+INSTALL_REQUIRES = ['xseg', 'argparse', 'psutil'
+                    ]
 
 EXTRAS_REQUIRES = {
 }
@@ -171,7 +172,7 @@ def find_package_data(
     return out
 
 setup(
-    name='xseg',
+    name='archipelago',
     version=VERSION,
     license='BSD',
     url='http://code.grnet.gr/',
@@ -197,5 +198,9 @@ setup(
     dependency_links=['http://docs.dev.grnet.gr/pypi'],
 
     entry_points={
+        'console_scripts': [
+            'archipelago = archipelago.cli:main',
+            'vlmc = archipelago.cli:main',
+        ],
     }
 )

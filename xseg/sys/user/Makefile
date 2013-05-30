@@ -44,7 +44,7 @@ EFILES+="make_symbol_map.sh"
 SUBDIR:=$(subst $(XSEG_HOME),,$(CURDIR))
 
 MAJOR=0
-MINOR=0.1
+MINOR=1
 AR=ar
 
 DRIVERS=xseg_posix xseg_segdev xseg_pthread
@@ -55,13 +55,12 @@ SHELL=/bin/bash
 default: all
 
 all: libxseg.a libxseg.so
-	make -C python MAJOR=$(MAJOR) MINOR=$(MINOR)
+	make -C python all MAJOR=$(MAJOR) MINOR=$(MINOR)
 	make -C xq all
 	make -C xpool all
 	make -C xhash all
 	make -C xheap all
 	make -C xobj all
-	make -C python all
 
 COMMA=,
 _initialize.c: drivers

@@ -229,15 +229,16 @@ int xobj_iterate(struct xobject_h *obj_h, struct xobject_iter *it, void **obj)
 //consistent wit obj_size
 int __xobj_check(struct xobject_h *obj_h, void *ptr)
 {
-	void *container = XPTR(&obj_h->container);
 	xhash_iter_t it;
 	uint64_t i, nr_objs;
+	xhashidx key, val;
+	void *mem;
+	void *obj;
+	void *container = XPTR(&obj_h->container);
 	xhash_t *allocated = XPTR_TAKE(obj_h->allocated, container);
 	xhash_iter_init(allocated, &it);
-	xhashidx key, val;
 	while (xhash_iterate(allocated, &it, &key, &val)){
-		void *mem = XPTR_TAKE(key, container);
-		void *obj;
+		mem = XPTR_TAKE(key, container);
 		nr_objs = xheap_get_chunk_size(mem)/obj_h->obj_size;
 		for (i = 0; i < nr_objs; i++) {
 			obj = (void *) ((unsigned long) mem +
@@ -261,7 +262,6 @@ int xobj_check(struct xobject_h *obj_h, void *ptr)
 
 int __xobj_isFree(struct xobject_h *obj_h, void *ptr)
 {
-	int r = 0;
 	void *container = XPTR(&obj_h->container);
 	xptr node;
 	struct xobject *obj;
