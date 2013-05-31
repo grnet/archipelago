@@ -612,8 +612,8 @@ static int init_peerd_loop(struct peerd *peer)
 static void * st_peerd_loop(void *peer)
 {
 	struct peerd *peerd = peer;
-	peerd->peerd_loop(peerd);
-	return 0;
+
+	return init_peerd_loop(peer);
 }
 #endif
 
