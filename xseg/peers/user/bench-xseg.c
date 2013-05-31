@@ -111,8 +111,9 @@ int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 	unsigned long seed = -1;
 	uint64_t rc;
 	struct timespec timer_seed;
+	struct timespec *ts;
 	int set_by_hand = 0;
-	int r;
+	int i, r;
 
 	op[0] = 0;
 	pattern[0] = 0;
@@ -328,6 +329,17 @@ int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 	if (init_timer(&prefs->rec_tm, INSANITY_ECCENTRIC))
 		goto tm_fail;
 
+	if (prefs->rec_tm->insanity <= GET_FLAG(INSANITY, prefs->flags)) {
+		for (i = 0; i < peer->nr_ops; i++) {
+			ts = malloc(sizeof(struct timespec));
+			if (!ts) {
+				XSEGLOG2(&lc, E, "Timespec allocation failed\n");
+				goto tm_fail;
+			}
+			peer->peer_reqs[i].priv = ts;
+		}
+	}
+
 	/*************************************\
 	 * Initialize the LFSR and global_id *
 	\*************************************/
@@ -417,6 +429,7 @@ static int send_request(struct peerd *peer, struct bench *prefs)
 	int r;
 	uint64_t new;
 	uint64_t size = prefs->bs;
+	struct timespec *ts;
 
 	//srcport and dstport must already be provided by the user.
 	//returns struct xseg_request with basic initializations
@@ -481,12 +494,15 @@ static int send_request(struct peerd *peer, struct bench *prefs)
 	/*
 	 * Start measuring receive time.
 	 * When we receive a request, we need to have its submission time to
-	 * measure elapsed time. Thus, we memcpy its submission time to pr->priv.
+	 * measure elapsed time. Thus, we copy its submission time to pr->priv.
 	 * QUESTION: Is this the fastest way?
 	 */
 	timer_start(prefs, prefs->rec_tm);
-	if (prefs->rec_tm->insanity <= GET_FLAG(INSANITY, prefs->flags))
-		memcpy(pr->priv, &prefs->rec_tm->start_time, sizeof(struct timespec));
+	if (prefs->rec_tm->insanity <= GET_FLAG(INSANITY, prefs->flags)) {
+		ts = (struct timespec *)pr->priv;
+		ts->tv_sec = prefs->rec_tm->start_time.tv_sec;
+		ts->tv_nsec = prefs->rec_tm->start_time.tv_nsec;
+	}
 
 	//Submit the request from the source port to the target port
 	XSEGLOG2(&lc, D, "Submit request %lu\n", new);
@@ -613,7 +629,7 @@ void custom_peer_finalize(struct peerd *peer)
 		print_stats(prefs);
 
 	print_remaining(prefs);
-	print_res(prefs, prefs->total_tm, "Total Requests");
+	print_res(prefs);
 	return;
 }
 
@@ -641,7 +657,7 @@ static void handle_received(struct peerd *peer, struct peer_req *pr)
 		return;
 	}
 
-	timer_stop(prefs, rec, pr->priv);
+	timer_stop(prefs, rec, (struct timespec *)pr->priv);
 
 	if (!(pr->req->state & XS_SERVED))
 		prefs->status->failed++;

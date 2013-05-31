@@ -292,9 +292,9 @@ void print_io_stats(struct bench *prefs, double elapsed)
 	__calculate_bw(prefs, iops, &bw);
 
 	fprintf(stdout, "           ~~~~~~~~~~~~~~~~~~~~~~~~\n");
-	fprintf(stdout, "Bandwidth:    %.3lf %s\n", bw.val, bw.unit);
+	if (prefs->op == X_READ || prefs->op == X_WRITE)
+		fprintf(stdout, "Bandwidth:    %.3lf %s\n", bw.val, bw.unit);
 	fprintf(stdout, "IOPS:         %.3lf\n", iops);
-	fflush(stdout);
 }
 
 void print_stats(struct bench *prefs)
@@ -326,34 +326,42 @@ void print_remaining(struct bench *prefs)
 	fflush(stdout);
 }
 
-void print_res(struct bench *prefs, struct timer *tm, char *type)
+void print_res(struct bench *prefs)
 {
-	struct tm_result res;
-	double sum;
+	struct timer *tm;
+	struct tm_result res, res_rec;
+	double sum, sum_rec;
 
+	/*  */
+	tm = prefs->total_tm;
 	sum = __timespec2double(tm->sum);
 	res = __separate_by_order(sum);
 
 	fprintf(stdout, "\n");
-	fprintf(stdout, "              %s\n", type);
+	fprintf(stdout, "              Benchmark results\n");
 	fprintf(stdout, "           ========================\n");
 	fprintf(stdout, "             |-s-||-ms-|-us-|-ns-|\n");
 	fprintf(stdout, "Total time:   %3u. %03u  %03u  %03u\n",
 			res.s, res.ms, res.us, res.ns);
-	fflush(stdout);
 
-	if (!prefs->status->received)
+	if (!prefs->status->received) {
+		fflush(stdout);
 		return;
+	}
 
-	res = __separate_by_order(sum / prefs->status->received);
+	tm = prefs->rec_tm;
+	if (GET_FLAG(INSANITY, prefs->flags) < tm->insanity)
+		goto flush;
 
-	fprintf(stdout, "Mean Time:    %3u. %03u  %03u  %03u\n",
-			res.s, res.ms, res.us, res.ns);
-	fflush(stdout);
+	sum_rec = __timespec2double(tm->sum);
+	res_rec = __separate_by_order(sum_rec / prefs->status->received);
 
-	//TODO: Add std
+	fprintf(stdout, "Avg. latency: %3u. %03u  %03u  %03u\n",
+			res_rec.s, res_rec.ms, res_rec.us, res_rec.ns);
 
+flush:
 	print_io_stats(prefs, sum);
+	fflush(stdout);
 }
 
 void print_progress(struct bench *prefs)

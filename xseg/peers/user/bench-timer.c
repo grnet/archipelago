@@ -109,8 +109,8 @@ void timer_stop(struct bench *prefs, struct timer *timer,
 
 	//Add the elapsed time to the current sum for this timer.
 	//For accuracy, nanoseconds' sum has to be always less that 10^9
-	if (elapsed_time.tv_nsec + timer->sum.tv_nsec > SEC){
-		timer->sum.tv_nsec += elapsed_time.tv_nsec;
+	if (elapsed_time.tv_nsec + timer->sum.tv_nsec >= SEC){
+		timer->sum.tv_nsec += elapsed_time.tv_nsec - SEC;
 		timer->sum.tv_sec += elapsed_time.tv_sec + 1;
 	} else {
 		timer->sum.tv_nsec += elapsed_time.tv_nsec;

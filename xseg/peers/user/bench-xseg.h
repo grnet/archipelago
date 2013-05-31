@@ -209,7 +209,7 @@ int read_pattern(char *pattern);
 int read_insanity(char *insanity);
 int read_verify(char *insanity);
 int read_progress(char *progress);
-void print_res(struct bench *prefs, struct timer *tm, char *type);
+void print_res(struct bench *prefs);
 void print_stats(struct bench *prefs);
 void print_progress(struct bench *prefs);
 void print_remaining(struct bench *prefs);
