@@ -378,7 +378,7 @@ void create_id(unsigned long seed)
 				"be used\n");
 
 	//nanoseconds can't be more than 9 digits
-	snprintf(global_id, IDLEN, "bench-%09lu", seed);
+	snprintf(global_id, IDLEN + 1, "bench-%09lu", seed);
 }
 
 void create_target(struct bench *prefs, struct xseg_request *req,
@@ -386,14 +386,16 @@ void create_target(struct bench *prefs, struct xseg_request *req,
 {
 	struct xseg *xseg = prefs->peer->xseg;
 	char *req_target;
+	char buf[TARGETLEN + 1];
 
 	req_target = xseg_get_target(xseg, req);
 
 	//For read/write, the target object may not correspond to `new`, which is
 	//actually the chunk number.
 	new = __get_object(prefs, new);
-	snprintf(req_target, TARGETLEN, "%s-%016lu", global_id, new);
-	XSEGLOG2(&lc, D, "Target name of request is %s\n", req_target);
+	snprintf(buf, TARGETLEN + 1, "%s-%016lu", global_id, new);
+	strncpy(req_target, buf, TARGETLEN);
+	XSEGLOG2(&lc, D, "Target name of request is %s\n", buf);
 }
 
 
