@@ -478,11 +478,6 @@ static int send_request(struct peerd *peer, struct bench *prefs)
 	pr->peer = peer;
 	pr->portno = srcport;
 	pr->req = req;
-	pr->priv = malloc(sizeof(struct timespec));
-	if (!pr->priv) {
-		perror("malloc");
-		goto put_peer_request;
-	}
 
 	//XSEGLOG2(&lc, D, "Set request data\n");
 	r = xseg_set_req_data(xseg, req, pr);
