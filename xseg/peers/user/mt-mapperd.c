@@ -1414,10 +1414,13 @@ static struct xseg_request * copyup_object(struct peerd *peer, struct map_node *
 	sprintf(tmp + map->volumelen, "_%u", mn->objectidx);
 	tmp[XSEG_MAX_TARGETLEN] = 0;
 	tmplen = strlen(tmp);
+	XSEGLOG2(&lc, D, "Base for new target: %s (len: %d)", tmp, tmplen);
 	SHA256((unsigned char *)tmp, tmplen, sha);
 	hexlify(sha, new_target+MAPPER_PREFIX_LEN);
 	newtargetlen = MAPPER_PREFIX_LEN + HEXLIFIED_SHA256_DIGEST_SIZE;
-
+	#define fooooo 71
+	XSEGLOG2(&lc, D, "New target: %.71s (len: %d)", new_target, newtargetlen);
+	#undef fooooo
 
 	if (!strncmp(mn->object, zero_block, ZERO_BLOCK_LEN))
 		goto copyup_zeroblock;
