@@ -2543,18 +2543,28 @@ struct map * get_map(struct peer_req *pr, char *name, uint32_t namelen,
 			map = create_map(mapper, name, namelen, flags);
 			if (!map)
 				return NULL;
+			__get_map(map);
 			r = open_load_map(pr, map, flags);
 			if (r < 0){
 				do_dropcache(pr, map);
+				/* signal map here, so any other threads that
+				 * tried to get the map, but couldn't because
+				 * of the opening or loading operation that
+				 * failed, can continue.
+				 */
+				signal_map(map);
+				put_map(map);
 				return NULL;
 			}
+			return map;
 		} else {
 			return NULL;
 		}
 	} else if (map->flags & MF_MAP_DESTROYED){
 		return NULL;
+	} else {
+		__get_map(map);
 	}
-	__get_map(map);
 	return map;
 
 }
