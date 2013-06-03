@@ -353,6 +353,9 @@ reseed:
 	}
 	create_id(seed);
 
+	if (prefs->status->max == 1)
+		SET_FLAG(PATTERN, prefs->flags, PATTERN_SEQ);
+
 	if (GET_FLAG(PATTERN, prefs->flags) == PATTERN_RAND) {
 		prefs->lfsr = malloc(sizeof(struct bench_lfsr));
 		if (!prefs->lfsr) {

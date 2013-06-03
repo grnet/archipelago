@@ -59,7 +59,7 @@
 
 /*
  * Pattern type occupies 1st flag bit.
- * If 1, it's sequential, if 0, it's random.
+ * If 0, it's sequential, if 1, it's random.
  */
 #define PATTERN_FLAG_POS 0
 #define PATTERN_BITMASK 1
@@ -87,7 +87,7 @@
 
 /* Progress bar option occupies 6th flag bit */
 #define PROGRESS_FLAG_POS 5
-#define PROGRESS_BITMASK 1	/* i.e. "11" in binary form */
+#define PROGRESS_BITMASK 1
 #define PROGRESS_NO 0
 #define PROGRESS_YES 1
 
