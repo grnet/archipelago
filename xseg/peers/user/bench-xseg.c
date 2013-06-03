@@ -126,30 +126,28 @@ int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 	request_cap[0] = 0;
 	progress[0] = 0;
 
-#ifdef MT
-	for (i = 0; i < nr_threads; i++) {
-		prefs = peer->thread[i]->priv;
-		prefs = malloc(sizeof(struct bench));
-		if (!prefs) {
-			perror("malloc");
-			return -1;
-		}
-	}
-#endif
 	prefs = malloc(sizeof(struct bench));
 	if (!prefs) {
 		perror("malloc");
-		return -1;
+		goto prefs_fail;
 	}
 	memset(prefs, 0, sizeof(struct bench));
 
 	prefs->status = malloc(sizeof(struct req_status));
 	if (!prefs->status) {
 		perror("malloc");
-		return -1;
+		goto status_fail;
 	}
-
 	memset(prefs->status, 0, sizeof(struct req_status));
+
+	for (i = 0; i < peer->nr_ops; i++) {
+		ts = malloc(sizeof(struct timespec));
+		if (!ts) {
+			perror("malloc");
+			goto priv_fail;
+		}
+		peer->peer_reqs[i].priv = ts;
+	}
 
 	//Begin reading the benchmark-specific arguments
 	BEGIN_READ_ARGS(argc, argv);
@@ -329,17 +327,6 @@ int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 	if (init_timer(&prefs->rec_tm, INSANITY_ECCENTRIC))
 		goto tm_fail;
 
-	if (prefs->rec_tm->insanity <= GET_FLAG(INSANITY, prefs->flags)) {
-		for (i = 0; i < peer->nr_ops; i++) {
-			ts = malloc(sizeof(struct timespec));
-			if (!ts) {
-				XSEGLOG2(&lc, E, "Timespec allocation failed\n");
-				goto tm_fail;
-			}
-			peer->peer_reqs[i].priv = ts;
-		}
-	}
-
 	/*************************************\
 	 * Initialize the LFSR and global_id *
 	\*************************************/
@@ -415,6 +402,13 @@ tm_fail:
 	free(prefs->sub_tm);
 	free(prefs->get_tm);
 	free(prefs->rec_tm);
+priv_fail:
+	for (; i >= 0; i--) {
+		free(peer->peer_reqs[i].priv);
+	}
+status_fail:
+	free(prefs->status);
+prefs_fail:
 	free(prefs);
 	return -1;
 }
@@ -522,7 +516,6 @@ static int send_request(struct peerd *peer, struct bench *prefs)
 	return 0;
 
 put_peer_request:
-	free(pr->priv);
 	free_peer_req(peer, pr);
 put_xseg_request:
 	if (xseg_put_request(xseg, req, srcport))
@@ -665,8 +658,6 @@ static void handle_received(struct peerd *peer, struct peer_req *pr)
 	if (xseg_put_request(peer->xseg, pr->req, pr->portno))
 		XSEGLOG2(&lc, W, "Cannot put xseg request\n");
 
-	//QUESTION, can't we just keep the malloced memory for future use?
-	free(pr->priv);
 	free_peer_req(peer, pr);
 }
 
