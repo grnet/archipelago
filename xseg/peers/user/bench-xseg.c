@@ -327,17 +327,6 @@ int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 	if (init_timer(&prefs->rec_tm, INSANITY_ECCENTRIC))
 		goto tm_fail;
 
-	if (prefs->rec_tm->insanity <= GET_FLAG(INSANITY, prefs->flags)) {
-		for (i = 0; i < peer->nr_ops; i++) {
-			ts = malloc(sizeof(struct timespec));
-			if (!ts) {
-				XSEGLOG2(&lc, E, "Timespec allocation failed\n");
-				goto tm_fail;
-			}
-			peer->peer_reqs[i].priv = ts;
-		}
-	}
-
 	/*************************************\
 	 * Initialize the LFSR and global_id *
 	\*************************************/
