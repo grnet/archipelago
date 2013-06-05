@@ -10,14 +10,14 @@
 #include <xseg/protocol.h>
 #include <sys/util.h>
 
-#define XCACHE_LRU_ARRAY (1<<0)
-#define XCACHE_LRU_HEAP  (1<<1)
+#define XCACHE_LRU_ARRAY      (1<<0)
+#define XCACHE_LRU_HEAP       (1<<1)
+#define XCACHE_USE_RMTABLE    (1<<2)
 
 #define XCACHE_LRU_MAX   (uint64_t)(-1)
 
 typedef xqindex xcache_handler;
 #define NoEntry (xcache_handler)Noneidx
-#define DelEntry (xcache_handler)(-2)
 
 #define NODE_ACTIVE 0
 #define NODE_EVICTED 1
@@ -43,11 +43,6 @@ typedef xqindex xcache_handler;
  *				called on initial node preparation.
  *				Must return NULL on error, to abort cache initialization.
  *
- * post_evict:	called after an eviction has occured, with cache lock held.
- *				Must return 0 if there are no pending actions to the entry.
- *				On non-zero value, user should get the entry which will be put
- *				to the evicted table.
- *
  * on_free:		called when a cache entry is freed.
  *
  * on_finalize:	FILLME
@@ -59,7 +54,6 @@ struct xcache_ops {
 	int (*on_init)(void *cache_data, void *user_data);
 	int (*on_evict)(void *cache_data, void *evicted_user_data);
 	int (*on_finalize)(void *cache_data, void *evicted_user_data);
-	int (*post_evict)(void *cache_data, void *evicted_user_data);
 	void (*on_reinsert)(void *cache_data, void *user_data);
 	void (*on_put)(void *cache_data, void *user_data);
 	void (*on_free)(void *cache_data, void *user_data);

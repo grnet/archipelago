@@ -77,9 +77,7 @@ static int __table_insert(xhash_t **table, struct xcache * cache, xcache_handler
 	r = xhash_insert(*table, (xhashidx)ce->name, idx);
 	if (r == -XHASH_ERESIZE){
 		XSEGLOG("Rebuilding internal hash table");
-		new = xhash_resize(*table,
-				cache->rm_entries->size_shift,
-				cache->rm_entries->limit, NULL);
+		new = xhash_resize(*table, (*table)->size_shift, (*table)->limit, NULL);
 		if (!new) {
 			XSEGLOG("Error resizing hash table");
 			return -1;
@@ -335,27 +333,31 @@ static void xcache_entry_put(struct xcache *cache, xqindex idx)
 	struct xcache_entry *ce = &cache->nodes[idx];
 	unsigned long ref;
 
-	xlock_acquire(&cache->rm_lock, 1);
+	if (cache->flags & XCACHE_USE_RMTABLE) {
+		xlock_acquire(&cache->rm_lock, 1);
 
-	ref = __sync_sub_and_fetch(&ce->ref, 1);
-	if (ref > 0)
-		goto out;
+		ref = __sync_sub_and_fetch(&ce->ref, 1);
+		if (ref > 0)
+			goto out;
 
-	if (cache->ops.on_finalize)
-		cache->ops.on_finalize(cache->priv, ce->priv);
+		if (cache->ops.on_finalize)
+			cache->ops.on_finalize(cache->priv, ce->priv);
 
-	/*
-	 * FIXME: BUG! Why? Say that on finalize has deemed that ce is clear.
-	 * If we get descheduled before getting rm_lock and in the meantime, the
-	 * cache entry is reinserted, dirtied and evicted? The ce->ref will be
-	 * zero but we shouldn't leave since there are still dirty buckets.
-	 */
-	if (ce->ref != 0)
-		goto out;
-	if (__xcache_remove_rm(cache, idx) < 0)
-		goto out;
+		/*
+		 * FIXME: BUG! Why? Say that on finalize has deemed that ce is clear.
+		 * If we get descheduled before getting rm_lock and in the meantime, the
+		 * cache entry is reinserted, dirtied and evicted? The ce->ref will be
+		 * zero but we shouldn't leave since there are still dirty buckets.
+		 */
+		if (ce->ref != 0)
+			goto out;
+		if (__xcache_remove_rm(cache, idx) < 0)
+			goto out;
 
-	xlock_release(&cache->rm_lock);
+		xlock_release(&cache->rm_lock);
+	} else if ( __sync_sub_and_fetch(&ce->ref, 1) > 0) {
+		return;
+	}
 
 	if (cache->ops.on_put)
 		cache->ops.on_put(cache->priv, ce->priv);
@@ -364,7 +366,7 @@ static void xcache_entry_put(struct xcache *cache, xqindex idx)
 
 	return;
 
-out:
+out:	/* For XCACHE_USE_RMTABLE only */
 	xlock_release(&cache->rm_lock);
 }
 
@@ -442,8 +444,8 @@ static int __xcache_evict(struct xcache *cache, xcache_handler h)
 	if (UNLIKELY(ce->state == NODE_EVICTED))
 		XSEGLOG("BUG: Evicting an already evicted entry (h: %lu, priv: %p)",
 			 h, ce->priv);
-	if (!cache->ops.post_evict ||
-			!cache->ops.post_evict(cache->priv, ce->priv))
+
+	if (!(cache->flags & XCACHE_USE_RMTABLE))
 		return 0;
 
 	ce->state = NODE_EVICTED;
@@ -520,6 +522,9 @@ static xcache_handler __xcache_insert(struct xcache *cache, xcache_handler h,
 	if (tmp_h != NoEntry)
 		return tmp_h;
 
+	if (!(cache->flags & XCACHE_USE_RMTABLE))
+		goto insert;
+
 	/* check if our "older self" exists in the rm_entries */
 	xlock_acquire(&cache->rm_lock, 1);
 	tmp_h = __xcache_lookup_rm(cache, ce->name);
@@ -545,6 +550,7 @@ static xcache_handler __xcache_insert(struct xcache *cache, xcache_handler h,
 	}
 	xlock_release(&cache->rm_lock);
 
+insert:
 	/* insert new entry to cache */
 	r = __xcache_insert_entries(cache, h);
 	if (r == -XHASH_ENOSPC){
@@ -734,13 +740,15 @@ int xcache_init(struct xcache *cache, uint32_t xcache_size,
 		goto out_free_q;
 	}
 
-	/*
-	 * "rm_entries" must have the same size as "entries" since each one indexes
-	 * at most (cache->nodes / 2) entries
-	 */
-	cache->rm_entries = xhash_new(shift, cache->size, STRING);
-	if (!cache->rm_entries){
-		goto out_free_entries;
+	if (flags & XCACHE_USE_RMTABLE) {
+		/*
+		 * "rm_entries" must have the same size as "entries" since each one indexes
+		 * at most (cache->nodes / 2) entries
+		 */
+		cache->rm_entries = xhash_new(shift, cache->size, STRING);
+		if (!cache->rm_entries){
+			goto out_free_entries;
+		}
 	}
 
 	cache->nodes = xtypes_malloc(cache->nr_nodes * sizeof(struct xcache_entry));

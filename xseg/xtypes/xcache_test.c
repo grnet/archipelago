@@ -176,21 +176,15 @@ void *node_init(void *c, void *xh)
 	return malloc(sizeof(struct ce));
 }
 
-int post_evict(void *c, void *e)
-{
-	return 0;
-}
-
 int test1(unsigned long n)
 {
 	struct xcache cache;
 	struct xcache_ops c_ops = {
 		.on_init = NULL,
 		.on_evict = NULL,
-		.on_finalize = finalize_safe,
 		.on_free = free_safe,
 		.on_node_init = NULL,
-		.post_evict = post_evict
+		.on_put = put_safe
 	};
 	xcache_handler h, nh;
 	sum_put = 0;
