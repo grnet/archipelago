@@ -778,7 +778,7 @@ struct xseg *xseg_join(	char *segtypename,
 	priv->segment_type = *segtype;
 	priv->peer_type = *peertype;
 	priv->wakeup = wakeup;
-	priv->req_data = xhash_new(3, INTEGER); //FIXME should be relative to XSEG_DEF_REQS
+	priv->req_data = xhash_new(3, 0, INTEGER); //FIXME should be relative to XSEG_DEF_REQS
 	if (!priv->req_data)
 		goto err_priv;
 	xlock_release(&priv->reqdatalock);
@@ -1544,7 +1544,7 @@ int xseg_set_req_data(struct xseg *xseg, struct xseg_request *xreq, void *data)
 	req_data = xseg->priv->req_data;
 	r = xhash_insert(req_data, (xhashidx) xreq, (xhashidx) data);
 	if (r == -XHASH_ERESIZE) {
-		req_data = xhash_resize(req_data, xhash_grow_size_shift(req_data), NULL);
+		req_data = xhash_resize(req_data, xhash_grow_size_shift(req_data), 0, NULL);
 		if (req_data) {
 			xseg->priv->req_data = req_data;
 			r = xhash_insert(req_data, (xhashidx) xreq, (xhashidx) data);
@@ -1571,7 +1571,7 @@ int xseg_get_req_data(struct xseg *xseg, struct xseg_request *xreq, void **data)
 	if (r >= 0) {
 		r = xhash_delete(req_data, (xhashidx) xreq);
 		if (r == -XHASH_ERESIZE) {
-			req_data = xhash_resize(req_data, xhash_shrink_size_shift(req_data), NULL);
+			req_data = xhash_resize(req_data, xhash_shrink_size_shift(req_data), 0, NULL);
 			if (req_data){
 				xseg->priv->req_data = req_data;
 				r = xhash_delete(req_data, (xhashidx) xreq);

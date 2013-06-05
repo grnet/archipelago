@@ -435,7 +435,7 @@ static int insert_map(struct mapperd *mapper, struct map *map)
 	r = xhash_insert(mapper->hashmaps, (xhashidx) map->volume, (xhashidx) map);
 	while (r == -XHASH_ERESIZE) {
 		xhashidx shift = xhash_grow_size_shift(mapper->hashmaps);
-		xhash_t *new_hashmap = xhash_resize(mapper->hashmaps, shift, NULL);
+		xhash_t *new_hashmap = xhash_resize(mapper->hashmaps, shift, 0, NULL);
 		if (!new_hashmap){
 			XSEGLOG2(&lc, E, "Cannot grow mapper->hashmaps to sizeshift %llu",
 					(unsigned long long) shift);
@@ -457,7 +457,7 @@ static int remove_map(struct mapperd *mapper, struct map *map)
 	r = xhash_delete(mapper->hashmaps, (xhashidx) map->volume);
 	while (r == -XHASH_ERESIZE) {
 		xhashidx shift = xhash_shrink_size_shift(mapper->hashmaps);
-		xhash_t *new_hashmap = xhash_resize(mapper->hashmaps, shift, NULL);
+		xhash_t *new_hashmap = xhash_resize(mapper->hashmaps, shift, 0, NULL);
 		if (!new_hashmap){
 			XSEGLOG2(&lc, E, "Cannot shrink mapper->hashmaps to sizeshift %llu",
 					(unsigned long long) shift);
@@ -592,7 +592,7 @@ static int insert_object(struct map *map, struct map_node *mn)
 	int r = xhash_insert(map->objects, mn->objectidx, (xhashidx) mn);
 	if (r == -XHASH_ERESIZE) {
 		unsigned long shift = xhash_grow_size_shift(map->objects);
-		map->objects = xhash_resize(map->objects, shift, NULL);
+		map->objects = xhash_resize(map->objects, shift, 0, NULL);
 		if (!map->objects)
 			return -1;
 		r = xhash_insert(map->objects, mn->objectidx, (xhashidx) mn);
@@ -1285,7 +1285,7 @@ static int __set_copyup_node(struct mapper_io *mio, struct xseg_request *req, st
 		r = xhash_insert(mio->copyups_nodes, (xhashidx) req, (xhashidx) mn);
 		if (r == -XHASH_ERESIZE) {
 			xhashidx shift = xhash_grow_size_shift(mio->copyups_nodes);
-			xhash_t *new_hashmap = xhash_resize(mio->copyups_nodes, shift, NULL);
+			xhash_t *new_hashmap = xhash_resize(mio->copyups_nodes, shift, 0, NULL);
 			if (!new_hashmap)
 				goto out;
 			mio->copyups_nodes = new_hashmap;
@@ -1301,7 +1301,7 @@ static int __set_copyup_node(struct mapper_io *mio, struct xseg_request *req, st
 		r = xhash_delete(mio->copyups_nodes, (xhashidx) req);
 		if (r == -XHASH_ERESIZE) {
 			xhashidx shift = xhash_shrink_size_shift(mio->copyups_nodes);
-			xhash_t *new_hashmap = xhash_resize(mio->copyups_nodes, shift, NULL);
+			xhash_t *new_hashmap = xhash_resize(mio->copyups_nodes, shift, 0, NULL);
 			if (!new_hashmap)
 				goto out;
 			mio->copyups_nodes = new_hashmap;
@@ -1686,7 +1686,7 @@ static struct map * create_map(struct mapperd *mapper, char *name,
 		m->version = 0; /* version 0 should be pithos maps */
 	}
 	m->flags = 0;
-	m->objects = xhash_new(3, INTEGER); 
+	m->objects = xhash_new(3, 0, INTEGER); 
 	if (!m->objects){
 		XSEGLOG2(&lc, E, "Cannot allocate object hashmap for map %s",
 				m->volume);
@@ -2867,11 +2867,11 @@ int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 	struct mapperd *mapperd = malloc(sizeof(struct mapperd));
 	peer->priv = mapperd;
 	mapper = mapperd;
-	mapper->hashmaps = xhash_new(3, STRING);
+	mapper->hashmaps = xhash_new(3, 0, STRING);
 
 	for (i = 0; i < peer->nr_ops; i++) {
 		struct mapper_io *mio = malloc(sizeof(struct mapper_io));
-		mio->copyups_nodes = xhash_new(3, INTEGER);
+		mio->copyups_nodes = xhash_new(3, 0, INTEGER);
 		mio->copyups = 0;
 		mio->err = 0;
 		mio->active = 0;
