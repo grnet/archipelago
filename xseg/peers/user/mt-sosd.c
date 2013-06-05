@@ -804,7 +804,7 @@ int break_lock(struct radosd *rados, struct rados_io *rio)
 			XSEGLOG2(&lc, E, "Could not list lockers for %s", rio->obj_name);
 			r = -1;
 			break;
-		} else if (r == -ERANGE) {
+		} else if (nr_lockers == -ERANGE) {
 			free(tag);
 			free(clients);
 			free(cookies);
