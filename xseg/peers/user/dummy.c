@@ -48,6 +48,7 @@ void custom_peer_usage()
 	fprintf(stderr, "Custom peer options: \n"
 			"none \n\n");
 }
+
 int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 {
 	return 0;
@@ -66,7 +67,7 @@ int dispatch(struct peerd *peer, struct peer_req *pr, struct xseg_request *req,
 	else {
 //		printf("completing req id: %u (remote %u)\n", (unsigned int) (pr - peer->peer_reqs), (unsigned int) pr->req->priv);
 //		nanosleep(&delay,NULL);
-		print_req(peer->xseg, pr->req);
+		//print_req(peer->xseg, pr->req);
 		complete(peer, pr);
 	}
 	return 0;

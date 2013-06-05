@@ -1,3 +1,13 @@
+archipelago (0.3-1) stable; urgency=low
+
+  * Update librados dependency to v0.61.2+grnet2
+  * Improve RADOS locking support
+  * Change ext_storage name to archipelago
+  * Change peer names by using archip prefix.
+  * Bug fixes
+
+ -- Filippos Giannakos <philipgian@grnet.gr>  Wed, 05 Jun 2013 12:25:39 +0300
+
 archipelago (0.1.2-1) unstable; urgency=low
 
   * Include snapshots and python bindings

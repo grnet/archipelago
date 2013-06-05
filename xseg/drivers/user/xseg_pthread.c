@@ -57,7 +57,7 @@ static void pthread_mfree(void *mem);
 static long pthread_allocate(const char *name, uint64_t size)
 {
 	int fd, r;
-	fd = shm_open(name, O_RDWR | O_CREAT, 0770);
+	fd = shm_open(name, O_RDWR | O_CREAT | O_EXCL, 0770);
 	if (fd < 0) {
 		XSEGLOG("Cannot create shared segment: %s\n",
 			strerror_r(errno, errbuf, ERRSIZE));
@@ -137,20 +137,22 @@ static void handler(int signum)
 
 static pthread_key_t pid_key, xpidx_key;
 static pthread_key_t mask_key, act_key;
+static pthread_key_t id_key;
 static pthread_once_t once_init = PTHREAD_ONCE_INIT;
 static pthread_once_t once_quit = PTHREAD_ONCE_INIT;
 static int isInit;
+static volatile int id = 0;
 
-static void keys_init(void) 
+static void keys_init(void)
 {
 	int r;
-	
+
 	r = pthread_key_create(&pid_key, NULL);
 	if (r < 0) {
 		isInit = 0;
 		return;
 	}
-	
+
 	r = pthread_key_create(&xpidx_key, NULL);
 	if (r < 0) {
 		isInit = 0;
@@ -161,8 +163,13 @@ static void keys_init(void)
 		isInit = 0;
 		return;
 	}
-	
+
 	r = pthread_key_create(&act_key, NULL);
+	if (r < 0) {
+		isInit = 0;
+		return;
+	}
+	r = pthread_key_create(&id_key, NULL);
 	if (r < 0) {
 		isInit = 0;
 		return;
@@ -173,22 +180,22 @@ static void keys_init(void)
 
 #define INT_TO_POINTER(__myptr, __myint) \
 	do {\
-		unsigned long __foo__ = (unsigned long) __myint; \
-		__myptr = (void *) __foo__ ; \
+		unsigned long __foo____myptr = (unsigned long) __myint; \
+		__myptr = (void *) __foo____myptr ; \
 	} while (0)
 
 #define POINTER_TO_INT(__myint, __myptr)\
 	do { \
-		unsigned long __foo__ = (unsigned long) __myptr; \
-		__myint = (int) __foo__ ; \
+		unsigned long __foo____myint = (unsigned long) __myptr; \
+		__myint = (int) __foo____myint ; \
 	} while (0)
 
 /* must be called by each thread */
 static int pthread_local_signal_init(struct xseg *xseg, xport portno)
 {
-	int r;
+	int r, my_id;
 	pid_t pid;
-	void *tmp;
+	void *tmp, *tmp2;
 	sigset_t *savedset, *set;
 	struct sigaction *act, *old_act;
 
@@ -225,11 +232,17 @@ static int pthread_local_signal_init(struct xseg *xseg, xport portno)
 		goto err6;
 
 
+	my_id = *(volatile int *) &id;
+	while (!__sync_bool_compare_and_swap(&id, my_id, my_id+1)){
+		my_id = *(volatile int *) &id;
+	}
 	pid = syscall(SYS_gettid);
 	INT_TO_POINTER(tmp, pid);
-	if (!pthread_setspecific(pid_key, tmp) ||
+	INT_TO_POINTER(tmp2, my_id);
+	if (pthread_setspecific(pid_key, tmp) ||
 			pthread_setspecific(mask_key, savedset) ||
-			pthread_setspecific(act_key, old_act))
+			pthread_setspecific(act_key, old_act) ||
+			pthread_setspecific(id_key, tmp2))
 		goto err7;
 
 	return 0;
@@ -278,7 +291,7 @@ static int pthread_prepare_wait(struct xseg *xseg, uint32_t portno)
 {
 	void * tmp;
 	pid_t pid;
-	xpool_index r;
+	int my_id;
 	struct xseg_port *port = xseg_get_port(xseg, portno);
 	if (!port) 
 		return -1;
@@ -290,38 +303,33 @@ static int pthread_prepare_wait(struct xseg *xseg, uint32_t portno)
 	POINTER_TO_INT(pid, tmp);
 	if (!pid)
 		return -1;
-
-	r = xpool_add(&psd->waiters, (xpool_index) pid, portno); 
-	if (r == NoIndex)
-		return -1;
-	pthread_setspecific(xpidx_key, (void *)r);
+	tmp = pthread_getspecific(id_key);
+	POINTER_TO_INT(my_id, tmp);
+	psd->pids[my_id] = pid;
 	return 0;
 }
 
 static int pthread_cancel_wait(struct xseg *xseg, uint32_t portno)
 {
 	void * tmp;
+	int my_id;
 	pid_t pid;
-	xpool_data data;
-	xpool_index xpidx, r;
 	struct xseg_port *port = xseg_get_port(xseg, portno);
-	if (!port) 
+	if (!port)
 		return -1;
 	struct pthread_signal_desc *psd = xseg_get_signal_desc(xseg, port);
 	if (!psd)
 		return -1;
-	
+
 	tmp = pthread_getspecific(pid_key);
 	POINTER_TO_INT(pid, tmp);
 	if (!pid)
 		return -1;
 
-	xpidx = (xpool_index) pthread_getspecific(xpidx_key);
+	tmp = pthread_getspecific(id_key);
+	POINTER_TO_INT(my_id, tmp);
+	psd->pids[my_id] = 0;
 
-	r = xpool_remove(&psd->waiters, xpidx, &data, portno);
-	if (r == NoIndex)
-		return -1;
-	
 	return 0;
 }
 
@@ -346,8 +354,7 @@ static int pthread_wait_signal(struct xseg *xseg, uint32_t usec_timeout)
 
 static int pthread_signal(struct xseg *xseg, uint32_t portno)
 {
-	xpool_data data;
-	xpool_index idx;
+	int i;
 
 	struct xseg_port *port = xseg_get_port(xseg, portno);
 	if (!port) 
@@ -356,15 +363,15 @@ static int pthread_signal(struct xseg *xseg, uint32_t portno)
 	if (!psd)
 		return -1;
 
-	idx = xpool_peek(&psd->waiters, &data, portno); //FIXME portno is not the caller but the callee
-	if (idx == NoIndex) 
-		return 0;
+	pid_t cue;
+	for (i = 0; i < MAX_WAITERS; i++) {
+		cue = psd->pids[i];
+		if (cue)
+			return syscall(SYS_tkill, cue, SIGIO);
+	}
 
-	pid_t cue = (pid_t) data;
-	if (!cue)
-		return 0;
-
-	return syscall(SYS_tkill, cue, SIGIO);
+	/* no waiter found */
+	return 0;
 }
 
 static void *pthread_malloc(uint64_t size)
@@ -397,16 +404,21 @@ static struct xseg_type xseg_pthread = {
 
 int pthread_init_signal_desc(struct xseg *xseg, void *sd)
 {
+	int i;
 	struct pthread_signal_desc *psd = (struct pthread_signal_desc *)sd;
-	xpool_init(&psd->waiters, MAX_WAITERS, psd->bufs);
-	xpool_clear(&psd->waiters, 1);
+	for (i = 0; i < MAX_WAITERS; i++) {
+		psd->pids[i]=0;
+	}
 	return 0;
 }
 
 void pthread_quit_signal_desc(struct xseg *xseg, void *sd)
 {
+	int i;
 	struct pthread_signal_desc *psd = (struct pthread_signal_desc *)sd;
-	xpool_clear(&psd->waiters, 1);
+	for (i = 0; i < MAX_WAITERS; i++) {
+		psd->pids[i]=0;
+	}
 	return;
 }
 

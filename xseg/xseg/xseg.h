@@ -195,6 +195,7 @@ struct xseg_port {
 	uint64_t alloc_reqs;
 	struct xlock port_lock;
 	xptr signal_desc;
+	uint32_t flags;
 };
 
 struct xseg_request;
@@ -226,11 +227,16 @@ struct xseg_task {
 #define X_CLOSE    15
 #define	X_SNAPSHOT 16
 
-/* FLAGS */
-#define XF_NOSYNC (1 << 0)
-#define XF_FLUSH  (1 << 1)
-#define XF_FUA    (1 << 2)
-#define XF_FORCE  (1 << 3)
+/* REQ FLAGS */
+#define XF_NOSYNC    (1 << 0)
+#define XF_FLUSH     (1 << 1)
+#define XF_FUA       (1 << 2)
+#define XF_FORCE     (1 << 3)
+
+/* PORT FLAGS */
+
+#define CAN_ACCEPT   (1 << 0)
+#define CAN_RECEIVE  (1 << 1)
 
 /* STATES */
 #define XS_SERVED	(1 << 0)
@@ -254,9 +260,9 @@ struct xseg_request {
 	volatile uint32_t state;
 	uint32_t flags;
 	xport src_portno;
-	xport src_transit_portno;
+	xport transit_portno;
 	xport dst_portno;
-	xport dst_transit_portno;
+	xport effective_dst_portno;
 	struct xq path;
 	xqindex path_bufs[MAX_PATH_LEN];
 	/* pad */
@@ -301,7 +307,7 @@ struct xseg {
 	struct xobject_h *request_h;
 	struct xobject_h *port_h;
 	xptr *ports;
-	xport *src_gw, *dst_gw;
+	xport *path_next, *dst_gw;
 
 	struct xseg_shared *shared;
 	struct xseg_private *priv;
@@ -458,15 +464,11 @@ void xseg_put_objh(struct xseg *xseg, struct xobject_h *objh);
 #define xseg_get_queue(__xseg, __port, __queue) \
 	((struct xq *) XPTR_TAKE(__port->__queue, __xseg->segment))
 
-#endif
 
-xport xseg_set_srcgw		(struct xseg *xseg, xport portno, xport srcgw);
-xport xseg_getandset_srcgw	(struct xseg *xseg, xport portno, xport srcgw);
-xport xseg_set_dstgw		(struct xseg *xseg, xport portno, xport dstgw);
-xport xseg_getandset_dstgw	(struct xseg *xseg, xport portno, xport dstgw);
+int xseg_set_path_next(struct xseg *xseg, xport portno, xport next);
 
-int xseg_set_req_data (struct xseg *xseg, struct xseg_request *xreq, void *data);
-int xseg_get_req_data (struct xseg *xseg, struct xseg_request *xreq, void **data);
+int xseg_set_req_data(struct xseg *xseg, struct xseg_request *xreq, void *data);
+int xseg_get_req_data(struct xseg *xseg, struct xseg_request *xreq, void **data);
 
 int xseg_init_local_signal(struct xseg *xseg, xport portno);
 void xseg_quit_local_signal(struct xseg *xseg, xport portno);
@@ -480,4 +482,7 @@ uint64_t xseg_get_allocated_requests(struct xseg *xseg, xport portno);
 int xseg_set_freequeue_size(struct xseg *xseg, xport portno, xqindex size,
 				uint32_t flags);
 
+xport xseg_forward(struct xseg *xseg, struct xseg_request *req, xport new_dst,
+		xport portno, uint32_t flags);
 
+#endif
