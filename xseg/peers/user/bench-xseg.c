@@ -48,7 +48,7 @@
 #include <bench-lfsr.h>
 #include <limits.h>
 
-char global_id[IDLEN];
+char global_id[IDLEN + 1];
 /*
  * This macro checks two things:
  * a) If in-flight requests are less than given iodepth
