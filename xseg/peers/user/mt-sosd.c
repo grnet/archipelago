@@ -42,6 +42,7 @@
 #include <pthread.h>
 #include <openssl/sha.h>
 #include <ctype.h>
+#include <errno.h>
 
 #ifndef SHA256_DIGEST_SIZE
 #define SHA256_DIGEST_SIZE 32
@@ -58,6 +59,8 @@
 #define RADOS_LOCK_NAME "RadosLock"
 //#define RADOS_LOCK_COOKIE "Cookie"
 #define RADOS_LOCK_COOKIE "foo"
+#define RADOS_LOCK_TAG ""
+#define RADOS_LOCK_DESC ""
 
 void custom_peer_usage()
 {
@@ -744,8 +747,9 @@ void * lock_op(void *arg)
 		}
 	}
 
-	while(rados_lock(rados->ioctx, rio->obj_name, RADOS_LOCK_NAME,
-		C_LOCK_EXCLUSIVE, RADOS_LOCK_COOKIE, "", "", NULL, 0) < 0){
+	/* passing flag 1 means renew lock */
+	while(rados_lock_exclusive(rados->ioctx, rio->obj_name, RADOS_LOCK_NAME,
+		RADOS_LOCK_COOKIE, RADOS_LOCK_DESC, NULL, LIBRADOS_LOCK_FLAG_RENEW) < 0){
 		if (pr->req->flags & XF_NOSYNC){
 			XSEGLOG2(&lc, E, "Rados lock failed for %s",
 					rio->obj_name);
@@ -773,6 +777,69 @@ void * lock_op(void *arg)
 	return NULL;
 }
 
+int break_lock(struct radosd *rados, struct rados_io *rio)
+{
+	int r, exclusive;
+	char *tag = NULL, *clients = NULL, *cookies = NULL, *addrs = NULL;
+	size_t tag_len = 1024, clients_len = 1024, cookies_len = 1024;
+	size_t addrs_len = 1024;
+	ssize_t nr_lockers;
+
+	for (;;) {
+		tag = malloc(sizeof(char) * tag_len);
+		clients = malloc(sizeof(char) * clients_len);
+		cookies = malloc(sizeof(char) * cookies_len);
+		addrs = malloc(sizeof(char) * addrs_len);
+		if (!tag || !clients || !cookies || !addrs) {
+			XSEGLOG2(&lc, E, "Out of memmory");
+			r = -1;
+			break;
+		}
+
+		nr_lockers = rados_list_lockers(rados->ioctx, rio->obj_name,
+				RADOS_LOCK_NAME, &exclusive, tag, &tag_len,
+				clients, &clients_len, cookies, &cookies_len,
+				addrs, &addrs_len);
+		if (nr_lockers < 0 && nr_lockers != -ERANGE) {
+			XSEGLOG2(&lc, E, "Could not list lockers for %s", rio->obj_name);
+			r = -1;
+			break;
+		} else if (r == -ERANGE) {
+			free(tag);
+			free(clients);
+			free(cookies);
+			free(addrs);
+		} else {
+			if (nr_lockers != 1) {
+				XSEGLOG2(&lc, E, "Number of lockers for %s != 1 !(%d)",
+						rio->obj_name, nr_lockers);
+				r = -1;
+				break;
+			} else if (!exclusive) {
+				XSEGLOG2(&lc, E, "Lock for %s is not exclusive",
+						rio->obj_name);
+				r = -1;
+				break;
+			} else if (strcmp(RADOS_LOCK_TAG, tag)) {
+				XSEGLOG2(&lc, E, "List lockers returned wrong tag "
+						"(\"%s\" vs \"%s\")", tag, RADOS_LOCK_TAG);
+				r = -1;
+				break;
+			}
+			r = rados_break_lock(rados->ioctx, rio->obj_name,
+				RADOS_LOCK_NAME, clients, RADOS_LOCK_COOKIE);
+			break;
+		}
+	}
+
+	free(tag);
+	free(clients);
+	free(cookies);
+	free(addrs);
+
+	return r;
+}
+
 void * unlock_op(void *arg)
 {
 	struct peer_req *pr = (struct peer_req *)arg;
@@ -782,13 +849,19 @@ void * unlock_op(void *arg)
 	strncpy(rio->obj_name + len, LOCK_SUFFIX, LOCK_SUFFIX_LEN);
 	rio->obj_name[len + LOCK_SUFFIX_LEN] = 0;
 	int r;
+
 	XSEGLOG2(&lc, I, "Starting unlock op for %s", rio->obj_name);
-	if (pr->req->flags & XF_FORCE)
-		r = rados_break_lock(rados->ioctx, rio->obj_name, RADOS_LOCK_NAME,
-			RADOS_LOCK_COOKIE);
-	else
+	if (pr->req->flags & XF_FORCE) {
+		r = break_lock(rados, rio);
+	}
+	else {
 		r = rados_unlock(rados->ioctx, rio->obj_name, RADOS_LOCK_NAME,
 			RADOS_LOCK_COOKIE);
+	}
+	/* ENOENT means that the lock did not existed.
+	 * This still counts as a successfull unlock operation
+	 */
+	//if (r < 0 && r != -ENOENT){
 	if (r < 0){
 		XSEGLOG2(&lc, E, "Rados unlock failed for %s (r: %d)", rio->obj_name, r);
 		fail(pr->peer, pr);
