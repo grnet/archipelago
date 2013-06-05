@@ -77,10 +77,10 @@ CHARDEV_MINOR = 0
 
 REQS = 512
 
-FILE_BLOCKER = 'mt-pfiled'
-RADOS_BLOCKER = 'mt-sosd'
-MAPPER = 'mt-mapperd'
-VLMC = 'st-vlmcd'
+FILE_BLOCKER = 'archip-pfiled'
+RADOS_BLOCKER = 'archip-sosd'
+MAPPER = 'archip-mapperd'
+VLMC = 'archip-vlmcd'
 BLOCKER = ''
 
 available_storage = {'files': FILE_BLOCKER, 'rados': RADOS_BLOCKER}
@@ -337,7 +337,7 @@ def construct_peers():
             str(config['PITHOSMAPS']), str(config['FILED_MAPS']), "-d",
             "-f", os.path.join(PIDFILE_PATH, "blockerm" + PID_SUFFIX)
         ]
-    elif BLOCKER == "mt-sosd":
+    elif BLOCKER == "archip-sosd":
         config_opts['blockerb'] = [
             "-p", str(config['BPORT']), "-g",
             str(config['SPEC']).encode(), "-n",
@@ -360,7 +360,7 @@ def construct_peers():
             "-l", os.path.join(str(LOGS_PATH), "blockerm" + LOG_SUFFIX),
             "-t", "3"
         ]
-    elif BLOCKER == "mt-pfiled":
+    elif BLOCKER == "archip-pfiled":
         config_opts['blockerb'] = [
             "-p", str(config['BPORT']), "-g",
             str(config['SPEC']).encode(), "-n",
