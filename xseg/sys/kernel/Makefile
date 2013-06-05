@@ -50,10 +50,15 @@ PWD := $(shell pwd)
 EXTRA_CFLAGS += -g -I$(BASE) -I$(BASE)/sys/kernel -DVAL_OVERLOAD
 LIBDIR=$(BASE)/lib/kernel
 
-xseg-objs := xsegmod.o xq.k.o xpool.k.o xhash.k.o xheap.k.o xobj.k.o xseg.k.o 
+xseg-objs := xsegmod.o
+xseg-objs += $(addsuffix .k.o, $(XTYPES))
+xseg-objs += xseg.k.o
 obj-m += xseg.o segdev.o
 
-default: xq.k.c xpool.k.c xhash.k.c xheap.k.c xobj.k.c xseg.k.c
+DEPENDENCIES = $(addsuffix .k.c, $(XTYPES))
+DEPENDENCIES += xseg.k.c
+
+default: $(DEPENDENCIES)
 	$(MAKE) -C $(KDIR) SUBDIRS=$(PWD) V=$(V) modules
 	cp -vaf xseg.ko segdev.ko $(LIBDIR)
 
@@ -87,5 +92,5 @@ install-src:
 	done
 
 clean:
-	rm -f xq.k.c xpool.k.c xhash.k.c xheap.k.c xobj.k.c xseg.k.c
+	rm -f $(DEPENDENCIES)
 	make -C /lib/modules/$(KVER)/build M=$(PWD) V=$(V) clean
