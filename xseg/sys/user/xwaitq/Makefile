@@ -31,72 +31,43 @@
 # or implied, of GRNET S.A.
 #
 
-.PHONY: clean default install install-src
+.PHONY: default all clean install install-src
 
 include $(XSEG_HOME)/base.mk
 
-ifeq (,$(KVER))
-KVER := $(shell uname -r)
-endif
+DEBUG=-g
 
 FILES="Makefile"
-FILES+=$(shell ls *.h)
-FILES+=$(shell ls *.c)
+#FILES+=$(shell ls *.h)
+#FILES+=$(shell ls *.c)
 
 SUBDIR:=$(subst $(XSEG_HOME),,$(CURDIR))
 
-KDIR := /lib/modules/$(KVER)/build
-PWD := $(shell pwd)
-EXTRA_CFLAGS += -g -I$(BASE) -I$(BASE)/sys/kernel -DVAL_OVERLOAD
-LIBDIR=$(BASE)/lib/kernel
+default: all
 
-xseg-objs := xsegmod.o
-xseg-objs += $(addsuffix .k.o, $(XTYPES))
-xseg-objs += xseg.k.o
-obj-m += xseg.o segdev.o
+all: xwaitq.o xwaitq.pic.o xwaitq_test
 
-DEPENDENCIES = $(addsuffix .k.c, $(XTYPES))
-DEPENDENCIES += xseg.k.c
+$(BASE)/sys/user/xseg_user.o:
+	make -C $(BASE)/sys/user xseg_user.o
 
-default: $(DEPENDENCIES)
-	$(MAKE) -C $(KDIR) SUBDIRS=$(PWD) V=$(V) modules
-	cp -vaf xseg.ko segdev.ko $(LIBDIR)
+xwaitq_test: $(BASE)/xtypes/xwaitq_test.c xwaitq.o $(BASE)/sys/user/xq/xq.o $(BASE)/sys/user/xseg_user.o
+	$(CC) $(CFLAGS) $(INC) -L$(LIB) -o $@ $< xwaitq.o \
+	$(BASE)/sys/user/xseg_user.o $(BASE)/sys/user/xq/xq.o \
+	-ldl -lpthread
 
-xq.k.c: $(BASE)/xtypes/xq.c $(BASE)/xtypes/xq.h
-	ln -sf $< $@
+xwaitq.o: $(BASE)/xtypes/xwaitq.c $(BASE)/xtypes/xwaitq.h  $(BASE)/xtypes/xwork.h $(BASE)/xtypes/xlock.h
+	$(CC) $(CFLAGS) $(INC) -c -o $@ $<
 
-xpool.k.c: $(BASE)/xtypes/xpool.c $(BASE)/xtypes/xpool.h
-	ln -sf $< $@
-
-xhash.k.c: $(BASE)/xtypes/xhash.c $(BASE)/xtypes/xhash.h
-	ln -sf $< $@
-
-xheap.k.c: $(BASE)/xtypes/xheap.c $(BASE)/xtypes/xheap.h
-	ln -sf $< $@
-
-xobj.k.c: $(BASE)/xtypes/xobj.c $(BASE)/xtypes/xobj.h
-	ln -sf $< $@
-
-xworkq.k.c: $(BASE)/xtypes/xworkq.c $(BASE)/xtypes/xworkq.h
-	ln -sf $< $@
-
-xwaitq.k.c: $(BASE)/xtypes/xwaitq.c $(BASE)/xtypes/xwaitq.h
-	ln -sf $< $@
-
-xseg.k.c: $(BASE)/xseg/xseg.c $(BASE)/xseg/xseg.h
-	ln -sf $< $@
-
-install:
-	install -d $(DESTDIR)$(moduledir)
-	install -o 0 -g 0 -m 644 -t $(DESTDIR)$(moduledir) xseg.ko
-	install -o 0 -g 0 -m 644 -t $(DESTDIR)$(moduledir) segdev.ko
-
-install-src:
-	install -d $(DESTDIR)$(srcdir)$(SUBDIR)
-	@for f in $(FILES); do \
-		install -o 0 -g 0 -m 644 -t $(DESTDIR)$(srcdir)$(SUBDIR) $$f ; \
-	done
+xwaitq.pic.o: $(BASE)/xtypes/xwaitq.c $(BASE)/xtypes/xwaitq.h $(BASE)/xtypes/xwork.h $(BASE)/xtypes/xlock.h
+	$(CC) $(CFLAGS) $(INC) -fPIC -c -o $@ $<
 
 clean:
-	rm -f $(DEPENDENCIES)
-	make -C /lib/modules/$(KVER)/build M=$(PWD) V=$(V) clean
+	rm -f xwaitq.o xwaitq.pic.o xwaitq_test
+
+install:
+
+install-src:
+	install -d $(DESTDIR)$(srcdir)$(SUBDIR) ;
+	@for f in $(FILES) ; do \
+		install -o 0 -g 0 -m 644 -t $(DESTDIR)$(srcdir)$(SUBDIR) $$f ; \
+	done
