@@ -174,6 +174,8 @@ struct map_node {
 
 #define signal_map(__map)			\
 	do { 					\
+		XSEGLOG2(&lc, D, "Checking map %lx %s. Waiters %u, ta: %u", \
+				__map, __map->volume, __map->waiters, ta);  \
 		if (__map->waiters) {		\
 			ta += __map->waiters;		\
 			XSEGLOG2(&lc, D, "Signaling map %lx %s, waiters: %u, \
@@ -1412,10 +1414,13 @@ static struct xseg_request * copyup_object(struct peerd *peer, struct map_node *
 	sprintf(tmp + map->volumelen, "_%u", mn->objectidx);
 	tmp[XSEG_MAX_TARGETLEN] = 0;
 	tmplen = strlen(tmp);
+	XSEGLOG2(&lc, D, "Base for new target: %s (len: %d)", tmp, tmplen);
 	SHA256((unsigned char *)tmp, tmplen, sha);
 	hexlify(sha, new_target+MAPPER_PREFIX_LEN);
 	newtargetlen = MAPPER_PREFIX_LEN + HEXLIFIED_SHA256_DIGEST_SIZE;
-
+	#define fooooo 71
+	XSEGLOG2(&lc, D, "New target: %.71s (len: %d)", new_target, newtargetlen);
+	#undef fooooo
 
 	if (!strncmp(mn->object, zero_block, ZERO_BLOCK_LEN))
 		goto copyup_zeroblock;
@@ -1625,6 +1630,7 @@ static inline void __get_map(struct map *map)
 static inline void put_map(struct map *map)
 {
 	struct map_node *mn;
+	XSEGLOG2(&lc, D, "Putting map %lx %s. ref %u", map, map->volume, map->ref);
 	map->ref--;
 	if (!map->ref){
 		XSEGLOG2(&lc, I, "Freeing map %s", map->volume);
@@ -2540,18 +2546,28 @@ struct map * get_map(struct peer_req *pr, char *name, uint32_t namelen,
 			map = create_map(mapper, name, namelen, flags);
 			if (!map)
 				return NULL;
+			__get_map(map);
 			r = open_load_map(pr, map, flags);
 			if (r < 0){
 				do_dropcache(pr, map);
+				/* signal map here, so any other threads that
+				 * tried to get the map, but couldn't because
+				 * of the opening or loading operation that
+				 * failed, can continue.
+				 */
+				signal_map(map);
+				put_map(map);
 				return NULL;
 			}
+			return map;
 		} else {
 			return NULL;
 		}
 	} else if (map->flags & MF_MAP_DESTROYED){
 		return NULL;
+	} else {
+		__get_map(map);
 	}
-	__get_map(map);
 	return map;
 
 }

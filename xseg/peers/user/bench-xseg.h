@@ -118,11 +118,11 @@
  * The benchark ID (IDLEN) is global for the test, calculated once and is a
  * string of the following form: {"bench-" + 9-digit number + "\0"}.
  * The target string (TARGETLEN) is per object, concatenated with the string
- * above and is of the following form: {"-" +16-digit number + "\0"}.
+ * above and is of the following form: {"-" +16-digit number}.
  */
-#define IDLEN 16
-#define TARGETLEN (IDLEN + 17)
-extern char global_id[IDLEN];
+#define IDLEN 15
+#define TARGETLEN (IDLEN + 1 + 16)
+extern char global_id[IDLEN + 1];
 
 struct bench {
 	uint64_t to; //Total number of objects (not for read/write)
