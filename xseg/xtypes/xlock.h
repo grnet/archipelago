@@ -111,7 +111,11 @@ static inline unsigned long xlock_acquire(struct xlock *lock, unsigned long who)
 
 static inline unsigned long xlock_try_lock(struct xlock *lock, unsigned long who)
 {
-	return __sync_bool_compare_and_swap(&lock->owner, Noone, who);
+	unsigned long owner;
+	owner = *(volatile unsigned long *)(&lock->owner);
+	if (owner == Noone)
+		return __sync_bool_compare_and_swap(&lock->owner, Noone, who);
+	return 0;
 }
 
 static inline void xlock_release(struct xlock *lock)

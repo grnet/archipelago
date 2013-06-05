@@ -38,6 +38,21 @@
 #include <_sysutil.h>
 #include <sys/domain.h>
 
+/* performance stuff */
+
+#if defined(__GNUC__) && ((__GNUC__ * 100 + __GNUC_MINOR__) >= 303)
+
+#ifndef LIKELY
+#define LIKELY(x)		__builtin_expect(!!(x),1)
+#endif
+#ifndef UNLIKELY
+#define UNLIKELY(x)     __builtin_expect(!!(x),0)
+#endif
+
+#else
+#define LIKELY(x)       (x)
+#define UNLIKELY(x)     (x)
+#endif
 /* log stuff */
 
 
