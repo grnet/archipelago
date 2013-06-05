@@ -54,7 +54,7 @@ char errbuf[ERRSIZE];
 static long posix_allocate(const char *name, uint64_t size)
 {
 	int fd, r;
-	fd = shm_open(name, O_RDWR | O_CREAT, 0770);
+	fd = shm_open(name, O_RDWR | O_CREAT | O_EXCL, 0770);
 	if (fd < 0) {
 		XSEGLOG("Cannot create shared segment: %s\n",
 			strerror_r(errno, errbuf, ERRSIZE));
@@ -174,7 +174,7 @@ static void posix_remote_signal_quit(void)
 static int posix_prepare_wait(struct xseg *xseg, uint32_t portno)
 {
 	struct xseg_port *port = xseg_get_port(xseg, portno);
-	if (!port) 
+	if (!port)
 		return -1;
 	struct posix_signal_desc *psd = xseg_get_signal_desc(xseg, port);
 	if (!psd)
@@ -186,7 +186,7 @@ static int posix_prepare_wait(struct xseg *xseg, uint32_t portno)
 static int posix_cancel_wait(struct xseg *xseg, uint32_t portno)
 {
 	struct xseg_port *port = xseg_get_port(xseg, portno);
-	if (!port) 
+	if (!port)
 		return -1;
 	struct posix_signal_desc *psd = xseg_get_signal_desc(xseg, port);
 	if (!psd)
@@ -217,14 +217,15 @@ static int posix_wait_signal(struct xseg *xseg, uint32_t usec_timeout)
 static int posix_signal(struct xseg *xseg, uint32_t portno)
 {
 	struct xseg_port *port = xseg_get_port(xseg, portno);
-	if (!port) 
+	if (!port)
 		return -1;
 	struct posix_signal_desc *psd = xseg_get_signal_desc(xseg, port);
 	if (!psd)
 		return -1;
 	pid_t cue = (pid_t)psd->waitcue;
 	if (!cue)
-		return 0;
+		//HACKY!
+		return -2;
 
 	/* FIXME: Make calls to xseg_signal() check for errors */
 	return syscall(SYS_tkill, cue, SIGIO);
@@ -262,7 +263,7 @@ void posix_quit_signal_desc(struct xseg *xseg, void *sd)
 
 void * posix_alloc_data(struct xseg *xseg)
 {
-	struct xobject_h *sd_h = xseg_get_objh(xseg, MAGIC_POSIX_SD, 
+	struct xobject_h *sd_h = xseg_get_objh(xseg, MAGIC_POSIX_SD,
 			sizeof(struct posix_signal_desc));
 	return sd_h;
 }

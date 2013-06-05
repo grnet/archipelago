@@ -83,6 +83,18 @@ struct peer_req {
 #ifdef ST_THREADS
 	st_cond_t cond;
 #endif
+#ifdef MT
+	int thread_no;
+#endif
+};
+
+struct thread {
+	pthread_t tid;
+	struct peerd *peer;
+	int thread_no;
+	struct xq free_thread_reqs;
+	void *priv;
+	void *arg;
 };
 
 struct peerd {
@@ -90,15 +102,17 @@ struct peerd {
 	xport portno_start;
 	xport portno_end;
 	long nr_ops;
-	uint32_t defer_portno;
+	xport defer_portno;
 	struct peer_req *peer_reqs;
 	struct xq free_reqs;
+	int (*peerd_loop)(void *arg);
 	void *priv;
 #ifdef MT
 	uint32_t nr_threads;
 	struct thread *thread;
 	struct xq threads;
 	void (*interactive_func)(void);
+#else
 #endif
 };
 
@@ -110,19 +124,25 @@ enum dispatch_reason {
 
 void fail(struct peerd *peer, struct peer_req *pr);
 void complete(struct peerd *peer, struct peer_req *pr);
-void defer_request(struct peerd *peer, struct peer_req *pr);
+int defer_request(struct peerd *peer, struct peer_req *pr);
 void pending(struct peerd *peer, struct peer_req *req);
 void log_pr(char *msg, struct peer_req *pr);
 int canDefer(struct peerd *peer);
-int submit_peer_req(struct peerd *peer, struct peer_req *pr);
-struct peer_req *alloc_peer_req(struct peerd *peer);
 void free_peer_req(struct peerd *peer, struct peer_req *pr);
+int submit_peer_req(struct peerd *peer, struct peer_req *pr);
 void get_submits_stats();
 void get_responds_stats();
 void usage();
 void print_req(struct xseg *xseg, struct xseg_request *req);
+int all_peer_reqs_free(struct peerd *peer);
+
 #ifdef MT
 int thread_execute(struct peerd *peer, void (*func)(void *arg), void *arg);
+struct peer_req *alloc_peer_req(struct peerd *peer, struct thread *t);
+int check_ports(struct peerd *peer, struct thread *t);
+#else
+struct peer_req *alloc_peer_req(struct peerd *peer);
+int check_ports(struct peerd *peer);
 #endif
 
 static inline struct peerd * __get_peerd(void * custom_peerd)
@@ -131,12 +151,18 @@ static inline struct peerd * __get_peerd(void * custom_peerd)
 }
 
 
+
 /* decration of "common" variables */
+extern volatile unsigned int terminated;
 extern struct log_ctx lc;
 #ifdef ST_THREADS
 extern uint32_t ta;
 #endif
 
+inline int isTerminate(void)
+{
+	return terminated;
+}
 
 /********************************
  *   mandatory peer functions   *
