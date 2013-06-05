@@ -818,7 +818,6 @@ int xcache_invalidate(struct xcache *cache, char *name)
 	xcache_handler h;
 
 	xlock_acquire(&cache->lock, 1);
-	xlock_acquire(&cache->rm_lock, 1);
 
 	h = __xcache_lookup_entries(cache, name);
 	if (h != NoEntry){
@@ -826,18 +825,23 @@ int xcache_invalidate(struct xcache *cache, char *name)
 		goto out_put;
 	}
 
-	h = __xcache_lookup_rm(cache, name);
-	if (h != NoEntry){
-		r = __xcache_remove_rm(cache, h);
-	}
+	if (cache->flags & XCACHE_USE_RMTABLE) {
+		xlock_acquire(&cache->rm_lock, 1);
+		xlock_release(&cache->lock);
 
-	xlock_release(&cache->rm_lock);
-	xlock_release(&cache->lock);
+		h = __xcache_lookup_rm(cache, name);
+		if (h != NoEntry){
+			r = __xcache_remove_rm(cache, h);
+		}
+
+		xlock_release(&cache->rm_lock);
+	} else {
+		xlock_release(&cache->lock);
+	}
 
 	return r;
 
 out_put:
-	xlock_release(&cache->rm_lock);
 	xlock_release(&cache->lock);
 
 	if (r >= 0)
