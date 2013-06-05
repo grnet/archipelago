@@ -25,30 +25,30 @@ typedef xqindex xcache_handler;
 /*
  * Called with out cache lock held:
  *
- * on_init:		called on cache entry initialization.
- *				Should return negative on error to abort cache entry
- *				initialization.
+ * on_init:	called on cache entry initialization.
+ *		Should return negative on error to abort cache entry
+ *		initialization.
  *
- * on_put:		called when the last reference to the cache entry is put
+ * on_put:	called when the last reference to the cache entry is put
  *
  * on_evict:	called when a cache entry is evicted. It is called with the old
- *				cache entry that gets evicted and the new cache entry that
- *				trigger the eviction as arguments.
- *				Return value interpretation:
- *					< 0 : Failure.
- *					= 0 : Success. Finished with the old cache entry.
- *					> 0 : Success. Pending actions on the old cache entry.
+ *		cache entry that gets evicted and the new cache entry that
+ *		trigger the eviction as arguments.
+ *		Return value interpretation:
+ *			< 0 : Failure.
+ *			= 0 : Success. Finished with the old cache entry.
+ *			> 0 : Success. Pending actions on the old cache entry.
  *
  * on_node_init:
- *				called on initial node preparation.
- *				Must return NULL on error, to abort cache initialization.
+ *		called on initial node preparation.
+ *		Must return NULL on error, to abort cache initialization.
  *
- * on_free:		called when a cache entry is freed.
+ * on_free:	called when a cache entry is freed.
  *
  * on_finalize:	FILLME
- *				Must return 0 if there are no pending actions to the entry.
- *				On non-zero value, user should get the entry which will be put
- *				to the evicted table.
+ *		Must return 0 if there are no pending actions to the entry.
+ *		On non-zero value, user should get the entry which will be put
+ *		to the evicted table.
  */
 struct xcache_ops {
 	int (*on_init)(void *cache_data, void *user_data);

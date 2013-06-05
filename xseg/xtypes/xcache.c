@@ -726,7 +726,7 @@ int xcache_init(struct xcache *cache, uint32_t xcache_size,
 	cache->priv = priv;
 	cache->flags = flags;
 
-	/* FIXME: If cache->size is UINT64_MAX then cache->nodes has overflowed */
+	/* TODO: assert  cache->size is not UINT64_MAX */
 	if (cache->size == (uint64_t)(-1))
 		return -1;
 
