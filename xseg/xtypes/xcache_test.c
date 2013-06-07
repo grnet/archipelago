@@ -271,7 +271,7 @@ void *thread_test2_part1(void *arg)
 	char name[XSEG_MAX_TARGETLEN];
 
 	do {
-		sprintf(name, "%lu%lu", tid, i);
+		sprintf(name, "tid:%lu_i:%lu", tid, i);
 		h = xcache_lookup(cache, name);
 		if (h != NoEntry){
 			fprintf(stderr, "Cold cache returned cache entry\n");
@@ -308,7 +308,7 @@ void *thread_test2_part2(void *arg)
 	char name[XSEG_MAX_TARGETLEN];
 
 	do {
-		sprintf(name, "%lu%lu", tid, i);
+		sprintf(name, "tid:%lu_i:%lu", tid, i);
 		h = xcache_lookup(cache, name);
 		if (h != NoEntry){
 			lookups++;
@@ -330,7 +330,7 @@ void *thread_test2_part3(void *arg)
 	int r;
 
 	do {
-		sprintf(name, "%lu%lu", tid, i);
+		sprintf(name, "tid:%lu_i:%lu", tid, i);
 		r =  xcache_invalidate(cache, name);
 		if (r >= 0){
 			invalidations++;
