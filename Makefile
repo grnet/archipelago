@@ -45,7 +45,7 @@ xseg:
 
 clean:
 	make -C xseg clean
-	rm xseg/config.mk
+	#rm xseg/config.mk
 
 install:
 	make -C xseg install
