@@ -49,11 +49,11 @@
 #include <math.h>
 #include <string.h>
 
-#define PRINT_SIG(__who, __sig)									\
-	fprintf(stdout, "%s (%lu): id %lu, object %lu, offset %lu\n",		\
-			#__who, (uint64_t)(__sig),							\
-			((struct signature *)__sig)->id,					\
-			((struct signature *)__sig)->object,				\
+#define PRINT_SIG(__who, __sig)						\
+	fprintf(stdout, "%s (%lu): id %lu, object %lu, offset %lu\n",	\
+			#__who, (uint64_t)(__sig),			\
+			((struct signature *)__sig)->id,		\
+			((struct signature *)__sig)->object,		\
 			((struct signature *)__sig)->offset);
 
 struct timespec delay = {0, 4000000};
@@ -68,7 +68,7 @@ static inline uint64_t __get_id()
 
 static inline uint64_t __get_object_from_name(char *name)
 {
-	return atol(name + IDLEN); /* cut the "bench-908135-" part*/
+	return atol(name + IDLEN + 1); /* cut the "bench-908135-" part*/
 }
 
 static inline uint64_t __get_object(struct bench *prefs, uint64_t new)
