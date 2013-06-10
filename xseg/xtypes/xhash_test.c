@@ -48,7 +48,7 @@ xhash_t *my_resize(xhash_t *h, xhashidx sizeshift)
 		perror("malloc");
 		exit(1);
 	}
-	xhash_resize(h, sizeshift, new);
+	xhash_resize(h, sizeshift, 0, new);
 	free(h);
 	return new;
 }
@@ -100,7 +100,7 @@ int test_string(xhashidx loops)
         perror("malloc");
 	exit(1);
     }
-    xhash_init(h, 2, STRING);
+    xhash_init(h, 2, 0, STRING);
     for (i = 10; i < loops; i++) {
 	int ret;
         xhashidx r;
@@ -164,7 +164,7 @@ int test_string2()
         perror("malloc");
 	exit(1);
     }
-    xhash_init(h, 3, STRING);
+    xhash_init(h, 3, 0, STRING);
     for (i = 0; i < 4; i++) {
 	int ret;
         xhashidx r;
@@ -210,6 +210,7 @@ int test_string2()
     return 0;
 }
 
+//TODO add test for limit
 int main(int argc, char **argv) {
     xhashidx loops, i, v;
     struct xhash *h;
@@ -226,7 +227,7 @@ int main(int argc, char **argv) {
         perror("malloc");
 	exit(1);
     }
-    xhash_init(h, 2, INTEGER);
+    xhash_init(h, 2, 0, INTEGER);
     for (i = 10; i < loops; i++) {
 	int ret;
         xhashidx r;
