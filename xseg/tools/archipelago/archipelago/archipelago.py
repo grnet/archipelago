@@ -38,75 +38,93 @@
 import os
 import sys
 import time
-import signal
 import errno
 from subprocess import check_call
 
 from .common import *
 from .vlmc import showmapped as vlmc_showmapped
+from .vlmc import get_mapped as vlmc_get_mapped
 
 
-def start_peer(peer):
-    if check_pidfile(peer.role) > 0:
+def start_peer(peer, cli=False):
+    if peer.is_running():
         raise Error("Cannot start peer %s. Peer already running" % peer.role)
-    cmd = [peer.executable] + peer.opts
-    s = "Starting %s " % peer.role
-    sys.stdout.write(s.ljust(FIRST_COLUMN_WIDTH))
+    if cli:
+        s = "Starting %s " % peer.role
+        sys.stdout.write(s.ljust(FIRST_COLUMN_WIDTH))
     try:
-        check_call(cmd, shell=False)
+        peer.start()
+    except Error as e:
+        if cli:
+            sys.stdout.write(red("FAILED".ljust(SECOND_COLUMN_WIDTH)))
+            sys.stdout.write("\n")
+        raise e
     except Exception as e:
-        print e
-        sys.stdout.write(red("FAILED".ljust(SECOND_COLUMN_WIDTH)))
-        sys.stdout.write("\n")
+        if cli:
+            print e
+            sys.stdout.write(red("FAILED".ljust(SECOND_COLUMN_WIDTH)))
+            sys.stdout.write("\n")
         raise Error("Cannot start %s" % peer.role)
 
-    time.sleep(3)
-    pid = check_pidfile(peer.role)
-    if pid < 0 or not check_running(peer.executable, pid):
-        sys.stdout.write(red("FAILED".ljust(SECOND_COLUMN_WIDTH)))
-        sys.stdout.write("\n")
-        raise Error("Couldn't start %s" % peer.role)
-
-    sys.stdout.write(green("OK".ljust(SECOND_COLUMN_WIDTH)))
-    sys.stdout.write("\n")
-
-
-def stop_peer(peer):
-    pid = check_pidfile(peer.role)
-    if pid < 0:
-        pretty_print(peer[2], yellow("not running"))
-        return
-
-    s = "Stopping %s " % peer.role
-    sys.stdout.write(s.ljust(FIRST_COLUMN_WIDTH))
+#TODO configurable
     i = 0
-    while check_running(peer.executable, pid):
-        os.kill(pid, signal.SIGTERM)
+    while not peer.is_running():
+        time.sleep(0.1)
+        i += 1
+        if i > 30: #3secs
+            if cli:
+                sys.stdout.write(red("FAILED".ljust(SECOND_COLUMN_WIDTH)))
+                sys.stdout.write("\n")
+            raise Error("Couldn't start %s" % peer.role)
+
+    if cli:
+        sys.stdout.write(green("OK".ljust(SECOND_COLUMN_WIDTH)))
+        sys.stdout.write("\n")
+
+
+def stop_peer(peer, cli=False):
+    try:
+        peer.stop()
+    except Error:
+        if cli:
+            pretty_print(peer.role, yellow("Not running"))
+        return
+    if cli:
+        s = "Stopping %s " % peer.role
+        sys.stdout.write(s.ljust(FIRST_COLUMN_WIDTH))
+
+    i = 0
+    while peer.get_pid():
         time.sleep(0.1)
         i += 1
         if i > 150:
-            sys.stdout.write(red("FAILED".ljust(SECOND_COLUMN_WIDTH)))
-            sys.stdout.write("\n")
+            if cli:
+                sys.stdout.write(red("FAILED".ljust(SECOND_COLUMN_WIDTH)))
+                sys.stdout.write("\n")
             raise Error("Failed to stop peer %s." % peer.role)
-    sys.stdout.write(green("OK".ljust(SECOND_COLUMN_WIDTH)))
-    sys.stdout.write("\n")
+    if cli:
+        sys.stdout.write(green("OK".ljust(SECOND_COLUMN_WIDTH)))
+        sys.stdout.write("\n")
 
 
-def peer_running(peer):
-    pid = check_pidfile(peer.role)
-    if pid < 0:
-        pretty_print(peer.role, red('not running'))
+def peer_running(peer, cli):
+    try:
+        if peer.is_running():
+            if cli:
+                pretty_print(peer.role, green('running'))
+            return True
+        else:
+            if cli:
+                pretty_print(peer.role, red('not running'))
+            return False
+    except Error:
+        if cli:
+            pretty_print(peer.role, yellow("Has valid pidfile but does not "
+                                           "seem to be active"))
         return False
 
-    if not check_running(peer.executable, pid):
-        pretty_print(peer.role, yellow("Has valid pidfile but does not seem "
-                                       "to be active"))
-        return False
-    pretty_print(peer.role, green('running'))
-    return True
 
-
-def make_segdev():
+def make_segdev(cli=False):
     try:
         os.stat(str(CHARDEV_NAME))
         raise Error("Segdev already exists")
@@ -116,7 +134,8 @@ def make_segdev():
         pass
     cmd = ["mknod", str(CHARDEV_NAME), "c", str(CHARDEV_MAJOR),
            str(CHARDEV_MINOR)]
-    print ' '.join(cmd)
+    if cli:
+        print ' '.join(cmd)
     try:
         check_call(cmd, shell=False)
     except Exception:
@@ -136,90 +155,114 @@ def remove_segdev():
         raise Error("Segdev device removal failed.")
 
 
-def start_peers(peers):
+def start_peers(peers, cli=False):
     for m in modules:
         if not loaded_module(m):
             raise Error("Cannot start userspace peers. " + m +
                         " module not loaded")
-    for r in roles:
+    for r, _ in config['roles']:
         p = peers[r]
-        start_peer(p)
+        start_peer(p, cli)
 
 
-def stop_peers(peers):
-    for r in reversed(roles):
+def stop_peers(peers, cli=False):
+    for r, _ in reversed(config['roles']):
         p = peers[r]
-        stop_peer(p)
+        stop_peer(p, cli)
 
 
-def start(user=False, peer=None, **kwargs):
-    if peer:
+def start(user=False, role=None, cli=False, **kwargs):
+    if role:
         try:
-            p = peers[peer]
+            p = peers[role]
         except KeyError:
-            raise Error("Invalid peer %s" % str(args.peer))
-        return start_peer(p)
+            raise Error("Invalid peer %s" % role)
+        return start_peer(p, cli)
 
     if user:
-        return start_peers(peers)
+        return start_peers(peers, cli)
 
     if status() > 0:
         raise Error("Cannot start. Try stopping first")
 
+    if cli:
+        print "===================="
+        print "Starting archipelago"
+        print "===================="
+        print ""
     try:
         for m in modules:
             load_module(m, None)
         time.sleep(0.5)
-        make_segdev()
+        make_segdev(cli)
         time.sleep(0.5)
         create_segment()
         time.sleep(0.5)
-        start_peers(peers)
+        start_peers(peers, cli)
         load_module(xsegbd, xsegbd_args)
     except Exception as e:
-        print red(e)
-        stop(user, peer)
-        raise e
+        if cli:
+            print red(e)
+        stop(user, role, cli)
 
 
-def stop(user=False, peer=None, **kwargs):
-    if peer:
+def stop(user=False, role=None, cli=False, **kwargs):
+    if role:
         try:
-            p = peers[peer]
+            p = peers[role]
         except KeyError:
-            raise Error("Invalid peer %s" % str(args.peer))
-        return stop_peer(p)
+            raise Error("Invalid peer %s" % role)
+        return stop_peer(p, cli)
     if user:
-        return stop_peers(peers)
+        return stop_peers(peers, cli)
     #check devices
-    if vlmc_showmapped() > 0:
-        raise Error("Cannot stop archipelago. Mapped volumes exist")
+    if cli:
+        print "===================="
+        print "Stoping archipelago"
+        print "===================="
+        print ""
+    if cli:
+        if vlmc_showmapped() > 0:
+            raise Error("Cannot stop archipelago. Mapped volumes exist")
+    else:
+        mapped = vlmc_get_mapped()
+        if mapped and len(mapped) > 0:
+            raise Error("Cannot stop archipelago. Mapped volumes exist")
     unload_module(xsegbd)
-    stop_peers(peers)
+    stop_peers(peers, cli)
     remove_segdev()
     for m in reversed(modules):
         unload_module(m)
         time.sleep(0.3)
 
 
-def status(**kwargs):
+def status(cli=False, **kwargs):
     r = 0
-    if vlmc_showmapped() > 0:
-        r += 1
+    if cli:
+        if vlmc_showmapped() > 0:
+            r += 1
+    else:
+        mapped = vlmc_get_mapped()
+        if mapped and len(mapped) > 0:
+            r += 1
     if loaded_module(xsegbd):
-        pretty_print(xsegbd, green('Loaded'))
+        if cli:
+            pretty_print(xsegbd, green('Loaded'))
         r += 1
     else:
-        pretty_print(xsegbd, red('Not loaded'))
+        if cli:
+            pretty_print(xsegbd, red('Not loaded'))
     for m in reversed(modules):
         if loaded_module(m):
-            pretty_print(m, green('Loaded'))
+            if cli:
+                pretty_print(m, green('Loaded'))
             r += 1
         else:
-            pretty_print(m, red('Not loaded'))
-    for role in reversed(roles):
+            if cli:
+                pretty_print(m, red('Not loaded'))
+    for role, _ in reversed(config['roles']):
         p = peers[role]
-        if peer_running(p):
+        if peer_running(p, cli):
             r += 1
     return r
 
