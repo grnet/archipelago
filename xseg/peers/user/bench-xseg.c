@@ -53,17 +53,20 @@ char global_id[IDLEN + 1];
  * This macro checks two things:
  * a) If in-flight requests are less than given iodepth
  * b) If we have submitted all of the requests
+ * c) If we are not in ping mode
+ * d) If we have been asked to terminate
  */
-#define CAN_SEND_REQUEST(__p)											\
+#define CAN_SEND_REQUEST(__p)						\
 	((__p->status->submitted - __p->status->received < __p->iodepth) && \
-	(__p->status->submitted < __p->status->max) &&						\
-	!isTerminate())
+	(__p->status->submitted < __p->status->max) &&			\
+	(GET_FLAG(PING, __p->flags) == PING_MODE_OFF) &&		\
+	 !isTerminate())
 
-#define CAN_VERIFY(__p)													\
+#define CAN_VERIFY(__p)							\
 	((GET_FLAG(VERIFY, __p->flags) != VERIFY_NO) && __p->op == X_READ)
 
-#define CAN_PRINT_PROGRESS(__p, __q)									\
-	((GET_FLAG(PROGRESS, __p->flags) == PROGRESS_YES) &&				\
+#define CAN_PRINT_PROGRESS(__p, __q)					\
+	((GET_FLAG(PROGRESS, __p->flags) == PROGRESS_YES) &&		\
 	(__p->status->received == __q))
 
 void custom_peer_usage()
@@ -84,6 +87,7 @@ void custom_peer_usage()
 			"    --insanity| sane    | Adjust insanity level of benchmark:\n"
 			"              |         |     [sane|eccentric|manic|paranoid]\n"
 			"    --progress| yes     | Show progress of requests\n"
+			"    --ping    | yes     | Ping target before starting benchmark\n"
 			"\n"
 			"Additional information:\n"
 			"  --------------------------------------------\n"
@@ -104,6 +108,7 @@ int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 	char insanity[MAX_ARG_LEN + 1];
 	char verify[MAX_ARG_LEN + 1];
 	char progress[MAX_ARG_LEN + 1];
+	char ping[MAX_ARG_LEN + 1];
 	struct xseg *xseg = peer->xseg;
 	unsigned int xseg_page_size = 1 << xseg->config.page_shift;
 	long iodepth = -1;
@@ -125,6 +130,7 @@ int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 	verify[0] = 0;
 	request_cap[0] = 0;
 	progress[0] = 0;
+	ping[0] = 0;
 
 	prefs = malloc(sizeof(struct bench));
 	if (!prefs) {
@@ -164,6 +170,7 @@ int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 	READ_ARG_STRING("--insanity", insanity, MAX_ARG_LEN);
 	READ_ARG_STRING("--verify", verify, MAX_ARG_LEN);
 	READ_ARG_STRING("--progress", progress, MAX_ARG_LEN);
+	READ_ARG_STRING("--ping", ping, MAX_ARG_LEN);
 	END_READ_ARGS();
 
 	/*****************************\
@@ -387,6 +394,16 @@ reseed:
 	}
 	SET_FLAG(PROGRESS, prefs->flags, r);
 
+	/* Pinging the target peer is on by default */
+	if (!ping[0])
+		strcpy(ping, "yes");
+	r = read_ping(ping);
+	if (r < 0) {
+		XSEGLOG2(&lc, E, "Invalid syntax: --ping %s\n", ping);
+		goto arg_fail;
+	}
+	SET_FLAG(PING, prefs->flags, r);
+
 	prefs->peer = peer;
 	peer->peerd_loop = bench_peerd_loop;
 	peer->priv = (void *) prefs;
@@ -523,6 +540,69 @@ put_xseg_request:
 	return -1;
 }
 
+static int send_ping_request(struct peerd *peer, struct bench *prefs)
+{
+	struct xseg_request *req;
+	struct xseg *xseg = peer->xseg;
+	struct peer_req *pr;
+	xport srcport = prefs->src_port;
+	xport dstport = prefs->dst_port;
+	xport p;
+	int r;
+
+	XSEGLOG2(&lc, I, "Sending ping request...");
+	//srcport and dstport must already be provided by the user.
+	//returns struct xseg_request with basic initializations
+	XSEGLOG2(&lc, D, "Get new request\n");
+	req = xseg_get_request(xseg, srcport, dstport, X_ALLOC);
+	if (!req) {
+		XSEGLOG2(&lc, W, "Cannot get request\n");
+		return -1;
+	}
+	req->op = X_PING;
+
+	XSEGLOG2(&lc, D, "Allocate peer request\n");
+	pr = alloc_peer_req(peer);
+	if (!pr) {
+		XSEGLOG2(&lc, W, "Cannot allocate peer request (%ld remaining)\n",
+				peer->nr_ops - xq_count(&peer->free_reqs));
+		goto put_xseg_request;
+	}
+	pr->peer = peer;
+	pr->portno = srcport;
+	pr->req = req;
+
+	r = xseg_set_req_data(xseg, req, pr);
+	if (r < 0) {
+		XSEGLOG2(&lc, W, "Cannot set request data\n");
+		goto put_peer_request;
+	}
+
+	//Submit the request from the source port to the target port
+	XSEGLOG2(&lc, D, "Submit ping request");
+	p = xseg_submit(xseg, req, srcport, X_ALLOC);
+	if (p == NoPort) {
+		XSEGLOG2(&lc, W, "Cannot submit request\n");
+		goto put_peer_request;
+	}
+	timer_stop(prefs, prefs->sub_tm, NULL);
+
+	//Send SIGIO to the process that has bound this port to inform that
+	//IO is possible
+	r = xseg_signal(xseg, p);
+	//if (r < 0)
+	//	XSEGLOG2(&lc, W, "Cannot signal destination peer (reason %d)\n", r);
+
+	return 0;
+
+put_peer_request:
+	free_peer_req(peer, pr);
+put_xseg_request:
+	if (xseg_put_request(xseg, req, srcport))
+		XSEGLOG2(&lc, W, "Cannot put request\n");
+	return -1;
+}
+
 /*
  * This function substitutes the default generic_peerd_loop of peer.c.
  * It's plugged to struct peerd at custom peer's initialisation
@@ -557,7 +637,12 @@ int bench_peerd_loop(void *arg)
 	XSEGLOG2(&lc, I, "%s has tid %u.\n",id, pid);
 	xseg_init_local_signal(xseg, peer->portno_start);
 
-	timer_start(prefs, prefs->total_tm);
+	/* If no ping is going to be sent, we can begin the benchmark now. */
+	if (GET_FLAG(PING, prefs->flags) == PING_MODE_OFF)
+		timer_start(prefs, prefs->total_tm);
+	else
+		send_ping_request(peer, prefs);
+
 send_request:
 	while (!(isTerminate() && all_peer_reqs_free(peer))) {
 		while (CAN_SEND_REQUEST(prefs)) {
@@ -634,14 +719,27 @@ static void handle_received(struct peerd *peer, struct peer_req *pr)
 	//FIXME: handle null pointer
 	struct bench *prefs = peer->priv;
 	struct timer *rec = prefs->rec_tm;
+	int start_timer = 0;
 
-	prefs->status->received++;
 	if (!pr->req) {
 		//This is a serious error, so we must stop
 		XSEGLOG2(&lc, E, "Received peer request with no xseg request");
 		terminated++;
 		return;
 	}
+
+	/*
+	 * If we were in ping mode, we can now switch off and start the
+	 * benchmark.
+	 */
+	if (GET_FLAG(PING, prefs->flags) == PING_MODE_ON) {
+		XSEGLOG2(&lc, I, "Ping received. Benchmark can start now.");
+		SET_FLAG(PING, prefs->flags, PING_MODE_OFF);
+		start_timer = 1;
+		goto out;
+	}
+
+	prefs->status->received++;
 
 	if ((GET_FLAG(INSANITY, prefs->flags) < rec->insanity) && !pr->priv) {
 		XSEGLOG2(&lc, W, "Cannot find submission time of request");
@@ -655,10 +753,14 @@ static void handle_received(struct peerd *peer, struct peer_req *pr)
 	else if (CAN_VERIFY(prefs) && read_chunk(prefs, pr->req))
 		prefs->status->corrupted++;
 
+out:
 	if (xseg_put_request(peer->xseg, pr->req, pr->portno))
 		XSEGLOG2(&lc, W, "Cannot put xseg request\n");
 
 	free_peer_req(peer, pr);
+
+	if (start_timer)
+		timer_start(prefs, prefs->total_tm);
 }
 
 int dispatch(struct peerd *peer, struct peer_req *pr, struct xseg_request *req,

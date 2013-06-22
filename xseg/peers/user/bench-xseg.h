@@ -91,15 +91,21 @@
 #define PROGRESS_NO 0
 #define PROGRESS_YES 1
 
+/* Ping option occupies 7th flag bit */
+#define PING_FLAG_POS 6
+#define PING_BITMASK 1
+#define PING_MODE_OFF 0
+#define PING_MODE_ON 1
+
 /*
  * Current bench flags representation:
- * 64 7  6  5  4  3  2  1 : bits
- * ...0  0  0  0  0  0  0
- *      |_||____||____||_|
- *		 ^	  ^	    ^   ^
- *		 |	  |		|   |
- *		 | insanity	| pattern
- *	  progress	 verify
+ * 64  8  7  6  5  4  3  2  1 : bits
+ * ... 0  0  0  0  0  0  0  0
+ *       |_||_||____||____||_|
+ *        ^  ^	  ^	^   ^
+ *	  |  |	  |	|   |
+ *	ping | insanity | pattern
+ *	  progress   verify
  */
 
 /*
@@ -209,6 +215,7 @@ int read_pattern(char *pattern);
 int read_insanity(char *insanity);
 int read_verify(char *insanity);
 int read_progress(char *progress);
+int read_ping(char *progress);
 void print_res(struct bench *prefs);
 void print_stats(struct bench *prefs);
 void print_progress(struct bench *prefs);

@@ -266,6 +266,15 @@ int read_progress(char *progress)
 	return -1;
 }
 
+int read_ping(char *ping)
+{
+	if (strncmp(ping, "no", MAX_ARG_LEN + 1) == 0)
+		return PING_MODE_OFF;
+	if (strncmp(ping, "yes", MAX_ARG_LEN + 1) == 0)
+		return PING_MODE_ON;
+	return -1;
+}
+
 int read_pattern(char *pattern)
 {
 	if (strncmp(pattern, "seq", MAX_ARG_LEN + 1) == 0)
