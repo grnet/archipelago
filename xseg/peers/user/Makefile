@@ -35,7 +35,8 @@
 .PHONY: default all clean install install-src
 
 include $(XSEG_HOME)/base.mk
-PEERS := xseg archip-sosd archip-mapperd archip-vlmcd archip-pfiled archip-bench
+#PEERS := xseg archip-sosd archip-mapperd archip-vlmcd archip-pfiled archip-bench
+PEERS := xseg archip-mapperd archip-vlmcd archip-pfiled archip-bench
 
 FILES="Makefile"
 FILES+=$(shell ls *.h)
@@ -91,8 +92,17 @@ archip-pfiled: mt-pfiled.c peer.c peer.h $(BASE)/xseg/protocol.h
 archip-vlmcd: mt-vlmcd.c peer.c peer.h $(BASE)/xseg/protocol.h
 	$(CC) $(CFLAGS) -o $@ $< peer.c $(INC) -L$(LIB) -lxseg
 
-archip-mapperd: mt-mapperd.c peer.c peer.h $(BASE)/xseg/protocol.h
-	$(CC) $(CFLAGS) -o $@ $< peer.c $(INC) -L$(LIB) -DST_THREADS -lxseg -lst -lcrypto
+MAPPER_PREQ=mapper.c mapper.h peer.c peer.h hash.h hash.c mapper-handling.c \
+	    mapper-versions.h mapper-versions.c mapper-version0.h mapper-version0.c \
+	    mapper-version1.h mapper-version1.c mapper-version2.h mapper-version2.c \
+	    $(BASE)/xseg/protocol.h
+
+archip-mapperd: $(MAPPER_PREQ)
+	$(CC) $(CFLAGS) -o $@ $(CPREQS) $(INC) -L$(LIB) -DST_THREADS \
+							-lxseg -lst -lcrypto
+#archip-mapperd: mt-mapperd.c peer.c peer.h hash.h hash.c $(BASE)/xseg/protocol.h
+#	$(CC) $(CFLAGS) -o $@ $< peer.c hash.c $(INC) -L$(LIB) -DST_THREADS \
+#							-lxseg -lst -lcrypto
 
 pfiled: pfiled.c common.c $(BASE)/xseg/xseg.h $(BASE)/xseg/protocol.h common.h
 	$(CC) $(CFLAGS) -o $@ $< common.c  $(INC) -L$(LIB) -lxseg -lpthread
