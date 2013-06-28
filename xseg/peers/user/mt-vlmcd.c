@@ -341,7 +341,11 @@ static int do_accepted_pr(struct peerd *peer, struct peer_req *pr)
 		case X_INFO: vio->mreq->op = X_INFO; break;
 		case X_CLOSE: vio->mreq->op = X_CLOSE; break;
 		case X_OPEN: vio->mreq->op = X_OPEN; break;
-		case X_SNAPSHOT: vio->mreq->op = X_SNAPSHOT; break;
+		case X_SNAPSHOT:
+			     //FIXME hack
+			     vio->mreq->op = X_SNAPSHOT;
+			     vio->mreq->data = pr->req->data;
+			     break;
 		default: goto out_put;
 	}
 	xseg_set_req_data(peer->xseg, vio->mreq, pr);
