@@ -169,12 +169,12 @@ def archipelago_parser():
 
     start_parser = subparsers.add_parser('start', help='Start archipelago')
     start_parser.set_defaults(func=archipelago.start)
-    start_parser.add_argument('peer', type=str, nargs='?',
+    start_parser.add_argument('role', type=str, nargs='?',
                               help='peer to start')
 
     stop_parser = subparsers.add_parser('stop', help='Stop archipelago')
     stop_parser.set_defaults(func=archipelago.stop)
-    stop_parser.add_argument('peer', type=str, nargs='?', help='peer to stop')
+    stop_parser.add_argument('role', type=str, nargs='?', help='peer to stop')
 
     status_parser = subparsers.add_parser('status', help='Archipelago status')
     status_parser.set_defaults(func=archipelago.status)
@@ -182,7 +182,7 @@ def archipelago_parser():
     restart_parser = subparsers.add_parser('restart',
                                            help='Restart archipelago')
     restart_parser.set_defaults(func=archipelago.restart)
-    restart_parser.add_argument('peer', type=str, nargs='?',
+    restart_parser.add_argument('role', type=str, nargs='?',
                                 help='peer to restart')
 
     return parser
@@ -204,11 +204,11 @@ def main():
     loadrc(args.config)
     kwargs = vars(args)
     if parser_func == archipelago_parser:
-        peers = construct_peers()
+        #peers = construct_peers()
         xsegbd_args = [('start_portno', str(config['XSEGBD_START'])),
                        ('end_portno', str(config['XSEGBD_END']))]
     try:
-        args.func(**kwargs)
+        args.func(cli=True, **kwargs)
         return 0
     except Error as e:
         print red(e)
