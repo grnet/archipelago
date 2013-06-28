@@ -32,6 +32,10 @@
  * or implied, of GRNET S.A.
  */
 
+#ifndef PEER_H
+
+#define PEER_H
+
 #include <stddef.h>
 #include <xseg/xseg.h>
 
@@ -177,3 +181,5 @@ int dispatch(struct peerd *peer, struct peer_req *pr, struct xseg_request *req,
 		enum dispatch_reason reason);
 
 void custom_peer_usage();
+
+#endif /* end of PEER_H */
