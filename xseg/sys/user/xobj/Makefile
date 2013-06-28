@@ -7,6 +7,7 @@
 #   1. Redistributions of source code must retain the above
 #      copyright notice, this list of conditions and the following
 #      disclaimer.
+#
 #   2. Redistributions in binary form must reproduce the above
 #      copyright notice, this list of conditions and the following
 #      disclaimer in the documentation and/or other materials
@@ -56,10 +57,10 @@ xobj_test: $(BASE)/xtypes/xobj_test.c xobj.o $(BASE)/sys/user/xheap/xheap.o $(BA
 	$(BASE)/sys/user/xheap/xheap.o -ldl -lpthread
 
 xobj.o: $(BASE)/xtypes/xobj.c $(BASE)/xtypes/xobj.h $(BASE)/sys/user/xheap/xheap.o $(BASE)/xtypes/xlock.h
-	$(CC) $(CFLAGS) $(INC) -c -o $@ $< $(BASE)/sys/user/xheap/xheap.o
+	$(CC) $(CFLAGS) $(INC) -c -o $@ $<
 
 xobj.pic.o: $(BASE)/xtypes/xobj.c $(BASE)/xtypes/xobj.h $(BASE)/xtypes/xlock.h
-	$(CC) $(CFLAGS) $(INC) -fPIC -c -o $@ $< $(BASE)/sys/user/xheap/xheap.pic.o
+	$(CC) $(CFLAGS) $(INC) -fPIC -c -o $@ $<
 
 clean:
 	rm -f xobj.o xobj.pic.o xobj_test

@@ -53,6 +53,7 @@ typedef uint64_t xhashidx;
 
 #define XHASH_ERESIZE 1
 #define XHASH_EEXIST 2
+#define XHASH_ENOSPC 3
 
 enum xhash_type {
 	INTEGER = 0,	/* signed/unsigned integers, pointers, etc */
@@ -67,6 +68,7 @@ struct xhash {
     xhashidx used;
     xhashidx dummies;
     xhashidx defval;
+    xhashidx limit;
     enum xhash_type type;
 #ifdef PHASH_STATS
     xhashidx inserts;
@@ -131,11 +133,13 @@ xhashidx xhash_grow_size_shift(xhash_t *xhash);
 xhashidx xhash_shrink_size_shift(xhash_t *xhash);
 ssize_t xhash_get_alloc_size(xhashidx size_shift);
 
-xhash_t *xhash_new(xhashidx minsize_shift, enum xhash_type type);
+xhash_t *xhash_new(xhashidx minsize_shift, xhashidx limit, enum xhash_type type);
 void xhash_free(xhash_t *xhash); // pairs with _new()
-void xhash_init(struct xhash *xhash, xhashidx minsize_shift, enum xhash_type type);
+void xhash_init(struct xhash *xhash, xhashidx minsize_shift, xhashidx limit,
+		enum xhash_type type);
 
-xhash_t * xhash_resize(xhash_t *xhash, xhashidx new_size_shift, xhash_t *newxhash);
+xhash_t * xhash_resize(xhash_t *xhash, xhashidx new_size_shift,
+		xhashidx newlimit, xhash_t *newxhash);
 int xhash_insert(xhash_t *xhash, xhashidx key, xhashidx val);
 int xhash_update(xhash_t *xhash, xhashidx key, xhashidx val);
 int xhash_freql_update(xhash_t *xhash, xhashidx key, xhashidx val);

@@ -3,41 +3,52 @@ SPEC="segdev:xsegbd:1024:5120:12"
 
 XSEGBD_START=0
 XSEGBD_END=499
-VPORT_START=500
-VPORT_END=999
-BPORT=1000
-MPORT=1001
-MBPORT=1002
 VTOOL=1003
 
-#Max number of flying operations
-NR_OPS_BLOCKERB=512
-NR_OPS_BLOCKERM=512
-NR_OPS_VLMC=512
-NR_OPS_MAPPER=512
+roles = [('blockerb', 'rados_blocker'),
+         ('blockerm', 'rados_blocker'),
+         ('mapperd', 'mapperd'),
+         ('vlmcd', 'vlmcd')]
 
-#verbosity levels for each xseg peer
-#0 Error
-#1 Warnings
-#2 Info
-#3 Debug
-VERBOSITY_BLOCKERB="3"
-VERBOSITY_BLOCKERM="3"
-VERBOSITY_MAPPER="3"
-VERBOSITY_VLMC="3"
+#nr_ops: Max number of flying operations
+#log_level: verbosity levels for each xseg peer
+#            0 - Error
+#            1 - Warnings
+#            2 - Info
+#            3 - Debug
 
-# Choose between rados or files STORAGE
-# For the selected storage method, the appropriate config options must be set
-#STORAGE="files"
-STORAGE="rados"
+blockerb= {
+    'portno_start': 1000,
+    'portno_end': 1000,
+    'log_level': 3,
+    'nr_ops': 512,
+    'pool': 'blocks'
+}
 
-#options for STORAGE="files"
-#FILED_IMAGES="/srv/archip/blocks"
-#FILED_MAPS="/srv/archip/maps"
-#PITHOS="/srv/pithos/data/blocks"
-#PITHOSMAPS="/srv/pithos/data/maps"
+blockerm = {
+    'portno_start': 1002,
+    'portno_end': 1002,
+    'log_level': 3,
+    'nr_ops': 512,
+    'pool': 'maps'
+}
 
-#options for STORAGE="rados"
-RADOS_POOL_MAPS="maps"
-RADOS_POOL_BLOCKS="blocks"
+mapperd = {
+    'portno_start': 1001,
+    'portno_end': 1001,
+    'log_level': 3,
+    'nr_ops': 512,
+    'blockerb_port': 1000,
+    'blockerm_port': 1002
+}
+
+vlmcd = {
+    'portno_start': 500,
+    'portno_end': 999,
+    'log_level': 3,
+    'nr_ops': 512,
+    'blocker_port': 1000,
+    'mapper_port': 1001
+}
+
 

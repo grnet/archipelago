@@ -60,7 +60,7 @@ int xobj_handler_init(struct xobject_h *obj_h, void *container,
 	 */
 	//bytes = xheap_get_chunk_size(xhash);
 
-	xhash_init(xhash, 3, INTEGER);
+	xhash_init(xhash, 3, 0, INTEGER);
 	obj_h->allocated = XPTR_MAKE(xhash, container);
 	obj_h->list = 0;
 	obj_h->flags = 0;
@@ -118,7 +118,7 @@ int xobj_alloc_obj(struct xobject_h * obj_h, uint64_t nr)
 		new = xheap_allocate(heap, size);
 		if (!new)
 			goto err;
-		xhash_resize(allocated, sizeshift, new);
+		xhash_resize(allocated, sizeshift, 0, new);
 		xheap_free(allocated);
 		allocated = new;
 		obj_h->allocated = XPTR_MAKE(allocated, container);

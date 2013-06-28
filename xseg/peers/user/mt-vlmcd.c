@@ -181,7 +181,7 @@ static int insert_volume(struct vlmcd *vlmc, struct volume_info *vi)
 	r = xhash_insert(vlmc->volumes, (xhashidx) vi->name, (xhashidx) vi);
 	while (r == -XHASH_ERESIZE) {
 		xhashidx shift = xhash_grow_size_shift(vlmc->volumes);
-		xhash_t *new_hashmap = xhash_resize(vlmc->volumes, shift, NULL);
+		xhash_t *new_hashmap = xhash_resize(vlmc->volumes, shift, 0, NULL);
 		if (!new_hashmap){
 			XSEGLOG2(&lc, E, "Cannot grow vlmc->volumes to sizeshift %llu",
 					(unsigned long long) shift);
@@ -206,7 +206,7 @@ static int remove_volume(struct vlmcd *vlmc, struct volume_info *vi)
 	r = xhash_delete(vlmc->volumes, (xhashidx) vi->name);
 	while (r == -XHASH_ERESIZE) {
 		xhashidx shift = xhash_shrink_size_shift(vlmc->volumes);
-		xhash_t *new_hashmap = xhash_resize(vlmc->volumes, shift, NULL);
+		xhash_t *new_hashmap = xhash_resize(vlmc->volumes, shift, 0, NULL);
 		if (!new_hashmap){
 			XSEGLOG2(&lc, E, "Cannot shrink vlmc->volumes to sizeshift %llu",
 					(unsigned long long) shift);
@@ -800,7 +800,7 @@ int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 	}
 	peer->priv = (void *) vlmc;
 
-	vlmc->volumes = xhash_new(3, STRING);
+	vlmc->volumes = xhash_new(3, 0, STRING);
 	if (!vlmc->volumes){
 		XSEGLOG2(&lc, E, "Cannot alloc vlmc");
 		return -1;
