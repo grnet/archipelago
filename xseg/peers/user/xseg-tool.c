@@ -675,6 +675,7 @@ int cmd_snapshot(char *src, char *dst, long block_size)
 	char *target = xseg_get_target(xseg, req);
 	char *data = xseg_get_data(xseg, req);
 
+	fprintf(stdout, "Snapshotting %s(%u) to %s(%u)\n", src, targetlen, dst, parentlen);
 	strncpy(target, src, targetlen);
         xsnapshot = (struct xseg_request_snapshot *) data;
         strncpy(xsnapshot->target, dst, parentlen);
