@@ -108,7 +108,7 @@ def create(name, size=None, snap=None, **kwargs):
 
     ret = False
     xseg_ctx = Xseg_ctx(config['SPEC'], config['VTOOL'])
-    mport = config['MPORT']
+    mport = peers['mapperd'].portno_start
     datasize = sizeof(xseg_request_clone)
     with Request(xseg_ctx, mport, len(name), datasize) as req:
         req.set_op(X_CLONE)
@@ -138,13 +138,13 @@ def create(name, size=None, snap=None, **kwargs):
 
 
 @exclusive
-def snapshot(name, **kwargs):
+def snapshot(name, cli=False, **kwargs):
     if len(name) < 6:
         raise Error("Name should have at least len 6")
 
     ret = False
     xseg_ctx = Xseg_ctx(config['SPEC'], config['VTOOL'])
-    vport = config['VPORT_START']
+    vport = peers['vlmcd'].portno_start
     datasize = sizeof(xseg_request_snapshot)
     with Request(xseg_ctx, vport, len(name), datasize) as req:
         req.set_op(X_SNAPSHOT)
@@ -165,16 +165,17 @@ def snapshot(name, **kwargs):
     xseg_ctx.shutdown()
     if not ret:
         raise Error("vlmc snapshot failed")
-    sys.stdout.write("Snapshot name: %s\n" % reply)
+    if cli:
+        sys.stdout.write("Snapshot name: %s\n" % reply)
     return reply
 
 
 def list_volumes(**kwargs):
-    if config['STORAGE'] == "rados":
+    if isinstance(peers['blockerm'], Sosd):
         import rados
         cluster = rados.Rados(conffile=config['CEPH_CONF_FILE'])
         cluster.connect()
-        ioctx = cluster.open_ioctx(config['RADOS_POOL_MAPS'])
+        ioctx = cluster.open_ioctx(peers['blockerm'].pool)
         oi = rados.ObjectIterator(ioctx)
         for o in oi:
             name = o.key
@@ -203,7 +204,8 @@ def remove(name, **kwargs):
 
     ret = False
     xseg_ctx = Xseg_ctx(config['SPEC'], config['VTOOL'])
-    with Request(xseg_ctx, config['MPORT'], len(name), 0) as req:
+    mport = peers['mapperd'].portno_start
+    with Request(xseg_ctx, mport, len(name), 0) as req:
         req.set_op(X_DELETE)
         req.set_size(0)
         req.set_offset(0)
@@ -218,6 +220,7 @@ def remove(name, **kwargs):
 
 @exclusive
 def map_volume(name, **kwargs):
+    vport = peers['vlmcd'].portno_start
     if not loaded_module(xsegbd):
         raise Error("Xsegbd module not loaded")
     prev = config['XSEGBD_START']
@@ -238,9 +241,9 @@ def map_volume(name, **kwargs):
         fd = os.open(XSEGBD_SYSFS + "add", os.O_WRONLY)
         print >> sys.stderr, "write to %s : %s %d:%d:%d" % (XSEGBD_SYSFS +
                              "add", name, port, port - config['XSEGBD_START'] +
-                             config['VPORT_START'], REQS)
+                             vport, REQS)
         os.write(fd, "%s %d:%d:%d" % (name, port, port - config['XSEGBD_START']
-                                      + config['VPORT_START'], REQS))
+                                      + vport, REQS))
         os.close(fd)
         return port
     except Exception, reason:
@@ -291,7 +294,7 @@ def resize(name, size, **kwargs):
 
 
 @exclusive
-def lock(name, **kwargs):
+def lock(name, cli=False, **kwargs):
     if len(name) < 6:
         raise Error("Name should have at least len 6")
 
@@ -299,7 +302,8 @@ def lock(name, **kwargs):
 
     ret = False
     xseg_ctx = Xseg_ctx(config['SPEC'], config['VTOOL'])
-    with Request(xseg_ctx, config['MBPORT'], len(name), 0) as req:
+    mbport = peers['blockerm'].portno_start
+    with Request(xseg_ctx, mbport, len(name), 0) as req:
         req.set_op(X_ACQUIRE)
         req.set_size(0)
         req.set_offset(0)
@@ -311,12 +315,12 @@ def lock(name, **kwargs):
     xseg_ctx.shutdown()
     if not ret:
         raise Error("vlmc lock failed")
-    else:
+    if cli:
         sys.stdout.write("Volume locked\n")
 
 
 @exclusive
-def unlock(name, force=False, **kwargs):
+def unlock(name, force=False, cli=False, **kwargs):
     if len(name) < 6:
         raise Error("Name should have at least len 6")
 
@@ -324,7 +328,8 @@ def unlock(name, force=False, **kwargs):
 
     ret = False
     xseg_ctx = Xseg_ctx(config['SPEC'], config['VTOOL'])
-    with Request(xseg_ctx, config['MBPORT'], len(name), 0) as req:
+    mbport = peers['blockerm'].portno_start
+    with Request(xseg_ctx, mbport, len(name), 0) as req:
         req.set_op(X_RELEASE)
         req.set_size(0)
         req.set_offset(0)
@@ -339,18 +344,19 @@ def unlock(name, force=False, **kwargs):
     xseg_ctx.shutdown()
     if not ret:
         raise Error("vlmc unlock failed")
-    else:
+    if cli:
         sys.stdout.write("Volume unlocked\n")
 
 
 @exclusive
-def open_volume(name, **kwargs):
+def open_volume(name, cli=False, **kwargs):
     if len(name) < 6:
         raise Error("Name should have at least len 6")
 
     ret = False
     xseg_ctx = Xseg_ctx(config['SPEC'], config['VTOOL'])
-    with Request(xseg_ctx, config['VPORT_START'], len(name), 0) as req:
+    vport = peers['vlmcd'].portno_start
+    with Request(xseg_ctx, vport, len(name), 0) as req:
         req.set_op(X_OPEN)
         req.set_size(0)
         req.set_offset(0)
@@ -361,18 +367,19 @@ def open_volume(name, **kwargs):
     xseg_ctx.shutdown()
     if not ret:
         raise Error("vlmc open failed")
-    else:
+    if cli:
         sys.stdout.write("Volume opened\n")
 
 
 @exclusive
-def close_volume(name, **kwargs):
+def close_volume(name, cli=False, **kwargs):
     if len(name) < 6:
         raise Error("Name should have at least len 6")
 
     ret = False
     xseg_ctx = Xseg_ctx(config['SPEC'], config['VTOOL'])
-    with Request(xseg_ctx, config['VPORT_START'], len(name), 0) as req:
+    vport = peers['vlmcd'].portno_start
+    with Request(xseg_ctx, vport, len(name), 0) as req:
         req.set_op(X_CLOSE)
         req.set_size(0)
         req.set_offset(0)
@@ -383,18 +390,19 @@ def close_volume(name, **kwargs):
     xseg_ctx.shutdown()
     if not ret:
         raise Error("vlmc close failed")
-    else:
+    if cli:
         sys.stdout.write("Volume closed\n")
 
 
 @exclusive
-def info(name, **kwargs):
+def info(name, cli=False, **kwargs):
     if len(name) < 6:
         raise Error("Name should have at least len 6")
 
     ret = False
     xseg_ctx = Xseg_ctx(config['SPEC'], config['VTOOL'])
-    with Request(xseg_ctx, config['MPORT'], len(name), 0) as req:
+    mport = peers['mapperd'].portno_start
+    with Request(xseg_ctx, mport, len(name), 0) as req:
         req.set_op(X_INFO)
         req.set_size(0)
         req.set_offset(0)
@@ -407,7 +415,7 @@ def info(name, **kwargs):
     xseg_ctx.shutdown()
     if not ret:
         raise Error("vlmc info failed")
-    else:
+    if cli:
         sys.stdout.write("Volume %s: size: %d\n" % (name, size))
 
 
