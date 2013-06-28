@@ -613,7 +613,7 @@ static void * st_peerd_loop(void *peer)
 {
 	struct peerd *peerd = peer;
 
-	return init_peerd_loop(peer);
+	return init_peerd_loop(peerd) ? (void *)-1 : (void *)0;
 }
 #endif
 
