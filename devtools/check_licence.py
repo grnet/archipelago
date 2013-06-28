@@ -40,10 +40,11 @@ EXCLUDE_FILENAMES = ['.gitignore', 'README', 'version', 'c_bsd.licence',
                      'python_bsd.licence', 'devflow.conf', 'verify',
                      'create', 'detach', 'attach', 'parameters.list', 'grow',
                      'remove', 'python_gpl.licence', 'c_gpl.licence', 'tags',
-                     'config.env', 'distribute_setup.py']
+                     'config.env', 'distribute_setup.py', '.o', '.ko', '.mod',
+		     '.a', '.so', '.cmd', '.mod.c', '.pyc', 'version.py']
 GPL_FILES = ['vlmc_wrapper.py', 'kernel/xseg_posix.c', 'kernel/xseg_pthread.c',
              'xsegbd.c']
-EXCLUDE_DIRECTORIES = ['.git', 'doc']
+EXCLUDE_DIRECTORIES = ['.git', 'doc', 'archipelago.egg-info', 'xseg.egg-info']
 VALID_YEARS = [2011, 2012, 2013]
 CUR_YEAR = 2013
 PYTHON_INTERPRETER = "#!/usr/bin/env python\n"
