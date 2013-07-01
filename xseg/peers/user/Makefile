@@ -52,7 +52,7 @@ default: $(PEERS)
 
 #all: filed xseg sosd vlmcd mapperd
 #all: filed xseg vlmcd mapperd
-all: filed xseg archip-sosd dummy archip-vlmcd mapperd archip-mapperd pfiled monitor vlmc-xseg archip-vlmcd archip-pfiled archip-bench
+all: xseg archip-sosd dummy archip-vlmcd mapperd archip-mapperd pfiled monitor vlmc-xseg archip-vlmcd archip-pfiled archip-bench
 
 
 vlmcd: vlmcd.c common.c $(BASE)/xseg/xseg.h $(BASE)/xseg/protocol.h common.h
@@ -77,9 +77,6 @@ archip-bench: bench-xseg.c peer.c bench-timer.c bench-lfsr.c bench-utils.c bench
 	$(CC) $(CFLAGS) -o $@ $(CPREQS) $(INC) -L$(LIB) -lxseg -lpthread -lm
 
 monitor: monitor.c peer.c peer.h
-	$(CC) $(CFLAGS) -o $@ $< peer.c $(INC) -L$(LIB) -lxseg -lpthread -DMT
-
-mt-vlmcd: mt-vlmcd.c peer.c peer.h $(BASE)/xseg/protocol.h
 	$(CC) $(CFLAGS) -o $@ $< peer.c $(INC) -L$(LIB) -lxseg -lpthread -DMT
 
 archip-pfiled: filed.c peer.c peer.h hash.c hash.h $(BASE)/xseg/protocol.h
@@ -121,4 +118,4 @@ install-src:
 
 clean:
 	rm -f xseg sosd vlmcd mapperd archip-sosd monitor archip-mapperd \
-		pfiled vlmc-xseg archip-vlmcd mt-vlmcd archip-pfiled archip-bench
+		pfiled vlmc-xseg archip-vlmcd archip-pfiled archip-bench
