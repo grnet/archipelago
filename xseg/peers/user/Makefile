@@ -82,7 +82,7 @@ monitor: monitor.c peer.c peer.h
 mt-vlmcd: mt-vlmcd.c peer.c peer.h $(BASE)/xseg/protocol.h
 	$(CC) $(CFLAGS) -o $@ $< peer.c $(INC) -L$(LIB) -lxseg -lpthread -DMT
 
-archip-pfiled: mt-pfiled.c peer.c peer.h hash.c hash.h $(BASE)/xseg/protocol.h
+archip-pfiled: filed.c peer.c peer.h hash.c hash.h $(BASE)/xseg/protocol.h
 	$(CC) $(CFLAGS) -o $@ $(CPREQS) $(INC) -L$(LIB) -lxseg -lpthread -DMT \
 							-lcrypto
 
