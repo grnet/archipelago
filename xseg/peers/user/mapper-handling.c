@@ -618,12 +618,14 @@ static int __copyup_copy_cb(struct peer_req *pr, struct xseg_request *req,
 	struct xseg_request *xreq;
 	struct map_node newmn;
 	char *target;
+	int r;
+	struct mapper_io *mio = __get_mapper_io(pr);
 
 	mn->state &= ~MF_OBJECT_COPYING;
 
 	map = mn->map;
 	if (!map){
-		XSEGLOG2(&lc, E, "Object %s has not map back pointer", mn->object);
+		XSEGLOG2(&lc, E, "Object %s has no map back pointer", mn->object);
 		return -1;
 	}
 
@@ -643,6 +645,10 @@ static int __copyup_copy_cb(struct peer_req *pr, struct xseg_request *req,
 				"\n\t of map %s [%llu]",
 				mn->object, map->volume, (unsigned long long) mn->objectidx);
 		return -1;
+	}
+	r = __set_node(mio, req, mn);
+	if (r < 0) {
+		XSEGLOG2(&lc, E, "Cannot set map node for object %s", mn->object);
 	}
 	mn->state |= MF_OBJECT_WRITING;
 	return 0;
