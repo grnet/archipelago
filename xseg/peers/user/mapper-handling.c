@@ -735,16 +735,8 @@ struct xseg_request * __object_write(struct peerd *peer, struct peer_req *pr,
 				struct map *map, struct map_node *mn)
 {
 	int r;
-//	struct mapperd *mapper = __get_mapperd(peer);
+	struct mapper_io *mio = __get_mapper_io(pr);
 	struct xseg_request *req;
-//	req = xseg_get_request(peer->xseg, pr->portno,
-//							mapper->mbportno, X_ALLOC);
-//	if (!req){
-//		XSEGLOG2(&lc, E, "Cannot allocate request for object %s. \n\t"
-//				"(Map: %s [%llu]",
-//				mn->object, map->volume, (unsigned long long) mn->objectidx);
-//		goto out_err;
-//	}
 
 	req = map_functions[map->version].prepare_write_object(pr, map, mn);
 	if (!req){
@@ -752,11 +744,16 @@ struct xseg_request * __object_write(struct peerd *peer, struct peer_req *pr,
 		goto out_err;
 	}
 
+	r = __set_node(mio, req, mn);
+	if (r < 0) {
+		XSEGLOG2(&lc, E, "Cannot set map node for object %s", mn->object);
+		goto out_put;
+	}
 	r = send_request(pr, req);
 	if (r < 0) {
 		XSEGLOG2(&lc, E, "Cannot send request %p, pr: %p, map: %s",
 				req, pr, map->volume);
-		goto out_put;
+		goto out_unset_node;
 	}
 	XSEGLOG2(&lc, I, "Writing object %s \n\t"
 			"Map: %s [%llu]",
@@ -764,6 +761,8 @@ struct xseg_request * __object_write(struct peerd *peer, struct peer_req *pr,
 
 	return req;
 
+out_unset_node:
+	__set_node(mio, req, NULL);
 out_put:
 	xseg_put_request(peer->xseg, req, pr->portno);
 out_err:
