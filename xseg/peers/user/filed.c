@@ -58,12 +58,7 @@
 #include <xseg/xseg.h>
 #include <xseg/protocol.h>
 
-#ifndef SHA256_DIGEST_SIZE
-#define SHA256_DIGEST_SIZE 32
-#endif
-/* hex representation of sha256 value takes up double the sha256 size */
-#define HEXLIFIED_SHA256_DIGEST_SIZE (SHA256_DIGEST_SIZE << 1)
-
+#include <hash.h>
 
 #define FIO_STR_ID_LEN		3
 #define LOCK_SUFFIX		"_lock"
@@ -77,12 +72,6 @@
 
 #define WRITE 1
 #define READ 2
-
-/* Pithos hash for the zero block
- * FIXME: Should it be hardcoded?
-#define ZERO_BLOCK \
-	"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b85"
- */
 
 /*
  * Globals, holding command-line arguments
@@ -139,17 +128,6 @@ struct pfiled * __get_pfiled(struct peerd *peer)
 struct fio * __get_fio(struct peer_req *pr)
 {
 	return (struct fio*) pr->priv;
-}
-
-
-/* hexlify function. 
- * Unsafe. Doesn't check if data length is odd!
- */
-static void hexlify(unsigned char *data, char *hex)
-{
-	int i;
-	for (i=0; i<SHA256_DIGEST_LENGTH; i++)
-		sprintf(hex+2*i, "%02x", data[i]);
 }
 
 
@@ -237,7 +215,7 @@ static void get_dirs(char buf[6], struct pfiled *pfiled, char *target, uint32_t 
 	}
 
 	SHA256((unsigned char *)target, targetlen, sha);
-	hexlify(sha, hex);
+	hexlify(sha, 3, hex);
 	strncpy(buf, hex, 6);
 	return;
 }
@@ -838,9 +816,9 @@ static void handle_snapshot(struct peerd *peer, struct peer_req *pr)
 	}
 
 	xreply = (struct xseg_reply_snapshot *)xseg_get_data(peer->xseg, req);
-	hexlify(sha, xreply->target);
+	hexlify(sha, SHA256_DIGEST_SIZE, xreply->target);
 	xreply->targetlen = HEXLIFIED_SHA256_DIGEST_SIZE;
-	hexlify(sha, snapshot_name);
+	hexlify(sha, SHA256_DIGEST_SIZE, snapshot_name);
 	snapshot_name[HEXLIFIED_SHA256_DIGEST_SIZE] = 0;
 
 
