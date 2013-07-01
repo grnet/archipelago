@@ -41,6 +41,8 @@ XTYPES += xhash
 XTYPES += xheap
 XTYPES += xworkq
 XTYPES += xwaitq
+XTYPES += xbinheap
+XTYPES += xcache
 XTYPES += xobj
 
 export XTYPES
