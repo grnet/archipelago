@@ -452,7 +452,8 @@ int cmd_acquire(char *target)
 	strncpy(req_target, target, targetlen);
 	req->offset = 0;
 	req->size = 0;
-	req->op = X_OPEN;
+	req->op = X_ACQUIRE;
+	req->flags = XF_NOSYNC;
 	p = xseg_submit(xseg, req, srcport, X_ALLOC);
 	if (p == NoPort)
 		return -1;
@@ -462,6 +463,75 @@ int cmd_acquire(char *target)
 }
 
 int cmd_release(char *target)
+{
+	uint32_t targetlen = strlen(target);
+	int r;
+	xport p;
+	char *req_target;
+	struct xseg_request *req = xseg_get_request(xseg, srcport, dstport, X_ALLOC);
+	if (!req) {
+		fprintf(stderr, "No request\n");
+		return -1;
+	}
+
+	r = xseg_prep_request(xseg, req, targetlen, 0);
+	if (r < 0) {
+		fprintf(stderr, "Cannot prepare request! (%lu, 0)\n",
+			(unsigned long)targetlen);
+		xseg_put_request(xseg, req, srcport);
+		return -1;
+	}
+
+	req_target = xseg_get_target(xseg, req);
+	strncpy(req_target, target, targetlen);
+	req->offset = 0;
+	req->size = 0;
+	req->op = X_RELEASE;
+	//req->flags = XF_FORCE;
+	req->flags = 0;
+	p = xseg_submit(xseg, req, srcport, X_ALLOC);
+	if (p == NoPort)
+		return -1;
+
+	xseg_signal(xseg, p);
+	return 0;
+	return 0;
+}
+
+int cmd_open(char *target)
+{
+	uint32_t targetlen = strlen(target);
+	int r;
+	xport p;
+	char *req_target;
+	struct xseg_request *req = xseg_get_request(xseg, srcport, dstport, X_ALLOC);
+	if (!req) {
+		fprintf(stderr, "No request\n");
+		return -1;
+	}
+
+	r = xseg_prep_request(xseg, req, targetlen, 0);
+	if (r < 0) {
+		fprintf(stderr, "Cannot prepare request! (%lu, 0)\n",
+			(unsigned long)targetlen);
+		xseg_put_request(xseg, req, srcport);
+		return -1;
+	}
+
+	req_target = xseg_get_target(xseg, req);
+	strncpy(req_target, target, targetlen);
+	req->offset = 0;
+	req->size = 0;
+	req->op = X_OPEN;
+	p = xseg_submit(xseg, req, srcport, X_ALLOC);
+	if (p == NoPort)
+		return -1;
+
+	xseg_signal(xseg, p);
+	return 0;
+}
+
+int cmd_close(char *target)
 {
 	uint32_t targetlen = strlen(target);
 	int r;
@@ -2070,7 +2140,7 @@ int main(int argc, char **argv)
 		if (!strcmp(argv[i], "snapshot") && (i + 2 < argc)) {
 			char *src = argv[i+1];
 			char *dst = argv[i+2];
-			ret = cmd_snapshot(src, dst, 4096*1024);
+			ret = cmd_snapshot(src, dst, 4096*1024*1024UL);
 			i += 2;
 			continue;
 		}
