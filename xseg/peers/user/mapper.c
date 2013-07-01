@@ -867,7 +867,12 @@ static int do_mapr(struct peer_req *pr, struct map *map)
 static int do_mapw(struct peer_req *pr, struct map *map)
 {
 	struct peerd *peer = pr->peer;
-	int r = req2objs(pr, map, 1);
+	int r;
+	if (map->flags & MF_MAP_READONLY) {
+		XSEGLOG2(&lc, E, "Cannot write to a read only map");
+		return -1;
+	}
+	r = req2objs(pr, map, 1);
 	if  (r < 0){
 		XSEGLOG2(&lc, I, "Map w of map %s, range: %llu-%llu failed",
 				map->volume, 
@@ -954,6 +959,7 @@ static int do_clone(struct peer_req *pr, struct map *map)
 		goto out_close;
 	}
 	clonemap->objects = map_nodes;
+	clonemap->nr_objs = c;
 	for (i = 0; i < c; i++) {
 		mn = get_mapnode(map, i);
 		if (mn) {
