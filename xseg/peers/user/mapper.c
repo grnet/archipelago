@@ -343,7 +343,7 @@ static int do_copyups(struct peer_req *pr, struct r2o *mns, int n)
 				 * Otherwise it's a bug.
 				 */
 				if (mn->state != MF_OBJECT_COPYING
-						|| mn->state != MF_OBJECT_WRITING) {
+						&& mn->state != MF_OBJECT_WRITING) {
 					XSEGLOG2(&lc, E, "BUG: Map node has wrong state");
 				}
 				wait_on_mapnode(mn, mn->state & MF_OBJECT_NOT_READY);
@@ -699,7 +699,7 @@ static int do_snapshot(struct peer_req *pr, struct map *map)
 		return -1;
 	}
 	if (map->epoch == UINT64_MAX) {
-		XSEGLOG2(&lc, E, "Max number of snapshots reached");
+		XSEGLOG2(&lc, E, "Max epoch reached for %s", map->volume);
 		return -1;
 	}
 	XSEGLOG2(&lc, I, "Starting snapshot for map %s", map->volume);
@@ -753,6 +753,7 @@ static int do_snapshot(struct peer_req *pr, struct map *map)
 		goto out_close;
 	}
 	snap_map->epoch = 0;
+	//snap_map->flags &= ~MF_MAP_DELETED;
 	snap_map->flags = MF_MAP_READONLY;
 	snap_map->objects = map->objects;
 	snap_map->size = map->size;
@@ -806,13 +807,18 @@ static int do_destroy(struct peer_req *pr, struct map *map)
 
 	XSEGLOG2(&lc, I, "Destroying map %s", map->volume);
 	map->state |= MF_MAP_DELETING;
-
 	map->flags |= MF_MAP_DELETED;
 	/* Just write map here. Only thing that matters are the map flags, which
 	 * will not be overwritten by any other concurrent map write which can
 	 * be caused by a copy up. Also if by any chance, the volume is
 	 * recreated and there are pending copy ups from the old node, they will
 	 * not mess with the new one. So let's just be fast.
+	 */
+	/* we could write only metadata here to speed things up*/
+	/* Also, we could delete/truncate the unnecessary map blocks, aka all but
+	 * metadata, but that would require to make sure there are no pending
+	 * operations on any block, aka wait_all_objects_ready(). Or we can do
+	 * it later, with garbage collection.
 	 */
 	r = write_map(pr, map);
 	if (r < 0){
@@ -938,6 +944,14 @@ static int do_clone(struct peer_req *pr, struct map *map)
 		XSEGLOG2(&lc, E, "Target volume %s exists", clonemap->volume);
 		goto out_close;
 	}
+
+	/* Make sure, we can take at least one snapshot of the new volume */
+	if (map->epoch >= UINT64_MAX - 2) {
+		XSEGLOG2(&lc, E, "Max epoch reached for %s", clonemap->volume);
+		goto out_close;
+	}
+	clonemap->flags &= ~MF_MAP_DELETED;
+	clonemap->epoch++;
 
 	if (xclone->size == -1)
 		clonemap->size = map->size;
@@ -1148,13 +1162,22 @@ void * handle_clone(struct peer_req *pr)
 			goto out;
 		}
 		r = load_map(pr, map);
-		if (r >= 0 && map->flags & MF_MAP_DELETED) {
+		if (r >= 0 && !(map->flags & MF_MAP_DELETED)) {
 			XSEGLOG2(&lc, E, "Map exists %s", map->volume);
 			close_map(pr, map);
 			put_map(map);
 			r = -1;
 			goto out;
 		}
+		if (map->epoch >= UINT64_MAX - 2) {
+			XSEGLOG2(&lc, E, "Max epoch reached for %s", map->volume);
+			close_map(pr, map);
+			put_map(map);
+			r = -1;
+			goto out;
+		}
+		map->epoch++;
+		map->flags &= ~MF_MAP_DELETED;
 		map->size = xclone->size;
 		map->blocksize = MAPPER_DEFAULT_BLOCKSIZE;
 		map->nr_objs = calc_map_obj(map);
