@@ -64,6 +64,15 @@ mapperd: mapperd.c common.c $(BASE)/xseg/xseg.h $(BASE)/xseg/protocol.h common.h
 sosd: sosd.c $(BASE)/xseg/xseg.h $(BASE)/util_libs/user/sos/sos.h
 	$(CC) $(CFLAGS) -o $@ $< $(INC) -L$(LIB) -lxseg -lsos
 
+monitor: monitor.c peer.c peer.h
+	$(CC) $(CFLAGS) -o $@ $< peer.c $(INC) -L$(LIB) -lxseg -lpthread -DMT
+
+pfiled: pfiled.c common.c $(BASE)/xseg/xseg.h $(BASE)/xseg/protocol.h common.h
+	$(CC) $(CFLAGS) -o $@ $< common.c  $(INC) -L$(LIB) -lxseg -lpthread
+
+vlmc-xseg: vlmc-tool.c $(BASE)/xseg/xseg.h
+	$(CC) $(CFLAGS) -o $@ $< $(INC) -L$(LIB) -lxseg
+
 xseg: xseg-tool.c $(BASE)/xtypes/xheap.c $(BASE)/xseg/xseg.h
 	$(CC) $(CFLAGS) -o $@ $< $(BASE)/xtypes/xheap.c $(INC) -L$(LIB) -lxseg
 
@@ -73,11 +82,11 @@ archip-sosd: mt-sosd.c peer.c peer.h
 dummy: dummy.c peer.c peer.h
 	$(CC) $(CFLAGS) -o $@ $< peer.c $(INC) -L$(LIB) -lxseg -lpthread -DMT
 
-archip-bench: bench-xseg.c peer.c bench-timer.c bench-lfsr.c bench-utils.c bench-xseg.h peer.h bench-lfsr.h
-	$(CC) $(CFLAGS) -o $@ $(CPREQS) $(INC) -L$(LIB) -lxseg -lpthread -lm
+BENCH_PREQ=bench-xseg.c peer.c bench-lfsr.c bench-timer.c bench-utils.c \
+	   bench-xseg.h peer.h bench-lfsr.h $(BASE)/xseg/protocol.h
 
-monitor: monitor.c peer.c peer.h
-	$(CC) $(CFLAGS) -o $@ $< peer.c $(INC) -L$(LIB) -lxseg -lpthread -DMT
+archip-bench: $(BENCH_PREQ)
+	$(CC) $(CFLAGS) -o $@ $(CPREQS) $(INC) -L$(LIB) -lxseg -lpthread -lm
 
 archip-pfiled: filed.c peer.c peer.h hash.c hash.h $(BASE)/xseg/protocol.h
 	$(CC) $(CFLAGS) -o $@ $(CPREQS) $(INC) -L$(LIB) -lxseg -lpthread -DMT \
@@ -94,15 +103,6 @@ MAPPER_PREQ=mapper.c mapper.h peer.c peer.h hash.h hash.c mapper-handling.c \
 archip-mapperd: $(MAPPER_PREQ)
 	$(CC) $(CFLAGS) -o $@ $(CPREQS) $(INC) -L$(LIB) -DST_THREADS \
 							-lxseg -lst -lcrypto
-#archip-mapperd: mt-mapperd.c peer.c peer.h hash.h hash.c $(BASE)/xseg/protocol.h
-#	$(CC) $(CFLAGS) -o $@ $< peer.c hash.c $(INC) -L$(LIB) -DST_THREADS \
-#							-lxseg -lst -lcrypto
-
-pfiled: pfiled.c common.c $(BASE)/xseg/xseg.h $(BASE)/xseg/protocol.h common.h
-	$(CC) $(CFLAGS) -o $@ $< common.c  $(INC) -L$(LIB) -lxseg -lpthread
-
-vlmc-xseg: vlmc-tool.c $(BASE)/xseg/xseg.h
-	$(CC) $(CFLAGS) -o $@ $< $(INC) -L$(LIB) -lxseg
 
 install:
 	install -d $(DESTDIR)$(bindir)
