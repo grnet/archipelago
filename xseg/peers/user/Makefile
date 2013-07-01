@@ -55,9 +55,6 @@ default: $(PEERS)
 all: filed xseg archip-sosd dummy archip-vlmcd mapperd archip-mapperd pfiled monitor vlmc-xseg archip-vlmcd archip-pfiled archip-bench
 
 
-filed: filed.c $(BASE)/xseg/xseg.h
-	$(CC) $(CFLAGS) -o $@ $< $(INC) -L$(LIB) -lxseg -lpthread
-
 vlmcd: vlmcd.c common.c $(BASE)/xseg/xseg.h $(BASE)/xseg/protocol.h common.h
 	$(CC) $(CFLAGS) -o $@ $< common.c $(INC) -L$(LIB) -lxseg
 
@@ -85,8 +82,8 @@ monitor: monitor.c peer.c peer.h
 mt-vlmcd: mt-vlmcd.c peer.c peer.h $(BASE)/xseg/protocol.h
 	$(CC) $(CFLAGS) -o $@ $< peer.c $(INC) -L$(LIB) -lxseg -lpthread -DMT
 
-archip-pfiled: mt-pfiled.c peer.c peer.h $(BASE)/xseg/protocol.h
-	$(CC) $(CFLAGS) -o $@ $< peer.c $(INC) -L$(LIB) -lxseg -lpthread -DMT \
+archip-pfiled: mt-pfiled.c peer.c peer.h hash.c hash.h $(BASE)/xseg/protocol.h
+	$(CC) $(CFLAGS) -o $@ $(CPREQS) $(INC) -L$(LIB) -lxseg -lpthread -DMT \
 							-lcrypto
 
 archip-vlmcd: mt-vlmcd.c peer.c peer.h $(BASE)/xseg/protocol.h
@@ -123,5 +120,5 @@ install-src:
 	done
 
 clean:
-	rm -f filed xseg sosd vlmcd mapperd archip-sosd monitor archip-mapperd \
+	rm -f xseg sosd vlmcd mapperd archip-sosd monitor archip-mapperd \
 		pfiled vlmc-xseg archip-vlmcd mt-vlmcd archip-pfiled archip-bench
