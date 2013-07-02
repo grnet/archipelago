@@ -35,8 +35,8 @@
 .PHONY: default all clean install install-src
 
 include $(XSEG_HOME)/base.mk
-#PEERS := xseg archip-sosd archip-mapperd archip-vlmcd archip-pfiled archip-bench
-PEERS := xseg archip-mapperd archip-vlmcd archip-pfiled archip-bench archip-dummy
+#PEERS := xseg archip-sosd archip-mapperd archip-vlmcd archip-filed archip-bench
+PEERS := xseg archip-mapperd archip-vlmcd archip-filed archip-bench archip-dummy
 
 FILES="Makefile"
 FILES+=$(shell ls *.h)
@@ -52,7 +52,7 @@ default: $(PEERS)
 
 #all: filed xseg sosd vlmcd mapperd
 #all: filed xseg vlmcd mapperd
-all: xseg archip-sosd archip-dummy archip-vlmcd mapperd archip-mapperd pfiled monitor vlmc-xseg archip-vlmcd archip-pfiled archip-bench
+all: xseg archip-sosd archip-dummy archip-vlmcd mapperd archip-mapperd pfiled monitor vlmc-xseg archip-vlmcd archip-filed archip-bench
 
 
 vlmcd: vlmcd.c common.c $(BASE)/xseg/xseg.h $(BASE)/xseg/protocol.h common.h
@@ -88,7 +88,7 @@ BENCH_PREQ=bench-xseg.c peer.c bench-lfsr.c bench-timer.c bench-utils.c \
 archip-bench: $(BENCH_PREQ)
 	$(CC) $(CFLAGS) -o $@ $(CPREQS) $(INC) -L$(LIB) -lxseg -lpthread -lm
 
-archip-pfiled: filed.c peer.c peer.h hash.c hash.h $(BASE)/xseg/protocol.h
+archip-filed: filed.c peer.c peer.h hash.c hash.h $(BASE)/xseg/protocol.h
 	$(CC) $(CFLAGS) -o $@ $(CPREQS) $(INC) -L$(LIB) -lxseg -lpthread -DMT \
 							-lcrypto
 
@@ -118,5 +118,5 @@ install-src:
 
 clean:
 	rm -f xseg sosd vlmcd mapperd archip-sosd monitor archip-mapperd \
-		pfiled vlmc-xseg archip-vlmcd archip-pfiled archip-bench \
+		pfiled vlmc-xseg archip-vlmcd archip-filed archip-bench \
 		archip-dummy
