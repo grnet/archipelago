@@ -608,7 +608,7 @@ int cmd_copy(char *src, char *dst)
 	return 0;
 }
 
-int cmd_clone(char *src, char *dst)
+int cmd_clone(char *src, char *dst, long size)
 {
 
         uint32_t targetlen = strlen(dst);
@@ -636,7 +636,12 @@ int cmd_clone(char *src, char *dst)
         xclone = (struct xseg_request_clone *) data;
         strncpy(xclone->target, src, parentlen);
 	xclone->targetlen = parentlen;
-        xclone->size = -1;
+	if (size) {
+		xclone->size = (uint64_t)size;
+		xclone->size *= 1024*1024;
+	} else {
+		xclone->size = -1;
+	}
         req->offset = 0;
         req->size = sizeof(struct xseg_request_clone);
         req->op = X_CLONE;
@@ -2131,11 +2136,12 @@ int main(int argc, char **argv)
 			continue;
 		}
 
-		if (!strcmp(argv[i], "clone") && (i + 2 < argc)) {
+		if (!strcmp(argv[i], "clone") && (i + 3 < argc)) {
 			char *src = argv[i+1];
 			char *dst = argv[i+2];
-			ret = cmd_clone(src, dst);
-			i += 2;
+			long size = atol(argv[i+3]);
+			ret = cmd_clone(src, dst, size);
+			i += 3;
 			continue;
 		}
 		if (!strcmp(argv[i], "snapshot") && (i + 2 < argc)) {
