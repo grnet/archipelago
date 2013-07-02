@@ -70,7 +70,7 @@ int __set_node(struct mapper_io *mio, struct xseg_request *req,
 			xhashidx shift = xhash_grow_size_shift(mio->copyups_nodes);
 			xhash_t *new_hashmap = xhash_resize(mio->copyups_nodes, shift, 0, NULL);
 			if (!new_hashmap)
-				goto out;
+				return -1;
 			mio->copyups_nodes = new_hashmap;
 			r = xhash_insert(mio->copyups_nodes, (xhashidx) req, (xhashidx) mn);
 		}
@@ -86,15 +86,18 @@ int __set_node(struct mapper_io *mio, struct xseg_request *req,
 			xhashidx shift = xhash_shrink_size_shift(mio->copyups_nodes);
 			xhash_t *new_hashmap = xhash_resize(mio->copyups_nodes, shift, 0, NULL);
 			if (!new_hashmap)
-				goto out;
+				return -1;
 			mio->copyups_nodes = new_hashmap;
 			r = xhash_delete(mio->copyups_nodes, (xhashidx) req);
-		}
+		} 
+//		else if (r == -XHASH_ENOENT) {
+//			XSEGLOG2(&lc, W, "%lx not found on mio %lx", req, mio);
+//			return -1;
+//		}
 		if (r < 0)
 			XSEGLOG2(&lc, E, "Deletion of %lx on mio %lx failed",
 					req, mio);
 	}
-out:
 	return r;
 }
 

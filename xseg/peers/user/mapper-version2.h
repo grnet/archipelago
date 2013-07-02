@@ -53,7 +53,9 @@
  */
 #define v2_objectsize_in_map (1 + sizeof(uint32_t) + v2_max_objectlen)
 
-#define v2_read_chunk_size (512*1024)
+//#define v2_read_chunk_size (512*1024)
+#define v2_nr_objs_per_chunk ((512*1024)/v2_objectsize_in_map)
+#define v2_read_chunk_size (v2_nr_objs_per_chunk * v2_objectsize_in_map)
 
 /* Map header contains:
  * 	map version - uint32_t

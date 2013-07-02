@@ -51,6 +51,7 @@ int read_object_v2(struct map_node *mn, unsigned char *buf)
 	objectlen = *(typeof(objectlen) *)(buf + 1);
 	mn->objectlen = objectlen;
 	if (mn->objectlen > v2_max_objectlen) {
+		XSEGLOG2(&lc, D, "mn: %p, buf: %p, objectlen: %u", mn, buf, mn->objectlen);
 		XSEGLOG2(&lc, E, "Invalid object len %u", mn->objectlen);
 		return -1;
 	}
@@ -59,7 +60,7 @@ int read_object_v2(struct map_node *mn, unsigned char *buf)
 		strcpy(mn->object, MAPPER_PREFIX);
 		len += MAPPER_PREFIX_LEN;
 	}
-	memcpy(mn->object + len, buf + sizeof(mn->objectlen) + 1, mn->objectlen);
+	memcpy(mn->object + len, buf + sizeof(objectlen) + 1, mn->objectlen);
 	mn->object[mn->objectlen] = 0;
 	return 0;
 }
@@ -80,13 +81,16 @@ void v2_object_to_map(unsigned char* buf, struct map_node *mn)
 
 	objectlen = (typeof(objectlen))(buf + 1);
 	*objectlen = mn->objectlen & 0xFFFFFFFF;
+	if (*objectlen > v2_max_objectlen) {
+		XSEGLOG2(&lc, E, "Invalid object len %u", mn->objectlen);
+	}
 
 	len = 0;
 	if (mn->flags & MF_OBJECT_ARCHIP){
 		/* strip common prefix */
 		len += MAPPER_PREFIX_LEN;
 	}
-	memcpy((buf + 1 + sizeof(mn->objectlen)), mn->object + len, mn->objectlen);
+	memcpy((buf + 1 + sizeof(uint32_t)), mn->object + len, mn->objectlen);
 }
 
 struct xseg_request * prepare_write_object_v2(struct peer_req *pr, struct map *map,
@@ -100,8 +104,12 @@ struct xseg_request * prepare_write_object_v2(struct peer_req *pr, struct map *m
 	uint32_t targetlen;
 	char buf[sizeof(uint64_t)*2 + 1];
 	uint64_t nr_objs_per_block, my_block;
+	uint64_t nr_objs_per_chunk, nr_chunks_per_block;
 
-	nr_objs_per_block = map->blocksize / v2_objectsize_in_map;
+	nr_objs_per_chunk = v2_read_chunk_size/v2_objectsize_in_map;
+	nr_chunks_per_block = map->blocksize/v2_read_chunk_size;
+//	nr_objs_per_block = map->blocksize / v2_objectsize_in_map;
+	nr_objs_per_block = nr_chunks_per_block * nr_objs_per_chunk;
 	my_block = mn->objectidx / nr_objs_per_block;
 
 
@@ -156,7 +164,14 @@ int read_map_v2(struct map *m, unsigned char *data)
 		map_node[i].state = 0;
 		map_node[i].ref = 1;
 		map_node[i].cond = st_cond_new(); //FIXME err check;
-		read_object_v2(&map_node[i], data+pos);
+		r = read_object_v2(&map_node[i], data+pos);
+		if (r < 0) {
+			XSEGLOG2(&lc, E, "Map %s: Could not read object %llu",
+					m->volume, i);
+			free(m->objects);
+			m->objects = NULL;
+			return -1;
+		}
 		pos += v2_objectsize_in_map;
 	}
 	return 0;
@@ -180,7 +195,7 @@ void write_map_v2_cb(struct peer_req *pr, struct xseg_request *req)
 	}
 
 out:
-	xseg_put_request(peer->xseg, req, pr->portno);
+	put_request(pr, req);
 	mio->pending_reqs--;
 	signal_pr(pr);
 	return;
@@ -247,7 +262,8 @@ int __write_map_v2(struct peer_req *pr, struct map *map)
 	count = 0;
 	nr_objs_per_chunk = v2_read_chunk_size/v2_objectsize_in_map;
 	nr_chunks_per_block = map->blocksize/v2_read_chunk_size;
-	nr_objs_per_block = map->blocksize / v2_objectsize_in_map;
+//	nr_objs_per_block = map->blocksize / v2_objectsize_in_map;
+	nr_objs_per_block = nr_chunks_per_block * nr_objs_per_chunk;
 	nr_map_blocks = map->nr_objs / nr_objs_per_block;
 	if (map->nr_objs % nr_objs_per_block) {
 		nr_map_blocks++;
@@ -258,7 +274,7 @@ int __write_map_v2(struct peer_req *pr, struct map *map)
 			nr_objs_per_chunk, nr_chunks_per_block, nr_objs_per_block,
 			nr_map_blocks);
 	for (i = 0; i < nr_map_blocks && count < map->nr_objs; i++) {
-		for (j = 0; j < nr_objs_per_chunk && count < map->nr_objs; j++) {
+		for (j = 0; j < nr_chunks_per_block && count < map->nr_objs; j++) {
 			hexlify((unsigned char *)&i, sizeof(i), buf);
 			buf[2*sizeof(i)] = 0;
 			sprintf(target, "%s_%s", map->volume, buf);
@@ -471,7 +487,8 @@ int __load_map_v2(struct peer_req *pr, struct map *map, unsigned char *mapbuf)
 	count = 0;
 	nr_objs_per_chunk = v2_read_chunk_size/v2_objectsize_in_map;
 	nr_chunks_per_block = map->blocksize/v2_read_chunk_size;
-	nr_objs_per_block = map->blocksize / v2_objectsize_in_map;
+//	nr_objs_per_block = map->blocksize / v2_objectsize_in_map;
+	nr_objs_per_block = nr_chunks_per_block * nr_objs_per_chunk;
 	nr_map_blocks = map->nr_objs / nr_objs_per_block;
 	if (map->nr_objs % nr_objs_per_block) {
 		nr_map_blocks++;
@@ -503,7 +520,8 @@ int __load_map_v2(struct peer_req *pr, struct map *map, unsigned char *mapbuf)
 					target, targetlen, req->offset);
 
 			//FIXME
-			r = __set_node(mio, req, (struct map_node *)(mapbuf + i*map->blocksize + j*v2_read_chunk_size));
+			//r = __set_node(mio, req, (struct map_node *)(mapbuf + i*map->blocksize + j*v2_read_chunk_size));
+			r = __set_node(mio, req, (struct map_node *)(mapbuf + i*(nr_objs_per_block * v2_objectsize_in_map) + j*v2_read_chunk_size));
 
 			r = send_request(pr, req);
 			if (r < 0) {
@@ -525,6 +543,7 @@ int load_map_v2(struct peer_req *pr, struct map *map)
 	unsigned char *buf;
 	struct mapper_io *mio = __get_mapper_io(pr);
 	uint32_t buf_size = sizeof(char) * map->nr_objs * v2_objectsize_in_map;
+	uint32_t rem;
 
 	if (map->flags & MF_MAP_DELETED) {
 		XSEGLOG2(&lc, I, "Loaded deleted map. Ignoring loading objects");
@@ -534,6 +553,12 @@ int load_map_v2(struct peer_req *pr, struct map *map)
 	if (buf_size < v2_read_chunk_size) {
 		buf_size = v2_read_chunk_size;
 	}
+	/* buf size must be a multiple of v2_read_chunk_size */
+	rem = buf_size % v2_read_chunk_size;
+	XSEGLOG2(&lc, D, "Buf size %u, rem: %u", buf_size, rem);
+	if (rem)
+		buf_size += (v2_read_chunk_size - rem);
+	XSEGLOG2(&lc, D, "Allocating %u bytes buffer", buf_size);
 	buf = malloc(buf_size);
 	if (!buf) {
 		XSEGLOG2(&lc, E, "Cannot allocate memory");
@@ -629,7 +654,7 @@ int read_map_metadata_v2(struct map *map, unsigned char *metadata,
 	char nulls[v2_mapheader_size];
 	uint64_t pos;
 	if (metadata_len < v2_mapheader_size) {
-		XSEGLOG2(&lc, E, "Metadata len < v1_mapheader_size");
+		XSEGLOG2(&lc, E, "Metadata len < v2_mapheader_size");
 		return -1;
 	}
 	memset(nulls, 0, v2_mapheader_size);
