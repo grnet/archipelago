@@ -298,7 +298,7 @@ int __write_map_v2(struct peer_req *pr, struct map *map)
 	return 0;
 
 out_put:
-	xseg_put_request(peer->xseg, req, pr->portno);
+	put_request(pr, req);
 out_err:
 	mio->err = 1;
 	return -1;
@@ -439,11 +439,12 @@ void load_map_v2_cb(struct peer_req *pr, struct xseg_request *req)
 	}
 
 	data = xseg_get_data(peer->xseg, req);
+	XSEGLOG2(&lc, D, "Memcpy %llu to %p (%u)", req->serviced, buf, *(uint32_t *)(data+1));
 	memcpy(buf, data, req->serviced);
 
 out:
 	__set_node(mio, req, NULL);
-	xseg_put_request(peer->xseg, req, pr->portno);
+	put_request(pr, req);
 	mio->pending_reqs--;
 	signal_pr(pr);
 	return;
@@ -506,7 +507,7 @@ int __load_map_v2(struct peer_req *pr, struct map *map, unsigned char *mapbuf)
 
 			r = send_request(pr, req);
 			if (r < 0) {
-				xseg_put_request(peer->xseg, req, pr->portno);
+				put_request(pr, req);
 				XSEGLOG2(&lc, E, "Cannot send request");
 				mio->err = 1;
 				return -1;

@@ -50,6 +50,7 @@
 #include <mapper.h>
 #include <mapper-versions.h>
 
+extern st_cond_t req_cond;
 /* pithos considers this a block full of zeros, so should we.
  * it is actually the sha256 hash of nothing.
  */
@@ -1413,6 +1414,7 @@ int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 	xseg_set_max_requests(peer->xseg, peer->portno_start, 5000);
 	xseg_set_freequeue_size(peer->xseg, peer->portno_start, 3000, 0);
 
+	req_cond = st_cond_new();
 
 //	test_map(peer);
 
@@ -1486,7 +1488,7 @@ void custom_peer_finalize(struct peerd *peer)
 		if (!(req->state & XS_SERVED))
 			XSEGLOG2(&lc, E, "Couldn't close map %s", map->volume);
 		map->state &= ~MF_MAP_CLOSING;
-		xseg_put_request(peer->xseg, req, pr->portno);
+		put_request(pr, req);
 	}
 	return;
 

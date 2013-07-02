@@ -44,8 +44,11 @@
 #include <mapper-versions.h>
 #include <xtypes/xhash.h>
 
-
+static uint32_t nr_reqs = 0;
+static uint32_t waiters_for_req = 0;
+st_cond_t req_cond;
 char buf[XSEG_MAX_TARGETLEN + 1];
+
 char * null_terminate(char *target, uint32_t targetlen)
 {
 	if (targetlen > XSEG_MAX_TARGETLEN)
@@ -133,6 +136,26 @@ int send_request(struct peer_req *pr, struct xseg_request *req)
 	return 0;
 }
 
+#define wait_for_req() \
+	do{ \
+		ta--; \
+		waiters_for_req++; \
+		XSEGLOG2(&lc, D, "Waiting for request. Waiters: %u", \
+				waiters_for_req); \
+		st_cond_wait(req_cond); \
+	}while(0)
+
+#define signal_one_req() \
+	do { \
+		if (waiters_for_req) { \
+			ta++; \
+			waiters_for_req--; \
+			XSEGLOG2(&lc, D, "Siganling one request. Waiters: %u", \
+					waiters_for_req); \
+			st_cond_signal(req_cond); \
+		} \
+	}while(0)
+
 struct xseg_request * get_request(struct peer_req *pr, xport dst, char *target,
 		uint32_t targetlen, uint64_t datalen)
 {
@@ -140,19 +163,29 @@ struct xseg_request * get_request(struct peer_req *pr, xport dst, char *target,
 	struct peerd *peer = pr->peer;
 	struct xseg_request *req;
 	char *reqtarget;
-
+retry:
 	req = xseg_get_request(peer->xseg, pr->portno, dst, X_ALLOC);
 	if (!req){
-		XSEGLOG2(&lc, E, "Cannot allocate request for target %s",
-				null_terminate(target, targetlen));
-		return NULL;
+		if (!nr_reqs) {
+			XSEGLOG2(&lc, E, "Cannot allocate request for target %s",
+					null_terminate(target, targetlen));
+			return NULL;
+		} else {
+			wait_for_req();
+			goto retry;
+		}
 	}
 	r = xseg_prep_request(peer->xseg, req, targetlen, datalen);
 	if (r < 0){
-		XSEGLOG2(&lc, E, "Cannot prepare request for target",
-				null_terminate(target, targetlen));
 		xseg_put_request(peer->xseg, req, pr->portno);
-		return NULL;
+		if (!nr_reqs) {
+			XSEGLOG2(&lc, E, "Cannot prepare request for target",
+					null_terminate(target, targetlen));
+			return NULL;
+		} else {
+			wait_for_req();
+			goto retry;
+		}
 	}
 
 	reqtarget = xseg_get_target(peer->xseg, req);
@@ -162,7 +195,16 @@ struct xseg_request * get_request(struct peer_req *pr, xport dst, char *target,
 	}
 	strncpy(reqtarget, target, req->targetlen);
 
+	nr_reqs++;
 	return req;
+}
+
+void put_request(struct peer_req *pr, struct xseg_request *req)
+{
+	struct peerd *peer = pr->peer;
+	xseg_put_request(peer->xseg, req, pr->portno);
+	nr_reqs--;
+	signal_one_req();
 }
 
 struct xseg_request * __close_map(struct peer_req *pr, struct map *map)
@@ -196,7 +238,7 @@ struct xseg_request * __close_map(struct peer_req *pr, struct map *map)
 	return req;
 
 out_put:
-	xseg_put_request(peer->xseg, req, pr->portno);
+	put_request(pr, req);
 out_err:
 	return NULL;
 }
@@ -217,7 +259,7 @@ int close_map(struct peer_req *pr, struct map *map)
 	wait_on_pr(pr, (!((req->state & XS_FAILED)||(req->state & XS_SERVED))));
 	map->state &= ~MF_MAP_CLOSING;
 	err = req->state & XS_FAILED;
-	xseg_put_request(peer->xseg, req, pr->portno);
+	put_request(pr, req);
 	if (err)
 		return -1;
 	return 0;
@@ -258,7 +300,7 @@ struct xseg_request * __open_map(struct peer_req *pr, struct map *map,
 	return req;
 
 out_put:
-	xseg_put_request(peer->xseg, req, pr->portno);
+	put_request(pr, req);
 out_err:
 	return NULL;
 }
@@ -276,7 +318,7 @@ int open_map(struct peer_req *pr, struct map *map, uint32_t flags)
 	wait_on_pr(pr, (!((req->state & XS_FAILED)||(req->state & XS_SERVED))));
 	map->state &= ~MF_MAP_OPENING;
 	err = req->state & XS_FAILED;
-	xseg_put_request(peer->xseg, req, pr->portno);
+	put_request(pr, req);
 	if (err)
 		return -1;
 	else
@@ -328,7 +370,7 @@ struct xseg_request * __load_map_metadata(struct peer_req *pr, struct map *map)
 	return req;
 
 out_put:
-	xseg_put_request(peer->xseg, req, pr->portno);
+	put_request(pr, req);
 out_err:
 	return NULL;
 }
@@ -391,11 +433,11 @@ int load_map_metadata(struct peer_req *pr, struct map *map)
 		goto out_put;
 	}
 
-	xseg_put_request(peer->xseg, req, pr->portno);
+	put_request(pr, req);
 	return 0;
 
 out_put:
-	xseg_put_request(peer->xseg, req, pr->portno);
+	put_request(pr, req);
 out_err:
 	XSEGLOG2(&lc, E, "Load map version for map %s failed", map->volume);
 	return -1;
@@ -576,7 +618,7 @@ struct xseg_request * __copyup_object(struct peer_req *pr, struct map_node *mn)
 out_unset_node:
 	__set_node(mio, req, NULL);
 out_put:
-	xseg_put_request(peer->xseg, req, pr->portno);
+	put_request(pr, req);
 //out_err:
 	XSEGLOG2(&lc, E, "Copying up object %s \n\t to %s failed", mn->object, new_target);
 	return NULL;
@@ -723,7 +765,7 @@ void copyup_cb(struct peer_req *pr, struct xseg_request *req)
 	}
 
 out:
-	xseg_put_request(peer->xseg, req, pr->portno);
+	put_request(pr, req);
 	return;
 
 out_err:
@@ -770,7 +812,7 @@ struct xseg_request * __object_write(struct peerd *peer, struct peer_req *pr,
 out_unset_node:
 	__set_node(mio, req, NULL);
 out_put:
-	xseg_put_request(peer->xseg, req, pr->portno);
+	put_request(pr, req);
 out_err:
 	XSEGLOG2(&lc, E, "Object write for object %s failed. \n\t"
 			"(Map: %s [%llu]",
@@ -981,7 +1023,7 @@ void snapshot_cb(struct peer_req *pr, struct xseg_request *req)
 	}
 
 out:
-	xseg_put_request(peer->xseg, req, pr->portno);
+	put_request(pr, req);
 	return;
 
 out_err:

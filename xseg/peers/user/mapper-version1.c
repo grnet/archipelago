@@ -179,7 +179,7 @@ struct xseg_request * __write_map_v1(struct peer_req *pr, struct map *map)
 	return req;
 
 out_put:
-	xseg_put_request(peer->xseg, req, pr->portno);
+	put_request(pr, req);
 out_err:
 	XSEGLOG2(&lc, E, "Map write for map %s failed.", map->volume);
 	return NULL;
@@ -195,10 +195,9 @@ int write_map_v1(struct peer_req *pr, struct map *map)
 	wait_on_pr(pr, (!(req->state & XS_FAILED || req->state & XS_SERVED)));
 	if (req->state & XS_FAILED)
 		r = -1;
-	xseg_put_request(peer->xseg, req, pr->portno);
+	put_request(pr, req);
 	return r;
 }
-
 
 
 struct xseg_request * __load_map_v1(struct peer_req *pr, struct map *map)
@@ -210,7 +209,6 @@ struct xseg_request * __load_map_v1(struct peer_req *pr, struct map *map)
 	uint64_t datalen;
 
 
-	//FIXME if this 
 	datalen = calc_map_obj(map) * v1_objectsize_in_map;
 	req = get_request(pr, mapper->mbportno, map->volume, map->volumelen,
 			datalen);
@@ -232,7 +230,7 @@ struct xseg_request * __load_map_v1(struct peer_req *pr, struct map *map)
 	return req;
 
 out_put:
-	xseg_put_request(peer->xseg, req, pr->portno);
+	put_request(pr, req);
 out_fail:
 	return NULL;
 }
@@ -251,13 +249,13 @@ int load_map_v1(struct peer_req *pr, struct map *map)
 
 	if (req->state & XS_FAILED){
 		XSEGLOG2(&lc, E, "Map load failed for map %s", map->volume);
-		xseg_put_request(peer->xseg, req, pr->portno);
+		put_request(pr, req);
 		return -1;
 	}
 	//assert req->service == req->size
 	data = xseg_get_data(peer->xseg, req);
 	r = read_map_v1(map, (unsigned char *)data);
-	xseg_put_request(peer->xseg, req, pr->portno);
+	put_request(pr, req);
 	return r;
 }
 
