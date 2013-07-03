@@ -89,11 +89,11 @@ int __set_node(struct mapper_io *mio, struct xseg_request *req,
 				return -1;
 			mio->copyups_nodes = new_hashmap;
 			r = xhash_delete(mio->copyups_nodes, (xhashidx) req);
-		} 
-//		else if (r == -XHASH_ENOENT) {
-//			XSEGLOG2(&lc, W, "%lx not found on mio %lx", req, mio);
-//			return -1;
-//		}
+		}
+		else if (r == -XHASH_ENOENT) {
+			XSEGLOG2(&lc, W, "%lx not found on mio %lx", req, mio);
+			return -1;
+		}
 		if (r < 0)
 			XSEGLOG2(&lc, E, "Deletion of %lx on mio %lx failed",
 					req, mio);

@@ -54,6 +54,7 @@ typedef uint64_t xhashidx;
 #define XHASH_ERESIZE 1
 #define XHASH_EEXIST 2
 #define XHASH_ENOSPC 3
+#define XHASH_ENOENT 4
 
 enum xhash_type {
 	INTEGER = 0,	/* signed/unsigned integers, pointers, etc */
