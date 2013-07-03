@@ -43,12 +43,7 @@
 #include <openssl/sha.h>
 #include <ctype.h>
 #include <errno.h>
-
-#ifndef SHA256_DIGEST_SIZE
-#define SHA256_DIGEST_SIZE 32
-#endif
-/* hex representation of sha256 value takes up double the sha256 size */
-#define HEXLIFIED_SHA256_DIGEST_SIZE (SHA256_DIGEST_SIZE << 1)
+#include <hash.h>
 
 
 #define LOCK_SUFFIX "_lock"
@@ -68,54 +63,6 @@ void custom_peer_usage()
 		"--pool: Rados pool to connect\n"
 		"\n");
 }
-
-/* hexlify function. 
- * Unsafe. Doesn't check if data length is odd!
- */
-static void hexlify(unsigned char *data, char *hex)
-{
-        int i;
-        for (i=0; i<SHA256_DIGEST_LENGTH; i++)
-                sprintf(hex+2*i, "%02x", data[i]);
-}
-/*
-static void unhexlify(char *hex, unsigned char *data)
-{
-        int i;
-        char c;
-        for (i=0; i<SHA256_DIGEST_LENGTH; i++){
-                data[i] = 0;
-                c = hex[2*i];
-                if (isxdigit(c)){
-                        if (isdigit(c)){
-                                c-= '0';
-                        }
-                        else {
-                                c = tolower(c);
-                                c = c-'a' + 10;
-                        }
-                }
-                else {
-                        c = 0;
-                }
-                data[i] |= (c << 4) & 0xF0;
-                c = hex[2*i+1];
-                if (isxdigit(c)){
-                        if (isdigit(c)){
-                                c-= '0';
-                        }
-                        else {
-                                c = tolower(c);
-                                c = c-'a' + 10;
-                        }
-                }
-                else {
-                        c = 0;
-                }
-                data[i] |= c & 0x0F;
-        }
-}
-*/
 
 enum rados_state {
 	ACCEPTED = 0,
@@ -604,7 +551,7 @@ int handle_snapshot(struct peerd *peer, struct peer_req *pr)
 
 			struct xseg_reply_snapshot *xreply;
 			xreply = (struct xseg_reply_snapshot *)xseg_get_data(peer->xseg, req);
-			hexlify(sha, xreply->target);
+			hexlify(sha, SHA256_DIGEST_SIZE, xreply->target);
 			xreply->targetlen = HEXLIFIED_SHA256_DIGEST_SIZE;
 
 			strncpy(rio->second_name, xreply->target, xreply->targetlen);

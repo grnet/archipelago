@@ -76,8 +76,8 @@ vlmc-xseg: vlmc-tool.c $(BASE)/xseg/xseg.h
 xseg: xseg-tool.c $(BASE)/xtypes/xheap.c $(BASE)/xseg/xseg.h
 	$(CC) $(CFLAGS) -o $@ $< $(BASE)/xtypes/xheap.c $(INC) -L$(LIB) -lxseg
 
-archip-sosd: mt-sosd.c peer.c peer.h
-	$(CC) $(CFLAGS) -o $@ $< peer.c $(INC) -L$(LIB) -lxseg -lrados -lpthread \
+archip-sosd: mt-sosd.c hash.c hash.h peer.c peer.h
+	$(CC) $(CFLAGS) -o $@ $(CPREQS) $(INC) -L$(LIB) -lxseg -lrados -lpthread \
 							-lcrypto -DMT
 archip-dummy: dummy.c peer.c peer.h
 	$(CC) $(CFLAGS) -o $@ $< peer.c $(INC) -L$(LIB) -lxseg -lpthread -DMT
