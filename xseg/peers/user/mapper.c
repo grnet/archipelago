@@ -1353,17 +1353,45 @@ int dispatch_accepted(struct peerd *peer, struct peer_req *pr,
 
 }
 
+struct cb_arg {
+	struct peer_req *pr;
+	struct xseg_request *req;
+};
+
+void * callback_caller(struct cb_arg *arg)
+{
+	struct peer_req *pr = arg->pr;
+	struct xseg_request *req = arg->req;
+	struct mapper_io *mio = __get_mapper_io(pr);
+
+	mio->cb(pr, req);
+	free(arg);
+
+	return NULL;
+}
+
 int dispatch(struct peerd *peer, struct peer_req *pr, struct xseg_request *req,
 		enum dispatch_reason reason)
 {
 	struct mapper_io *mio = __get_mapper_io(pr);
+	struct cb_arg *arg;
 
 	if (reason == dispatch_accept)
 		dispatch_accepted(peer, pr, req);
 	else {
 		if (mio->cb){
-			mio->cb(pr, req);
-		} else { 
+//			mio->cb(pr, req);
+			arg = malloc(sizeof(struct cb_arg));
+			if (!arg) {
+				XSEGLOG2(&lc, E, "Cannot allocate cb_arg");
+				return -1;
+			}
+			arg->pr = pr;
+			arg->req = req;
+			ta++;
+		//	mio->active = 1;
+			st_thread_create(callback_caller, arg, 0, 0);
+		} else {
 			signal_pr(pr);
 		}
 	}
