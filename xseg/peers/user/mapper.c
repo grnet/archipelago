@@ -748,7 +748,7 @@ static int do_snapshot(struct peer_req *pr, struct map *map)
 		XSEGLOG2(&lc, E, "Snapshot exists");
 		goto out_put;
 	}
-	r = load_map(pr, snap_map);
+	r = load_map_metadata(pr, snap_map);
 	if (r >= 0 && !(map->flags & MF_MAP_DELETED)) {
 		XSEGLOG2(&lc, E, "Snapshot exists");
 		goto out_close;
@@ -821,7 +821,7 @@ static int do_destroy(struct peer_req *pr, struct map *map)
 	 * operations on any block, aka wait_all_objects_ready(). Or we can do
 	 * it later, with garbage collection.
 	 */
-	r = write_map(pr, map);
+	r = write_map_metadata(pr, map);
 	if (r < 0){
 		map->state &= ~MF_MAP_DELETING;
 		XSEGLOG2(&lc, E, "Failed to destroy map %s", map->volume);
@@ -940,7 +940,7 @@ static int do_clone(struct peer_req *pr, struct map *map)
 		XSEGLOG2(&lc, E, "Target volume %s exists", clonemap->volume);
 		goto out_put;
 	}
-	r = load_map(pr, clonemap);
+	r = load_map_metadata(pr, clonemap);
 	if (r >= 0 && !(clonemap->flags & MF_MAP_DELETED)) {
 		XSEGLOG2(&lc, E, "Target volume %s exists", clonemap->volume);
 		goto out_close;
@@ -1162,7 +1162,7 @@ void * handle_clone(struct peer_req *pr)
 			r = -1;
 			goto out;
 		}
-		r = load_map(pr, map);
+		r = load_map_metadata(pr, map);
 		if (r >= 0 && !(map->flags & MF_MAP_DELETED)) {
 			XSEGLOG2(&lc, E, "Map exists %s", map->volume);
 			close_map(pr, map);

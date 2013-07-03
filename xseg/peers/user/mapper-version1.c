@@ -132,7 +132,7 @@ int read_map_v1(struct map *m, unsigned char *data)
 	return 0;
 }
 
-struct xseg_request * __write_map_v1(struct peer_req *pr, struct map *map)
+struct xseg_request * __write_map_data_v1(struct peer_req *pr, struct map *map)
 {
 	int r;
 	struct peerd *peer = pr->peer;
@@ -143,7 +143,7 @@ struct xseg_request * __write_map_v1(struct peer_req *pr, struct map *map)
 	struct map_node *mn;
 
 	req = get_request(pr, mapper->mbportno, map->volume, map->volumelen,
-			v1_mapheader_size + map->nr_objs * v1_objectsize_in_map);
+				map->nr_objs * v1_objectsize_in_map);
 	if (!req){
 		XSEGLOG2(&lc, E, "Cannot get request for map %s",
 				map->volume);
@@ -153,16 +153,11 @@ struct xseg_request * __write_map_v1(struct peer_req *pr, struct map *map)
 
 	data = xseg_get_data(peer->xseg, req);
 
-	pos = 0;
-	memcpy(data + pos, &map->version, sizeof(map->version));
-	pos += sizeof(map->version);
-	memcpy(data + pos, &map->size, sizeof(map->size));
-	pos += sizeof(map->size);
-
 	req->op = X_WRITE;
 	req->size = req->datalen;
-	req->offset = 0;
+	req->offset = v1_mapheader_size;
 
+	pos = 0;
 	for (i = 0; i < map->nr_objs; i++) {
 		mn = &map->objects[i];
 		v1_object_to_map((unsigned char *)(data+pos), mn);
@@ -185,11 +180,10 @@ out_err:
 	return NULL;
 }
 
-int write_map_v1(struct peer_req *pr, struct map *map)
+int write_map_data_v1(struct peer_req *pr, struct map *map)
 {
 	int r = 0;
-	struct peerd *peer = pr->peer;
-	struct xseg_request *req = __write_map_v1(pr, map);
+	struct xseg_request *req = __write_map_data_v1(pr, map);
 	if (!req)
 		return -1;
 	wait_on_pr(pr, (!(req->state & XS_FAILED || req->state & XS_SERVED)));
@@ -199,8 +193,65 @@ int write_map_v1(struct peer_req *pr, struct map *map)
 	return r;
 }
 
+struct xseg_request * __write_map_metadata_v1(struct peer_req *pr, struct map *map)
+{
+	int r;
+	struct peerd *peer = pr->peer;
+	struct mapperd *mapper = __get_mapperd(peer);
+	struct xseg_request *req;
+	char *data;
+	uint64_t pos;
 
-struct xseg_request * __load_map_v1(struct peer_req *pr, struct map *map)
+	req = get_request(pr, mapper->mbportno, map->volume, map->volumelen,
+			v1_mapheader_size);
+	if (!req){
+		XSEGLOG2(&lc, E, "Cannot get request for map %s",
+				map->volume);
+		goto out_err;
+	}
+
+
+	data = xseg_get_data(peer->xseg, req);
+
+	pos = 0;
+	memcpy(data + pos, &map->version, sizeof(map->version));
+	pos += sizeof(map->version);
+	memcpy(data + pos, &map->size, sizeof(map->size));
+	pos += sizeof(map->size);
+
+	req->op = X_WRITE;
+	req->size = req->datalen;
+	req->offset = 0;
+
+	r = send_request(pr, req);
+	if (r < 0) {
+		XSEGLOG2(&lc, E, "Cannot send request %p, pr: %p, map: %s",
+				req, pr, map->volume);
+		goto out_put;
+	}
+
+	return req;
+
+out_put:
+	put_request(pr, req);
+out_err:
+	XSEGLOG2(&lc, E, "Map write for map %s failed.", map->volume);
+	return NULL;
+}
+int write_map_metadata_v1(struct peer_req *pr, struct map *map)
+{
+	int r = 0;
+	struct xseg_request *req = __write_map_metadata_v1(pr, map);
+	if (!req)
+		return -1;
+	wait_on_pr(pr, (!(req->state & XS_FAILED || req->state & XS_SERVED)));
+	if (req->state & XS_FAILED)
+		r = -1;
+	put_request(pr, req);
+	return r;
+}
+
+struct xseg_request * __load_map_data_v1(struct peer_req *pr, struct map *map)
 {
 	int r;
 	struct xseg_request *req;
@@ -235,14 +286,14 @@ out_fail:
 	return NULL;
 }
 
-int load_map_v1(struct peer_req *pr, struct map *map)
+int load_map_data_v1(struct peer_req *pr, struct map *map)
 {
 	int r = 0;
 	struct xseg_request *req;
 	struct peerd *peer = pr->peer;
 	char *data;
 
-	req = __load_map_v1(pr, map);
+	req = __load_map_data_v1(pr, map);
 	if (!req)
 		return -1;
 	wait_on_pr(pr, (!(req->state & XS_FAILED || req->state & XS_SERVED)));

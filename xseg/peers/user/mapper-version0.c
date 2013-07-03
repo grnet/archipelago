@@ -120,7 +120,7 @@ int read_map_v0(struct map *m, unsigned char * data)
 }
 
 
-struct xseg_request * __write_map_v0(struct peer_req *pr, struct map *map)
+struct xseg_request * __write_map_data_v0(struct peer_req *pr, struct map *map)
 {
 	int r;
 	struct peerd *peer = pr->peer;
@@ -169,11 +169,10 @@ out_err:
 	return NULL;
 }
 
-int write_map_v0(struct peer_req *pr, struct map *map)
+int write_map_data_v0(struct peer_req *pr, struct map *map)
 {
 	int r = 0;
-	struct peerd *peer = pr->peer;
-	struct xseg_request *req = __write_map_v0(pr, map);
+	struct xseg_request *req = __write_map_data_v0(pr, map);
 	if (!req)
 		return -1;
 	wait_on_pr(pr, (!(req->state & XS_FAILED || req->state & XS_SERVED)));
@@ -184,8 +183,13 @@ int write_map_v0(struct peer_req *pr, struct map *map)
 }
 
 
+int write_map_metadata_v0(struct peer_req *pr, struct map *map)
+{
+	/* No metadata */
+	return 0;
+}
 
-struct xseg_request * __load_map_v0(struct peer_req *pr, struct map *map)
+struct xseg_request * __load_map_data_v0(struct peer_req *pr, struct map *map)
 {
 	int r;
 	struct xseg_request *req;
@@ -226,7 +230,7 @@ out_fail:
 	return NULL;
 }
 
-int load_map_v0(struct peer_req *pr, struct map *map)
+int load_map_data_v0(struct peer_req *pr, struct map *map)
 {
 	int r = 0;
 	struct xseg_request *req;
@@ -234,7 +238,7 @@ int load_map_v0(struct peer_req *pr, struct map *map)
 	char *data;
 
 retry:
-	req = __load_map_v0(pr, map);
+	req = __load_map_data_v0(pr, map);
 	if (!req)
 		return -1;
 	wait_on_pr(pr, (!(req->state & XS_FAILED || req->state & XS_SERVED)));

@@ -250,7 +250,6 @@ int close_map(struct peer_req *pr, struct map *map)
 {
 	int err;
 	struct xseg_request *req;
-	struct peerd *peer = pr->peer;
 
 	map->state |= MF_MAP_CLOSING;
 	req = __close_map(pr, map);
@@ -312,7 +311,6 @@ int open_map(struct peer_req *pr, struct map *map, uint32_t flags)
 {
 	int err;
 	struct xseg_request *req;
-	struct peerd *peer = pr->peer;
 
 	req = __open_map(pr, map, flags);
 	if (!req){
@@ -329,11 +327,31 @@ int open_map(struct peer_req *pr, struct map *map, uint32_t flags)
 	return 0;
 }
 
+int write_map_metadata(struct peer_req *pr, struct map *map)
+{
+	int r;
+	map->state |= MF_MAP_WRITING;
+	r = map_functions[map->version].write_map_metadata(pr, map);
+	map->state &= ~MF_MAP_WRITING;
+	return r;
+}
+
+/*
+int write_map_data(struct peer_req *pr, struct map *map)
+{
+}
+*/
+
 int write_map(struct peer_req* pr, struct map *map)
 {
 	int r;
 	map->state |= MF_MAP_WRITING;
-	r = map_functions[map->version].write_map(pr, map);
+	r = map_functions[map->version].write_map_metadata(pr, map);
+	if (r < 0)
+		goto out;
+
+	r = map_functions[map->version].write_map_data(pr, map);
+out:
 	map->state &= ~MF_MAP_WRITING;
 	return r;
 }
@@ -461,7 +479,7 @@ int load_map(struct peer_req *pr, struct map *map)
 		goto out_err;
 	}
 	XSEGLOG2(&lc, D, "Loaded map metadata. Found map version %u", map->version);
-	r = map_functions[map->version].load_map(pr, map);
+	r = map_functions[map->version].load_map_data(pr, map);
 	if (r < 0)
 		goto out_err;
 

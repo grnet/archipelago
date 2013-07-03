@@ -99,12 +99,13 @@ struct map_functions {
 	int (*read_object)(struct map_node *mn, unsigned char *buf);
 	struct xseg_request * (*prepare_write_object)(struct peer_req *pr,
 			struct map *map, struct map_node *mn);
-	int (*read_map)(struct map *map, unsigned char * data);
-	int (*load_map)(struct peer_req *pr, struct map *map);
-	int (*write_map)(struct peer_req *pr, struct map *map);
+//	int (*read_map)(struct map *map, unsigned char * data);
+//	int (*write_map)(struct peer_req *pr, struct map *map);
 	int (*read_map_metadata)(struct map *map, unsigned char *metadata,
 			uint32_t metadata_len);
+	int (*load_map_data)(struct peer_req *pr, struct map *map);
 	int (*write_map_metadata)(struct peer_req *pr, struct map *map);
+	int (*write_map_data)(struct peer_req *pr, struct map *map);
 };
 
 extern struct map_functions map_functions[];
