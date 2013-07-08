@@ -453,6 +453,13 @@ static void handle_read(struct peerd *peer, struct peer_req *pr)
 		return;
 	}
 
+	if (req->datalen < req->size) {
+		XSEGLOG2(&lc, E, "Request datalen is less than request size");
+		pfiled_fail(peer, pr);
+		return;
+	}
+
+
 	fd = dir_open(pfiled, fio, target, req->targetlen, READ);
 	if (fd < 0){
 		if (errno != ENOENT) {
@@ -460,25 +467,25 @@ static void handle_read(struct peerd *peer, struct peer_req *pr)
 			pfiled_fail(peer, pr);
 			return;
 		} else {
-			memset(data, 0, req->datalen);
-			req->serviced = req->datalen;
+			memset(data, 0, req->size);
+			req->serviced = req->size;
 			goto out;
 		}
 	}
 
 
-	while (req->serviced < req->datalen) {
+	while (req->serviced < req->size) {
 		r = pread(fd, data + req->serviced,
-				req->datalen - req->serviced,
+				req->size- req->serviced,
 				req->offset + req->serviced);
 		if (r < 0) {
-			req->datalen = req->serviced;
 			XSEGLOG2(&lc, E, "Cannot read");
+			break;
 		}
 		else if (r == 0) {
 			/* reached end of file. zero out the rest data buffer */
-			memset(data + req->serviced, 0, req->datalen - req->serviced);
-			req->serviced = req->datalen;
+			memset(data + req->serviced, 0, req->size - req->serviced);
+			req->serviced = req->size;
 		}
 		else {
 			req->serviced += r;
@@ -510,6 +517,12 @@ static void handle_write(struct peerd *peer, struct peer_req *pr)
 
 	XSEGLOG2(&lc, I, "Handle write started for pr: %p, req: %p", pr, pr->req);
 
+	if (req->datalen < req->size) {
+		XSEGLOG2(&lc, E, "Request datalen is less than request size");
+		pfiled_fail(peer, pr);
+		return;
+	}
+
 	fd = dir_open(pfiled, fio, target, req->targetlen, WRITE);
 	if (fd < 0){
 		XSEGLOG2(&lc, E, "Open failed");
@@ -530,12 +543,12 @@ static void handle_write(struct peerd *peer, struct peer_req *pr)
 		}
 	}
 
-	while (req->serviced < req->datalen) {
+	while (req->serviced < req->size) {
 		r = pwrite(fd, data + req->serviced, 
-				req->datalen - req->serviced,
+				req->size- req->serviced,
 				req->offset + req->serviced);
 		if (r < 0) {
-			req->datalen = req->serviced;
+			break;
 		}
 		else {
 			req->serviced += r;
