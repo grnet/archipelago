@@ -493,6 +493,7 @@ int load_map(struct peer_req *pr, struct map *map)
 			XSEGLOG2(&lc, E, "Could not update map %s to latest version",
 					map->volume);
 			map->version = prev_version;
+			goto out_err;
 		}
 	}
 
@@ -724,8 +725,6 @@ static int __copyup_write_cb(struct peer_req *pr, struct xseg_request *req,
 	struct mapper_io *mio = __get_mapper_io(pr);
 	struct map_node tmp;
 	char *data;
-
-	__set_node(mio, req, NULL);
 
 	//assert mn->state & MF_OBJECT_WRITING
 	mn->state &= ~MF_OBJECT_WRITING;
