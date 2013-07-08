@@ -522,6 +522,7 @@ tm_fail:
 	free(prefs->get_tm);
 	free(prefs->rec_tm);
 priv_fail:
+	j--;
 	for (; j >= 0; j--) {
 		free(peer->peer_reqs[j].priv);
 	}
