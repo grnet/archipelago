@@ -33,13 +33,13 @@
  */
 
 #define _GNU_SOURCE
+#include <xseg/xseg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <sys/syscall.h>
 #include <sys/types.h>
 #include <pthread.h>
-#include <xseg/xseg.h>
 #include <peer.h>
 #include <time.h>
 #include <sys/util.h>
@@ -47,8 +47,8 @@
 #include <bench-xseg.h>
 #include <bench-lfsr.h>
 #include <limits.h>
+#include <math.h>
 
-char global_id[IDLEN + 1];
 /*
  * This macro checks two things:
  * a) If in-flight requests are less than given iodepth
@@ -86,12 +86,47 @@ void custom_peer_usage()
 			"    --seed    | None    | Initialize LFSR and target names\n"
 			"    --insanity| sane    | Adjust insanity level of benchmark:\n"
 			"              |         |     [sane|eccentric|manic|paranoid]\n"
-			"    --progress| yes     | Show progress of requests\n"
+			"    --progress| yes     | Show progress of requests [yes|no]\n"
 			"    --ping    | yes     | Ping target before starting benchmark\n"
+			"              |         |     [yes|no]\n"
+			"    --prefix  | 'bench' | Add a common prefix to all object names\n"
+			"    --objname | 'bench' | Use only one object with this name\n"
 			"\n"
 			"Additional information:\n"
 			"  --------------------------------------------\n"
-			"  The -to and -ts options are mutually exclusive\n"
+			"  * The -to and -ts options are mutually exclusive\n"
+			"\n"
+			"  * The object name is always not null-terminated and\n"
+			"    defaults to the following structure:\n"
+			"           <prefix>-<seed>-<object number>\n"
+			"\n"
+			"    where:\n"
+			"    a. <prefix> is given by user or defaults to 'bench'\n"
+			"    b. <seed> is given by user or defaults to a random value.\n"
+			"       Its length will be 9 digits, with trailing zeros where\n"
+			"       necessary\n"
+			"    c. <object number> is out of the user's control. It is\n"
+			"       calculated during the benchmark and is a 15-digit\n"
+			"       number, allowing a maximum of 1 quadrillion objects\n"
+			"\n"
+                        "   So, if bench is called with the arguments:\n"
+			"           --prefix obj --seed 999\n"
+			"\n"
+			"   and <object number> is 9,the resulting object name will\n"
+			"   be:\n"
+			"           obj-000000999-000000000000009\n"
+			"\n"
+			" * The above object name structure can by bypassed with the\n"
+			"   --objname <object name> argument. This implies the\n"
+			"   following:\n"
+			"\n"
+			"   a. --pattern argument defaults to 'seq'\n"
+			"   b. --verify argument defaults to 'no'\n"
+			"   c. -to argument defaults to 1\n"
+			"   d. -ts argument defaults to (and can't be larger than)\n"
+			"      the object size (-os argument)\n"
+			"   e. --seed and --prefix arguments are not only unnecessary,\n"
+			"      but will also produce an error to alert the user\n"
 			"\n");
 }
 
@@ -109,16 +144,19 @@ int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 	char verify[MAX_ARG_LEN + 1];
 	char progress[MAX_ARG_LEN + 1];
 	char ping[MAX_ARG_LEN + 1];
+	char prefix[XSEG_MAX_TARGETLEN + 1];
+	char objname[XSEG_MAX_TARGETLEN + 1];
 	struct xseg *xseg = peer->xseg;
+	struct object_vars *obv;
 	unsigned int xseg_page_size = 1 << xseg->config.page_shift;
 	long iodepth = -1;
 	long dst_port = -1;
 	unsigned long seed = -1;
+	unsigned long seed_max;
 	uint64_t rc;
-	struct timespec timer_seed;
 	struct timespec *ts;
-	int set_by_hand = 0;
-	int i, r;
+	int set_by_hand = 1;
+	int j, r;
 
 	op[0] = 0;
 	pattern[0] = 0;
@@ -131,7 +169,10 @@ int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 	request_cap[0] = 0;
 	progress[0] = 0;
 	ping[0] = 0;
+	prefix[0] = 0;
+	objname[0] = 0;
 
+	/* allocate struct bench */
 	prefs = malloc(sizeof(struct bench));
 	if (!prefs) {
 		perror("malloc");
@@ -139,6 +180,7 @@ int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 	}
 	memset(prefs, 0, sizeof(struct bench));
 
+	/* allocate struct req_status */
 	prefs->status = malloc(sizeof(struct req_status));
 	if (!prefs->status) {
 		perror("malloc");
@@ -146,13 +188,22 @@ int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 	}
 	memset(prefs->status, 0, sizeof(struct req_status));
 
-	for (i = 0; i < peer->nr_ops; i++) {
+	/* allocate struct object_name */
+	prefs->objvars = malloc(sizeof(struct object_vars));
+	if (!prefs->objvars) {
+		perror("malloc");
+		goto object_name_fail;
+	}
+	memset(prefs->objvars, 0, sizeof(struct object_vars));
+
+	/* allocate a struct timespec for each peer request */
+	for (j = 0; j < peer->nr_ops; j++) {
 		ts = malloc(sizeof(struct timespec));
 		if (!ts) {
 			perror("malloc");
 			goto priv_fail;
 		}
-		peer->peer_reqs[i].priv = ts;
+		peer->peer_reqs[j].priv = ts;
 	}
 
 	//Begin reading the benchmark-specific arguments
@@ -171,7 +222,42 @@ int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 	READ_ARG_STRING("--verify", verify, MAX_ARG_LEN);
 	READ_ARG_STRING("--progress", progress, MAX_ARG_LEN);
 	READ_ARG_STRING("--ping", ping, MAX_ARG_LEN);
+	READ_ARG_STRING("--prefix", prefix, XSEG_MAX_TARGETLEN);
+	READ_ARG_STRING("--objname", objname, XSEG_MAX_TARGETLEN);
 	END_READ_ARGS();
+
+	/********************************\
+	 * Check object name parameters *
+	\********************************/
+	if (objname[0] && prefix[0]) {
+		XSEGLOG2(&lc, E, "--objname and --prefix options cannot be"
+				"used together.");
+		goto arg_fail;
+	}
+
+	obv = prefs->objvars;
+	obv->seedlen = SEEDLEN;
+	obv->objnumlen = OBJNUMLEN;
+	if (objname[0]) {
+		/* TODO: Fill restrictions here */
+		strncpy(obv->name, objname, XSEG_MAX_TARGETLEN);
+		obv->prefixlen = 0;
+		obv->namelen = strlen(objname);
+	} else {
+		if (!prefix[0])	/* In this case we use a default value */
+			strcpy(prefix, "bench");
+		strncpy(obv->prefix, prefix, XSEG_MAX_TARGETLEN);
+		obv->prefixlen = strlen(prefix);
+		/* We add 2 for the extra dashes */
+		obv->namelen = obv->prefixlen + obv->seedlen +
+			obv->objnumlen + 2;
+	}
+
+	/* Only --prefix can exceed bounds since --objname is bounded */
+	if (obv->namelen > XSEG_MAX_TARGETLEN) {
+		XSEGLOG2(&lc, E, "--prefix %s: Prefix is too long.", prefix);
+		goto arg_fail;
+	}
 
 	/*****************************\
 	 * Check I/O type parameters *
@@ -293,6 +379,9 @@ int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 		goto arg_fail;
 	}
 
+	if (prefs->status->max == 1)
+		SET_FLAG(PATTERN, prefs->flags, PATTERN_SEQ);
+
 	//Object size (os): Defaults to 4M.
 	//Must have the same format as "block size"
 	//Must be integer multiple of "block size"
@@ -334,21 +423,24 @@ int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 	if (init_timer(&prefs->rec_tm, INSANITY_ECCENTRIC))
 		goto tm_fail;
 
-	/*************************************\
-	 * Initialize the LFSR and global_id *
-	\*************************************/
-reseed:
-	//We proceed to initialise the global_id, and seed variables.
-	if (seed == -1) {
-		clock_gettime(CLOCK_BENCH, &timer_seed);
-		seed = timer_seed.tv_nsec;
-	} else {
-		set_by_hand = 1;
-	}
-	create_id(seed);
+	/***********************\
+	 * Initialize the LFSR *
+	\***********************/
 
-	if (prefs->status->max == 1)
-		SET_FLAG(PATTERN, prefs->flags, PATTERN_SEQ);
+	seed_max = pow(10, obv->seedlen + 1) - 1;
+	if (seed == -1) {
+		srand(time(NULL));
+		set_by_hand = 0;
+	} else if (validate_seed(prefs, seed)) {
+		XSEGLOG2(&lc, E, "--seed %lu: Seed larger than %lu. Only its "
+				"first %d digits will be used",
+				seed, seed_max, obv->seedlen);
+		goto arg_fail;
+	}
+
+reseed:
+	if (!set_by_hand)
+		seed = rand() % seed_max + 1;
 
 	if (GET_FLAG(PATTERN, prefs->flags) == PATTERN_RAND) {
 		prefs->lfsr = malloc(sizeof(struct bench_lfsr));
@@ -357,15 +449,18 @@ reseed:
 			goto lfsr_fail;
 		}
 
-		r = lfsr_init(prefs->lfsr, prefs->status->max, seed, seed & 0xF);
-		if (r && set_by_hand) {
+		r = lfsr_init(prefs->lfsr, prefs->status->max,
+				seed, seed & 0xF);
+		if (r) {
+			if (!set_by_hand) {
+				free(prefs->lfsr);
+				goto reseed;
+			}
 			XSEGLOG2(&lc, E, "LFSR could not be initialized.\n");
 			goto lfsr_fail;
-		} else if (r) {
-			seed = -1;
-			goto reseed;
 		}
 	}
+	obv->seed = seed;
 
 	/*********************************\
 	 * Miscellaneous initializations *
@@ -407,7 +502,14 @@ reseed:
 	prefs->peer = peer;
 	peer->peerd_loop = bench_peerd_loop;
 	peer->priv = (void *) prefs;
-	XSEGLOG2(&lc, I, "Global ID is %s\n", global_id);
+
+	if (obv->prefixlen)
+		XSEGLOG2(&lc, I, "Seed is %u, prefix is %s",
+				obv->seed, obv->prefix);
+	else
+		XSEGLOG2(&lc, I, "Seed is %u, object name is %s",
+				obv->seed, obv->name);
+
 	return 0;
 
 arg_fail:
@@ -420,9 +522,11 @@ tm_fail:
 	free(prefs->get_tm);
 	free(prefs->rec_tm);
 priv_fail:
-	for (; i >= 0; i--) {
-		free(peer->peer_reqs[i].priv);
+	for (; j >= 0; j--) {
+		free(peer->peer_reqs[j].priv);
 	}
+object_name_fail:
+	free(prefs->objvars);
 status_fail:
 	free(prefs->status);
 prefs_fail:
@@ -436,6 +540,7 @@ static int send_request(struct peerd *peer, struct bench *prefs)
 	struct xseg_request *req;
 	struct xseg *xseg = peer->xseg;
 	struct peer_req *pr;
+	struct object_vars *obv = prefs->objvars;
 	xport srcport = prefs->src_port;
 	xport dstport = prefs->dst_port;
 	xport p;
@@ -456,21 +561,27 @@ static int send_request(struct peerd *peer, struct bench *prefs)
 	}
 	timer_stop(prefs, prefs->get_tm, NULL);
 
-	//Allocate enough space for the data and the target's name
+	/*
+	 * Allocate enough space for the data and the target's name.
+	 * Also, allocate one extra byte to prevent buffer overflow due to the
+	 * obligatory null termination of snprint(). This extra byte will not be
+	 * counted as part of the target's name.
+	 */
 	XSEGLOG2(&lc, D, "Prepare new request\n");
-	r = xseg_prep_request(xseg, req, TARGETLEN, size);
+	r = xseg_prep_request(xseg, req, obv->namelen + 1, size);
 	if (r < 0) {
 		XSEGLOG2(&lc, W, "Cannot prepare request! (%lu, %llu)\n",
-				TARGETLEN, (unsigned long long)size);
+				obv->namelen + 1, (unsigned long long)size);
 		goto put_xseg_request;
 	}
+	req->targetlen--;
 
 	//Determine what the next target/chunk will be, based on I/O pattern
 	new = determine_next(prefs);
 	req->op = prefs->op;
 	XSEGLOG2(&lc, I, "Our new request is %lu\n", new);
-	//Create a target of this format: "bench-<global_id>-<obj_no>"
-	create_target(prefs, req, new);
+	obv->objnum = __get_object(prefs, new);
+	create_target(prefs, req);
 
 	if (prefs->op == X_WRITE || prefs->op == X_READ) {
 		req->size = size;

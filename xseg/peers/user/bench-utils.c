@@ -58,24 +58,38 @@
 
 struct timespec delay = {0, 4000000};
 
-/******************************\
- * Static miscellaneous tools *
-\******************************/
-static inline uint64_t __get_id()
+__attribute__ ((unused))
+void inspect_obv(struct object_vars *obv)
 {
-	return atol(global_id + 6); /* cut the "bench-" part*/
+	XSEGLOG2(&lc, D, "Struct object vars:\n"
+			"\tname: %s (%d),\n"
+			"\tprefix: %s (%d),\n"
+			"\tseed: %lu (%d),\n"
+			"\tobjnum: %lu (%d)",
+			obv->name, obv->namelen, obv->prefix, obv->prefixlen,
+			obv->seed, obv->seedlen,
+			obv->objnum, obv->objnumlen);
 }
 
-static inline uint64_t __get_object_from_name(char *name)
-{
-	return atol(name + IDLEN + 1); /* cut the "bench-908135-" part*/
-}
-
-static inline uint64_t __get_object(struct bench *prefs, uint64_t new)
+uint64_t __get_object(struct bench *prefs, uint64_t new)
 {
 	if (prefs->ts > 0)
 		new = new / (prefs->os / prefs->bs);
 	return new;
+}
+
+/******************************\
+ * Static miscellaneous tools *
+\******************************/
+static inline uint64_t __get_object_from_name(struct object_vars *obv,
+		char *name)
+{
+	/* In case of --objname switch */
+	if (obv->name[0])
+		return 0;
+
+	/* Keep only the object number */
+	return atol(name + obv->namelen - obv->objnumlen);
 }
 
 static inline int __snap_to_bound8(uint64_t space)
@@ -284,6 +298,13 @@ int read_pattern(char *pattern)
 	return -1;
 }
 
+int validate_seed(struct bench *prefs, unsigned long seed)
+{
+	if (seed < pow(10, prefs->objvars->seedlen))
+		return 0;
+	return -1;
+}
+
 /*******************\
  * Print functions *
 \*******************/
@@ -388,33 +409,30 @@ void print_progress(struct bench *prefs)
  * Benchmarking functions *
 \**************************/
 
-void create_id(unsigned long seed)
-{
-	if (seed >= pow(10, 9))
-		XSEGLOG2(&lc, W, "Seed larger than 10^9, only its first 9 digits will "
-				"be used\n");
-
-	//nanoseconds can't be more than 9 digits
-	snprintf(global_id, IDLEN + 1, "bench-%09lu", seed);
-}
-
-void create_target(struct bench *prefs, struct xseg_request *req,
-		uint64_t new)
+void create_target(struct bench *prefs, struct xseg_request *req)
 {
 	struct xseg *xseg = prefs->peer->xseg;
+	struct object_vars *obv = prefs->objvars;
 	char *req_target;
-	char buf[TARGETLEN + 1];
 
 	req_target = xseg_get_target(xseg, req);
 
-	//For read/write, the target object may not correspond to `new`, which is
-	//actually the chunk number.
-	new = __get_object(prefs, new);
-	snprintf(buf, TARGETLEN + 1, "%s-%016lu", global_id, new);
-	strncpy(req_target, buf, TARGETLEN);
-	XSEGLOG2(&lc, D, "Target name of request is %s\n", buf);
+	/*
+	 * For read/write, the target object may not correspond to `new`, which
+	 * is actually the chunk number.
+	 * Also, we use one extra byte while writting the target's name to store
+	 * the null character and not overflow, but this will not be part of the
+	 * target's name
+	 */
+	if (obv->prefix[0]) {
+		snprintf(req_target, obv->namelen + 1, "%s-%0*lu-%0*lu",
+				obv->prefix, obv->seedlen, obv->seed,
+				obv->objnumlen, obv->objnum);
+	} else {
+		strncpy(req_target, obv->name, obv->namelen);
+	}
+	XSEGLOG2(&lc, D, "Target name of request is %s\n", req_target);
 }
-
 
 uint64_t determine_next(struct bench *prefs)
 {
@@ -465,7 +483,7 @@ uint64_t calculate_prog_quantum(struct bench *prefs)
  * **************************************************
  * In both cases, special care is taken not to exceed the chunk's memory range.
  * Also, the bare minimum chunk to verify should be 48 bytes. This limit is set
- * by reeadwrite_chunk_meta, which expects to write in a memory at least this
+ * by readwrite_chunk_meta, which expects to write in a memory at least this
  * big.
  *
  * **************************************************
@@ -473,12 +491,14 @@ uint64_t calculate_prog_quantum(struct bench *prefs)
  * Endianness must be taken into careful consideration when examining a memory
  * chunk.
  */
-static int readwrite_chunk_full(struct xseg *xseg, struct xseg_request *req,
-		uint64_t id, uint64_t object)
+static int readwrite_chunk_full(struct bench *prefs, struct xseg_request *req)
 {
 	struct bench_lfsr id_lfsr;
 	struct bench_lfsr obj_lfsr;
 	struct bench_lfsr off_lfsr;
+	struct xseg *xseg = prefs->peer->xseg;
+	uint64_t id = prefs->objvars->seed;
+	uint64_t object = prefs->objvars->objnum;
 	uint64_t *d = (uint64_t *)xseg_get_data(xseg, req);
 	uint64_t s = req->size;
 
@@ -513,12 +533,14 @@ static int readwrite_chunk_full(struct xseg *xseg, struct xseg_request *req,
 	return 0;
 }
 
-static int readwrite_chunk_meta(struct xseg *xseg, struct xseg_request *req,
-		uint64_t id, uint64_t object)
+static int readwrite_chunk_meta(struct bench *prefs, struct xseg_request *req)
 {
+	struct xseg *xseg = prefs->peer->xseg;
+	struct signature sig;
+	uint64_t id = prefs->objvars->seed;
+	uint64_t object = prefs->objvars->objnum;
 	char *d = xseg_get_data(xseg, req);
 	uint64_t s = req->size;
-	struct signature sig;
 	int sig_s = sizeof(struct signature);
 	int r = 0;
 
@@ -527,7 +549,8 @@ static int readwrite_chunk_meta(struct xseg *xseg, struct xseg_request *req,
 	sig.offset = req->offset;
 
 	if (s < sig_s) {
-		XSEGLOG2(&lc, E, "Too small chunk size (%lu butes). Leaving.", s);
+		XSEGLOG2(&lc, E, "Too small chunk size (%lu butes). "
+				"Leaving.", s);
 		return 1;
 	}
 
@@ -550,13 +573,9 @@ static int readwrite_chunk_meta(struct xseg *xseg, struct xseg_request *req,
 /*
  * We want these functions to be as fast as possible in case we haven't asked
  * for verification
- * TODO: Make them prettier but keep the speed of this implementation
  */
 void create_chunk(struct bench *prefs, struct xseg_request *req, uint64_t new)
 {
-	struct xseg *xseg = prefs->peer->xseg;
-	uint64_t id;
-	uint64_t object;
 	int verify;
 
 	verify = GET_FLAG(VERIFY, prefs->flags);
@@ -564,25 +583,23 @@ void create_chunk(struct bench *prefs, struct xseg_request *req, uint64_t new)
 		case VERIFY_NO:
 			break;
 		case VERIFY_META:
-			id = __get_id();
-			object = __get_object(prefs, new);
-			readwrite_chunk_meta(xseg, req, id, object);
+			inspect_obv(prefs->objvars);
+			readwrite_chunk_meta(prefs, req);
 			break;
 		case VERIFY_FULL:
-			id = __get_id();
-			object = __get_object(prefs, new);
-			readwrite_chunk_full(xseg, req, id, object);
+			inspect_obv(prefs->objvars);
+			readwrite_chunk_full(prefs, req);
 			break;
 		default:
-			XSEGLOG2(&lc, W, "Unexpected verification mode: %d\n", verify);
+			XSEGLOG2(&lc, W, "Unexpected verification mode: %d\n",
+					verify);
 	}
 }
 
 int read_chunk(struct bench *prefs, struct xseg_request *req)
 {
 	struct xseg *xseg = prefs->peer->xseg;
-	uint64_t id;
-	uint64_t object;
+	struct object_vars *obv = prefs->objvars;
 	char *target;
 	int verify;
 	int r = 0;
@@ -592,19 +609,20 @@ int read_chunk(struct bench *prefs, struct xseg_request *req)
 		case VERIFY_NO:
 			break;
 		case VERIFY_META:
-			id = __get_id();
 			target = xseg_get_target(xseg, req);
-			object = __get_object_from_name(target);
-			r = readwrite_chunk_meta(xseg, req, id, object);
+			obv->objnum = __get_object_from_name(obv, target);
+			inspect_obv(prefs->objvars);
+			r = readwrite_chunk_meta(prefs, req);
 			break;
 		case VERIFY_FULL:
-			id = __get_id();
 			target = xseg_get_target(xseg, req);
-			object = __get_object_from_name(target);
-			r = readwrite_chunk_full(xseg, req, id, object);
+			obv->objnum = __get_object_from_name(obv, target);
+			inspect_obv(prefs->objvars);
+			r = readwrite_chunk_full(prefs, req);
 			break;
 		default:
-			XSEGLOG2(&lc, W, "Unexpected verification mode: %d\n", verify);
+			XSEGLOG2(&lc, W, "Unexpected verification mode: %d\n",
+					verify);
 	}
 	return r;
 }
