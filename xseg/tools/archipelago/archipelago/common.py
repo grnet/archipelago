@@ -47,15 +47,14 @@ import sys
 import time
 import psutil
 import errno
+import signal
 from subprocess import check_call
 from collections import namedtuple
 import socket
 
 hostname = socket.gethostname()
 
-#archipelago peer roles. Order matters!
-roles = ['blockerb', 'blockerm', 'mapperd', 'vlmcd']
-Peer = namedtuple('Peer', ['executable', 'opts', 'role'])
+valid_role_types = ['file_blocker', 'rados_blocker', 'mapperd', 'vlmcd']
 
 peers = dict()
 xsegbd_args = []
@@ -85,40 +84,265 @@ FILE_BLOCKER = 'archip-pfiled'
 RADOS_BLOCKER = 'archip-sosd'
 MAPPER = 'archip-mapperd'
 VLMC = 'archip-vlmcd'
-BLOCKER = ''
 
-available_storage = {'files': FILE_BLOCKER, 'rados': RADOS_BLOCKER}
+
+class Peer(object):
+    cli_opts = None
+
+    def __init__(self, role=None, daemon=True, nr_ops=16,
+                 logfile=None, pidfile=None, portno_start=None,
+                 portno_end=None, log_level=0, spec=None):
+        if not role:
+            raise Error("Role was not provided")
+        self.role = role
+
+        if not self.executable:
+            raise Error("Executable must be provided for %s" % role)
+
+        if not portno_start:
+            raise Error("Portno_start must be provied for %s" % role)
+        self.portno_start = portno_start
+
+        if not portno_end:
+            raise Error("Portno_end must be provied for %s" % role)
+        self.portno_end = portno_end
+
+        self.daemon = daemon
+        if not spec:
+            raise Error("Xseg spec was not provided for %s" % role)
+        self.spec = spec
+
+        if logfile:
+            self.logfile = logfile
+        else:
+            self.logfile = os.path.join(LOGS_PATH, role + LOG_SUFFIX)
+
+        if pidfile:
+            self.pidfile = pidfile
+        else:
+            self.pidfile = os.path.join(PIDFILE_PATH, role + PID_SUFFIX)
+
+        try:
+            if not os.path.isdir(os.path.dirname(self.logfile)):
+                raise Error("Log path %s does not exist" % self.logfile)
+        except:
+            raise Error("Log path %s does not exist or is not a directory" %
+                        self.logfile)
+
+        try:
+            os.makedirs(os.path.dirname(self.pidfile))
+        except OSError as e:
+            if e.errno == errno.EEXIST:
+                if os.path.isdir(os.path.dirname(self.pidfile)):
+                    pass
+                else:
+                    raise Error("Pid path %s is not a directory" %
+                                os.path.dirname(self.pidfile))
+            else:
+                raise Error("Cannot create path %s" %
+                            os.path.dirname(self.pidfile))
+
+        self.nr_ops = nr_ops
+        self.log_level = log_level
+
+        if self.log_level < 0 or self.log_level > 3:
+            raise Error("%s: Invalid log level %d" %
+                        (self.role, self.log_level))
+
+        if self.cli_opts is None:
+            self.cli_opts = []
+        self.set_cli_options()
+
+    def start(self):
+        if self.get_pid():
+            raise Error("Peer has valid pidfile")
+        cmd = [self.executable] + self.cli_opts
+        try:
+            check_call(cmd, shell=False)
+        except Exception as e:
+            raise Error("Cannot start %s: %s" % (self.role, str(e)))
+
+    def stop(self):
+        pid = self.get_pid()
+        if not pid:
+            raise Error("Peer %s not running" % self.role)
+
+        if self.__is_running(pid):
+            os.kill(pid, signal.SIGTERM)
+
+    def __is_running(self, pid):
+        name = self.executable
+        for p in psutil.process_iter():
+            if p.name[0:len(name)] == name and pid == p.pid:
+                return True
+
+        return False
+
+    def is_running(self):
+        pid = self.get_pid()
+        if not pid:
+            return False
+
+        if not self.__is_running(pid):
+            raise Error("Peer %s has valid pidfile but is not running" %
+                        self.role)
+
+        return True
+
+    def get_pid(self):
+        if not self.pidfile:
+            return None
+
+        pf = None
+        try:
+            pf = open(self.pidfile, "r")
+            pid = int(pf.read())
+            pf.close()
+        except:
+            if pf:
+                pf.close()
+            return None
+
+        return pid
+
+    def set_cli_options(self):
+        if self.daemon:
+            self.cli_opts.append("-d")
+        if self.nr_ops:
+            self.cli_opts.append("-n")
+            self.cli_opts.append(str(self.nr_ops))
+        if self.logfile:
+            self.cli_opts.append("-l")
+            self.cli_opts.append(self.logfile)
+        if self.pidfile:
+            self.cli_opts.append("--pidfile")
+            self.cli_opts.append(self.pidfile)
+        if self.portno_start:
+            self.cli_opts.append("-sp")
+            self.cli_opts.append(str(self.portno_start))
+        if self.portno_end:
+            self.cli_opts.append("-ep")
+            self.cli_opts.append(str(self.portno_end))
+        if self.log_level:
+            self.cli_opts.append("-v")
+            self.cli_opts.append(str(self.log_level))
+        if self.spec:
+            self.cli_opts.append("-g")
+            self.cli_opts.append(self.spec)
+
+
+class MTpeer(Peer):
+    def __init__(self, nr_threads=1, **kwargs):
+        self.nr_threads = nr_threads
+        super(MTpeer, self).__init__(**kwargs)
+
+        if self.cli_opts is None:
+            self.cli_opts = []
+        self.set_mtcli_options()
+
+    def set_mtcli_options(self):
+        self.cli_opts.append("-t")
+        self.cli_opts.append(str(self.nr_threads))
+
+
+class Sosd(MTpeer):
+    def __init__(self, pool=None, **kwargs):
+        self.executable = RADOS_BLOCKER
+        self.pool = pool
+        super(Sosd, self).__init__(**kwargs)
+
+        if self.cli_opts is None:
+            self.cli_opts = []
+        self.set_sosd_cli_options()
+
+    def set_sosd_cli_options(self):
+        if self.pool:
+            self.cli_opts.append("--pool")
+            self.cli_opts.append(self.pool)
+
+
+class Pfiled(MTpeer):
+    def __init__(self, pithos_dir=None, archip_dir=None, prefix=None):
+        self.executable = FILE_BLOCKER
+        self.pithos_dir = pithos_dir
+        self.archip_dir = archip_dir
+        self.prefix = prefix
+
+        super(Pfiled, self).__init__(**kwargs)
+
+        if not self.pithos_dir:
+            raise Error("%s: Pithos dir must be set" % self.role)
+        if not os.path.isdir(self.pithos_dir):
+            raise Error("%s: Pithos dir invalid" % self.role)
+
+        if not self.archip_dir:
+            raise Error("%s: Archip dir must be set" % self.role)
+        if not os.path.isdir(self.archip_dir):
+            raise Error("%s: Archip dir invalid" % self.role)
+
+        if self.cli_opts is None:
+            self.cli_opts = []
+        self.set_pfiled_cli_options()
+
+    def set_pfiled_cli_options(self):
+        if self.pithos_dir:
+            self.cli_opts.append("--pithos")
+            self.cli_opts.append(self.pithos_dir)
+        if self.archip_dir:
+            self.cli_opts.append("--archip")
+            self.cli_opts.append(self.archip_dir)
+        if self.prefix:
+            self.cli_opts.append("--prefix")
+            self.cli_opts.append(self.prefix)
+
+
+class Mapperd(Peer):
+    def __init__(self, blockerm_port=None, blockerb_port=None, **kwargs):
+        self.executable = MAPPER
+        self.blockerm_port = blockerm_port
+        self.blockerb_port = blockerb_port
+        super(Mapperd, self).__init__(**kwargs)
+
+        if self.cli_opts is None:
+            self.cli_opts = []
+        self.set_mapperd_cli_options()
+
+    def set_mapperd_cli_options(self):
+        if self.blockerm_port:
+            self.cli_opts.append("-mbp")
+            self.cli_opts.append(str(self.blockerm_port))
+        if self.blockerb_port:
+            self.cli_opts.append("-bp")
+            self.cli_opts.append(str(self.blockerb_port))
+
+
+class Vlmcd(Peer):
+    def __init__(self, blocker_port=None, mapper_port=None, **kwargs):
+        self.executable = VLMC
+        self.blocker_port = blocker_port
+        self.mapper_port = mapper_port
+        super(Vlmcd, self).__init__(**kwargs)
+
+        if self.cli_opts is None:
+            self.cli_opts = []
+        self.set_vlmcd_cli_opts()
+
+    def set_vlmcd_cli_opts(self):
+        if self.blocker_port:
+            self.cli_opts.append("-bp")
+            self.cli_opts.append(str(self.blocker_port))
+        if self.mapper_port:
+            self.cli_opts.append("-mp")
+            self.cli_opts.append(str(self.mapper_port))
 
 
 config = {
     'CEPH_CONF_FILE': '/etc/ceph/ceph.conf',
+    'SPEC': "segdev:xsegbd:1024:5120:12",
     'XSEGBD_START': 0,
     'XSEGBD_END': 499,
-    'VPORT_START': 500,
-    'VPORT_END': 999,
-    'BPORT': 1000,
-    'MPORT': 1001,
-    'MBPORT': 1002,
     'VTOOL': 1003,
     #RESERVED 1023
-    #default config
-    'SPEC': "segdev:xsegbd:1024:5120:12",
-    'NR_OPS_BLOCKERB': "",
-    'NR_OPS_BLOCKERM': "",
-    'NR_OPS_VLMC': "",
-    'NR_OPS_MAPPER': "",
-    #'VERBOSITY_BLOCKERB': "",
-    #'VERBOSITY_BLOCKERM': "",
-    #'VERBOSITY_MAPPER': "",
-    #'VERBOSITY_VLMC': "",
-    #mt-pfiled specific options,
-    'FILED_IMAGES': "",
-    'FILED_MAPS': "",
-    'PITHOS': "",
-    'PITHOSMAPS': "",
-    #mt-sosd specific options,
-    'RADOS_POOL_MAPS': "",
-    'RADOS_POOL_BLOCKS': ""
 }
 
 FIRST_COLUMN_WIDTH = 23
@@ -153,6 +377,8 @@ class Error(Exception):
 
 
 def check_conf():
+    port_ranges = []
+
     def isExec(file_path):
         return os.path.isfile(file_path) and os.access(file_path, os.X_OK)
 
@@ -163,52 +389,25 @@ def check_conf():
                 return True
         return False
 
-    def validPort(port, limit, name):
-        try:
-            if int(port) >= limit:
-                print red(str(port) + " >= " + limit)
-                return False
-        except:
-            print red("Invalid port "+name+" : " + str(port))
-            return False
+    def validatePort(portno, limit):
+        if portno >= limit:
+            raise Error("Portno %d out of range" % portno)
 
-        return True
-
-    if not LOGS_PATH:
-        print red("LOGS_PATH is not set")
-        return False
-    if not PIDFILE_PATH:
-        print red("PIDFILE_PATH is not set")
-        return False
-
-    try:
-        if not os.path.isdir(str(LOGS_PATH)):
-            print red("LOGS_PATH "+str(LOGS_PATH)+" does not exist")
-            return False
-    except:
-        print red("LOGS_PATH doesn't exist or is not a directory")
-        return False
-
-    try:
-        os.makedirs(str(PIDFILE_PATH))
-    except OSError as e:
-        if e.errno == errno.EEXIST:
-            if os.path.isdir(str(PIDFILE_PATH)):
-                pass
-            else:
-                print red(str(PIDFILE_PATH) + " is not a directory")
-                return False
-        else:
-            print red("Cannot create " + str(PIDFILE_PATH))
-            return False
-    except:
-        print red("PIDFILE_PATH is not set")
-        return False
+    def validatePortRange(portno_start, portno_end, limit):
+        validatePort(portno_start, limit)
+        validatePort(portno_end, limit)
+        if portno_start > portno_end:
+            raise Error("Portno_start > Portno_end: %d > %d " %
+                        (portno_start, portno_end))
+        for start, end in port_ranges:
+            if not (portno_end < start or portno_start > end):
+                raise Error("Port range conflict: (%d, %d) confilcts with (%d, %d)" %
+                            (portno_start, portno_end,  start, end))
+        port_ranges.append((portno_start, portno_end))
 
     splitted_spec = str(config['SPEC']).split(':')
     if len(splitted_spec) < 5:
-        print red("Invalid spec")
-        return False
+        raise Error("Invalid spec")
 
     xseg_type = splitted_spec[0]
     xseg_name = splitted_spec[1]
@@ -217,190 +416,53 @@ def check_conf():
     xseg_align = int(splitted_spec[4])
 
     if xseg_type != "segdev":
-        print red("Segment type not segdev")
+        raise Error("Segment type not segdev")
         return False
     if xseg_name != "xsegbd":
-        print red("Segment name not equal xsegbd")
+        raise Error("Segment name not equal xsegbd")
         return False
     if xseg_align != 12:
-        print red("Wrong alignemt")
+        raise Error("Wrong alignemt")
         return False
 
-    for v in [config['VERBOSITY_BLOCKERB'],
-              config['VERBOSITY_BLOCKERM'],
-              config['VERBOSITY_MAPPER'],
-              config['VERBOSITY_VLMC']
-              ]:
-        if v is None:
-            print red("Verbosity missing")
-        try:
-            if (int(v) > 3 or int(v) < 0):
-                print red("Invalid verbosity " + str(v))
-                return False
-        except:
-            print red("Invalid verbosity " + str(v))
-            return False
-
-    for n in [config['NR_OPS_BLOCKERB'],
-              config['NR_OPS_BLOCKERM'],
-              config['NR_OPS_VLMC'],
-              config['NR_OPS_MAPPER']
-              ]:
-        if n is None:
-            print red("Nr ops missing")
-        try:
-            if (int(n) <= 0):
-                print red("Invalid nr_ops " + str(n))
-                return False
-        except:
-            print red("Invalid nr_ops " + str(n))
-            return False
-
-    if not validPort(config['VTOOL'], xseg_ports, "VTOOL"):
-        return False
-    if not validPort(config['MPORT'], xseg_ports, "MPORT"):
-        return False
-    if not validPort(config['BPORT'], xseg_ports, "BPORT"):
-        return False
-    if not validPort(config['MBPORT'], xseg_ports, "MBPORT"):
-        return False
-    if not validPort(config['VPORT_START'], xseg_ports, "VPORT_START"):
-        return False
-    if not validPort(config['VPORT_END'], xseg_ports, "VPORT_END"):
-        return False
-    if not validPort(config['XSEGBD_START'], xseg_ports, "XSEGBD_START"):
-        return False
-    if not validPort(config['XSEGBD_END'], xseg_ports, "XSEGBD_END"):
-        return False
-
-    if not config['XSEGBD_START'] < config['XSEGBD_END']:
-        print red("XSEGBD_START should be less than XSEGBD_END")
-        return False
-    if not config['VPORT_START'] < config['VPORT_END']:
-        print red("VPORT_START should be less than VPORT_END")
-        return False
-#TODO check than no other port is set in the above ranges
-
-    global BLOCKER
     try:
-        BLOCKER = available_storage[str(config['STORAGE'])]
-    except:
-        print red("Invalid storage " + str(config['STORAGE']))
-        print "Available storage: \"" + ', "'.join(available_storage) + "\""
-        return False
+        if not config['roles']:
+            raise Error("Roles setup must be provided")
+    except KeyError:
+        raise Error("Roles setup must be provided")
 
-    if config['STORAGE'] == "files":
-        if config['FILED_IMAGES'] and not \
-                os.path.isdir(str(config['FILED_IMAGES'])):
-            print red("FILED_IMAGES invalid")
-            return False
-        if config['FILED_MAPS'] and not \
-                os.path.isdir(str(config['FILED_MAPS'])):
-            print red("FILED_PATH invalid")
-            return False
-        if config['PITHOS'] and not os.path.isdir(str(config['PITHOS'])):
-            print red("PITHOS invalid ")
-            return False
-        if config['PITHOSMAPS'] and not \
-                os.path.isdir(str(config['PITHOSMAPS'])):
-            print red("PITHOSMAPS invalid")
-            return False
-    elif config['STORAGE'] == "RADOS":
-        #TODO use rados.py to check for pool existance
-        pass
+    for role, role_type in config['roles']:
+        if role_type not in valid_role_types:
+            raise Error("%s is not a valid role" % role_type)
+        try:
+            role_config = config[role]
+        except:
+            raise Error("No config found for %s" % role)
 
-    for p in [BLOCKER, MAPPER, VLMC]:
-        if not validExec(p):
-            print red(p + "is not a valid executable")
-            return False
+        if role_type == 'file_blocker':
+            peers[role] = Pfiled(role=role, spec=config['SPEC'].encode(),
+                                 prefix=ARCHIP_PREFIX, **role_config)
+        elif role_type == 'rados_blocker':
+            peers[role] = Sosd(role=role, spec=config['SPEC'].encode(),
+                               **role_config)
+        elif role_type == 'mapperd':
+            peers[role] = Mapperd(role=role, spec=config['SPEC'].encode(),
+                                  **role_config)
+        elif role_type == 'vlmcd':
+            peers[role] = Vlmcd(role=role, spec=config['SPEC'].encode(),
+                                **role_config)
+        else:
+            raise Error("No valid peer type: %s" % role_type)
+        validatePortRange(peers[role].portno_start, peers[role].portno_end,
+                          xseg_ports)
 
+    validatePortRange(config['VTOOL'], config['VTOOL'], xseg_ports)
+    validatePortRange(config['XSEGBD_START'], config['XSEGBD_END'],
+                      xseg_ports)
     return True
 
 
 def construct_peers():
-    #these must be in sync with roles
-    executables = dict()
-    config_opts = dict()
-    executables['blockerb'] = BLOCKER
-    executables['blockerm'] = BLOCKER
-    executables['mapperd'] = MAPPER
-    executables['vlmcd'] = VLMC
-
-    if BLOCKER == "archip-sosd":
-        config_opts['blockerb'] = [
-            "-p", str(config['BPORT']), "-g",
-            str(config['SPEC']).encode(), "-n",
-            str(config['NR_OPS_BLOCKERB']),
-            "--pool", str(config['RADOS_POOL_BLOCKS']), "-v",
-            str(config['VERBOSITY_BLOCKERB']),
-            "-d",
-            "--pidfile", os.path.join(PIDFILE_PATH, "blockerb" + PID_SUFFIX),
-            "-l", os.path.join(str(LOGS_PATH), "blockerb" + LOG_SUFFIX),
-            "-t", "3"
-        ]
-        config_opts['blockerm'] = [
-            "-p", str(config['MBPORT']), "-g",
-            str(config['SPEC']).encode(), "-n",
-            str(config['NR_OPS_BLOCKERM']),
-            "--pool", str(config['RADOS_POOL_MAPS']), "-v",
-            str(config['VERBOSITY_BLOCKERM']),
-            "-d",
-            "--pidfile", os.path.join(PIDFILE_PATH, "blockerm" + PID_SUFFIX),
-            "-l", os.path.join(str(LOGS_PATH), "blockerm" + LOG_SUFFIX),
-            "-t", "3"
-        ]
-    elif BLOCKER == "archip-pfiled":
-        config_opts['blockerb'] = [
-            "-p", str(config['BPORT']), "-g",
-            str(config['SPEC']).encode(), "-n",
-            str(config['NR_OPS_BLOCKERB']),
-            "--archip", str(config['FILED_IMAGES']),
-            "-v", str(config['VERBOSITY_BLOCKERB']),
-            "-d",
-            "--pidfile", os.path.join(PIDFILE_PATH, "blockerb" + PID_SUFFIX),
-            "-l", os.path.join(str(LOGS_PATH), "blockerb" + LOG_SUFFIX),
-            "-t", str(config['NR_OPS_BLOCKERB']), "--prefix", ARCHIP_PREFIX,
-            "--uniquestr", str(hostname) + '_' + str(config['BPORT'])
-        ]
-        config_opts['blockerm'] = [
-            "-p", str(config['MBPORT']), "-g",
-            str(config['SPEC']).encode(), "-n",
-            str(config['NR_OPS_BLOCKERM']),
-            "--archip", str(config['FILED_MAPS']),
-            "-v", str(config['VERBOSITY_BLOCKERM']),
-            "-d",
-            "--pidfile", os.path.join(PIDFILE_PATH, "blockerm" + PID_SUFFIX),
-            "-l", os.path.join(str(LOGS_PATH), "blockerm" + LOG_SUFFIX),
-            "-t", str(config['NR_OPS_BLOCKERM']), "--prefix", ARCHIP_PREFIX,
-            "--uniquestr", str(hostname) + '_' + str(config['MBPORT'])
-        ]
-    else:
-            sys.exit(-1)
-
-    config_opts['mapperd'] = [
-        "-t", "1", "-p",  str(config['MPORT']), "-mbp",
-        str(config['MBPORT']),
-        "-g", str(config['SPEC']).encode(), "-n",
-        str(config['NR_OPS_MAPPER']), "-bp", str(config['BPORT']),
-        "--pidfile", os.path.join(PIDFILE_PATH, "mapperd" + PID_SUFFIX),
-        "-v", str(config['VERBOSITY_MAPPER']), "-d",
-        "-l", os.path.join(str(LOGS_PATH), "mapperd" + LOG_SUFFIX)
-    ]
-    config_opts['vlmcd'] = [
-        "-t", "1", "-sp",  str(config['VPORT_START']), "-ep",
-        str(config['VPORT_END']),
-        "-g", str(config['SPEC']).encode(), "-n",
-        str(config['NR_OPS_VLMC']), "-bp", str(config['BPORT']),
-        "-mp", str(config['MPORT']), "-d", "-v",
-        str(config['VERBOSITY_VLMC']),
-        "--pidfile", os.path.join(PIDFILE_PATH, "vlmcd" + PID_SUFFIX),
-        "-l", os.path.join(str(LOGS_PATH), "vlmcd" + LOG_SUFFIX)
-    ]
-
-    for r in roles:
-        peers[r] = Peer(executable=executables[r], opts=config_opts[r],
-                        role=r)
-
     return peers
 
 
