@@ -152,6 +152,10 @@ struct map {
 	volatile uint32_t ref;
 	volatile uint32_t waiters;
 	st_cond_t cond;
+
+	volatile uint32_t users;
+	volatile uint32_t waiters_users;
+	st_cond_t users_cond;
 };
 
 struct mapperd {
@@ -197,6 +201,15 @@ struct mapper_io {
 		st_cond_wait(__map->cond);	\
 	} while (__condition__)
 
+#define wait_all_objects_ready(__map)	\
+	do {					\
+		ta--;				\
+		__map->waiters_users++;		\
+		XSEGLOG2(&lc, D, "Waiting for objects ready on map %lx %s, waiters: %u, ta: %u",\
+				   __map, __map->volume, __map->waiters_users, ta); \
+		st_cond_wait(__map->users_cond);	\
+	} while (__map->users)
+
 #define signal_pr(__pr)				\
 	do { 					\
 		if (!__get_mapper_io(pr)->active){\
@@ -220,6 +233,18 @@ struct mapper_io {
 		}				\
 	}while(0)
 
+#define signal_all_objects_ready(__map)			\
+	do { 					\
+		/* assert __map->users == 0 */ \
+		if (__map->waiters_users) {		\
+			ta += __map->waiters_users;		\
+			XSEGLOG2(&lc, D, "Signaling objects ready for map %lx %s, waiters: %u, \
+			ta: %u",  __map, __map->volume, __map->waiters_users, ta); \
+			__map->waiters_users = 0;	\
+			st_cond_broadcast(__map->users_cond);	\
+		}				\
+	}while(0)
+
 #define signal_mapnode(__mn)			\
 	do { 					\
 		if (__mn->waiters) {		\
@@ -232,19 +257,6 @@ struct mapper_io {
 	}while(0)
 
 
-/* Map read/write function per version */
-/*
-struct map_functions {
-	int (*read_object)(struct map_node *mn, unsigned char *buf);
-  	int (*prepare_write_object)(struct peer_req *pr, struct map *map,
-  				struct map_node *mn, struct xseg_request *req);
-  	int (*read_map)(struct map *m, unsigned char * data);
- 	int (*prepare_write_map)(struct peer_req *pr, struct map *map,
-  	 				struct xseg_request *req);
-};
-
-extern struct map_functions map_functions;
-*/
 /* Helper functions */
 static inline struct mapperd * __get_mapperd(struct peerd *peer)
 {
@@ -275,6 +287,7 @@ struct xseg_request * __close_map(struct peer_req *pr, struct map *map);
 int close_map(struct peer_req *pr, struct map *map);
 struct xseg_request * __write_map(struct peer_req* pr, struct map *map);
 int write_map(struct peer_req* pr, struct map *map);
+int write_map_metadata(struct peer_req* pr, struct map *map);
 struct xseg_request * __load_map(struct peer_req *pr, struct map *m);
 int read_map(struct map *map, unsigned char *buf);
 int load_map(struct peer_req *pr, struct map *map);

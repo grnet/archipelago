@@ -287,10 +287,14 @@ static struct map * create_map(char *name, uint32_t namelen, uint32_t flags)
 	m->waiters = 0;
 	m->cond = st_cond_new(); //FIXME err check;
 
+	m->users = 0;
+	m->waiters_users = 0;
+	m->users_cond = st_cond_new();
+
 	return m;
 }
 
-static void wait_all_objects_ready(struct map *map)
+static void wait_all_map_objects_ready(struct map *map)
 {
 	uint64_t i;
 	struct map_node *mn;
@@ -298,15 +302,23 @@ static void wait_all_objects_ready(struct map *map)
 	//TODO: maybe add counter on the map on how many objects are used, to
 	//speed up the common case, where there are no used objects.
 	map->state |= MF_MAP_SERIALIZING;
+	if (map->users)
+		wait_all_objects_ready(map);
+
 	for (i = 0; i < map->nr_objs; i++) {
 		mn = get_mapnode(map, i);
 		if (mn) {
 			//make sure all pending operations on all objects are completed
-			if (mn->state & MF_OBJECT_NOT_READY)
-				wait_on_mapnode(mn, mn->state & MF_OBJECT_NOT_READY);
+			if (mn->state & MF_OBJECT_NOT_READY) {
+				XSEGLOG2(&lc, E, "BUG: Map node %x of map %s, "
+						"idx: %llu is not ready",
+						mn, map->volume, i);
+//				wait_on_mapnode(mn, mn->state & MF_OBJECT_NOT_READY);
+			}
 			put_mapnode(mn);
 		}
 	}
+
 	map->state &= ~MF_MAP_SERIALIZING;
 }
 
@@ -401,6 +413,9 @@ static int req2objs(struct peer_req *pr, struct map *map, int write)
 		XSEGLOG2(&lc, E, "Cannot allocate mns");
 		return -1;
 	}
+
+	map->users++;
+
 	idx = 0;
 	rem_size = pr->req->size;
 	obj_index = pr->req->offset / MAPPER_DEFAULT_BLOCKSIZE;
@@ -466,6 +481,9 @@ out:
 	}
 	free(mns);
 	mio->cb = NULL;
+	if (--map->users){
+		signal_all_objects_ready(map);
+	}
 	return r;
 }
 
@@ -534,7 +552,7 @@ static int do_close(struct peer_req *pr, struct map *map)
 		/* Do not close the map while there are pending requests on the
 		 * map nodes.
 		 */
-		wait_all_objects_ready(map);
+		wait_all_map_objects_ready(map);
 		/* do not drop cache if close failed and map not deleted */
 		if (close_map(pr, map) < 0 && !(map->flags & MF_MAP_DELETED))
 			return -1;
@@ -706,38 +724,6 @@ static int do_snapshot(struct peer_req *pr, struct map *map)
 	XSEGLOG2(&lc, I, "Starting snapshot for map %s", map->volume);
 	map->state |= MF_MAP_SNAPSHOTTING;
 
-	nr_objs = map->nr_objs;
-
-	//set all map_nodes read only;
-	//TODO, maybe skip that check and add an epoch number on each object.
-	//Then we can check if object is writable iff object epoch == map epoch
-	for (i = 0; i < nr_objs; i++) {
-		mn = get_mapnode(map, i);
-		if (!mn) {
-			XSEGLOG2(&lc, E, "Could not get map node %llu for map %s",
-					i, map->volume);
-			goto out_err;
-		}
-
-		// make sure all pending operations on all objects are completed
-		if (mn->state & MF_OBJECT_NOT_READY)
-			wait_on_mapnode(mn, mn->state & MF_OBJECT_NOT_READY);
-
-		mn->flags &= ~MF_OBJECT_WRITABLE;
-		put_mapnode(mn);
-	}
-	//increase epoch
-	map->epoch++;
-	//write map
-	r = write_map(pr, map);
-	if (r < 0) {
-		XSEGLOG2(&lc, E, "Cannot write map");
-		/* Not restoring epoch or writable status here, is not
-		 * devastating, since this is not the common case, and it can
-		 * only cause unneeded copy-on-write operations.
-		 */
-		goto out_err;
-	}
 	//create new map struct with name snapshot name and flag readonly.
 	snap_map = create_map(snapname, snapnamelen, MF_ARCHIP);
 
@@ -761,6 +747,51 @@ static int do_snapshot(struct peer_req *pr, struct map *map)
 	snap_map->blocksize = map->blocksize;
 	snap_map->nr_objs = map->nr_objs;
 
+
+	nr_objs = map->nr_objs;
+
+	//set all map_nodes read only;
+	//TODO, maybe skip that check and add an epoch number on each object.
+	//Then we can check if object is writable iff object epoch == map epoch
+	wait_all_map_objects_ready(map);
+	for (i = 0; i < nr_objs; i++) {
+		mn = get_mapnode(map, i);
+		if (!mn) {
+			XSEGLOG2(&lc, E, "Could not get map node %llu for map %s",
+					i, map->volume);
+			goto out_err;
+		}
+
+		// make sure all pending operations on all objects are completed
+		// Basically make sure, that no previously copy up operation,
+		// will mess with our state.
+		// This works, since only a map_w, that was processed before
+		// this request, can have issued an object write request which
+		// may be pending. Since the objects are processed in the same
+		// order by the copyup operation and the snapshot operation, we
+		// can be sure, that no previously ready objects, have changed
+		// their state into not read.
+		// No other operation that manipulated map objects can occur
+		// simutaneously with snapshot operation.
+		if (mn->state & MF_OBJECT_NOT_READY)
+			XSEGLOG2(&lc, E, "BUG: object not ready");
+	//		wait_on_mapnode(mn, mn->state & MF_OBJECT_NOT_READY);
+
+		mn->flags &= ~MF_OBJECT_WRITABLE;
+		put_mapnode(mn);
+	}
+	//increase epoch
+	map->epoch++;
+	//write map
+	r = write_map(pr, map);
+	if (r < 0) {
+		XSEGLOG2(&lc, E, "Cannot write map");
+		/* Not restoring epoch or writable status here, is not
+		 * devastating, since this is not the common case, and it can
+		 * only cause unneeded copy-on-write operations.
+		 */
+		goto out_err;
+	}
 	//write snapshot map
 	r = write_map(pr, snap_map);
 	if (r < 0) {
@@ -768,6 +799,7 @@ static int do_snapshot(struct peer_req *pr, struct map *map)
 		goto out_unset;
 	}
 
+	close_map(pr, snap_map);
 	snap_map->objects = NULL;
 	put_map(snap_map);
 
@@ -818,7 +850,7 @@ static int do_destroy(struct peer_req *pr, struct map *map)
 	/* we could write only metadata here to speed things up*/
 	/* Also, we could delete/truncate the unnecessary map blocks, aka all but
 	 * metadata, but that would require to make sure there are no pending
-	 * operations on any block, aka wait_all_objects_ready(). Or we can do
+	 * operations on any block, aka wait_all_map_objects_ready(). Or we can do
 	 * it later, with garbage collection.
 	 */
 	r = write_map_metadata(pr, map);
@@ -1366,7 +1398,7 @@ void * callback_caller(struct cb_arg *arg)
 
 	mio->cb(pr, req);
 	free(arg);
-
+	ta--;
 	return NULL;
 }
 
