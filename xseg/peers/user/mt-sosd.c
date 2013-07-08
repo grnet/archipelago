@@ -246,6 +246,12 @@ int handle_read(struct peerd *peer, struct peer_req *pr)
 	struct rados_io *rio = (struct rados_io *) (pr->priv);
 	struct xseg_request *req = pr->req;
 	char *data;
+
+	if (req->datalen < req->size) {
+		XSEGLOG2(&lc, E, "Request datalen is less than req size");
+		return -1;
+	}
+
 	if (rio->state == ACCEPTED) {
 		if (!req->size) {
 			complete(peer, pr);
@@ -271,15 +277,15 @@ int handle_read(struct peerd *peer, struct peer_req *pr)
 			/* reached end of object. zero out rest of data
 			 * requested from this object
 			 */
-			memset(data + req->serviced, 0, req->datalen - req->serviced);
-			req->serviced = req->datalen;
+			memset(data + req->serviced, 0, req->size - req->serviced);
+			req->serviced = req->size;
 		}
 		else if (pr->retval == -2) {
 			XSEGLOG2(&lc, I, "Reading of %s return -2. "
 					"Zeroing out data", rio->obj_name);
 			/* object not found. return zeros instead */
-			memset(data, 0, req->datalen);
-			req->serviced = req->datalen;
+			memset(data, 0, req->size);
+			req->serviced = req->size;
 		}
 		else {
 			XSEGLOG2(&lc, E, "Reading of %s failed", rio->obj_name);
@@ -287,7 +293,7 @@ int handle_read(struct peerd *peer, struct peer_req *pr)
 			fail(peer, pr);
 			return 0;
 		}
-		if (req->serviced >= req->datalen) {
+		if (req->serviced >= req->size) {
 			XSEGLOG2(&lc, I, "Reading of %s completed", rio->obj_name);
 			complete(peer, pr);
 			return 0;
@@ -316,6 +322,11 @@ int handle_read(struct peerd *peer, struct peer_req *pr)
 
 int handle_write(struct peerd *peer, struct peer_req *pr)
 {
+	if (req->datalen < req->size) {
+		XSEGLOG2(&lc, E, "Request datalen is less than req size");
+		return -1;
+	}
+
 	struct rados_io *rio = (struct rados_io *) (pr->priv);
 	struct xseg_request *req = pr->req;
 	if (rio->state == ACCEPTED) {
@@ -346,7 +357,7 @@ int handle_write(struct peerd *peer, struct peer_req *pr)
 		XSEGLOG2(&lc, I, "Writing of %s callback", rio->obj_name);
 		if (pr->retval == 0) {
 			XSEGLOG2(&lc, I, "Writing of %s completed", rio->obj_name);
-			req->serviced = req->datalen;
+			req->serviced = req->size;
 			complete(peer, pr);
 			return 0;
 		}
