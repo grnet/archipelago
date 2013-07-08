@@ -72,62 +72,60 @@
 void custom_peer_usage()
 {
 	fprintf(stderr, "Custom peer options: \n"
-			"  --------------------------------------------\n"
-			"    -op       | None    | XSEG operation [read|write|info|delete]\n"
-			"    --pattern | None    | I/O pattern [seq|rand]\n"
-			"    --verify  | no      | Verify written requests [no|meta|full]\n"
-			"    -rc       | None    | Request cap\n"
-			"    -to       | None    | Total objects\n"
-			"    -ts       | None    | Total I/O size\n"
-			"    -os       | 4M      | Object size\n"
-			"    -bs       | 4k      | Block size\n"
-			"    -tp       | None    | Target port\n"
-			"    --iodepth | 1       | Number of in-flight I/O requests\n"
-			"    --seed    | None    | Initialize LFSR and target names\n"
-			"    --insanity| sane    | Adjust insanity level of benchmark:\n"
-			"              |         |     [sane|eccentric|manic|paranoid]\n"
-			"    --progress| yes     | Show progress of requests [yes|no]\n"
-			"    --ping    | yes     | Ping target before starting benchmark\n"
-			"              |         |     [yes|no]\n"
-			"    --prefix  | 'bench' | Add a common prefix to all object names\n"
-			"    --objname | 'bench' | Use only one object with this name\n"
-			"\n"
-			"Additional information:\n"
-			"  --------------------------------------------\n"
-			"  * The -to and -ts options are mutually exclusive\n"
-			"\n"
-			"  * The object name is always not null-terminated and\n"
-			"    defaults to the following structure:\n"
-			"           <prefix>-<seed>-<object number>\n"
-			"\n"
-			"    where:\n"
-			"    a. <prefix> is given by user or defaults to 'bench'\n"
-			"    b. <seed> is given by user or defaults to a random value.\n"
-			"       Its length will be 9 digits, with trailing zeros where\n"
-			"       necessary\n"
-			"    c. <object number> is out of the user's control. It is\n"
-			"       calculated during the benchmark and is a 15-digit\n"
-			"       number, allowing a maximum of 1 quadrillion objects\n"
-			"\n"
-                        "   So, if bench is called with the arguments:\n"
-			"           --prefix obj --seed 999\n"
-			"\n"
-			"   and <object number> is 9,the resulting object name will\n"
-			"   be:\n"
-			"           obj-000000999-000000000000009\n"
-			"\n"
-			" * The above object name structure can by bypassed with the\n"
-			"   --objname <object name> argument. This implies the\n"
-			"   following:\n"
-			"\n"
-			"   a. --pattern argument defaults to 'seq'\n"
-			"   b. --verify argument defaults to 'no'\n"
-			"   c. -to argument defaults to 1\n"
-			"   d. -ts argument defaults to (and can't be larger than)\n"
-			"      the object size (-os argument)\n"
-			"   e. --seed and --prefix arguments are not only unnecessary,\n"
-			"      but will also produce an error to alert the user\n"
-			"\n");
+		"  --------------------------------------------\n"
+		"    -op       | None    | XSEG operation [read|write|info|delete]\n"
+		"    --pattern | None    | I/O pattern [seq|rand]\n"
+		"    --verify  | no      | Verify written requests [no|meta|full]\n"
+		"    -rc       | None    | Request cap\n"
+		"    -to       | None    | Total objects\n"
+		"    -ts       | None    | Total I/O size\n"
+		"    -os       | 4M      | Object size\n"
+		"    -bs       | 4k      | Block size\n"
+		"    -tp       | None    | Target port\n"
+		"    --iodepth | 1       | Number of in-flight I/O requests\n"
+		"    --seed    | None    | Initialize LFSR and target names\n"
+		"    --insanity| sane    | Adjust insanity level of benchmark:\n"
+		"              |         |     [sane|eccentric|manic|paranoid]\n"
+		"    --progress| yes     | Show progress of requests [yes|no]\n"
+		"    --ping    | yes     | Ping target before starting benchmark\n"
+		"              |         |     [yes|no]\n"
+		"    --prefix  | 'bench' | Add a common prefix to all object names\n"
+		"    --objname | 'bench' | Use only one object with this name\n"
+		"\n"
+		"Additional information:\n"
+		"  --------------------------------------------\n"
+		"  * The -to and -ts options are mutually exclusive\n"
+		"\n"
+		"  * The object name is always not null-terminated and\n"
+		"    defaults to the following structure:\n"
+		"           <prefix>-<seed>-<object number>\n"
+		"\n"
+		"    where:\n"
+		"    a. <prefix> is given by user or defaults to 'bench'\n"
+		"    b. <seed> is given by user or defaults to a random value.\n"
+		"       Its length will be 9 digits, with trailing zeros where\n"
+		"       necessary\n"
+		"    c. <object number> is out of the user's control. It is\n"
+		"       calculated during the benchmark and is a 15-digit\n"
+		"       number, allowing a maximum of 1 quadrillion objects\n"
+		"\n"
+		"   So, if bench is called with the arguments:\n"
+		"           --prefix obj --seed 999\n"
+		"\n"
+		"   and <object number> is 9,the resulting object name will\n"
+		"   be:\n"
+		"           obj-000000999-000000000000009\n"
+		"\n"
+		" * The above object name structure can by bypassed with the\n"
+		"   --objname <object name> argument. This implies the\n"
+		"   following:\n"
+		"\n"
+		"   a. -to option is strictly restricted to 1\n"
+		"   b. -ts option defaults to (and can't be larger than)\n"
+		"      the object size (-os argument)\n"
+		"   c. --prefix is must be unused. If used, it produces an "
+		"      error to alert the user\n"
+		"\n");
 }
 
 int custom_peer_init(struct peerd *peer, int argc, char *argv[])
@@ -239,7 +237,6 @@ int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 	obv->seedlen = SEEDLEN;
 	obv->objnumlen = OBJNUMLEN;
 	if (objname[0]) {
-		/* TODO: Fill restrictions here */
 		strncpy(obv->name, objname, XSEG_MAX_TARGETLEN);
 		obv->prefixlen = 0;
 		obv->namelen = strlen(objname);
@@ -342,46 +339,6 @@ int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 		goto arg_fail;
 	}
 
-	//Total objects (to) or total I/O size (ts).
-	//Must have the same format as "block size"
-	//They are mutually exclusive
-	if (total_objects[0] && total_size[0]) {
-		XSEGLOG2(&lc, E, "Total objects and total size are mutually exclusive\n");
-		goto arg_fail;
-	} else if (total_objects[0]) {
-		prefs->to = str2num(total_objects);
-		if (!prefs->to) {
-			XSEGLOG2(&lc, E, "Invalid syntax: -to %s\n", total_objects);
-			goto arg_fail;
-		}
-		//In this case, the maximum number of requests is the total number of
-		//objects we will handle
-		prefs->status->max = prefs->to;
-	} else if (total_size[0]) {
-		if (prefs->op != X_READ && prefs->op != X_WRITE) {
-			XSEGLOG2(&lc, E,
-					"Total objects must be supplied (required by -op %s)\n", op);
-			goto arg_fail;
-		}
-		prefs->ts = str2num(total_size);
-		if (!prefs->ts) {
-			XSEGLOG2(&lc, E, "Invalid syntax: -ts %s\n", total_size);
-			goto arg_fail;
-		} else if (prefs->ts % prefs->bs) {
-			XSEGLOG2(&lc, E, "Misaligned total I/O size: %s\n", total_size);
-			goto arg_fail;
-		}
-		//In this case, the maximum number of requests is the number of blocks
-		//we need to cover the total I/O size
-		prefs->status->max = prefs->ts / prefs->bs;
-	} else {
-		XSEGLOG2(&lc, E, "Total objects or total size must be supplied\n");
-		goto arg_fail;
-	}
-
-	if (prefs->status->max == 1)
-		SET_FLAG(PATTERN, prefs->flags, PATTERN_SEQ);
-
 	//Object size (os): Defaults to 4M.
 	//Must have the same format as "block size"
 	//Must be integer multiple of "block size"
@@ -397,6 +354,71 @@ int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 		goto arg_fail;
 	}
 
+	//Total objects (to) or total I/O size (ts).
+	//Must have the same format as "block size"
+	//They are mutually exclusive
+	if (total_objects[0] && total_size[0]) {
+		XSEGLOG2(&lc, E, "Total objects and total size are "
+				"mutually exclusive\n");
+		goto arg_fail;
+	} else if (total_objects[0]) {
+		prefs->to = str2num(total_objects);
+		if (!prefs->to) {
+			XSEGLOG2(&lc, E, "Invalid syntax: -to %s\n",
+					total_objects);
+			goto arg_fail;
+		}
+		//In this case, the maximum number of requests is the total
+		//number of objects we will handle
+		prefs->status->max = prefs->to;
+	} else if (total_size[0]) {
+		if (prefs->op != X_READ && prefs->op != X_WRITE) {
+			XSEGLOG2(&lc, E, "Total objects must be supplied "
+					"(required by -op %s)\n", op);
+			goto arg_fail;
+		}
+		prefs->ts = str2num(total_size);
+		if (!prefs->ts) {
+			XSEGLOG2(&lc, E, "Invalid syntax: -ts %s\n", total_size);
+			goto arg_fail;
+		} else if (prefs->ts % prefs->bs) {
+			XSEGLOG2(&lc, E, "Misaligned total I/O size: %s\n", total_size);
+			goto arg_fail;
+		}
+		//In this case, the maximum number of requests is the number of
+		//blocks we need to cover the total I/O size
+		prefs->status->max = prefs->ts / prefs->bs;
+	} else if (!objname[0]) {
+		XSEGLOG2(&lc, E, "Total objects or total size must be supplied\n");
+		goto arg_fail;
+	}
+
+	/*
+	 * Enforce --objname restrictions here.
+	 */
+	if (obv->name[0]) {
+		if (prefs->to > 1) {
+			XSEGLOG2(&lc, E, "-to %s: Total objects are restricted "
+					"to 1 due to --objname %s\n",
+					total_objects, objname);
+			goto arg_fail;
+		} else if (prefs->ts > prefs->os) {
+			XSEGLOG2(&lc, E, "-ts %s: Total size can't be larger "
+					"than object size (%s) due to "
+					"--objname %s\n",
+					total_size, object_size, objname);
+			goto arg_fail;
+		} else if (prefs->op == X_READ || prefs->op == X_WRITE) {
+			prefs->ts = prefs->os;
+			prefs->status->max = prefs->ts / prefs->bs;
+		} else {
+			prefs->to = 1;
+			prefs->status->max = 1;
+		}
+	}
+
+	if (prefs->status->max == 1)
+		SET_FLAG(PATTERN, prefs->flags, PATTERN_SEQ);
 
 	/*************************\
 	 * Check port parameters *
