@@ -407,6 +407,13 @@ static int req2objs(struct peer_req *pr, struct map *map, int write)
 
 	XSEGLOG2(&lc, D, "Calculated %u nr_objs", nr_objs);
 
+	if (pr->req->offset + pr->req->size > map->size) {
+		XSEGLOG2(&lc, E, "Invalid offset/size: offset: %llu, "
+				"size: %llu, map size: %llu",
+				pr->req->offset, pr->req->size, map->size);
+		return -1;
+	}
+
 	/* get map_nodes of request */
 	struct r2o *mns = malloc(sizeof(struct r2o)*nr_objs);
 	if (!mns){
