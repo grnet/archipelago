@@ -126,7 +126,7 @@ def create(name, size=None, snap=None, **kwargs):
         if size:
             xclone.size = size << 20
         else:
-            xclone.size = -1
+            xclone.size = 0
 
         req.set_data(xclone)
         req.submit()

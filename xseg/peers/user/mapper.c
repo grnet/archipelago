@@ -1003,7 +1003,7 @@ static int do_clone(struct peer_req *pr, struct map *map)
 	clonemap->flags &= ~MF_MAP_DELETED;
 	clonemap->epoch++;
 
-	if (xclone->size == -1)
+	if (xclone->size)
 		clonemap->size = map->size;
 	else
 		clonemap->size = xclone->size;

@@ -640,7 +640,7 @@ int cmd_clone(char *src, char *dst, long size)
 		xclone->size = (uint64_t)size;
 		xclone->size *= 1024*1024;
 	} else {
-		xclone->size = -1;
+		xclone->size = 0;
 	}
         req->offset = 0;
         req->size = sizeof(struct xseg_request_clone);
