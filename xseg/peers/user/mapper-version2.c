@@ -137,6 +137,7 @@ int read_object_v2(struct map_node *mn, unsigned char *buf)
 	}
 	memcpy(mn->object + len, buf + sizeof(objectlen) + 1, mn->objectlen);
 	mn->object[mn->objectlen] = 0;
+
 	return 0;
 }
 
@@ -179,6 +180,9 @@ struct xseg_request * prepare_write_objects_o2c_v2(struct peer_req *pr, struct m
 	struct map_node *mn;
 
 	datalen = v2_read_chunk_size;
+
+	XSEGLOG2(&lc, D, "Starting for map %s, start_obj: %llu, nr_objs: %llu",
+			map->volume, o2c.start_obj, o2c.nr_objs);
 
 	req = get_request(pr, mapper->mbportno, o2c.target,
 			o2c.targetlen, datalen);
@@ -252,6 +256,8 @@ int read_map_objects_v2(struct map *map, unsigned char *data, uint64_t start, ui
 	}
 
 	if (!map->objects) {
+		XSEGLOG2(&lc, D, "Allocating %llu nr_objs for size %llu",
+				map->nr_objs, map->size);
 		map_node = calloc(map->nr_objs, sizeof(struct map_node));
 		if (!map_node) {
 			XSEGLOG2(&lc, E, "Cannot allocate mem for %llu objects",
@@ -400,6 +406,8 @@ int __write_objects_v2(struct peer_req *pr, struct map *map, uint64_t start, uin
 	struct xseg_request *req;
 	struct obj2chunk o2c;
 
+	XSEGLOG2(&lc, D, "Writing objects for %s: start: %llu, nr: %llu",
+			map->volume, start, nr);
 	if (start + nr > map->nr_objs) {
 		XSEGLOG2(&lc, E, "Attempting to write beyond nr_objs");
 		return -1;
@@ -423,6 +431,7 @@ int __write_objects_v2(struct peer_req *pr, struct map *map, uint64_t start, uin
 		}
 		mio->pending_reqs++;
 		nr -= o2c.nr_objs;
+		start += o2c.nr_objs;
 	}
 	return 0;
 }
@@ -534,6 +543,7 @@ int __load_map_objects_v2(struct peer_req *pr, struct map *map, uint64_t start, 
 		}
 		mio->pending_reqs++;
 		nr -= o2c.nr_objs;
+		start += o2c.nr_objs;
 	}
 	return 0;
 
