@@ -584,7 +584,20 @@ static void handle_info(struct peerd *peer, struct peer_req *pr)
 	uint64_t size;
 	char *target = xseg_get_target(peer->xseg, req);
 	char *data = xseg_get_data(peer->xseg, req);
+	char buf[XSEG_MAX_TARGETLEN + 1];
 	struct xseg_reply_info *xinfo  = (struct xseg_reply_info *)data;
+
+	if (req->datalen < sizeof(struct xseg_reply_info)) {
+		strncpy(buf, target, req->targetlen);
+		r = xseg_resize_request(peer->xseg, req, req->targetlen, sizeof(struct xseg_reply_info));
+		if (r < 0) {
+			XSEGLOG2(&lc, E, "Cannot resize request");
+			pfiled_fail(peer, pr);
+			return;
+		}
+		target = xseg_get_target(peer->xseg, req);
+		strncpy(target, buf, req->targetlen);
+	}
 
 	XSEGLOG2(&lc, I, "Handle info started for pr: %p, req: %p", pr, pr->req);
 	fd = dir_open(pfiled, fio, target, req->targetlen, READ);
