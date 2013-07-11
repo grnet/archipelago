@@ -491,7 +491,24 @@ static int do_info(struct peer_req *pr, struct map *map)
 {
 	struct peerd *peer = pr->peer;
 	struct xseg_reply_info *xinfo;
-	xinfo = (struct xseg_reply_info *) xseg_get_data(peer->xseg, pr->req);
+	struct xseg_request *req = pr->req;
+	char buf[XSEG_MAX_TARGETLEN + 1];
+	char *target;
+	int r;
+
+	if (req->datalen < sizeof(struct xseg_reply_info)) {
+		target = xseg_get_target(peer->xseg, req);
+		strncpy(buf, target, req->targetlen);
+		r = xseg_resize_request(peer->xseg, req, req->targetlen, sizeof(struct xseg_reply_info));
+		if (r < 0) {
+			XSEGLOG2(&lc, E, "Cannot resize request");
+			return -1;
+		}
+		target = xseg_get_target(peer->xseg, req);
+		strncpy(target, buf, req->targetlen);
+	}
+
+	xinfo = (struct xseg_reply_info *) xseg_get_data(peer->xseg, req);
 	xinfo->size = map->size;
 	return 0;
 }
