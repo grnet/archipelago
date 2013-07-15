@@ -474,7 +474,11 @@ static void handle_read(struct peerd *peer, struct peer_req *pr)
 	}
 
 
+	XSEGLOG2(&lc, D, "req->serviced: %llu, req->size: %llu", req->serviced,
+			req->size);
 	while (req->serviced < req->size) {
+		XSEGLOG2(&lc, D, "req->serviced: %llu, req->size: %llu",
+				req->serviced, req->size);
 		r = pread(fd, data + req->serviced,
 				req->size- req->serviced,
 				req->offset + req->serviced);
@@ -491,6 +495,8 @@ static void handle_read(struct peerd *peer, struct peer_req *pr)
 			req->serviced += r;
 		}
 	}
+	XSEGLOG2(&lc, D, "req->serviced: %llu, req->size: %llu", req->serviced,
+			req->size);
 
 out:
 	if (req->serviced > 0 ) {
@@ -543,8 +549,12 @@ static void handle_write(struct peerd *peer, struct peer_req *pr)
 		}
 	}
 
+	XSEGLOG2(&lc, D, "req->serviced: %llu, req->size: %llu", req->serviced,
+			req->size);
 	while (req->serviced < req->size) {
-		r = pwrite(fd, data + req->serviced, 
+		XSEGLOG2(&lc, D, "req->serviced: %llu, req->size: %llu",
+				req->serviced, req->size);
+		r = pwrite(fd, data + req->serviced,
 				req->size- req->serviced,
 				req->offset + req->serviced);
 		if (r < 0) {
@@ -554,6 +564,8 @@ static void handle_write(struct peerd *peer, struct peer_req *pr)
 			req->serviced += r;
 		}
 	}
+	XSEGLOG2(&lc, D, "req->serviced: %llu, req->size: %llu", req->serviced,
+			req->size);
 	r = fsync(fd);
 	if (r< 0) {
 		XSEGLOG2(&lc, E, "Fsync failed.");
