@@ -1,5 +1,39 @@
+# Copyright 2013 GRNET S.A. All rights reserved.
+#
+# Redistribution and use in source and binary forms, with or
+# without modification, are permitted provided that the following
+# conditions are met:
+#
+#   1. Redistributions of source code must retain the above
+#      copyright notice, this list of conditions and the following
+#      disclaimer.
+#
+#   2. Redistributions in binary form must reproduce the above
+#      copyright notice, this list of conditions and the following
+#      disclaimer in the documentation and/or other materials
+#      provided with the distribution.
+#
+# THIS SOFTWARE IS PROVIDED BY GRNET S.A. ``AS IS'' AND ANY EXPRESS
+# OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+# WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+# PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL GRNET S.A OR
+# CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+# SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+# LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF
+# USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED
+# AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+# LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
+# ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+# POSSIBILITY OF SUCH DAMAGE.
+#
+# The views and conclusions contained in the software and
+# documentation are those of the authors and should not be
+# interpreted as representing official policies, either expressed
+# or implied, of GRNET S.A.
+
 import archipelago
-from archipelago.common import Xseg_ctx, Request, Filed, Mapperd, Vlmcd, create_segment, destroy_segment
+from archipelago.common import Xseg_ctx, Request, Filed, Mapperd, Vlmcd, \
+        create_segment, destroy_segment
 from archipelago.archipelago import start_peer, stop_peer
 import random as rnd
 import unittest
@@ -8,15 +42,7 @@ from xseg.xseg_api import *
 import ctypes
 import os
 from copy import copy
-
-rnd.seed()
-archipelago.common.BIN_DIR='/home/philipgian/code/archipelago/xseg/peers/user/'
-archipelago.common.LOGS_PATH=os.path.join(os.getcwd(), 'logs')
-archipelago.common.PIDFILE_PATH=os.path.join(os.getcwd(), 'pids')
-if not os.path.isdir(archipelago.common.LOGS_PATH):
-    os.makedirs(archipelago.common.LOGS_PATH)
-if not os.path.isdir(archipelago.common.PIDFILE_PATH):
-    os.makedirs(archipelago.common.PIDFILE_PATH)
+from sets import Set
 
 def get_random_string(length=64, repeat=16):
     nr_repeats = length//repeat
@@ -34,12 +60,30 @@ def get_random_string(length=64, repeat=16):
 
     return ''.join(l)
 
+def recursive_remove(path):
+    for root, dirs, files in os.walk(path, topdown=False):
+        for name in files:
+            os.remove(os.path.join(root, name))
+        for name in dirs:
+            os.rmdir(os.path.join(root, name))
 
+def init():
+    rnd.seed()
+    archipelago.common.BIN_DIR='/home/philipgian/code/archipelago/xseg/peers/user/'
+    archipelago.common.LOGS_PATH=os.path.join(os.getcwd(), 'logs')
+    archipelago.common.PIDFILE_PATH=os.path.join(os.getcwd(), 'pids')
+    if not os.path.isdir(archipelago.common.LOGS_PATH):
+        os.makedirs(archipelago.common.LOGS_PATH)
+    if not os.path.isdir(archipelago.common.PIDFILE_PATH):
+        os.makedirs(archipelago.common.PIDFILE_PATH)
+
+    recursive_remove(archipelago.common.LOGS_PATH)
 
 class XsegTest(unittest.TestCase):
     xseg = None
     myport = 15
     spec = "posix:testsegment:16:256:12".encode()
+    blocksize = 4*1024*1024
 
     def setUp(self):
         try:
@@ -60,23 +104,10 @@ class XsegTest(unittest.TestCase):
         xinfo.size = size
         return xinfo
 
-    def get_req(self, op, dst, target, data=None, size=None, offset=0, datalen=0,
+    def get_req(self, op, dst, target, data=None, size=0, offset=0, datalen=0,
             flags=0):
-        targetlen = len(target)
-        if not datalen and data:
-            datalen = len(data)
-        req = Request(self.xseg, dst, targetlen, datalen)
-        req.set_op(op)
-        if size is not None:
-            req.set_size(size)
-        else:
-            req.set_size(datalen)
-        req.set_offset(offset)
-        req.set_flags(flags)
-        self.assertTrue(req.set_target(target))
-        if data:
-            self.assertTrue(req.set_data(data))
-        return req
+        return Request(self.xseg, dst, target, data=data, size=size,
+                offset=offset, datalen=datalen, flags=flags, op=op)
 
     def assert_equal_xseg(self, req, expected_data):
         if isinstance(expected_data, xseg_reply_info):
@@ -99,7 +130,6 @@ class XsegTest(unittest.TestCase):
             segs = data.segs
             SegsArray = xseg_reply_map_scatterlist * cnt
             array = SegsArray.from_address(ctypes.addressof(segs))
-            #expected_array = SegsArray.from_address(ctypes.addressof(expected_data.segs))
             expected_array = expected_data.segs
             for i in range(0, cnt):
                 t = ctypes.string_at(array[i].target, array[i].targetlen)
@@ -137,114 +167,133 @@ class XsegTest(unittest.TestCase):
         return send_and_evaluate
 
     def send_write(self, dst, target, data=None, offset=0, datalen=0):
-        req = self.get_req(X_WRITE, dst, target, data, offset=offset, datalen=datalen)
+        #assert datalen >= size
+#        req = self.get_req(X_WRITE, dst, target, data, size=size, offset=offset, datalen=datalen)
+        req = Request.get_write_request(self.xseg, dst, target, data=data,
+                offset=offset, datalen=datalen)
         req.submit()
         return req
 
     send_and_evaluate_write = evaluate(send_write)
 
     def send_read(self, dst, target, size=0, datalen=0, offset=0):
-        if not datalen:
-            datalen=size
-        req = self.get_req(X_READ, dst, target, data=None, size=size, offset=offset, datalen=datalen)
+        #assert datalen >= size
+#        req = self.get_req(X_READ, dst, target, data=None, size=size, offset=offset, datalen=datalen)
+        req = Request.get_read_request(self.xseg, dst, target, size=size,
+                offset=offset, datalen=datalen)
         req.submit()
         return req
 
     send_and_evaluate_read = evaluate(send_read)
 
     def send_info(self, dst, target):
-        req = self.get_req(X_INFO, dst, target, data=None, size=0)
+        #req = self.get_req(X_INFO, dst, target, data=None, size=0)
+        req = Request.get_info_request(self.xseg, dst, target)
         req.submit()
         return req
 
     send_and_evaluate_info = evaluate(send_info)
 
     def send_copy(self, dst, src_target, dst_target=None, size=0, offset=0):
-        datalen = ctypes.sizeof(xseg_request_copy)
-        xcopy = xseg_request_copy()
-        xcopy.target = src_target
-        xcopy.targetlen = len(src_target)
-        req = self.get_req(X_COPY, dst, dst_target, xcopy, datalen=datalen,
-                offset=offset)
+        #datalen = ctypes.sizeof(xseg_request_copy)
+        #xcopy = xseg_request_copy()
+        #xcopy.target = src_target
+        #xcopy.targetlen = len(src_target)
+#        req = self.get_req(X_COPY, dst, dst_target, data=xcopy, datalen=datalen,
+#                offset=offset, size=size)
+        req = Request.get_copy_request(self.xseg, dst, src_target,
+                copy_target=dst_target, size=size, offset=offset)
         req.submit()
         return req
 
     send_and_evaluate_copy = evaluate(send_copy)
 
     def send_acquire(self, dst, target):
-        req = self.get_req(X_ACQUIRE, dst, target, flags=XF_NOSYNC)
+        #req = self.get_req(X_ACQUIRE, dst, target, flags=XF_NOSYNC)
+        req = Request.get_acquire_request(self.xseg, dst, target)
         req.submit()
         return req
 
     send_and_evaluate_acquire = evaluate(send_acquire)
 
     def send_release(self, dst, target, force=False):
-        req_flags = XF_NOSYNC
-        if force:
-            req_flags |= XF_FORCE
-        req = self.get_req(X_RELEASE, dst, target, size=0, flags=req_flags)
+        #req_flags = XF_NOSYNC
+        #if force:
+            #req_flags |= XF_FORCE
+        #req = self.get_req(X_RELEASE, dst, target, size=0, flags=req_flags)
+        req = Request.get_release_request(self.xseg, dst, target, force)
         req.submit()
         return req
 
     send_and_evaluate_release = evaluate(send_release)
 
     def send_delete(self, dst, target):
-        req = self.get_req(X_DELETE, dst, target)
+        #req = self.get_req(X_DELETE, dst, target)
+        req = Request.get_delete_request(self.xseg, dst, target)
         req.submit()
         return req
 
     send_and_evaluate_delete = evaluate(send_delete)
 
     def send_clone(self, dst, src_target, clone=None, clone_size=0):
-        xclone = xseg_request_clone()
-        xclone.target = src_target
-        xclone.targetlen = len(src_target)
-        xclone.size = clone_size
+        #xclone = xseg_request_clone()
+        #xclone.target = src_target
+        #xclone.targetlen = len(src_target)
+        #xclone.size = clone_size
 
-        req = self.get_req(X_CLONE, dst, clone, data=xclone,
-                datalen=ctypes.sizeof(xclone))
+        #req = self.get_req(X_CLONE, dst, clone, data=xclone,
+                #datalen=ctypes.sizeof(xclone))
+        req = Request.get_clone_request(self.xseg, dst, src_target,
+                clone=clone, clone_size=clone_size)
         req.submit()
         return req
 
     send_and_evaluate_clone = evaluate(send_clone)
 
     def send_snapshot(self, dst, src_target, snap=None):
-        xsnapshot = xseg_request_snapshot()
-        xsnapshot.target = snap
-        xsnapshot.targetlen = len(snap)
+        #xsnapshot = xseg_request_snapshot()
+        #xsnapshot.target = snap
+        #xsnapshot.targetlen = len(snap)
 
-        req = self.get_req(X_SNAPSHOT, dst, src_target, data=xsnapshot,
-                datalen=ctypes.sizeof(xsnapshot))
+        #req = self.get_req(X_SNAPSHOT, dst, src_target, data=xsnapshot,
+                #datalen=ctypes.sizeof(xsnapshot))
+        req = Request.get_snapshot_request(self.xseg, dst, src_target, snap=snap)
         req.submit()
         return req
 
     send_and_evaluate_snapshot = evaluate(send_snapshot)
 
     def send_open(self, dst, target):
-        req = self.get_req(X_OPEN, dst, target)
+        #req = self.get_req(X_OPEN, dst, target)
+        req = Request.get_open_request(self.xseg, dst, target)
         req.submit()
         return req
 
     send_and_evaluate_open = evaluate(send_open)
 
     def send_close(self, dst, target):
-        req = self.get_req(X_CLOSE, dst, target)
+        #req = self.get_req(X_CLOSE, dst, target)
+        req = Request.get_close_request(self.xseg, dst, target)
         req.submit()
         return req
 
     send_and_evaluate_close = evaluate(send_close)
 
     def send_map_read(self, dst, target, offset=0, size=0):
-        req = self.get_req(X_MAPR, dst, target, size=size, offset=offset,
-                datalen=0)
+        #req = self.get_req(X_MAPR, dst, target, size=size, offset=offset,
+                #datalen=0)
+        req = Request.get_mapr_request(self.xseg, dst, target, offset=offset,
+                size=size)
         req.submit()
         return req
 
     send_and_evaluate_map_read = evaluate(send_map_read)
 
     def send_map_write(self, dst, target, offset=0, size=0):
-        req = self.get_req(X_MAPW, dst, target, size=size, offset=offset,
-                datalen=0)
+        #req = self.get_req(X_MAPW, dst, target, size=size, offset=offset,
+                #datalen=0)
+        req = Request.get_mapw_request(self.xseg, dst, target, offset=offset,
+                size=size)
         req.submit()
         return req
 
@@ -256,11 +305,7 @@ class XsegTest(unittest.TestCase):
             os.makedirs(path)
 
         if clean:
-            for root, dirs, files in os.walk(path, topdown=False):
-                for name in files:
-                    os.remove(os.path.join(root, name))
-                for name in dirs:
-                    os.rmdir(os.path.join(root, name))
+            recursive_remove(path)
 
         return Filed(**args)
 
@@ -315,7 +360,6 @@ class VlmcdTest(XsegTest):
             'blocker_port': 0,
             'mapper_port': 2
             }
-    blocksize = 4*1024*1024
 
     def setUp(self):
         super(VlmcdTest, self).setUp()
@@ -386,7 +430,8 @@ class VlmcdTest(XsegTest):
                 expected=False)
         self.send_and_evaluate_clone(self.mapperdport, "", clone=volume,
                 clone_size=volsize)
-        self.send_and_evaluate_write(self.vlmcdport, volume, data=data)
+        self.send_and_evaluate_write(self.vlmcdport, volume, data=data,
+                serviced=datalen)
         self.send_and_evaluate_read(self.vlmcdport, volume, size=datalen,
                 expected_data=data)
 
@@ -414,12 +459,26 @@ class VlmcdTest(XsegTest):
         self.send_and_evaluate_snapshot(self.mapperdport, volume, snap=snap)
         self.send_and_evaluate_read(self.vlmcdport, snap, size=size,
                 offset=offset, expected_data=zeros)
-        self.send_and_evaluate_write(self.vlmcdport, volume, data=data, offset=offset)
+        self.send_and_evaluate_write(self.vlmcdport, volume, data=data, offset=offset,
+                serviced=size)
         self.send_and_evaluate_read(self.vlmcdport, snap, size=size,
                 offset=offset, expected_data=zeros)
         self.send_and_evaluate_read(self.vlmcdport, volume, size=size,
                 offset=offset, expected_data=data)
 
+    def test_info2(self):
+        volume = "myvolume"
+        volsize = 10*1024*1024
+        self.send_and_evaluate_clone(self.mapperdport, "", clone=volume,
+                clone_size=volsize)
+        xinfo = self.get_reply_info(volsize)
+        reqs = Set([])
+        reqs.add(self.send_info(self.vlmcdport, volume))
+        reqs.add(self.send_info(self.vlmcdport, volume))
+        while len(reqs) > 0:
+            req = self.xseg.wait_requests(reqs)
+            self.evaluate_req(req, data=xinfo)
+            reqs.remove(req)
 
 
 class MapperdTest(XsegTest):
@@ -627,6 +686,20 @@ class MapperdTest(XsegTest):
         xinfo = self.get_reply_info(volsize)
         self.send_and_evaluate_info(self.mapperdport, volume, expected=xinfo)
 
+    def test_info2(self):
+        volume = "myvolume"
+        volsize = 10*1024*1024
+        self.send_and_evaluate_clone(self.mapperdport, "", clone=volume,
+                clone_size=volsize)
+        xinfo = self.get_reply_info(volsize)
+        reqs = Set([])
+        reqs.add(self.send_info(self.mapperdport, volume))
+        reqs.add(self.send_info(self.mapperdport, volume))
+        while len(reqs) > 0:
+            req = self.xseg.wait_requests(reqs)
+            self.evaluate_req(req, data=xinfo)
+            reqs.remove(req)
+
     def test_open(self):
         volume = "myvolume"
         volsize = 10*1024*1024
@@ -635,6 +708,19 @@ class MapperdTest(XsegTest):
                 clone_size=volsize)
         self.send_and_evaluate_open(self.mapperdport, volume)
         self.send_and_evaluate_open(self.mapperdport, volume)
+
+    def test_open2(self):
+        volume = "myvolume"
+        volsize = 10*1024*1024
+        self.send_and_evaluate_clone(self.mapperdport, "", clone=volume,
+                clone_size=volsize)
+        reqs = Set([])
+        reqs.add(self.send_open(self.mapperdport, volume))
+        reqs.add(self.send_open(self.mapperdport, volume))
+        while len(reqs) > 0:
+            req = self.xseg.wait_requests(reqs)
+            self.evaluate_req(req)
+            reqs.remove(req)
 
     def test_close(self):
         volume = "myvolume"
@@ -666,6 +752,25 @@ class MapperdTest(XsegTest):
         self.send_and_evaluate_map_read(self.mapperdport, volume,
                 offset=offset, size=size, expected=False)
 
+    def test_mapr2(self):
+        volume = "myvolume"
+        volsize = 10*1024*1024
+        offset = 0
+        size = volsize
+
+        self.send_and_evaluate_clone(self.mapperdport, "", clone=volume,
+                clone_size=volsize)
+        reqs = Set([])
+        reqs.add(self.send_map_read(self.mapperdport, volume, offset=offset,
+            size=size))
+        reqs.add(self.send_map_read(self.mapperdport, volume, offset=offset,
+            size=size))
+        ret = MapperdTest.get_zero_map_reply(offset, size)
+        while len(reqs) > 0:
+            req = self.xseg.wait_requests(reqs)
+            self.evaluate_req(req, data=ret)
+            reqs.remove(req)
+
     def test_mapw(self):
         blocksize = self.blocksize
         volume = "myvolume"
@@ -688,12 +793,47 @@ class MapperdTest(XsegTest):
         start_peer(self.mapperd)
         self.send_and_evaluate_map_read(self.mapperdport, volume,
                 expected_data=ret, offset=offset, size=size)
+        self.send_and_evaluate_open(self.mapperdport, volume)
         offset = 101*1024*1024*1024
         self.send_and_evaluate_map_write(self.mapperdport, volume,
                 offset=offset, size=size, expected=False)
         offset = 100*1024*1024*1024 - 1
         self.send_and_evaluate_map_write(self.mapperdport, volume,
                 offset=offset, size=size, expected=False)
+
+    def test_mapw2(self):
+        blocksize = self.blocksize
+        volume = "myvolume"
+        volsize = 100*1024*1024*1024
+        offset = 90*1024*1024*1024 - 2
+        size = 512*1024
+        epoch = 1
+
+        ret = self.get_copy_map_reply(volume, offset, size, epoch)
+
+        self.send_and_evaluate_clone(self.mapperdport, "", clone=volume,
+                clone_size=volsize)
+
+        reqs = Set([])
+        reqs.add(self.send_map_write(self.mapperdport, volume, offset=offset,
+            size=size))
+        reqs.add(self.send_map_write(self.mapperdport, volume, offset=offset,
+            size=size))
+        reqs.add(self.send_map_write(self.mapperdport, volume, offset=offset,
+            size=size))
+        reqs.add(self.send_map_write(self.mapperdport, volume, offset=offset,
+            size=size))
+        reqs.add(self.send_map_write(self.mapperdport, volume, offset=offset,
+            size=size))
+        reqs.add(self.send_map_write(self.mapperdport, volume, offset=offset,
+            size=size))
+        reqs.add(self.send_map_write(self.mapperdport, volume, offset=offset,
+            size=size))
+        while len(reqs) > 0:
+            req = self.xseg.wait_requests(reqs)
+            self.evaluate_req(req, data=ret)
+            reqs.remove(req)
+
 
 class FiledTest(XsegTest):
     filed_args = {
@@ -726,22 +866,25 @@ class FiledTest(XsegTest):
         datalen = 1024
         data = get_random_string(datalen, 16)
         target = "mytarget"
+        xinfo = self.get_reply_info(datalen)
 
-        self.send_and_evaluate_write(self.filedport, target, data=data)
+        self.send_and_evaluate_write(self.filedport, target, data=data,
+                serviced=datalen)
         self.send_and_evaluate_read(self.filedport, target, size=datalen,
                 expected_data=data)
+        self.send_and_evaluate_info(self.filedport, target, expected_data=xinfo)
         stop_peer(self.filed)
         start_peer(self.filed)
         self.send_and_evaluate_read(self.filedport, target, size=datalen,
                 expected_data=data)
-        xinfo = self.get_reply_info(datalen)
         self.send_and_evaluate_info(self.filedport, target, expected_data=xinfo)
 
     def test_info(self):
         datalen = 1024
         data = get_random_string(datalen, 16)
         target = "mytarget"
-        self.send_and_evaluate_write(self.filedport, target, data=data)
+        self.send_and_evaluate_write(self.filedport, target, data=data,
+                serviced=datalen)
         xinfo = self.get_reply_info(datalen)
         self.send_and_evaluate_info(self.filedport, target, expected_data=xinfo)
 
@@ -751,9 +894,10 @@ class FiledTest(XsegTest):
         target = "mytarget"
         copy_target = "copy_target"
 
-        self.send_and_evaluate_write(self.filedport, target, data=data)
+        self.send_and_evaluate_write(self.filedport, target, data=data,
+                serviced=datalen)
         self.send_and_evaluate_read(self.filedport, target, size=datalen,
-                expected_data=data)
+                expected_data=data, serviced=datalen)
         self.send_and_evaluate_copy(self.filedport, target, dst_target=copy_target,
                 size=datalen, serviced=datalen)
         self.send_and_evaluate_read(self.filedport, copy_target, size=datalen,
@@ -789,4 +933,5 @@ class FiledTest(XsegTest):
         self.send_and_evaluate_read(self.filedport, target, size=datalen, expected_data=data)
 
 if __name__=='__main__':
+    init()
     unittest.main()
