@@ -407,6 +407,13 @@ static int req2objs(struct peer_req *pr, struct map *map, int write)
 
 	XSEGLOG2(&lc, D, "Calculated %u nr_objs", nr_objs);
 
+	if (pr->req->offset + pr->req->size > map->size) {
+		XSEGLOG2(&lc, E, "Invalid offset/size: offset: %llu, "
+				"size: %llu, map size: %llu",
+				pr->req->offset, pr->req->size, map->size);
+		return -1;
+	}
+
 	/* get map_nodes of request */
 	struct r2o *mns = malloc(sizeof(struct r2o)*nr_objs);
 	if (!mns){
@@ -491,7 +498,24 @@ static int do_info(struct peer_req *pr, struct map *map)
 {
 	struct peerd *peer = pr->peer;
 	struct xseg_reply_info *xinfo;
-	xinfo = (struct xseg_reply_info *) xseg_get_data(peer->xseg, pr->req);
+	struct xseg_request *req = pr->req;
+	char buf[XSEG_MAX_TARGETLEN + 1];
+	char *target;
+	int r;
+
+	if (req->datalen < sizeof(struct xseg_reply_info)) {
+		target = xseg_get_target(peer->xseg, req);
+		strncpy(buf, target, req->targetlen);
+		r = xseg_resize_request(peer->xseg, req, req->targetlen, sizeof(struct xseg_reply_info));
+		if (r < 0) {
+			XSEGLOG2(&lc, E, "Cannot resize request");
+			return -1;
+		}
+		target = xseg_get_target(peer->xseg, req);
+		strncpy(target, buf, req->targetlen);
+	}
+
+	xinfo = (struct xseg_reply_info *) xseg_get_data(peer->xseg, req);
 	xinfo->size = map->size;
 	return 0;
 }
@@ -986,7 +1010,7 @@ static int do_clone(struct peer_req *pr, struct map *map)
 	clonemap->flags &= ~MF_MAP_DELETED;
 	clonemap->epoch++;
 
-	if (xclone->size == -1)
+	if (xclone->size)
 		clonemap->size = map->size;
 	else
 		clonemap->size = xclone->size;
@@ -1101,12 +1125,21 @@ struct map * get_map(struct peer_req *pr, char *name, uint32_t namelen,
 				put_map(map);
 				return NULL;
 			}
+			/* If the map is deleted, drop everything and return
+			 * NULL.
+			 */
+			if (map->flags & MF_MAP_DELETED){
+				XSEGLOG2(&lc, E, "Loaded deleted map %s. Failing...",
+						map->volume);
+				do_close(pr, map);
+				signal_map(map);
+				put_map(map);
+				return NULL;
+			}
 			return map;
 		} else {
 			return NULL;
 		}
-	} else if (map->state & MF_MAP_DESTROYED){
-		return NULL;
 	} else {
 		__get_map(map);
 	}

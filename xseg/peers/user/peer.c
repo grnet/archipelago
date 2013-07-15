@@ -767,7 +767,7 @@ int pidfile_read(char *path, pid_t *pid)
 int pidfile_open(char *path, pid_t *old_pid)
 {
 	//nfs version > 3
-	int fd = open(path, O_CREAT|O_EXCL|O_WRONLY, S_IWUSR);
+	int fd = open(path, O_CREAT|O_EXCL|O_WRONLY, S_IRUSR|S_IWUSR);
 	if (fd < 0){
 		if (errno == EEXIST)
 			pidfile_read(path, old_pid);

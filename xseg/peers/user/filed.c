@@ -474,7 +474,11 @@ static void handle_read(struct peerd *peer, struct peer_req *pr)
 	}
 
 
+	XSEGLOG2(&lc, D, "req->serviced: %llu, req->size: %llu", req->serviced,
+			req->size);
 	while (req->serviced < req->size) {
+		XSEGLOG2(&lc, D, "req->serviced: %llu, req->size: %llu",
+				req->serviced, req->size);
 		r = pread(fd, data + req->serviced,
 				req->size- req->serviced,
 				req->offset + req->serviced);
@@ -491,6 +495,8 @@ static void handle_read(struct peerd *peer, struct peer_req *pr)
 			req->serviced += r;
 		}
 	}
+	XSEGLOG2(&lc, D, "req->serviced: %llu, req->size: %llu", req->serviced,
+			req->size);
 
 out:
 	if (req->serviced > 0 ) {
@@ -543,8 +549,12 @@ static void handle_write(struct peerd *peer, struct peer_req *pr)
 		}
 	}
 
+	XSEGLOG2(&lc, D, "req->serviced: %llu, req->size: %llu", req->serviced,
+			req->size);
 	while (req->serviced < req->size) {
-		r = pwrite(fd, data + req->serviced, 
+		XSEGLOG2(&lc, D, "req->serviced: %llu, req->size: %llu",
+				req->serviced, req->size);
+		r = pwrite(fd, data + req->serviced,
 				req->size- req->serviced,
 				req->offset + req->serviced);
 		if (r < 0) {
@@ -554,6 +564,8 @@ static void handle_write(struct peerd *peer, struct peer_req *pr)
 			req->serviced += r;
 		}
 	}
+	XSEGLOG2(&lc, D, "req->serviced: %llu, req->size: %llu", req->serviced,
+			req->size);
 	r = fsync(fd);
 	if (r< 0) {
 		XSEGLOG2(&lc, E, "Fsync failed.");
@@ -584,7 +596,20 @@ static void handle_info(struct peerd *peer, struct peer_req *pr)
 	uint64_t size;
 	char *target = xseg_get_target(peer->xseg, req);
 	char *data = xseg_get_data(peer->xseg, req);
+	char buf[XSEG_MAX_TARGETLEN + 1];
 	struct xseg_reply_info *xinfo  = (struct xseg_reply_info *)data;
+
+	if (req->datalen < sizeof(struct xseg_reply_info)) {
+		strncpy(buf, target, req->targetlen);
+		r = xseg_resize_request(peer->xseg, req, req->targetlen, sizeof(struct xseg_reply_info));
+		if (r < 0) {
+			XSEGLOG2(&lc, E, "Cannot resize request");
+			pfiled_fail(peer, pr);
+			return;
+		}
+		target = xseg_get_target(peer->xseg, req);
+		strncpy(target, buf, req->targetlen);
+	}
 
 	XSEGLOG2(&lc, I, "Handle info started for pr: %p, req: %p", pr, pr->req);
 	fd = dir_open(pfiled, fio, target, req->targetlen, READ);

@@ -92,8 +92,8 @@ static void *posix_map(const char *name, uint64_t size, struct xseg *seg)
 	struct xseg *xseg;
 	int fd;
 
-	if (seg)
-		XSEGLOG("struct xseg * is not NULL. Ignoring...\n");
+//	if (seg)
+//		XSEGLOG("struct xseg * is not NULL. Ignoring...\n");
 
 	fd = shm_open(name, O_RDWR, 0000);
 	if (fd < 0) {
