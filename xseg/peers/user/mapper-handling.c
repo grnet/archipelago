@@ -710,7 +710,7 @@ static int __copyup_copy_cb(struct peer_req *pr, struct xseg_request *req,
 				mn->object, map->volume, (unsigned long long) mn->objectidx);
 		return -1;
 	}
-	r = __set_node(mio, req, mn);
+	r = __set_node(mio, xreq, mn);
 	if (r < 0) {
 		XSEGLOG2(&lc, E, "Cannot set map node for object %s", mn->object);
 	}
@@ -732,7 +732,7 @@ static int __copyup_write_cb(struct peer_req *pr, struct xseg_request *req,
 	data = xseg_get_data(peer->xseg, req);
 	map_functions[mn->map->version].read_object(&tmp, (unsigned char *)data);
 	/* old object should not be writable */
-	if ((mn->flags & MF_OBJECT_WRITABLE)){
+	if (mn->flags & MF_OBJECT_WRITABLE) {
 		XSEGLOG2(&lc, E, "map node %s has wrong flags", mn->object);
 		return -1;
 	}
