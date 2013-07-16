@@ -809,7 +809,7 @@ static int do_snapshot(struct peer_req *pr, struct map *map)
 	//write map
 	r = write_map(pr, map);
 	if (r < 0) {
-		XSEGLOG2(&lc, E, "Cannot write map");
+		XSEGLOG2(&lc, E, "Cannot write map %s", map->volume);
 		/* Not restoring epoch or writable status here, is not
 		 * devastating, since this is not the common case, and it can
 		 * only cause unneeded copy-on-write operations.
@@ -1010,14 +1010,14 @@ static int do_clone(struct peer_req *pr, struct map *map)
 	clonemap->flags &= ~MF_MAP_DELETED;
 	clonemap->epoch++;
 
-	if (xclone->size)
+	if (!(xclone->size))
 		clonemap->size = map->size;
 	else
 		clonemap->size = xclone->size;
 	if (clonemap->size < map->size){
 		XSEGLOG2(&lc, W, "Requested clone size (%llu) < map size (%llu)"
 				"\n\t for requested clone %s",
-				(unsigned long long) xclone->size,
+				(unsigned long long) clonemap->size,
 				(unsigned long long) map->size, clonemap->volume);
 		goto out_close;
 	}
@@ -1198,9 +1198,12 @@ void * handle_clone(struct peer_req *pr)
 
 	if (xclone->targetlen){
 		/* if snap was defined */
-		//support clone only from pithos
-		r = map_action(do_clone, pr, xclone->target, xclone->targetlen,
-					MF_LOAD);
+		if (pr->req->flags & XF_CONTADDR)
+			r = map_action(do_clone, pr, xclone->target,
+					xclone->targetlen, MF_LOAD);
+		else
+			r = map_action(do_clone, pr, xclone->target,
+					xclone->targetlen, MF_LOAD|MF_ARCHIP);
 	} else {
 		/* else try to create a new volume */
 		XSEGLOG2(&lc, I, "Creating volume");
