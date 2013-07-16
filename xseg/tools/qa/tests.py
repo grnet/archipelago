@@ -444,19 +444,20 @@ class VlmcdTest(XsegTest):
         clone2 = "myclone2"
 
         volsize = 100*1024*1024*1024
-        clone2size = 200*1024*1024*104
+        clone2size = 200*1024*1024*1024
         offset = 90*1024*1024*1024
         size = 10*1024*1024
 
         zeros = '\x00' * size
         data = get_random_string(size, 16)
+        data2 = get_random_string(size, 16)
 
         self.send_and_evaluate_clone(self.mapperdport, "", clone=volume,
                 clone_size=volsize)
         self.send_and_evaluate_read(self.vlmcdport, volume, size=size,
                 offset=offset, expected_data=zeros)
 
-        self.send_and_evaluate_snapshot(self.mapperdport, volume, snap=snap)
+        self.send_and_evaluate_snapshot(self.vlmcdport, volume, snap=snap)
         self.send_and_evaluate_read(self.vlmcdport, snap, size=size,
                 offset=offset, expected_data=zeros)
         self.send_and_evaluate_write(self.vlmcdport, volume, data=data, offset=offset,
@@ -465,6 +466,27 @@ class VlmcdTest(XsegTest):
                 offset=offset, expected_data=zeros)
         self.send_and_evaluate_read(self.vlmcdport, volume, size=size,
                 offset=offset, expected_data=data)
+
+        self.send_and_evaluate_snapshot(self.vlmcdport, volume, snap=snap2)
+        self.send_and_evaluate_read(self.vlmcdport, snap2, size=size,
+                offset=offset, expected_data=data)
+        self.send_and_evaluate_clone(self.mapperdport, snap2, clone=clone1,
+                clone_size=clone2size)
+        self.send_and_evaluate_read(self.vlmcdport, clone1, size=size,
+                offset=offset, expected_data=data)
+        self.send_and_evaluate_read(self.vlmcdport, clone1, size=size,
+                offset=volsize+offset, expected_data=zeros)
+
+        self.send_and_evaluate_write(self.vlmcdport, clone1, data=data2,
+				offset=offset, serviced=size)
+        self.send_and_evaluate_read(self.vlmcdport, clone1, size=size,
+                offset=offset, expected_data=data2)
+        self.send_and_evaluate_read(self.vlmcdport, snap2, size=size,
+                offset=offset, expected_data=data)
+        self.send_and_evaluate_read(self.vlmcdport, volume, size=size,
+                offset=offset, expected_data=data)
+        self.send_and_evaluate_read(self.vlmcdport, snap, size=size,
+                offset=offset, expected_data=zeros)
 
     def test_info2(self):
         volume = "myvolume"
@@ -643,7 +665,7 @@ class MapperdTest(XsegTest):
         clone1 = "myclone1"
         clone2 = "myclone2"
         volsize = 100*1024*1024*1024
-        clone2size = 200*1024*1024*104
+        clone2size = 200*1024*1024*1024
         offset = 90*1024*1024*1024
         size = 10*1024*1024
         offset = 0
@@ -672,11 +694,15 @@ class MapperdTest(XsegTest):
         self.send_and_evaluate_map_read(self.mapperdport, volume,
                 expected_data=ret, offset=offset, size=size)
 
-#        self.send_and_evaluate_clone(self.mapperdport, snap, clone1)
-#        self.send_and_evaluate_info(self.mapperdport, clone1, volsize)
-#        self.send_and_evaluate_clone(self.mapperdport, snap, clone2,
-#                dst_size=clone2size)
-#        self.send_and_evaluate_info(self.mapperdport, clone2, clone2size)
+        self.send_and_evaluate_clone(self.mapperdport, snap, clone=clone1)
+        xinfo = self.get_reply_info(volsize)
+        self.send_and_evaluate_info(self.mapperdport, clone1, expected_data=xinfo)
+        self.send_and_evaluate_clone(self.mapperdport, snap, clone=clone2,
+                clone_size=2, expected=False)
+        self.send_and_evaluate_clone(self.mapperdport, snap, clone=clone2,
+                clone_size=clone2size)
+        xinfo = self.get_reply_info(clone2size)
+        self.send_and_evaluate_info(self.mapperdport, clone2, expected_data=xinfo)
 
     def test_info(self):
         volume = "myvolume"
@@ -684,7 +710,7 @@ class MapperdTest(XsegTest):
         self.send_and_evaluate_clone(self.mapperdport, "", clone=volume,
                 clone_size=volsize)
         xinfo = self.get_reply_info(volsize)
-        self.send_and_evaluate_info(self.mapperdport, volume, expected=xinfo)
+        self.send_and_evaluate_info(self.mapperdport, volume, expected_data=xinfo)
 
     def test_info2(self):
         volume = "myvolume"
