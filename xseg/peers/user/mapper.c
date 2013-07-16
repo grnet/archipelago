@@ -179,7 +179,7 @@ out:
 static inline struct map_node * get_mapnode(struct map *map, uint64_t index)
 {
 	struct map_node *mn;
-	if (index > map->nr_objs) {
+	if (index >= map->nr_objs) {
 	//	XSEGLOG2(&lc, E, "Index out of range: %llu > %llu",
 	//			index, map->nr_objs);
 		return NULL;
