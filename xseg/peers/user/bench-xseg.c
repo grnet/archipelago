@@ -834,10 +834,9 @@ void custom_peer_finalize(struct peerd *peer)
 		timer_stop(prefs, prefs->total_tm, NULL);
 
 	if (GET_FLAG(PROGRESS, prefs->flags) == PROGRESS_YES)
-		print_progress(prefs);
-	else
-		print_stats(prefs);
+		clear_lines(prefs);
 
+	print_stats(prefs);
 	print_remaining(prefs);
 	print_res(prefs);
 	return;

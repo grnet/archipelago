@@ -225,6 +225,7 @@ int read_insanity(char *insanity);
 int read_verify(char *insanity);
 int read_progress(char *progress);
 int read_ping(char *progress);
+void clear_lines(struct bench *prefs);
 void print_res(struct bench *prefs);
 void print_stats(struct bench *prefs);
 void print_progress(struct bench *prefs);

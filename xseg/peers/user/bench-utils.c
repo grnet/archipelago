@@ -309,6 +309,19 @@ int validate_seed(struct bench *prefs, unsigned long seed)
  * Print functions *
 \*******************/
 
+void clear_lines(struct bench *prefs)
+{
+	int lines = 6;
+
+	if ((prefs->op == X_READ) &&
+			(GET_FLAG(VERIFY, prefs->flags) != VERIFY_NO))
+		lines++;
+
+	/* TODO: Add bandwidth */
+
+	fprintf(stdout, "\033[%dA\033[J", lines);
+}
+
 void print_io_stats(struct bench *prefs, double elapsed)
 {
 	struct bw bw;
@@ -396,12 +409,7 @@ flush:
 
 void print_progress(struct bench *prefs)
 {
-	int lines = 6;
-
-	if ((prefs->op == X_READ) && (GET_FLAG(VERIFY, prefs->flags) != VERIFY_NO))
-		lines++;
-
-	fprintf(stdout, "\033[%dA\033[J", lines);
+	clear_lines(prefs);
 	print_stats(prefs);
 }
 
