@@ -592,10 +592,15 @@ int load_map_objects_v2(struct peer_req *pr, struct map *map, uint64_t start, ui
 	if (mio->pending_reqs > 0)
 		wait_on_pr(pr, mio->pending_reqs > 0);
 
+	if (mio->err) {
+		XSEGLOG2(&lc, E, "Error issuing load request");
+		goto out;
+	}
 	r = read_map_objects_v2(map, buf, start, nr);
 	if (r < 0) {
 		mio->err = 1;
 	}
+out:
 	free(buf);
 	mio->priv = NULL;
 	mio->cb = NULL;
