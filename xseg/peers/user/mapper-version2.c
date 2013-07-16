@@ -522,7 +522,7 @@ int __load_map_objects_v2(struct peer_req *pr, struct map *map, uint64_t start, 
 		o2c = get_chunk(map, start, nr);
 
 		req = get_request(pr, mapper->mbportno, o2c.target,
-				o2c.targetlen, o2c.len);
+				o2c.targetlen, datalen);
 		if (!req) {
 			XSEGLOG2(&lc, E, "Cannot get request");
 			goto out_err;
