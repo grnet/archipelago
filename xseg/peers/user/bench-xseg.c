@@ -56,26 +56,29 @@
  * c) If we are not in ping mode
  * d) If we have been asked to terminate
  */
-#define CAN_SEND_REQUEST(__p)						\
+#define CAN_SEND_REQUEST(__p)                                               \
 	((__p->status->submitted - __p->status->received < __p->iodepth) && \
-	(__p->status->submitted < __p->status->max) &&			\
-	(GET_FLAG(PING, __p->flags) == PING_MODE_OFF) &&		\
+	(__p->status->submitted < __p->status->max) &&                      \
+	(GET_FLAG(PING, __p->flags) == PING_MODE_OFF) &&                    \
 	 !isTerminate())
 
-#define CAN_VERIFY(__p)							\
+#define CAN_VERIFY(__p)                                                     \
 	((GET_FLAG(VERIFY, __p->flags) != VERIFY_NO) && __p->op == X_READ)
 
-#define CAN_PRINT_PROGRESS(__p, __q)					\
-	((GET_FLAG(PROGRESS, __p->flags) == PROGRESS_YES) &&		\
-	(__p->status->received == __q))
+#define CAN_PRINT_PROGRESS(__p, __nr)                                       \
+	((GET_FLAG(PROGRESS, __p->flags) != PROGRESS_NO) &&                 \
+	(GET_FLAG(PING, __p->flags) == PING_MODE_OFF) &&                    \
+	(__p->status->received == __nr))
 
 void custom_peer_usage()
 {
 	fprintf(stderr, "Custom peer options: \n"
 		"  --------------------------------------------\n"
-		"    -op       | None    | XSEG operation [read|write|info|delete]\n"
+		"    -op       | None    | XSEG operation:\n"
+		"              |         |     [read|write|info|delete]\n"
 		"    --pattern | None    | I/O pattern [seq|rand]\n"
-		"    --verify  | no      | Verify written requests [no|meta|full]\n"
+		"    --verify  | no      | Verify written requests:\n"
+		"              |         |     [no|meta|full]\n"
 		"    -rc       | None    | Request cap\n"
 		"    -to       | None    | Total objects\n"
 		"    -ts       | None    | Total I/O size\n"
@@ -86,11 +89,13 @@ void custom_peer_usage()
 		"    --seed    | None    | Initialize LFSR and target names\n"
 		"    --insanity| sane    | Adjust insanity level of benchmark:\n"
 		"              |         |     [sane|eccentric|manic|paranoid]\n"
-		"    --progress| yes     | Show progress of requests [yes|no]\n"
-		"    --ping    | yes     | Ping target before starting benchmark\n"
+		"    --progress| both    | Show progress of benchmark:\n"
+		"	       |         |     [req|io|both|no]\n"
+		"    --interval| 5%%     | Intervals at which progress is shown\n"
+		"    --ping    | yes     | Ping target before starting:\n"
 		"              |         |     [yes|no]\n"
-		"    --prefix  | 'bench' | Add a common prefix to all object names\n"
-		"    --objname | 'bench' | Use only one object with this name\n"
+		"    --prefix  | bench   | Add a common prefix to all object names\n"
+		"    --objname | None    | Use only one object with this name\n"
 		"\n"
 		"Additional information:\n"
 		"  --------------------------------------------\n"
@@ -123,8 +128,29 @@ void custom_peer_usage()
 		"   a. -to option is strictly restricted to 1\n"
 		"   b. -ts option defaults to (and can't be larger than)\n"
 		"      the object size (-os argument)\n"
-		"   c. --prefix is must be unused. If used, it produces an "
+		"   c. --prefix is must be unused. If used, it produces an\n"
 		"      error to alert the user\n"
+		"\n"
+		" * The progress report is printed by default at intervals of\n"
+		"   5%%.\n"
+		"   There are three progress types:\n"
+		"\n"
+		"   a. req: it prints the request status so far i.e. how many\n"
+		"      requests have been subitted, received, failed etc.\n"
+		"   b. io: it prints the bandwidth and IOPS status of the\n"
+		"      elapsed 5%% of the benchmark\n"
+		"   c. both: it combines the output of <req> and <io>.\n"
+		"\n"
+		" * Interval is commonly a percentage of max requests. This\n"
+		"   means that when a user gives:\n"
+		"           --interval 33%%\n"
+		"\n"
+		"   the progress report will be printed 3 times during the\n"
+		"   benchmark. Else, if the user wants to, he/she can give:\n"
+		"           --interval 1234\n"
+		"\n"
+		"  and the progress report will be printed every 1234\n"
+		"  requests.\n"
 		"\n");
 }
 
@@ -141,6 +167,7 @@ int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 	char insanity[MAX_ARG_LEN + 1];
 	char verify[MAX_ARG_LEN + 1];
 	char progress[MAX_ARG_LEN + 1];
+	char interval[MAX_ARG_LEN + 1];
 	char ping[MAX_ARG_LEN + 1];
 	char prefix[XSEG_MAX_TARGETLEN + 1];
 	char objname[XSEG_MAX_TARGETLEN + 1];
@@ -166,6 +193,7 @@ int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 	verify[0] = 0;
 	request_cap[0] = 0;
 	progress[0] = 0;
+	interval[0] = 0;
 	ping[0] = 0;
 	prefix[0] = 0;
 	objname[0] = 0;
@@ -194,6 +222,14 @@ int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 	}
 	memset(prefs->objvars, 0, sizeof(struct object_vars));
 
+	/* allocate struct object_name */
+	prefs->rep = malloc(sizeof(struct progress_report));
+	if (!prefs->rep) {
+		perror("malloc");
+		goto progress_report_fail;
+	}
+	memset(prefs->rep, 0, sizeof(struct progress_report));
+
 	/* allocate a struct timespec for each peer request */
 	for (j = 0; j < peer->nr_ops; j++) {
 		ts = malloc(sizeof(struct timespec));
@@ -219,6 +255,7 @@ int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 	READ_ARG_STRING("--insanity", insanity, MAX_ARG_LEN);
 	READ_ARG_STRING("--verify", verify, MAX_ARG_LEN);
 	READ_ARG_STRING("--progress", progress, MAX_ARG_LEN);
+	READ_ARG_STRING("--interval", interval, MAX_ARG_LEN);
 	READ_ARG_STRING("--ping", ping, MAX_ARG_LEN);
 	READ_ARG_STRING("--prefix", prefix, XSEG_MAX_TARGETLEN);
 	READ_ARG_STRING("--objname", objname, XSEG_MAX_TARGETLEN);
@@ -503,13 +540,37 @@ reseed:
 
 	/* Benchmarking progress printing is on by default */
 	if (!progress[0])
-		strcpy(progress, "yes");
+		strcpy(progress, "both");
 	r = read_progress(progress);
 	if (r < 0) {
 		XSEGLOG2(&lc, E, "Invalid syntax: --progress %s\n", progress);
 		goto arg_fail;
 	}
 	SET_FLAG(PROGRESS, prefs->flags, r);
+	prefs->rep->lines = calculate_report_lines(prefs);
+
+	/*
+	 * Progress report interval definition makes no sense with disabled
+	 * progress reports.
+	 */
+	if ((GET_FLAG(PROGRESS, prefs->flags) == PROGRESS_NO) &&
+			interval[0]) {
+		XSEGLOG2(&lc, E, "Cannot define progress interval without "
+				"enabling progress report\n");
+		goto arg_fail;
+	}
+
+	if (GET_FLAG(PROGRESS, prefs->flags) != PROGRESS_NO) {
+		/* By default, we print every 5% */
+		if (!interval[0])
+			strcpy(interval, "5%");
+		prefs->rep->interval = read_interval(prefs, interval);
+		if (prefs->rep->interval == 0) {
+			XSEGLOG2(&lc, E, "Invalid syntax: --interval %s\n",
+					interval);
+			goto arg_fail;
+		}
+	}
 
 	/* Pinging the target peer is on by default */
 	if (!ping[0])
@@ -548,6 +609,8 @@ priv_fail:
 	for (; j >= 0; j--) {
 		free(peer->peer_reqs[j].priv);
 	}
+progress_report_fail:
+	free(prefs->rep);
 object_name_fail:
 	free(prefs->objvars);
 status_fail:
@@ -757,34 +820,30 @@ int bench_peerd_loop(void *arg)
 	xport portno_end = peer->portno_end;
 	pid_t pid = syscall(SYS_gettid);
 	uint64_t threshold=1000/(1 + portno_end - portno_start);
-	uint64_t cached_prog_quantum = 0;
-	uint64_t prog_quantum = 0;
-	int r;
+	uint64_t next_report = prefs->rep->interval;
 	uint64_t loops;
-
-	if (GET_FLAG(PROGRESS, prefs->flags) == PROGRESS_YES) {
-		prog_quantum = calculate_prog_quantum(prefs);
-		cached_prog_quantum = prog_quantum;
-		print_stats(prefs);
-	}
+	int r;
 
 	XSEGLOG2(&lc, I, "%s has tid %u.\n",id, pid);
 	xseg_init_local_signal(xseg, peer->portno_start);
 
+	if (GET_FLAG(PROGRESS, prefs->flags) != PROGRESS_NO)
+		print_dummy_progress(prefs);
+
 	/* If no ping is going to be sent, we can begin the benchmark now. */
-	if (GET_FLAG(PING, prefs->flags) == PING_MODE_OFF)
-		timer_start(prefs, prefs->total_tm);
-	else
+	if (GET_FLAG(PING, prefs->flags) == PING_MODE_ON)
 		send_ping_request(peer, prefs);
+	else
+		timer_start(prefs, prefs->total_tm);
 
 send_request:
 	while (!(isTerminate() && all_peer_reqs_free(peer))) {
 		while (CAN_SEND_REQUEST(prefs)) {
 			xseg_cancel_wait(xseg, peer->portno_start);
 			XSEGLOG2(&lc, D, "...because %lu < %lu && %lu < %lu\n",
-					prefs->status->submitted - prefs->status->received,
-					prefs->iodepth, prefs->status->received,
-					prefs->status->max);
+				prefs->status->submitted - prefs->status->received,
+				prefs->iodepth, prefs->status->received,
+				prefs->status->max);
 			XSEGLOG2(&lc, D, "Start sending new request\n");
 			r = send_request(peer, prefs);
 			if (r < 0)
@@ -795,25 +854,21 @@ send_request:
 			if (loops == 1)
 				xseg_prepare_wait(xseg, peer->portno_start);
 
-			if (UNLIKELY(CAN_PRINT_PROGRESS(prefs, prog_quantum))) {
-				prog_quantum += cached_prog_quantum;
+			if (CAN_PRINT_PROGRESS(prefs, next_report)) {
 				print_progress(prefs);
+				next_report += prefs->rep->interval;
 			}
 
 			if (check_ports(peer)) {
-				//If an old request has just been acked, the most sensible
-				//thing to do is to immediately send a new one
+				//If an old request has just been acked, the
+				//most sensible thing to do is to immediately
+				//send a new one
 				if (prefs->status->received < prefs->status->max)
 					goto send_request;
 				else
 					return 0;
 			}
 		}
-		//struct xseg_port *port = xseg_get_port(xseg, portno_start);
-		//struct xq *q;
-		//q = XPTR_TAKE(port->request_queue, xseg->segment);
-		//XSEGLOG2(&lc, I, "%s goes to sleep with %u requests pending\n",
-		//		id, xq_count(q));
 		XSEGLOG2(&lc, I, "%s goes to sleep\n", id);
 		xseg_wait_signal(xseg, 10000000UL);
 		xseg_cancel_wait(xseg, peer->portno_start);
@@ -830,15 +885,32 @@ void custom_peer_finalize(struct peerd *peer)
 	struct bench *prefs = peer->priv;
 	//TODO: Measure mean time, standard variation
 
-	if (!prefs->total_tm->completed)
-		timer_stop(prefs, prefs->total_tm, NULL);
+	timer_stop(prefs, prefs->total_tm, NULL);
 
-	if (GET_FLAG(PROGRESS, prefs->flags) == PROGRESS_YES)
-		clear_lines(prefs);
+	if (GET_FLAG(PROGRESS, prefs->flags) != PROGRESS_NO)
+		clear_report_lines(prefs->rep->lines);
 
-	print_stats(prefs);
+	print_req_stats(prefs);
 	print_remaining(prefs);
-	print_res(prefs);
+	print_total_res(prefs);
+
+	if (GET_FLAG(INSANITY, prefs->flags) >= prefs->rec_tm->insanity)
+		print_rec_res(prefs);
+
+	print_divider();
+	/*
+	 * This is kinda hacky but is reasonable.
+	 * During the benchmark, we need to calculate the bandwidth within an
+	 * interval.
+	 * After the benchmark, we need to calculate the total bandwidth. To do
+	 * so, we treat the benchmark as one single interval, and that's what
+	 * the two lines below do. This way, the same code can aplly to both
+	 * cases
+	 */
+	prefs->total_tm->elapsed_time = prefs->total_tm->sum;
+	prefs->rep->interval = prefs->status->received;
+	print_io_stats(prefs);
+	fflush(stdout);
 	return;
 }
 

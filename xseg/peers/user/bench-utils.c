@@ -166,32 +166,35 @@ static struct tm_result __separate_by_order(double num)
 static void __calculate_bw(struct bench *prefs, double iops, struct bw *bw)
 {
 	bw->val = iops * prefs->bs;
-	strcpy(bw->unit, "B/s");
 
-	if (bw->val < 1024)
+	if (bw->val < 1024) {
+		strcpy(bw->unit, "B/s");
 		return;
+	}
 
 	bw->val = bw->val / 1024;
-	strcpy(bw->unit, "KB/s");
 
-	if (bw->val < 1024)
+	if (bw->val < 1024) {
+		strcpy(bw->unit, "KB/s");
 		return;
+	}
 
 	bw->val = bw->val / 1024;
-	strcpy(bw->unit, "MB/s");
 
-	if (bw->val < 1024)
+	if (bw->val < 1024) {
+		strcpy(bw->unit, "MB/s");
 		return;
+	}
 
 	bw->val = bw->val / 1024;
 	strcpy(bw->unit, "GB/s");
 }
 
-static double __calculate_iops(struct bench *prefs, double elapsed_ns)
+static double __calculate_iops(uint64_t requests, double elapsed_ns)
 {
 	/* elapsed_ns is in nanoseconds, so we convert it to seconds */
 	double elapsed = elapsed_ns / pow(10,9);
-	return (prefs->status->received / elapsed);
+	return (requests / elapsed);
 }
 
 /******************************\
@@ -275,9 +278,36 @@ int read_progress(char *progress)
 {
 	if (strncmp(progress, "no", MAX_ARG_LEN + 1) == 0)
 		return PROGRESS_NO;
-	if (strncmp(progress, "yes", MAX_ARG_LEN + 1) == 0)
-		return PROGRESS_YES;
+	if (strncmp(progress, "req", MAX_ARG_LEN + 1) == 0)
+		return PROGRESS_REQ;
+	if (strncmp(progress, "io", MAX_ARG_LEN + 1) == 0)
+		return PROGRESS_IO;
+	if (strncmp(progress, "both", MAX_ARG_LEN + 1) == 0)
+		return PROGRESS_BOTH;
 	return -1;
+}
+
+/*
+ * Read interval in percentage or raw mode and return its length (in requests)
+ * If syntax is invalid, return 0.
+ */
+uint64_t read_interval(struct bench *prefs, char *str_interval)
+{
+	char *unit = NULL;
+	uint64_t interval;
+
+	interval = strtoll(str_interval, &unit, 10);
+
+	/* If interval is raw number of requests */
+	if (!unit[0] && interval < prefs->status->max)
+		return interval;
+
+	/* If interval is percentage of max requests */
+	if (strncmp(unit, "%", MAX_ARG_LEN + 1) == 0 &&
+			interval > 0 && interval < 100)
+		return calculate_interval(prefs, interval);
+
+	return 0;
 }
 
 int read_ping(char *ping)
@@ -309,38 +339,71 @@ int validate_seed(struct bench *prefs, unsigned long seed)
  * Print functions *
 \*******************/
 
-void clear_lines(struct bench *prefs)
+uint64_t calculate_interval(struct bench *prefs, uint64_t percentage)
 {
-	int lines = 6;
+	uint64_t interval = round((double)prefs->status->max *
+			(double)percentage / 100);
 
-	if ((prefs->op == X_READ) &&
-			(GET_FLAG(VERIFY, prefs->flags) != VERIFY_NO))
-		lines++;
+	if (!interval)
+		interval = 1;
 
-	/* TODO: Add bandwidth */
+	return interval;
+}
 
+int calculate_report_lines(struct bench *prefs)
+{
+	int progress = GET_FLAG(PROGRESS, prefs->flags);
+	int lines = 0;
+
+	if (progress == PROGRESS_REQ ||	progress == PROGRESS_BOTH) {
+		lines = 6;
+		if ((GET_FLAG(VERIFY, prefs->flags) != VERIFY_NO) &&
+				(prefs->op == X_READ))
+			lines++;
+	}
+	if (progress == PROGRESS_IO ||	progress == PROGRESS_BOTH) {
+		lines += 1;
+		if (prefs->op == X_READ || prefs->op == X_WRITE)
+			lines++;
+	}
+
+	return lines;
+}
+
+void clear_report_lines(int lines)
+{
 	fprintf(stdout, "\033[%dA\033[J", lines);
 }
 
-void print_io_stats(struct bench *prefs, double elapsed)
+void print_divider()
 {
+	fprintf(stdout, "           ~~~~~~~~~~~~~~~~~~~~~~~~\n");
+}
+
+void print_io_stats(struct bench *prefs)
+{
+	struct timer *tm = prefs->total_tm;
 	struct bw bw;
+	double elapsed;
 	double iops;
 
-	/*
-	 * We could malloc struct bw in __calculate_bw, but it's safer in cases when
-	 * there is no memory left.
-	 */
-	iops = __calculate_iops(prefs, elapsed);
+	if (!prefs->status->received) {
+		if (prefs->op == X_READ || prefs->op == X_WRITE)
+			fprintf(stdout, "Bandwidth:    NaN\n");
+		fprintf(stdout, "IOPS:         NaN\n");
+		return;
+	}
+
+	elapsed = __timespec2double(tm->elapsed_time);
+	iops = __calculate_iops(prefs->rep->interval, elapsed);
 	__calculate_bw(prefs, iops, &bw);
 
-	fprintf(stdout, "           ~~~~~~~~~~~~~~~~~~~~~~~~\n");
 	if (prefs->op == X_READ || prefs->op == X_WRITE)
 		fprintf(stdout, "Bandwidth:    %.3lf %s\n", bw.val, bw.unit);
 	fprintf(stdout, "IOPS:         %.3lf\n", iops);
 }
 
-void print_stats(struct bench *prefs)
+void print_req_stats(struct bench *prefs)
 {
 	fprintf(stdout, "\n"
 			"Requests total:     %10lu\n"
@@ -351,10 +414,11 @@ void print_stats(struct bench *prefs)
 			prefs->status->submitted,
 			prefs->status->received,
 			prefs->status->failed);
-	if ((prefs->op == X_READ) && (GET_FLAG(VERIFY, prefs->flags) != VERIFY_NO))
-		fprintf(stdout, "Requests corrupted: %10lu\n", prefs->status->corrupted);
+	if ((prefs->op == X_READ) &&
+			(GET_FLAG(VERIFY, prefs->flags) != VERIFY_NO))
+		fprintf(stdout, "Requests corrupted: %10lu\n",
+				prefs->status->corrupted);
 	fprintf(stdout, "\n");
-	fflush(stdout);
 }
 
 void print_remaining(struct bench *prefs)
@@ -366,17 +430,14 @@ void print_remaining(struct bench *prefs)
 		fprintf(stdout, "Requests remaining: %10lu\n", remaining);
 	else
 		fprintf(stdout, "All requests have been served.\n");
-	fflush(stdout);
 }
 
-void print_res(struct bench *prefs)
+void print_total_res(struct bench *prefs)
 {
-	struct timer *tm;
-	struct tm_result res, res_rec;
-	double sum, sum_rec;
+	struct timer *tm = prefs->total_tm;
+	struct tm_result res;
+	double sum;
 
-	/*  */
-	tm = prefs->total_tm;
 	sum = __timespec2double(tm->sum);
 	res = __separate_by_order(sum);
 
@@ -386,31 +447,48 @@ void print_res(struct bench *prefs)
 	fprintf(stdout, "             |-s-||-ms-|-us-|-ns-|\n");
 	fprintf(stdout, "Total time:   %3u. %03u  %03u  %03u\n",
 			res.s, res.ms, res.us, res.ns);
+}
+
+void print_rec_res(struct bench *prefs)
+{
+	struct timer *tm = prefs->rec_tm;
+	struct tm_result res;
+	double sum;
 
 	if (!prefs->status->received) {
-		fflush(stdout);
+		fprintf(stdout, "Avg. latency: NaN\n");
 		return;
 	}
 
-	tm = prefs->rec_tm;
-	if (GET_FLAG(INSANITY, prefs->flags) < tm->insanity)
-		goto flush;
-
-	sum_rec = __timespec2double(tm->sum);
-	res_rec = __separate_by_order(sum_rec / prefs->status->received);
+	sum = __timespec2double(tm->sum);
+	res = __separate_by_order(sum / prefs->status->received);
 
 	fprintf(stdout, "Avg. latency: %3u. %03u  %03u  %03u\n",
-			res_rec.s, res_rec.ms, res_rec.us, res_rec.ns);
+			res.s, res.ms, res.us, res.ns);
+}
 
-flush:
-	print_io_stats(prefs, sum);
+static void __print_progress(struct bench *prefs)
+{
+	int progress = GET_FLAG(PROGRESS, prefs->flags);
+
+	if (progress == PROGRESS_REQ ||	progress == PROGRESS_BOTH)
+			print_req_stats(prefs);
+	if (progress == PROGRESS_IO ||	progress == PROGRESS_BOTH)
+			print_io_stats(prefs);
 	fflush(stdout);
+}
+
+void print_dummy_progress(struct bench *prefs)
+{
+	__print_progress(prefs);
 }
 
 void print_progress(struct bench *prefs)
 {
-	clear_lines(prefs);
-	print_stats(prefs);
+	timer_stop(prefs, prefs->total_tm, NULL);
+	clear_report_lines(prefs->rep->lines);
+	__print_progress(prefs);
+	timer_start(prefs, prefs->total_tm);
 }
 
 /**************************\
@@ -457,12 +535,6 @@ uint64_t calculate_offset(struct bench *prefs, uint64_t new)
 	else
 		return 0;
 }
-
-uint64_t calculate_prog_quantum(struct bench *prefs)
-{
-	return round((double)prefs->status->max / 20.0);
-}
-
 
 /*
  * ***********************************************

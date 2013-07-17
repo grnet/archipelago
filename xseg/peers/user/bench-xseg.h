@@ -87,25 +87,27 @@
 
 /* Progress bar option occupies 6th flag bit */
 #define PROGRESS_FLAG_POS 5
-#define PROGRESS_BITMASK 1
+#define PROGRESS_BITMASK 3	/* i.e. "11" in binary form */
 #define PROGRESS_NO 0
-#define PROGRESS_YES 1
+#define PROGRESS_REQ 1
+#define PROGRESS_IO 2
+#define PROGRESS_BOTH 3
 
 /* Ping option occupies 7th flag bit */
-#define PING_FLAG_POS 6
+#define PING_FLAG_POS 7
 #define PING_BITMASK 1
 #define PING_MODE_OFF 0
 #define PING_MODE_ON 1
 
 /*
  * Current bench flags representation:
- * 64  8  7  6  5  4  3  2  1 : bits
- * ... 0  0  0  0  0  0  0  0
- *       |_||_||____||____||_|
- *        ^  ^	  ^	^   ^
- *	  |  |	  |	|   |
- *	ping | insanity | pattern
- *	  progress   verify
+ * 64  9  8  7  6  5  4  3  2  1 : bits
+ * ... 0  0  0  0  0  0  0  0  0
+ *       |_||____||____||____||_|
+ *        ^    ^    ^	  ^    ^
+ *	  |    |    |	  |    |
+ *	ping   | insanity | pattern
+ *	     progress   verify
  */
 
 /*
@@ -137,10 +139,12 @@ struct bench {
 	xport src_port;
 	uint32_t op;	//xseg operation
 	uint64_t flags;
+	unsigned int interval;
 	struct peerd *peer;
 	struct req_status *status;
 	struct bench_lfsr *lfsr;
 	struct object_vars *objvars;
+	struct progress_report *rep;
 	struct timer *total_tm; //Total time for benchmark
 	struct timer *get_tm;	//Time for xseg_get_request
 	struct timer *sub_tm;	//Time for xseg_submit_request
@@ -164,6 +168,12 @@ struct req_status {
 	uint64_t received;
 	uint64_t corrupted;	/* Requests that did not pass verification */
 	uint64_t failed;
+};
+
+struct progress_report {
+	uint64_t prev_recv;
+	uint64_t interval;
+	int lines;
 };
 
 /*
@@ -225,18 +235,24 @@ int read_pattern(char *pattern);
 int read_insanity(char *insanity);
 int read_verify(char *insanity);
 int read_progress(char *progress);
+uint64_t read_interval(struct bench *prefs, char *str_interval);
 int read_ping(char *progress);
-void clear_lines(struct bench *prefs);
-void print_res(struct bench *prefs);
-void print_stats(struct bench *prefs);
+void clear_report_lines(int lines);
+void print_total_res(struct bench *prefs);
+void print_rec_res(struct bench *prefs);
+void print_divider();
+void print_req_stats(struct bench *prefs);
+void print_io_stats(struct bench *prefs);
 void print_progress(struct bench *prefs);
+void print_dummy_progress(struct bench *prefs);
 void print_remaining(struct bench *prefs);
 void create_target(struct bench *prefs, struct xseg_request *req);
 void create_chunk(struct bench *prefs, struct xseg_request *req, uint64_t new);
 int read_chunk(struct bench *prefs, struct xseg_request *req);
 uint64_t determine_next(struct bench *prefs);
 uint64_t calculate_offset(struct bench *prefs, uint64_t new);
-uint64_t calculate_prog_quantum(struct bench *prefs);
+uint64_t calculate_interval(struct bench *prefs, uint64_t percentage);
+int calculate_report_lines(struct bench *prefs);
 int validate_seed(struct bench *prefs, unsigned long seed);
 
 void inspect_obv(struct object_vars *obv);
