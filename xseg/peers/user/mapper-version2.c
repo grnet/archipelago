@@ -38,26 +38,7 @@
 
 /* v2 functions */
 
-int initialize_map_objects(struct map *map)
-{
-	uint64_t i;
-	struct map_node *map_node = map->objects;
-
-	if (!map_node)
-		return -1;
-
-	for (i = 0; i < map->nr_objs; i++) {
-		map_node[i].map = map;
-		map_node[i].objectidx = i;
-		map_node[i].waiters = 0;
-		map_node[i].state = 0;
-		map_node[i].ref = 1;
-		map_node[i].cond = st_cond_new(); //FIXME err check;
-	}
-	return 0;
-}
-
-uint32_t get_map_block_name(char *target, struct map *map, uint64_t block_id)
+static uint32_t get_map_block_name(char *target, struct map *map, uint64_t block_id)
 {
 	uint32_t targetlen;
 	char buf[sizeof(block_id)*2 + 1];
@@ -78,7 +59,7 @@ struct obj2chunk {
 	uint32_t len;
 };
 
-struct obj2chunk get_chunk(struct map *map, uint64_t start, uint64_t nr)
+static struct obj2chunk get_chunk(struct map *map, uint64_t start, uint64_t nr)
 {
 	struct obj2chunk ret;
 	uint64_t nr_objs_per_block, nr_objs_per_chunk, nr_chunks_per_block;
@@ -141,7 +122,7 @@ int read_object_v2(struct map_node *mn, unsigned char *buf)
 	return 0;
 }
 
-void v2_object_to_map(unsigned char* buf, struct map_node *mn)
+void object_to_map_v2(unsigned char* buf, struct map_node *mn)
 {
 	uint32_t *objectlen;
 	uint32_t len;
@@ -200,7 +181,7 @@ struct xseg_request * prepare_write_objects_o2c_v2(struct peer_req *pr, struct m
 	pos = 0;
 	for (k = o2c.start_obj; k < limit; k++) {
 		mn = &map->objects[k];
-		v2_object_to_map((unsigned char *)(data+pos), mn);
+		object_to_map_v2((unsigned char *)(data+pos), mn);
 		pos += v2_objectsize_in_map;
 	}
 
@@ -231,7 +212,7 @@ struct xseg_request * prepare_write_object_v2(struct peer_req *pr, struct map *m
 		return NULL;
 
 	data = xseg_get_data(peer->xseg, req);
-	v2_object_to_map((unsigned char *)(data), mn);
+	object_to_map_v2((unsigned char *)(data), mn);
 	return req;
 }
 
@@ -272,6 +253,8 @@ int read_map_objects_v2(struct map *map, unsigned char *data, uint64_t start, ui
 			goto out_free;
 		}
 	}
+
+	map_node = map->objects;
 
 	for (i = start; i < nr; i++) {
 		r = read_object_v2(&map_node[i], data+pos);
@@ -374,7 +357,7 @@ int __write_map_data_v2(struct peer_req *pr, struct map *map)
 			pos = 0;
 			for (k = start; k < map->nr_objs && k < limit; k++) {
 				mn = &map->objects[k];
-				v2_object_to_map((unsigned char *)(data+pos), mn);
+				object_to_map_v2((unsigned char *)(data+pos), mn);
 				pos += v2_objectsize_in_map;
 			}
 

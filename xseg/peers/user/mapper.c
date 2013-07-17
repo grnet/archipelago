@@ -176,7 +176,7 @@ out:
 	return r;
 }
 
-static inline struct map_node * get_mapnode(struct map *map, uint64_t index)
+inline struct map_node * get_mapnode(struct map *map, uint64_t index)
 {
 	struct map_node *mn;
 	if (index >= map->nr_objs) {
@@ -190,17 +190,40 @@ static inline struct map_node * get_mapnode(struct map *map, uint64_t index)
 	}
 	mn = &map->objects[index];
 	mn->ref++;
+	XSEGLOG2(&lc, D,  "mapnode %p: ref: %u", mn, mn->ref);
 	return mn;
 }
 
-static inline void put_mapnode(struct map_node *mn)
+inline void put_mapnode(struct map_node *mn)
 {
 	mn->ref--;
+	XSEGLOG2(&lc, D, "mapnode %p: ref: %u", mn, mn->ref);
 	if (!mn->ref){
 		//clean up mn
 		st_cond_destroy(mn->cond);
 	}
 }
+
+int initialize_map_objects(struct map *map)
+{
+	uint64_t i;
+	struct map_node *map_node = map->objects;
+
+	if (!map_node)
+		return -1;
+
+	for (i = 0; i < map->nr_objs; i++) {
+		map_node[i].map = map;
+		map_node[i].objectidx = i;
+		map_node[i].waiters = 0;
+		map_node[i].state = 0;
+		map_node[i].ref = 1;
+		map_node[i].cond = st_cond_new(); //FIXME err check;
+	}
+	return 0;
+}
+
+
 
 static inline void __get_map(struct map *map)
 {
@@ -584,133 +607,123 @@ static int do_close(struct peer_req *pr, struct map *map)
 	return dropcache(pr, map);
 }
 
-/* do_hash:
- *
- * send hash, overwrite object to the map, and do one write for the whole map.
- */
-#if 0
 static int do_hash(struct peer_req *pr, struct map *map)
 {
-	uint64_t i;
+	int r;
 	struct peerd *peer = pr->peer;
-	struct mapper_io *mio = __get_mapper_io(pr);
-	struct map_node *mn;
-	struct xseg_request *req;
-
-	if (!(map->state & MF_MAP_EXCLUSIVE)){
-		XSEGLOG2(&lc, E, "Map was not opened exclusively");
-		return -1;
-	}
-	XSEGLOG2(&lc, I, "Starting snapshot for map %s", map->volume);
-	map->state |= MF_MAP_SNAPSHOTTING;
-
-	uint64_t nr_obj = calc_map_obj(map);
-	mio->cb = snapshot_cb;
-	mio->snap_pending = 0;
-	mio->err = 0;
-	for (i = 0; i < nr_obj; i++){
-
-		/* throttle pending snapshots
-		 * this should be nr_ops of the blocker, but since we don't know
-		 * that, we assume based on our own nr_ops
-		 */
-		if (mio->snap_pending >= peer->nr_ops)
-			wait_on_pr(pr, mio->snap_pending >= peer->nr_ops);
-
-		mn = get_mapnode(map, i);
-		if (!mn)
-			//warning?
-			continue;
-		if (!(mn->flags & MF_OBJECT_WRITABLE)){
-			put_mapnode(mn);
-			continue;
-		}
-		// make sure all pending operations on all objects are completed
-		if (mn->flags & MF_OBJECT_NOT_READY)
-			wait_on_mapnode(mn, mn->flags & MF_OBJECT_NOT_READY);
-
-		/* TODO will this ever happen?? */
-		if (mn->flags & MF_OBJECT_DESTROYED){
-			put_mapnode(mn);
-			continue;
-		}
-
-		req = __snapshot_object(pr, mn);
-		if (!req){
-			mio->err = 1;
-			put_mapnode(mn);
-			break;
-		}
-		mio->snap_pending++;
-		/* do not put_mapnode here. cb does that */
-	}
-
-	if (mio->snap_pending > 0)
-		wait_on_pr(pr, mio->snap_pending > 0);
-	mio->cb = NULL;
-
-	if (mio->err)
-		goto out_err;
-
-	/* calculate name of snapshot */
-	struct map tmp_map = *map;
+	uint64_t i, bufsize;
+	struct map *hashed_map;
 	unsigned char sha[SHA256_DIGEST_SIZE];
-	unsigned char *buf = malloc(MAPPER_DEFAULT_BLOCKSIZE);
+	unsigned char *buf = NULL;
 	char newvolumename[MAX_VOLUME_LEN];
 	uint32_t newvolumenamelen = HEXLIFIED_SHA256_DIGEST_SIZE;
 	uint64_t pos = 0;
-	uint64_t max_objidx = calc_map_obj(map);
-	int r;
-
-	for (i = 0; i < max_objidx; i++) {
-		mn = find_object(map, i);
-		if (!mn){
-			XSEGLOG2(&lc, E, "Cannot find object %llu for map %s",
-					(unsigned long long) i, map->volume);
-			goto out_err;
-		}
-		v0_object_to_map(mn, buf+pos);
-		pos += v0_objectsize_in_map;
-	}
-//	SHA256(buf, pos, sha);
-	merkle_hash(buf, pos, sha);
-	hexlify(sha, newvolumename);
-	strncpy(tmp_map.volume, newvolumename, newvolumenamelen);
-	tmp_map.volumelen = newvolumenamelen;
-	free(buf);
-	tmp_map.version = 0; // set volume version to pithos image
-
-	/* write the map of the Snapshot */
-	r = write_map(pr, &tmp_map);
-	if (r < 0)
-		goto out_err;
 	char targetbuf[XSEG_MAX_TARGETLEN];
-	char *target = xseg_get_target(peer->xseg, pr->req);
+	char *target;
+	struct xseg_reply_hash *xreply;
+	struct map_node *mn;
+
+	if (!(map->flags & MF_MAP_READONLY)) {
+		XSEGLOG2(&lc, E, "Cannot hash live volumes");
+		return -1;
+	}
+
+	XSEGLOG2(&lc, I, "Hashing map %s", map->volume);
+	/* prepare hashed_map holder */
+	hashed_map = create_map("", 0, 0);
+	if (!hashed_map) {
+		XSEGLOG2(&lc, E, "Cannot create hashed map");
+		return -1;
+	}
+
+	/* set map metadata */
+	hashed_map->size = map->size;
+	hashed_map->nr_objs = map->nr_objs;
+	hashed_map->flags = MF_MAP_READONLY;
+	hashed_map->blocksize = MAPPER_DEFAULT_BLOCKSIZE; /* FIXME, this should be PITHOS_BLOCK_SIZE right? */
+
+	hashed_map->objects = calloc(map->nr_objs, sizeof(struct map_node));
+	if (!hashed_map->objects) {
+		XSEGLOG2(&lc, E, "Cannot allocate memory for %llu nr_objs",
+				hashed_map->nr_objs);
+		r = -1;
+		goto out;
+	}
+
+	r = initialize_map_objects(hashed_map);
+	if (r < 0) {
+		XSEGLOG2(&lc, E, "Cannot initialize hashed_map objects");
+		goto out;
+	}
+
+	r = hash_map(pr, map, hashed_map);
+	if (r < 0) {
+		XSEGLOG2(&lc, E, "Cannot hash map %s", map->volume);
+		goto out;
+	}
+
+	bufsize = hashed_map->nr_objs * v0_objectsize_in_map;
+
+	buf = malloc(bufsize);
+	if (!buf) {
+		XSEGLOG2(&lc, E, "Cannot allocate merkle_hash buffer of %llu bytes",
+				bufsize);
+		goto out;
+	}
+	for (i = 0; i < hashed_map->nr_objs; i++) {
+		mn = get_mapnode(hashed_map, i);
+		if (!mn){
+			XSEGLOG2(&lc, E, "Cannot get object %llu for map %s",
+					i, hashed_map->volume);
+			goto out;
+		}
+		map_functions[0].object_to_map(buf+pos, mn);
+		pos += v0_objectsize_in_map;
+		put_mapnode(mn);
+	}
+
+	merkle_hash(buf, pos, sha);
+	hexlify(sha, SHA256_DIGEST_SIZE, newvolumename);
+	strncpy(hashed_map->volume, newvolumename, newvolumenamelen);
+	hashed_map->volume[newvolumenamelen] = 0;
+	hashed_map->volumelen = newvolumenamelen;
+
+	/* write the hashed_map */
+	r = write_map(pr, hashed_map);
+	if (r < 0) {
+		XSEGLOG2(&lc, E, "Cannot write hashed_map %s", hashed_map->volume);
+		goto out;
+	}
+
+	/* Resize request to fit xhash reply */
+	target = xseg_get_target(peer->xseg, pr->req);
 	strncpy(targetbuf, target, pr->req->targetlen);
+
 	r = xseg_resize_request(peer->xseg, pr->req, pr->req->targetlen,
-			sizeof(struct xseg_reply_snapshot));
+			sizeof(struct xseg_reply_hash));
 	if (r < 0){
 		XSEGLOG2(&lc, E, "Cannot resize request");
-		goto out_err;
+		goto out;
 	}
+
 	target = xseg_get_target(peer->xseg, pr->req);
 	strncpy(target, targetbuf, pr->req->targetlen);
 
-	struct xseg_reply_snapshot *xreply = (struct xseg_reply_snapshot *)
-						xseg_get_data(peer->xseg, pr->req);
+	/* Put the target of the hashed_map on the reply */
+	xreply = (struct xseg_reply_hash *) xseg_get_data(peer->xseg, pr->req);
 	strncpy(xreply->target, newvolumename, newvolumenamelen);
 	xreply->targetlen = newvolumenamelen;
-	map->state &= ~MF_MAP_SNAPSHOTTING;
-	XSEGLOG2(&lc, I, "Snapshot for map %s completed", map->volume);
-	return 0;
 
-out_err:
-	map->state &= ~MF_MAP_SNAPSHOTTING;
-	XSEGLOG2(&lc, E, "Snapshot for map %s failed", map->volume);
-	return -1;
+out:
+	if (buf)
+		free(buf);
+	put_map(hashed_map);
+	if (r < 0) {
+		return -1;
+	} else {
+		return 0;
+	}
 }
-#endif
-
 
 static int do_snapshot(struct peer_req *pr, struct map *map)
 {
@@ -1390,6 +1403,23 @@ void * handle_snapshot(struct peer_req *pr)
 	return NULL;
 }
 
+void * handle_hash(struct peer_req *pr)
+{
+	struct peerd *peer = pr->peer;
+	char *target = xseg_get_target(peer->xseg, pr->req);
+	/* Do not request exclusive access. Since we are hashing only shapshots
+	 * which are read only, there is no need for locking
+	 */
+	int r = map_action(do_hash, pr, target, pr->req->targetlen,
+				MF_ARCHIP|MF_LOAD);
+	if (r < 0)
+		fail(peer, pr);
+	else
+		complete(peer, pr);
+	ta--;
+	return NULL;
+}
+
 int dispatch_accepted(struct peerd *peer, struct peer_req *pr,
 			struct xseg_request *req)
 {
@@ -1410,7 +1440,8 @@ int dispatch_accepted(struct peerd *peer, struct peer_req *pr,
 		case X_DELETE: action = handle_destroy; break;
 		case X_OPEN: action = handle_open; break;
 		case X_CLOSE: action = handle_close; break;
-		default: fprintf(stderr, "mydispatch: unknown up\n"); break;
+		case X_HASH: action = handle_hash; break;
+		default: fprintf(stderr, "mydispatch: unknown op\n"); break;
 	}
 	if (action){
 		ta++;

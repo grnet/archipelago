@@ -49,6 +49,8 @@ static uint32_t waiters_for_req = 0;
 st_cond_t req_cond;
 char buf[XSEG_MAX_TARGETLEN + 1];
 
+
+
 char * null_terminate(char *target, uint32_t targetlen)
 {
 	if (targetlen > XSEG_MAX_TARGETLEN)
@@ -346,6 +348,11 @@ int write_map(struct peer_req* pr, struct map *map)
 {
 	int r;
 	map->state |= MF_MAP_WRITING;
+	struct mapper_io *mio = __get_mapper_io(pr);
+
+	mio->cb = NULL;
+	mio->err = 0;
+
 	r = map_functions[map->version].write_map_metadata(pr, map);
 	if (r < 0)
 		goto out;
@@ -722,7 +729,6 @@ static int __copyup_write_cb(struct peer_req *pr, struct xseg_request *req,
 		struct map_node *mn)
 {
 	struct peerd *peer = pr->peer;
-	struct mapper_io *mio = __get_mapper_io(pr);
 	struct map_node tmp;
 	char *data;
 
@@ -937,131 +943,166 @@ out_err:
 	XSEGLOG2(&lc, E, "Map %s deletion failed", map->volume);
 	return  NULL;
 }
-void snapshot_cb(struct peer_req *pr, struct xseg_request *req)
-{
-	struct peerd *peer = pr->peer;
-	struct mapperd *mapper = __get_mapperd(peer);
-	(void)mapper;
-	struct mapper_io *mio = __get_mapper_io(pr);
-	struct map_node *mn = __get_node(mio, req);
-	if (!mn){
-		XSEGLOG2(&lc, E, "Cannot get map node");
-		goto out_err;
-	}
-	__set_node(mio, req, NULL);
-
-	if (req->state & XS_FAILED){
-		if (req->op == X_DELETE){
-			XSEGLOG2(&lc, E, "Delete req failed");
-			goto out_ok;
-		}
-		XSEGLOG2(&lc, E, "Req failed");
-		mn->flags &= ~MF_OBJECT_SNAPSHOTTING;
-		mn->flags &= ~MF_OBJECT_WRITING;
-		goto out_err;
-	}
-
-	if (req->op == X_WRITE) {
-		char old_object_name[MAX_OBJECT_LEN + 1];
-		uint32_t old_objectlen;
-
-		char *target = xseg_get_target(peer->xseg, req);
-		(void)target;
-		//assert mn->flags & MF_OBJECT_WRITING
-		mn->flags &= ~MF_OBJECT_WRITING;
-		strncpy(old_object_name, mn->object, mn->objectlen);
-		old_objectlen = mn->objectlen;
-
-		struct map_node tmp;
-		char *data = xseg_get_data(peer->xseg, req);
-		map_functions[mn->map->version].read_object(&tmp, (unsigned char *)data);
-		mn->flags &= ~MF_OBJECT_WRITABLE;
-
-		strncpy(mn->object, tmp.object, tmp.objectlen);
-		mn->object[tmp.objectlen] = 0;
-		mn->objectlen = tmp.objectlen;
-		XSEGLOG2(&lc, I, "Object write of %s completed successfully", mn->object);
-		//signal_mapnode since Snapshot was successfull
-		signal_mapnode(mn);
-
-		//do delete old object
-		strncpy(tmp.object, old_object_name, old_objectlen);
-		tmp.object[old_objectlen] = 0;
-		tmp.objectlen = old_objectlen;
-		tmp.flags = MF_OBJECT_WRITABLE;
-		struct xseg_request *xreq = __delete_object(pr, &tmp);
-		if (!xreq){
-			//just a warning. Snapshot was successfull
-			XSEGLOG2(&lc, W, "Cannot delete old object %s", tmp.object);
-			goto out_ok;
-		}
-		//overwrite copyup node, since tmp is a stack dummy variable
-		__set_node (mio, xreq, mn);
-		XSEGLOG2(&lc, I, "Deletion of %s pending", tmp.object);
-	} else if (req->op == X_SNAPSHOT) {
-		//issue write_object;
-		mn->flags &= ~MF_OBJECT_SNAPSHOTTING;
-		struct map *map = mn->map;
-		if (!map){
-			XSEGLOG2(&lc, E, "Object %s has not map back pointer", mn->object);
-			goto out_err;
-		}
-
-		/* construct a tmp map_node for writing purposes */
-		//char *target = xseg_get_target(peer->xseg, req);
-		struct map_node newmn = *mn;
-		newmn.flags = 0;
-		struct xseg_reply_snapshot *xreply;
-		xreply = (struct xseg_reply_snapshot *) xseg_get_data(peer->xseg, req);
-		//assert xreply->targetlen !=0
-		//assert xreply->targetlen < XSEG_MAX_TARGETLEN
-		//xreply->target[xreply->targetlen] = 0;
-		//assert xreply->target valid
-		strncpy(newmn.object, xreply->target, xreply->targetlen);
-		newmn.object[req->targetlen] = 0;
-		newmn.objectlen = req->targetlen;
-		newmn.objectidx = mn->objectidx;
-		struct xseg_request *xreq = object_write(peer, pr, map, &newmn);
-		if (!xreq){
-			XSEGLOG2(&lc, E, "Object write returned error for object %s"
-					"\n\t of map %s [%llu]",
-					mn->object, map->volume, (unsigned long long) mn->objectidx);
-			goto out_err;
-		}
-		mn->flags |= MF_OBJECT_WRITING;
-		__set_node (mio, xreq, mn);
-
-		XSEGLOG2(&lc, I, "Object %s snapshot completed. Pending writing.", mn->object);
-	} else if (req->op == X_DELETE){
-		//deletion of the old block completed
-		XSEGLOG2(&lc, I, "Deletion of completed");
-		goto out_ok;
-		;
-	} else {
-		//wtf??
-		;
-	}
-
-out:
-	put_request(pr, req);
-	return;
-
-out_err:
-	mio->snap_pending--;
-	XSEGLOG2(&lc, D, "Mio->snap_pending: %u", mio->snap_pending);
-	mio->err = 1;
-	if (mn)
-		signal_mapnode(mn);
-	signal_pr(pr);
-	goto out;
-
-out_ok:
-	mio->snap_pending--;
-	signal_pr(pr);
-	goto out;
-
-
-}
-
 #endif
 
+void hash_cb(struct peer_req *pr, struct xseg_request *req)
+{
+	struct mapper_io *mio = __get_mapper_io(pr);
+	struct peerd *peer = pr->peer;
+	struct map_node *mn = __get_node(mio, req);
+	struct xseg_reply_hash *xreply;
+
+	XSEGLOG2(&lc, I, "Callback of req %p", req);
+
+	if (!mn) {
+		XSEGLOG2(&lc, E, "Cannot get mapnode");
+		mio->err = 1;
+		goto out_nonode;
+	}
+
+	if (req->state & XS_FAILED) {
+		mio->err = 1;
+		XSEGLOG2(&lc, E, "Request failed");
+		goto out;
+	}
+
+	if (req->serviced != req->size) {
+		mio->err = 1;
+		XSEGLOG2(&lc, E, "Serviced != size");
+		goto out;
+	}
+
+	xreply = (struct xseg_reply_hash *) xseg_get_data(peer->xseg, req);
+	if (xreply->targetlen != HEXLIFIED_SHA256_DIGEST_SIZE) {
+		XSEGLOG2(&lc, E, "Reply targetlen != HEXLIFIED_SHA256_DIGEST_SIZE");
+		mio->err =1;
+		goto out;
+	}
+
+	strncpy(mn->object, xreply->target, HEXLIFIED_SHA256_DIGEST_SIZE);
+	mn->object[HEXLIFIED_SHA256_DIGEST_SIZE] = 0;
+	mn->objectlen = HEXLIFIED_SHA256_DIGEST_SIZE;
+	XSEGLOG2(&lc, D, "Received hash object %llu: %s (%p)",
+			mn->objectidx, mn->object, mn);
+	mn->flags = 0;
+
+out:
+	put_mapnode(mn);
+	__set_node(mio, req, NULL);
+out_nonode:
+	put_request(pr, req);
+	mio->pending_reqs--;
+	signal_pr(pr);
+	return;
+}
+
+
+int __hash_map(struct peer_req *pr, struct map *map, struct map *hashed_map)
+{
+	struct mapperd *mapper = __get_mapperd(pr->peer);
+	struct mapper_io *mio = __get_mapper_io(pr);
+	uint64_t i;
+	struct map_node *mn, *hashed_mn;
+	struct xseg_request *req;
+	int r;
+
+	mio->priv = 0;
+
+	for (i = 0; i < map->nr_objs; i++) {
+		mn = get_mapnode(map, i);
+		if (!mn) {
+			XSEGLOG2(&lc, E, "Cannot get mapnode %llu of map %s ",
+					"(nr_objs: %llu)", i, map->volume,
+					map->nr_objs);
+			return -1;
+		}
+		hashed_mn = get_mapnode(hashed_map, i);
+		if (!hashed_mn) {
+			XSEGLOG2(&lc, E, "Cannot get mapnode %llu of map %s ",
+					"(nr_objs: %llu)", i, hashed_map->volume,
+					hashed_map->nr_objs);
+			put_mapnode(mn);
+			return -1;
+		}
+		if (!(mn->flags & MF_OBJECT_ARCHIP)) {
+			mio->priv++;
+			strncpy(hashed_mn->object, mn->object, mn->objectlen);
+			hashed_mn->objectlen = mn->objectlen;
+			hashed_mn->object[hashed_mn->objectlen] = 0;
+			hashed_mn->flags = mn->flags;
+
+			put_mapnode(mn);
+			put_mapnode(hashed_mn);
+			continue;
+		}
+
+		req = get_request(pr, mapper->bportno, mn->object,
+				mn->objectlen, 0);
+		if (!req){
+			XSEGLOG2(&lc, E, "Cannot get request for map %s",
+					map->volume);
+			put_mapnode(mn);
+			put_mapnode(hashed_mn);
+			return -1;
+		}
+
+		req->op = X_HASH;
+		req->offset = 0;
+		req->size = map->blocksize;
+		r = __set_node(mio, req, hashed_mn);
+		if (r < 0) {
+			XSEGLOG2(&lc, E, "Cannot set node");
+			put_request(pr, req);
+			put_mapnode(mn);
+			put_mapnode(hashed_mn);
+			return -1;
+		}
+
+		r = send_request(pr, req);
+		if (r < 0) {
+			XSEGLOG2(&lc, E, "Cannot send request %p, pr: %p, map: %s",
+					req, pr, map->volume);
+			put_request(pr, req);
+			__set_node(mio, req, NULL);
+			put_mapnode(mn);
+			put_mapnode(hashed_mn);
+			return -1;
+		}
+		mio->pending_reqs++;
+		put_mapnode(mn);
+	}
+
+	return 0;
+}
+
+int hash_map(struct peer_req *pr, struct map *map, struct map *hashed_map)
+{
+	int r;
+	struct mapper_io *mio = __get_mapper_io(pr);
+
+	XSEGLOG2(&lc, I, "Hashing map %s", map->volume);
+	map->state |= MF_MAP_HASHING;
+	mio->pending_reqs = 0;
+	mio->cb = hash_cb;
+	mio->err = 0;
+
+
+	r = __hash_map(pr, map, hashed_map);
+	if (r < 0) {
+		mio->err = 1;
+	}
+
+	if (mio->pending_reqs) {
+		wait_on_pr(pr, mio->pending_reqs >0);
+	}
+
+	mio->cb = NULL;
+	map->state &= ~MF_MAP_HASHING;
+	if (mio->err) {
+		XSEGLOG2(&lc, E, "Hashing map %s failed", map->volume);
+		return -1;
+	} else {
+		XSEGLOG2(&lc, I, "Hashing map %s completed", map->volume);
+		return 0;
+	}
+}

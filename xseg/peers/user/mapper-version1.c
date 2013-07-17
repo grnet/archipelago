@@ -59,7 +59,7 @@ int read_object_v1(struct map_node *mn, unsigned char *buf)
 	return 0;
 }
 
-void v1_object_to_map(unsigned char* buf, struct map_node *mn)
+void object_to_map_v1(unsigned char* buf, struct map_node *mn)
 {
 	buf[0] = (mn->flags & MF_OBJECT_WRITABLE)? 1 : 0;
 	//assert !(mn->flags & MF_OBJECT_ARCHIP)
@@ -94,7 +94,7 @@ struct xseg_request * prepare_write_object_v1(struct peer_req *pr, struct map *m
 	req->offset = v1_mapheader_size + mn->objectidx * v1_objectsize_in_map;
 
 	data = xseg_get_data(pr->peer->xseg, req);
-	v1_object_to_map((unsigned char *)data, mn);
+	object_to_map_v1((unsigned char *)data, mn);
 	return NULL;
 }
 
@@ -160,7 +160,7 @@ struct xseg_request * __write_map_data_v1(struct peer_req *pr, struct map *map)
 	pos = 0;
 	for (i = 0; i < map->nr_objs; i++) {
 		mn = &map->objects[i];
-		v1_object_to_map((unsigned char *)(data+pos), mn);
+		object_to_map_v1((unsigned char *)(data+pos), mn);
 		pos += v1_objectsize_in_map;
 	}
 

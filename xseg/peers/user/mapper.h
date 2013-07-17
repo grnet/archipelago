@@ -134,9 +134,11 @@ struct map_node {
 //#define MF_MAP_DELETED		(1 << 8)
 #define MF_MAP_SNAPSHOTTING	(1 << 9)
 #define MF_MAP_SERIALIZING	(1 << 10)
+#define MF_MAP_HASHING		(1 << 11)
 #define MF_MAP_NOT_READY	(MF_MAP_LOADING|MF_MAP_WRITING|MF_MAP_DELETING|\
 				MF_MAP_DROPPING_CACHE|MF_MAP_OPENING|	       \
-				MF_MAP_SNAPSHOTTING|MF_MAP_SERIALIZING)
+				MF_MAP_SNAPSHOTTING|MF_MAP_SERIALIZING|        \
+				MF_MAP_HASHING)
 
 struct map {
 	uint32_t version;
@@ -304,5 +306,8 @@ struct xseg_request * get_request(struct peer_req *pr, xport dst, char * target,
 void put_request(struct peer_req *pr, struct xseg_request *req);
 struct xseg_request * __load_map_metadata(struct peer_req *pr, struct map *map);
 int load_map_metadata(struct peer_req *pr, struct map *map);
-
+int initialize_map_objects(struct map *map);
+int hash_map(struct peer_req *pr, struct map *map, struct map *hashed_map);
+struct map_node * get_mapnode(struct map *map, uint64_t objindex);
+void put_mapnode(struct map_node *mn);
 #endif /* end MAPPER_H */

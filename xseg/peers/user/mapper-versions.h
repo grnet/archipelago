@@ -96,6 +96,7 @@
  */
 
 struct map_functions {
+	void (*object_to_map)(unsigned char *buf, struct map_node *mn);
 	int (*read_object)(struct map_node *mn, unsigned char *buf);
 	struct xseg_request * (*prepare_write_object)(struct peer_req *pr,
 			struct map *map, struct map_node *mn);

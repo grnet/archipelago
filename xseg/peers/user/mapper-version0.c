@@ -48,7 +48,7 @@ int read_object_v0(struct map_node *mn, unsigned char *buf)
 	return 0;
 }
 
-void v0_object_to_map(unsigned char *data, struct map_node *mn)
+void object_to_map_v0(unsigned char *data, struct map_node *mn)
 {
 	unhexlify(mn->object, data);
 	//if name == zero block, raize MF_OBJECT_ZERO
@@ -74,7 +74,7 @@ struct xseg_request * prepare_write_object_v0(struct peer_req *pr, struct map *m
 	req->offset = v0_mapheader_size + mn->objectidx * v0_objectsize_in_map;
 
 	data = xseg_get_data(pr->peer->xseg, req);
-	v0_object_to_map((unsigned char *)data, mn);
+	object_to_map_v0((unsigned char *)data, mn);
 	return req;
 }
 
@@ -149,7 +149,7 @@ struct xseg_request * __write_map_data_v0(struct peer_req *pr, struct map *map)
 	pos = 0;
 	for (i = 0; i < map->nr_objs; i++) {
 		mn = &map->objects[i];
-		v0_object_to_map((unsigned char *)(data+pos), mn);
+		object_to_map_v0((unsigned char *)(data+pos), mn);
 		pos += v0_objectsize_in_map;
 	}
 

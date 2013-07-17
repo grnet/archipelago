@@ -71,7 +71,7 @@
 			   sizeof(uint64_t))
 
 int read_object_v2(struct map_node *mn, unsigned char *buf);
-//void v2_object_to_map(unsigned char* buf, struct map_node *mn);
+void object_to_map_v2(unsigned char* buf, struct map_node *mn);
 struct xseg_request * prepare_write_object_v2(struct peer_req *pr,
 				struct map *map, struct map_node *mn);
 //int read_map_v2(struct map *m, unsigned char * data);
@@ -85,6 +85,7 @@ int write_map_data_v2(struct peer_req *pr, struct map *map);
 /*.read_map = read_map_v2,	\*/
 #define map_functions_v2 {				\
 			.read_object = read_object_v2,	\
+			.object_to_map = object_to_map_v2, \
 			.prepare_write_object = prepare_write_object_v2,\
 			.load_map_data = load_map_data_v2, \
 			.write_map_metadata = write_map_metadata_v2, \
