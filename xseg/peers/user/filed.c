@@ -63,6 +63,8 @@
 #define FIO_STR_ID_LEN		3
 #define LOCK_SUFFIX		"_lock"
 #define LOCK_SUFFIX_LEN		5
+#define HASH_SUFFIX		"_hash"
+#define HASH_SUFFIX_LEN		5
 #define MAX_PATH_SIZE		1024
 #define MAX_FILENAME_SIZE 	(XSEG_MAX_TARGETLEN + LOCK_SUFFIX_LEN + MAX_UNIQUESTR_LEN + FIO_STR_ID_LEN)
 #define MAX_PREFIX_LEN		10
@@ -758,7 +760,136 @@ out:
 	return;
 }
 
-static void handle_snapshot(struct peerd *peer, struct peer_req *pr)
+static int __get_precalculated_hash(struct peerd *peer, char *target,
+		uint32_t targetlen, char hash[HEXLIFIED_SHA256_DIGEST_SIZE + 1])
+{
+	int ret = -1;
+	int r, fd;
+	uint32_t len, pos;
+	char *hash_file = NULL, *hash_path = NULL;
+	char tmpbuf[HEXLIFIED_SHA256_DIGEST_SIZE];
+	struct pfiled *pfiled = __get_pfiled(peer);
+
+	XSEGLOG2(&lc, D, "Started.");
+
+	hash_file = malloc(MAX_FILENAME_SIZE + 1);
+	hash_path = malloc(MAX_PATH_SIZE + MAX_FILENAME_SIZE + 1);
+
+	pos = 0;
+	strncpy(hash_file+pos, target, targetlen);
+	pos += targetlen;
+	strncpy(hash_file+pos, HASH_SUFFIX, HASH_SUFFIX_LEN);
+	pos += HASH_SUFFIX_LEN;
+	hash_file[pos] = 0;
+	hash[0] = 0;
+
+	r = create_path(hash_path, pfiled, hash_file, pos, 1);
+	if (r < 0)  {
+		XSEGLOG2(&lc, E, "Create path failed");
+		goto out;
+	}
+
+	fd = open(hash_path, O_RDONLY, S_IRWXU | S_IRUSR);
+	if (fd < 0) {
+		if (errno != ENOENT){
+			XSEGLOG2(&lc, E, "Error opening %s", hash_path);
+		} else {
+			XSEGLOG2(&lc, I, "No precalculated hash for %s", hash_file);
+			ret = 0;
+		}
+		goto out;
+	}
+
+	r = pread(fd, tmpbuf, HEXLIFIED_SHA256_DIGEST_SIZE, 0);
+	if (r < 0) {
+		XSEGLOG2(&lc, E, "Error reading from %s", hash_path);
+		close(fd);
+		goto out;
+	}
+	len = (uint32_t)r;
+
+	XSEGLOG2(&lc, D, "Read %u bytes", len);
+
+	r = close(fd);
+	if (r < 0) {
+		XSEGLOG2(&lc, E, "Could not close hash_file %s", hash_path);
+		goto out;
+	}
+
+	if (len == HEXLIFIED_SHA256_DIGEST_SIZE){
+		strncpy(hash, tmpbuf, HEXLIFIED_SHA256_DIGEST_SIZE);
+		hash[HEXLIFIED_SHA256_DIGEST_SIZE] = 0;
+		XSEGLOG2(&lc, D, "Found hash for %s : %s", hash_file, hash);
+		ret = 0;
+	}
+out:
+	free(hash_path);
+	XSEGLOG2(&lc, D, "Finished.");
+	return ret;
+}
+
+static int __set_precalculated_hash(struct peerd *peer, char *target,
+		uint32_t targetlen, char hash[HEXLIFIED_SHA256_DIGEST_SIZE + 1])
+{
+	int ret = -1;
+	int r, fd;
+	uint32_t len, pos;
+	char *hash_file = NULL, *hash_path = NULL;
+	char tmpbuf[HEXLIFIED_SHA256_DIGEST_SIZE];
+	struct pfiled *pfiled = __get_pfiled(peer);
+
+	XSEGLOG2(&lc, D, "Started.");
+
+	hash_file = malloc(MAX_FILENAME_SIZE + 1);
+	hash_path = malloc(MAX_PATH_SIZE + MAX_FILENAME_SIZE + 1);
+
+	pos = 0;
+	strncpy(hash_file+pos, target, targetlen);
+	pos += targetlen;
+	strncpy(hash_file+pos, HASH_SUFFIX, HASH_SUFFIX_LEN);
+	pos += HASH_SUFFIX_LEN;
+	hash_file[pos] = 0;
+
+	r = create_path(hash_path, pfiled, hash_file, pos, 1);
+	if (r < 0)  {
+		XSEGLOG2(&lc, E, "Create path failed");
+		goto out;
+	}
+
+	fd = open(hash_path, O_WRONLY | O_CREAT | O_EXCL, S_IRWXU | S_IRUSR);
+	if (fd < 0) {
+		if (errno != ENOENT){
+			XSEGLOG2(&lc, E, "Error opening %s", hash_path);
+		} else {
+			XSEGLOG2(&lc, I, "Hash file already exists %s", hash_file);
+			ret = 0;
+		}
+		goto out;
+	}
+
+	r = pwrite(fd, hash, HEXLIFIED_SHA256_DIGEST_SIZE, 0);
+	if (r < 0) {
+		XSEGLOG2(&lc, E, "Error reading from %s", hash_path);
+		close(fd);
+		goto out;
+	}
+	len = (uint32_t)r;
+
+	XSEGLOG2(&lc, D, "Wrote %u bytes", len);
+
+	r = close(fd);
+	if (r < 0) {
+		XSEGLOG2(&lc, E, "Could not close hash_file %s", hash_path);
+		goto out;
+	}
+
+out:
+	free(hash_path);
+	XSEGLOG2(&lc, D, "Finished.");
+	return ret;
+}
+
+static void handle_hash(struct peerd *peer, struct peer_req *pr)
 {
 	//open src
 	//read all file
@@ -766,6 +897,7 @@ static void handle_snapshot(struct peerd *peer, struct peer_req *pr)
 	//stat (open without create)
 	//write to hash_tmpfile
 	//link file
+
 	int src = -1, dst = -1, r = -1, pos;
 	ssize_t c;
 	uint64_t sum, written, trailing_zeros;
@@ -773,21 +905,18 @@ static void handle_snapshot(struct peerd *peer, struct peer_req *pr)
 	struct fio *fio = __get_fio(pr);
 	struct xseg_request *req = pr->req;
 	char *pathname = NULL, *tmpfile_pathname = NULL, *tmpfile = NULL;
-	char *target, *data;
-	char snapshot_name[HEXLIFIED_SHA256_DIGEST_SIZE + 1];
+	char *target;
+	char hash_name[HEXLIFIED_SHA256_DIGEST_SIZE + 1];
 	char name[XSEG_MAX_TARGETLEN + 1];
 
 	unsigned char *object_data = NULL;
 	unsigned char sha[SHA256_DIGEST_SIZE];
-	struct xseg_request_snapshot *xsnapshot;
-	struct xseg_reply_snapshot *xreply;
+	struct xseg_reply_hash *xreply;
 
 	target = xseg_get_target(peer->xseg, req);
-	data = xseg_get_data(peer->xseg, req);
-	xsnapshot = (struct xseg_request_snapshot *)data;
-	(void)xsnapshot; //ignore it
 
-	XSEGLOG2(&lc, I, "Handle snapshot started for pr: %p, req: %p", pr, pr->req);
+	XSEGLOG2(&lc, I, "Handle hash started for pr: %p, req: %p",
+			pr, pr->req);
 
 	if (!req->size) {
 		XSEGLOG2(&lc, E, "No request size provided");
@@ -801,10 +930,23 @@ static void handle_snapshot(struct peerd *peer, struct peer_req *pr)
 		goto out;
 	}
 
+	r = __get_precalculated_hash(peer, target, req->targetlen, hash_name);
+	if (r < 0) {
+		XSEGLOG2(&lc, E, "Error getting precalculated hash");
+		goto out;
+	}
+
+	if (hash_name[0] != 0) {
+		XSEGLOG2(&lc, I, "Precalucated hash found %s", hash_name);
+		goto found;
+	}
+
+	XSEGLOG2(&lc, I, "No precalculated hash found");
+
 	strncpy(name, target, req->targetlen);
 	name[req->targetlen] = 0;
 
-	pathname = malloc(MAX_PATH_SIZE + MAX_FILENAME_SIZE);
+	pathname = malloc(MAX_PATH_SIZE + MAX_FILENAME_SIZE + 1);
 	object_data = malloc(sizeof(char) * req->size);
 	if (!pathname || !object_data){
 		XSEGLOG2(&lc, E, "Out of memory");
@@ -842,25 +984,14 @@ static void handle_snapshot(struct peerd *peer, struct peer_req *pr)
 			sum, trailing_zeros);
 
 	sum -= trailing_zeros;
-	//calculate snapshot name
+	//calculate hash name
 	SHA256(object_data, sum, sha);
 
-	r = xseg_resize_request(peer->xseg, pr->req, pr->req->targetlen,
-			sizeof(struct xseg_reply_snapshot));
-	if (r < 0)  {
-		XSEGLOG2(&lc, E, "Resize request failed");
-		r = -1;
-		goto out;
-	}
-
-	xreply = (struct xseg_reply_snapshot *)xseg_get_data(peer->xseg, req);
-	hexlify(sha, SHA256_DIGEST_SIZE, xreply->target);
-	xreply->targetlen = HEXLIFIED_SHA256_DIGEST_SIZE;
-	hexlify(sha, SHA256_DIGEST_SIZE, snapshot_name);
-	snapshot_name[HEXLIFIED_SHA256_DIGEST_SIZE] = 0;
+	hexlify(sha, SHA256_DIGEST_SIZE, hash_name);
+	hash_name[HEXLIFIED_SHA256_DIGEST_SIZE] = 0;
 
 
-	r = create_path(pathname, pfiled, xreply->target, xreply->targetlen, 1);
+	r = create_path(pathname, pfiled, hash_name, HEXLIFIED_SHA256_DIGEST_SIZE, 1);
 	if (r < 0)  {
 		XSEGLOG2(&lc, E, "Create path failed");
 		r = -1;
@@ -872,11 +1003,12 @@ static void handle_snapshot(struct peerd *peer, struct peer_req *pr)
 	dst = open(pathname, O_WRONLY);
 	if (dst > 0) {
 		XSEGLOG2(&lc, I, "%s already exists, no write needed", pathname);
+		req->serviced = req->size;
 		r = 0;
 		goto out;
 	}
 
-	tmpfile_pathname = malloc(MAX_PATH_SIZE + MAX_FILENAME_SIZE);
+	tmpfile_pathname = malloc(MAX_PATH_SIZE + MAX_FILENAME_SIZE + 1);
 	if (!tmpfile_pathname){
 		XSEGLOG2(&lc, E, "Out of memory");
 		r = -1;
@@ -901,7 +1033,7 @@ static void handle_snapshot(struct peerd *peer, struct peer_req *pr)
 	pos += FIO_STR_ID_LEN;
 	tmpfile[pos] = 0;
 
-	r = create_path(tmpfile_pathname, pfiled, tmpfile, pos, 0);
+	r = create_path(tmpfile_pathname, pfiled, tmpfile, pos, 1);
 	if (r < 0)  {
 		XSEGLOG2(&lc, E, "Create path failed");
 		r = -1;
@@ -909,10 +1041,12 @@ static void handle_snapshot(struct peerd *peer, struct peer_req *pr)
 	}
 
 	XSEGLOG2(&lc, D, "Opening %s", tmpfile_pathname);
-	dst = open(tmpfile_pathname, O_WRONLY | O_CREAT | O_EXCL, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP);
+	dst = open(tmpfile_pathname, O_WRONLY | O_CREAT | O_EXCL,
+			S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP);
 	if (dst < 0) {
 		if (errno != EEXIST){
-			XSEGLOG2(&lc, E, "Error opening %s", tmpfile_pathname);
+			char error_str[1024];
+			XSEGLOG2(&lc, E, "Error opening %s (%s)", tmpfile_pathname, strerror_r(errno, error_str, 1023));
 		} else {
 			XSEGLOG2(&lc, E, "Error opening %s. Stale data found.",
 					tmpfile_pathname);
@@ -935,7 +1069,7 @@ static void handle_snapshot(struct peerd *peer, struct peer_req *pr)
 
 	r = link(tmpfile_pathname, pathname);
 	if (r < 0 && errno != EEXIST) {
-		XSEGLOG2(&lc, E, "Error linking snapshot file %s. Errno %d",
+		XSEGLOG2(&lc, E, "Error linking tmp file %s. Errno %d",
 				pathname, errno);
 		r = -1;
 		goto out_unlink;
@@ -943,8 +1077,29 @@ static void handle_snapshot(struct peerd *peer, struct peer_req *pr)
 
 	r = unlink(tmpfile_pathname);
 	if (r < 0) {
-		XSEGLOG2(&lc, W, "Error unlinking snapshot file %s", tmpfile_pathname);
+		XSEGLOG2(&lc, W, "Error unlinking tmp file %s", tmpfile_pathname);
+		r = 0;
 	}
+
+	r = __set_precalculated_hash(peer, target, req->targetlen, hash_name);
+	if (r < 0) {
+		XSEGLOG2(&lc, W, "Error setting precalculated hash");
+		r = 0;
+	}
+
+found:
+	r = xseg_resize_request(peer->xseg, pr->req, pr->req->targetlen,
+			sizeof(struct xseg_reply_hash));
+	if (r < 0)  {
+		XSEGLOG2(&lc, E, "Resize request failed");
+		r = -1;
+		goto out;
+	}
+
+	xreply = (struct xseg_reply_hash *)xseg_get_data(peer->xseg, req);
+	strncpy(xreply->target, hash_name, HEXLIFIED_SHA256_DIGEST_SIZE);
+	xreply->targetlen = HEXLIFIED_SHA256_DIGEST_SIZE;
+
 	req->serviced = req->size;
 	r = 0;
 
@@ -953,11 +1108,12 @@ out:
 		close(dst);
 	}
 	if (r < 0) {
-		XSEGLOG2(&lc, E, "Handle snapshot failed for pr: %p, req: %p. Target %s", pr, pr->req, name);
+		XSEGLOG2(&lc, E, "Handle hash failed for pr: %p, req: %p. ",
+				"Target %s", pr, pr->req, name);
 		pfiled_fail(peer, pr);
 	} else {
-		XSEGLOG2(&lc, I, "Handle snapshot completed for pr: %p, req: %p\n\t"
-				"Snapshotted %s to %s", pr, pr->req, name, snapshot_name);
+		XSEGLOG2(&lc, I, "Handle hash completed for pr: %p, req: %p\n\t"
+				"hashed %s to %s", pr, pr->req, name, hash_name);
 		pfiled_complete(peer, pr);
 	}
 	free(tmpfile_pathname);
@@ -1253,8 +1409,8 @@ int dispatch(struct peerd *peer, struct peer_req *pr, struct xseg_request *req,
 			handle_acquire(peer, pr); break;
 		case X_RELEASE:
 			handle_release(peer, pr); break;
-		case X_SNAPSHOT:
-			handle_snapshot(peer, pr); break;
+		case X_HASH:
+			handle_hash(peer, pr); break;
 		case X_SYNC:
 		default:
 			handle_unknown(peer, pr);
