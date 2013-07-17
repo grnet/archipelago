@@ -33,7 +33,7 @@
 
 import archipelago
 from archipelago.common import Xseg_ctx, Request, Filed, Mapperd, Vlmcd, \
-        create_segment, destroy_segment
+        create_segment, destroy_segment, Error
 from archipelago.archipelago import start_peer, stop_peer
 import random as rnd
 import unittest
@@ -43,6 +43,8 @@ import ctypes
 import os
 from copy import copy
 from sets import Set
+from binascii import hexlify, unhexlify
+from hashlib import sha256
 
 def get_random_string(length=64, repeat=16):
     nr_repeats = length//repeat
@@ -66,6 +68,21 @@ def recursive_remove(path):
             os.remove(os.path.join(root, name))
         for name in dirs:
             os.rmdir(os.path.join(root, name))
+
+def merkle_hash(hashes):
+    if len(hashes) == 0:
+        return sha256('').digest()
+    if len(hashes) == 1:
+        return hashes[0]
+
+    s = 2
+    while s < len(hashes):
+        s = s * 2
+    hashes += [('\x00' * len(hashes[0]))] * (s - len(hashes))
+    while len(hashes) > 1 :
+        hashes = [sha256(hashes[i] + hashes[i + 1]).digest() for i in range (0, len(hashes), 2)]
+    return hashes[0]
+    
 
 def init():
     rnd.seed()
@@ -104,6 +121,84 @@ class XsegTest(unittest.TestCase):
         xinfo.size = size
         return xinfo
 
+    @staticmethod
+    def get_hash_reply(hashstring):
+        xhash = xseg_reply_hash()
+        xhash.target = hashstring
+        xhash.targetlen = len(hashstring)
+        return xhash
+
+    @staticmethod
+    def get_object_name(volume, epoch, index):
+        epoch_64 = ctypes.c_uint64(epoch)
+        index_64 = ctypes.c_uint64(index)
+        epoch_64_char = ctypes.cast(ctypes.addressof(epoch_64), ctypes.c_char_p)
+        index_64_char = ctypes.cast(ctypes.addressof(index_64), ctypes.c_char_p)
+        epoch_64_str = ctypes.string_at(epoch_64_char, ctypes.sizeof(ctypes.c_uint64))
+        index_64_str = ctypes.string_at(index_64_char, ctypes.sizeof(ctypes.c_uint64))
+        epoch_hex = hexlify(epoch_64_str)
+        index_hex = hexlify(index_64_str)
+        return "archip_" + volume + "_" + epoch_hex + "_" + index_hex
+
+    @staticmethod
+    def get_map_reply(offset, size):
+        blocksize = XsegTest.blocksize
+        ret = xseg_reply_map()
+        cnt = (offset+size)//blocksize - offset//blocksize
+        if (offset+size) % blocksize > 0 :
+            cnt += 1
+        ret.cnt = cnt
+        SegsArray = xseg_reply_map_scatterlist * cnt
+        segs = SegsArray()
+        rem_size = size
+        offset = offset % blocksize
+        for i in range(0, cnt):
+            segs[i].offset = offset
+            segs[i].size = blocksize - offset
+            if segs[i].size > rem_size:
+                segs[i].size = rem_size
+            offset = 0
+            rem_size -= segs[i].size
+            if rem_size < 0 :
+                raise Error("Calculation error")
+        ret.segs = segs
+
+        return ret
+
+    @staticmethod
+    def get_list_of_hashes(xreply, from_segment=False):
+        hashes = []
+        cnt = xreply.cnt
+        segs = xreply.segs
+        if from_segment:
+            SegsArray = xseg_reply_map_scatterlist * cnt
+            array = SegsArray.from_address(ctypes.addressof(segs))
+            segs = array
+        for i in range(0, cnt):
+            hashes.append(ctypes.string_at(segs[i].target, segs[i].targetlen))
+        return hashes
+
+    @staticmethod
+    def get_zero_map_reply(offset, size):
+        ret = XsegTest.get_map_reply(offset, size);
+        cnt = ret.cnt
+        for i in range(0, cnt):
+            ret.segs[i].target = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+            ret.segs[i].targetlen = len(ret.segs[i].target)
+        return ret
+
+    @staticmethod
+    def get_copy_map_reply(volume, offset, size, epoch):
+        blocksize = XsegTest.blocksize
+        objidx_start = offset//blocksize
+        ret = XsegTest.get_map_reply(offset, size);
+        cnt = ret.cnt
+        for i in range(0, cnt):
+            ret.segs[i].target = MapperdTest.get_object_name(volume, epoch,
+                    objidx_start+i)
+            ret.segs[i].targetlen = len(ret.segs[i].target)
+        return ret
+
     def get_req(self, op, dst, target, data=None, size=0, offset=0, datalen=0,
             flags=0):
         return Request(self.xseg, dst, target, data=data, size=size,
@@ -137,6 +232,14 @@ class XsegTest(unittest.TestCase):
                 self.assertEqual(t, expected_array[i].target)
                 self.assertEqual(array[i].offset, expected_array[i].offset)
                 self.assertEqual(array[i].size, expected_array[i].size)
+        elif isinstance(expected_data, xseg_reply_hash):
+            datasize = ctypes.sizeof(expected_data)
+            self.assertEqual(datasize, req.get_datalen())
+            data = req.get_data(type(expected_data)).contents
+            self.assertEqual(data.targetlen, expected_data.targetlen)
+            t = ctypes.string_at(data.target, data.targetlen)
+            et = ctypes.string_at(expected_data.target, expected_data.targetlen)
+            self.assertEqual(t, et)
         else:
             raise Error("Unknown data type")
 
@@ -235,7 +338,8 @@ class XsegTest(unittest.TestCase):
 
     send_and_evaluate_delete = evaluate(send_delete)
 
-    def send_clone(self, dst, src_target, clone=None, clone_size=0):
+    def send_clone(self, dst, src_target, clone=None, clone_size=0,
+            cont_addr=False):
         #xclone = xseg_request_clone()
         #xclone.target = src_target
         #xclone.targetlen = len(src_target)
@@ -244,7 +348,7 @@ class XsegTest(unittest.TestCase):
         #req = self.get_req(X_CLONE, dst, clone, data=xclone,
                 #datalen=ctypes.sizeof(xclone))
         req = Request.get_clone_request(self.xseg, dst, src_target,
-                clone=clone, clone_size=clone_size)
+                clone=clone, clone_size=clone_size, cont_addr=cont_addr)
         req.submit()
         return req
 
@@ -299,6 +403,14 @@ class XsegTest(unittest.TestCase):
 
     send_and_evaluate_map_write = evaluate(send_map_write)
 
+    def send_hash(self, dst, target, size=0):
+        #req = self.get_req(X_hash, dst, target, data=None, size=0)
+        req = Request.get_hash_request(self.xseg, dst, target, size=size)
+        req.submit()
+        return req
+
+    send_and_evaluate_hash = evaluate(send_hash)
+
     def get_filed(self, args, clean=False):
         path = args['archip_dir']
         if not os.path.exists(path):
@@ -331,7 +443,7 @@ class VlmcdTest(XsegTest):
             'role': 'vlmctest-blockerm',
             'spec': XsegTest.spec,
             'nr_ops': 16,
-            'archip_dir': '/tmp/bfiledtest/',
+            'archip_dir': '/tmp/mfiledtest/',
             'prefix': 'archip_',
             'portno_start': 1,
             'portno_end': 1,
@@ -370,6 +482,7 @@ class VlmcdTest(XsegTest):
             self.vlmcd = self.get_vlmcd(self.vlmcd_args)
             self.vlmcdport = self.vlmcd.portno_start
             self.mapperdport = self.mapperd.portno_start
+            self.blockerbport = self.blockerb.portno_start
             start_peer(self.blockerm)
             start_peer(self.blockerb)
             start_peer(self.mapperd)
@@ -502,6 +615,65 @@ class VlmcdTest(XsegTest):
             self.evaluate_req(req, data=xinfo)
             reqs.remove(req)
 
+    def test_hash(self):
+        blocksize = self.blocksize
+        volume = "myvolume"
+        volume2 = "myvolume2"
+        snap = "snapshot"
+        clone = "clone"
+        volsize = 10*1024*1024
+        size = 512*1024
+        epoch = 1
+        offset = 0
+        data = get_random_string(size, 16)
+
+        self.send_and_evaluate_clone(self.mapperdport, "", clone=volume,
+                clone_size=volsize)
+        self.send_and_evaluate_write(self.vlmcdport, volume, data=data,
+				offset=offset, serviced=size)
+
+        self.send_and_evaluate_snapshot(self.vlmcdport, volume, snap=snap)
+
+        self.send_and_evaluate_hash(self.mapperdport, volume, size=volsize,
+                expected=False)
+        req = self.send_hash(self.mapperdport, snap, size=volsize)
+        req.wait()
+        self.assertTrue(req.success())
+        xreply = req.get_data(xseg_reply_hash).contents
+        hash_map = ctypes.string_at(xreply.target, xreply.targetlen)
+        req.put()
+
+        req = self.send_map_read(self.mapperdport, snap, offset=0,
+                size=volsize)
+        req.wait()
+        self.assertTrue(req.success())
+        xreply = req.get_data(xseg_reply_map).contents
+        blocks = self.get_list_of_hashes(xreply, from_segment=True)
+        req.put()
+        h = []
+        for b in blocks:
+            if (b == sha256('').hexdigest()):
+                h.append(unhexlify(b))
+                continue
+            req = self.send_hash(self.blockerbport, b, size=blocksize)
+            req.wait()
+            self.assertTrue(req.success())
+            xreply = req.get_data(xseg_reply_hash).contents
+            h.append(unhexlify(ctypes.string_at(xreply.target, xreply.targetlen)))
+            req.put()
+
+        mh = hexlify(merkle_hash(h))
+        self.assertEqual(hash_map, mh)
+
+        self.send_and_evaluate_clone(self.mapperdport, hash_map, clone=volume2,
+                clone_size=volsize * 2, expected=False)
+        self.send_and_evaluate_clone(self.mapperdport, hash_map, clone=volume2,
+                clone_size=volsize * 2, cont_addr=True)
+        self.send_and_evaluate_read(self.vlmcdport, volume2, size=size,
+                offset=offset, expected_data=data)
+        self.send_and_evaluate_read(self.vlmcdport, volume2, size=volsize - size,
+                offset=offset + size, expected_data='\x00' * (volsize - size))
+
 
 class MapperdTest(XsegTest):
     bfiled_args = {
@@ -519,7 +691,7 @@ class MapperdTest(XsegTest):
             'role': 'mappertest-blockerm',
             'spec': XsegTest.spec,
             'nr_ops': 16,
-            'archip_dir': '/tmp/bfiledtest/',
+            'archip_dir': '/tmp/mfiledtest/',
             'prefix': 'archip_',
             'portno_start': 1,
             'portno_end': 1,
@@ -562,65 +734,6 @@ class MapperdTest(XsegTest):
         stop_peer(self.blockerb)
         stop_peer(self.blockerm)
         super(MapperdTest, self).tearDown()
-
-    @staticmethod
-    def get_object_name(volume, epoch, index):
-        from binascii import hexlify
-        epoch_64 = ctypes.c_uint64(epoch)
-        index_64 = ctypes.c_uint64(index)
-        epoch_64_char = ctypes.cast(ctypes.addressof(epoch_64), ctypes.c_char_p)
-        index_64_char = ctypes.cast(ctypes.addressof(index_64), ctypes.c_char_p)
-        epoch_64_str = ctypes.string_at(epoch_64_char, ctypes.sizeof(ctypes.c_uint64))
-        index_64_str = ctypes.string_at(index_64_char, ctypes.sizeof(ctypes.c_uint64))
-        epoch_hex = hexlify(epoch_64_str)
-        index_hex = hexlify(index_64_str)
-        return "archip_" + volume + "_" + epoch_hex + "_" + index_hex
-
-    @staticmethod
-    def get_map_reply(offset, size):
-        blocksize = MapperdTest.blocksize
-        ret = xseg_reply_map()
-        cnt = (offset+size)//blocksize - offset//blocksize
-        if (offset+size) % blocksize > 0 :
-            cnt += 1
-        xseg_reply_map.cnt = cnt
-        SegsArray = xseg_reply_map_scatterlist * cnt
-        segs = SegsArray()
-        rem_size = size
-        offset = offset % blocksize
-        for i in range(0, cnt):
-            segs[i].offset = offset
-            segs[i].size = blocksize - offset
-            if segs[i].size > rem_size:
-                segs[i].size = rem_size
-            offset = 0
-            rem_size -= segs[i].size
-            if rem_size < 0 :
-                raise Error("Calculation error")
-        ret.segs = segs
-
-        return ret
-
-    @staticmethod
-    def get_zero_map_reply(offset, size):
-        ret = MapperdTest.get_map_reply(offset, size);
-        cnt = ret.cnt
-        for i in range(0, cnt):
-            ret.segs[i].target = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
-            ret.segs[i].targetlen = len(ret.segs[i].target)
-        return ret
-
-    @staticmethod
-    def get_copy_map_reply(volume, offset, size, epoch):
-        blocksize = MapperdTest.blocksize
-        objidx_start = offset//blocksize
-        ret = MapperdTest.get_map_reply(offset, size);
-        cnt = ret.cnt
-        for i in range(0, cnt):
-            ret.segs[i].target = MapperdTest.get_object_name(volume, epoch,
-                    objidx_start+i)
-            ret.segs[i].targetlen = len(ret.segs[i].target)
-        return ret
 
     def test_create(self):
         volume = "myvolume"
@@ -861,6 +974,7 @@ class MapperdTest(XsegTest):
             reqs.remove(req)
 
 
+
 class FiledTest(XsegTest):
     filed_args = {
             'role': 'testfiled',
@@ -957,6 +1071,30 @@ class FiledTest(XsegTest):
         self.send_and_evaluate_delete(self.filedport, target, True)
         data = '\x00' * datalen
         self.send_and_evaluate_read(self.filedport, target, size=datalen, expected_data=data)
+
+    def test_hash(self):
+        datalen = 1024
+        data = '\x00'*datalen
+        target = "target_zeros"
+
+
+        self.send_and_evaluate_write(self.filedport, target, data=data,
+                serviced=datalen)
+        ret = self.get_hash_reply(sha256(data.rstrip('\x00')).hexdigest())
+        self.send_and_evaluate_hash(self.filedport, target, size=datalen,
+                expected_data=ret, serviced=datalen)
+
+        target = "mytarget"
+        data = get_random_string(datalen, 16)
+        self.send_and_evaluate_write(self.filedport, target, data=data,
+                serviced=datalen)
+        ret = self.get_hash_reply(sha256(data.rstrip('\x00')).hexdigest())
+        self.send_and_evaluate_hash(self.filedport, target, size=datalen,
+                expected_data=ret, serviced=datalen)
+        self.send_and_evaluate_hash(self.filedport, target, size=datalen,
+                expected_data=ret, serviced=datalen)
+        self.send_and_evaluate_hash(self.filedport, target, size=datalen,
+                expected_data=ret, serviced=datalen)
 
 if __name__=='__main__':
     init()
