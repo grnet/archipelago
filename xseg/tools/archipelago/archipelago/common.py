@@ -935,14 +935,20 @@ class Request(object):
         return cls(xseg, dst, target, op=X_DELETE)
 
     @classmethod
-    def get_clone_request(cls, xseg, dst, target, clone=None, clone_size=0):
+    def get_clone_request(cls, xseg, dst, target, clone=None, clone_size=0,
+			cont_addr = False):
         datalen = sizeof(xseg_request_clone)
         xclone = xseg_request_clone()
         xclone.target = target
         xclone.targetlen= len(target)
         xclone.size = clone_size
 
-        return cls(xseg, dst, clone, op=X_CLONE, data=xclone, datalen=datalen)
+        flags = 0
+        if cont_addr:
+            flags = XF_CONTADDR
+
+        return cls(xseg, dst, clone, op=X_CLONE, data=xclone, datalen=datalen,
+				flags=flags)
 
     @classmethod
     def get_open_request(cls, xseg, dst, target):
@@ -971,3 +977,7 @@ class Request(object):
     def get_mapw_request(cls, xseg, dst, target, offset=0, size=0):
         return cls(xseg, dst, target, op=X_MAPW, offset=offset, size=size,
                 datalen=0)
+
+    @classmethod
+    def get_hash_request(cls, xseg, dst, target, size=0, offset=0):
+        return cls(xseg, dst, target, op=X_HASH, size=size, offset=offset)
