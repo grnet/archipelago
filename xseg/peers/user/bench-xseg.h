@@ -190,6 +190,7 @@ struct timer {
 	struct timespec sum;
 	struct timespec2 sum_sq;
 	struct timespec start_time;
+	struct timespec elapsed_time;
 	uint64_t completed;
 	int insanity;
 };
