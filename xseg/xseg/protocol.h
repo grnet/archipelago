@@ -86,8 +86,8 @@ struct xseg_request_snapshot {
 	uint32_t targetlen;
 };
 
-struct xseg_reply_snapshot {
-        char target[XSEG_MAX_TARGETLEN];
+struct xseg_reply_hash {
+	char target[XSEG_MAX_TARGETLEN];
 	uint32_t targetlen;
 };
 
