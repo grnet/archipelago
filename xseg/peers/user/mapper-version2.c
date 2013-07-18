@@ -621,7 +621,7 @@ int read_map_metadata_v2(struct map *map, unsigned char *metadata,
 	map->blocksize = *(uint32_t *)(metadata + pos);
 	pos += sizeof(uint32_t);
 	//FIXME check each flag seperately
-	map->flags = *(uint64_t *)(metadata + pos);
+	map->flags = *(uint32_t *)(metadata + pos);
 	pos += sizeof(uint32_t);
 	map->epoch = *(uint64_t *)(metadata + pos);
 	pos += sizeof(uint64_t);
