@@ -217,8 +217,10 @@ int handle_info(struct peerd *peer, struct peer_req *pr)
 	struct xseg_request *req = pr->req;
 	//struct radosd *rados = (struct radosd *) peer->priv;
 	struct rados_io *rio = (struct rados_io *) pr->priv;
-	char *req_data = xseg_get_data(peer->xseg, req);
-	struct xseg_reply_info *xinfo = (struct xseg_reply_info *)req_data;
+	char *req_data;
+	struct xseg_reply_info *xinfo;
+	char buf[XSEG_MAX_TARGETLEN + 1];
+	char *target;
 
 	if (rio->state == ACCEPTED) {
 		XSEGLOG2(&lc, I, "Getting info of %s", rio->obj_name);
@@ -230,6 +232,21 @@ int handle_info(struct peerd *peer, struct peer_req *pr)
 		}
 	}
 	else {
+		if (req->datalen < sizeof(struct xseg_reply_info)) {
+			target = xseg_get_target(peer->xseg, req);
+			strncpy(buf, target, req->targetlen);
+			r = xseg_resize_request(peer->xseg, req, req->targetlen, sizeof(struct xseg_reply_info));
+			if (r < 0) {
+				XSEGLOG2(&lc, E, "Cannot resize request");
+				fail(peer, pr);
+				return 0;
+			}
+			target = xseg_get_target(peer->xseg, req);
+			strncpy(target, buf, req->targetlen);
+		}
+
+		req_data = xseg_get_data(peer->xseg, req);
+		xinfo = (struct xseg_reply_info *)req_data;
 		if (pr->retval < 0){
 			xinfo->size = 0;
 			XSEGLOG2(&lc, E, "Getting info of %s failed", rio->obj_name);	
@@ -326,7 +343,7 @@ int handle_read(struct peerd *peer, struct peer_req *pr)
 
 int handle_write(struct peerd *peer, struct peer_req *pr)
 {
-	if (req->datalen < req->size) {
+	if (pr->req->datalen < pr->req->size) {
 		XSEGLOG2(&lc, E, "Request datalen is less than req size");
 		return -1;
 	}
@@ -551,11 +568,12 @@ int handle_hash(struct peerd *peer, struct peer_req *pr)
 			xreply = (struct xseg_reply_hash*)xseg_get_data(peer->xseg, req);
 			r = xseg_resize_request(peer->xseg, pr->req, pr->req->targetlen,
 					sizeof(struct xseg_reply_hash));
-			strncpy(xreply->target, rio->obj_name, HEXLIFIED_SHA256_DIGEST_SIZE);
+			strncpy(xreply->target, rio->second_name, HEXLIFIED_SHA256_DIGEST_SIZE);
 			xreply->targetlen = HEXLIFIED_SHA256_DIGEST_SIZE;
 
 			XSEGLOG2(&lc, I, "Calculated %s as hash of %s",
 					rio->second_name, rio->obj_name);
+			req->serviced = req->size;
 			goto out_buf;
 
 		}
@@ -596,7 +614,7 @@ int handle_hash(struct peerd *peer, struct peer_req *pr)
 			xreply = (struct xseg_reply_hash*)xseg_get_data(peer->xseg, req);
 			r = xseg_resize_request(peer->xseg, pr->req, pr->req->targetlen,
 					sizeof(struct xseg_reply_hash));
-			strncpy(xreply->target, rio->obj_name, HEXLIFIED_SHA256_DIGEST_SIZE);
+			strncpy(xreply->target, rio->second_name, HEXLIFIED_SHA256_DIGEST_SIZE);
 			xreply->targetlen = HEXLIFIED_SHA256_DIGEST_SIZE;
 
 			XSEGLOG2(&lc, I, "Calculated %s as hash of %s",
@@ -661,16 +679,14 @@ int handle_hash(struct peerd *peer, struct peer_req *pr)
 			pos += HASH_SUFFIX_LEN;
 			hash_name[pos] = 0;
 
-			req->state = POSTHASHING;
+			rio->state = POSTHASHING;
 			if (do_aio_generic(peer, pr, X_WRITE, hash_name, rio->second_name,
 						HEXLIFIED_SHA256_DIGEST_SIZE, 0) < 0) {
 				XSEGLOG2(&lc, E, "Writing of %s failed on do_aio_write", hash_name);
 				r = -1;
 				goto out_buf;
 			}
-
-			r = 0;
-			goto out_buf;
+			return 0;
 		}
 		else {
 			XSEGLOG2(&lc, E, "Writing of %s failed", rio->obj_name);
