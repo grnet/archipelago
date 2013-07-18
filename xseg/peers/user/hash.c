@@ -37,6 +37,38 @@
 #include <stdlib.h>
 #include <string.h>
 
+static char get_hex(unsigned int h)
+{
+	switch (h)
+	{
+		case 0:
+		case 1:
+		case 2:
+		case 3:
+		case 4:
+		case 5:
+		case 6:
+		case 7:
+		case 8:
+		case 9:
+			return h + '0';
+		case 10:
+			return 'a';
+		case 11:
+			return 'b';
+		case 12:
+			return 'c';
+		case 13:
+			return 'd';
+		case 14:
+			return 'e';
+		case 15:
+			return 'f';
+	}
+	/* not reachable */
+	return '0';
+}
+
 /* hexlify function.
  * Unsafe. Doesn't check if data length is odd!
  */
@@ -44,8 +76,10 @@
 void hexlify(unsigned char *data, long datalen, char *hex)
 {
 	long i;
-	for (i=0; i<datalen; i++)
-		sprintf(hex+2*i, "%02x", data[i]);
+	for (i=0; i<datalen; i++){
+		hex[2*i] = get_hex((data[i] & 0xF0) >> 4);
+		hex[2*i + 1] = get_hex(data[i] & 0x0F);
+	}
 }
 
 void unhexlify(char *hex, unsigned char *data)
