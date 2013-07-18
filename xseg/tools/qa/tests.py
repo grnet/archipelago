@@ -32,11 +32,11 @@
 # or implied, of GRNET S.A.
 
 import archipelago
-from archipelago.common import Xseg_ctx, Request, Filed, Mapperd, Vlmcd, \
+from archipelago.common import Xseg_ctx, Request, Filed, Mapperd, Vlmcd, Sosd, \
         create_segment, destroy_segment, Error
 from archipelago.archipelago import start_peer, stop_peer
 import random as rnd
-import unittest
+import unittest2 as unittest
 from xseg.xprotocol import *
 from xseg.xseg_api import *
 import ctypes
@@ -86,7 +86,7 @@ def merkle_hash(hashes):
 
 def init():
     rnd.seed()
-    archipelago.common.BIN_DIR='/home/philipgian/code/archipelago/xseg/peers/user/'
+    archipelago.common.BIN_DIR=os.path.join(os.getcwd(), '../../peers/user/')
     archipelago.common.LOGS_PATH=os.path.join(os.getcwd(), 'logs')
     archipelago.common.PIDFILE_PATH=os.path.join(os.getcwd(), 'pids')
     if not os.path.isdir(archipelago.common.LOGS_PATH):
@@ -105,7 +105,7 @@ class XsegTest(unittest.TestCase):
     def setUp(self):
         try:
             create_segment(self.spec)
-        except:
+        except Exception as e:
             destroy_segment(self.spec)
             create_segment(self.spec)
         self.xseg = Xseg_ctx(self.spec, self.myport)
@@ -420,6 +420,18 @@ class XsegTest(unittest.TestCase):
             recursive_remove(path)
 
         return Filed(**args)
+
+    def get_sosd(self, args, clean=False):
+        pool = args['pool']
+        import rados
+        cluster = rados.Rados(conffile='/etc/ceph/ceph.conf')
+        cluster.connect()
+        if cluster.pool_exists(pool):
+            cluster.delete_pool(pool)
+        cluster.create_pool(pool)
+
+        cluster.shutdown()
+        return Sosd(**args)
 
     def get_mapperd(self, args):
         return Mapperd(**args)
@@ -973,9 +985,101 @@ class MapperdTest(XsegTest):
             self.evaluate_req(req, data=ret)
             reqs.remove(req)
 
+class BlockerTest(object):
+    def test_write_read(self):
+        datalen = 1024
+        data = get_random_string(datalen, 16)
+        target = "mytarget"
+        xinfo = self.get_reply_info(datalen)
+
+        self.send_and_evaluate_write(self.blockerport, target, data=data,
+                serviced=datalen)
+        self.send_and_evaluate_read(self.blockerport, target, size=datalen,
+                expected_data=data)
+        self.send_and_evaluate_info(self.blockerport, target, expected_data=xinfo)
+        stop_peer(self.blocker)
+        start_peer(self.blocker)
+        self.send_and_evaluate_read(self.blockerport, target, size=datalen,
+                expected_data=data)
+        self.send_and_evaluate_info(self.blockerport, target, expected_data=xinfo)
+
+    def test_info(self):
+        datalen = 1024
+        data = get_random_string(datalen, 16)
+        target = "mytarget"
+        self.send_and_evaluate_write(self.blockerport, target, data=data,
+                serviced=datalen)
+        xinfo = self.get_reply_info(datalen)
+        self.send_and_evaluate_info(self.blockerport, target, expected_data=xinfo)
+
+    def test_copy(self):
+        datalen = 1024
+        data = get_random_string(datalen, 16)
+        target = "mytarget"
+        copy_target = "copy_target"
+
+        self.send_and_evaluate_write(self.blockerport, target, data=data,
+                serviced=datalen)
+        self.send_and_evaluate_read(self.blockerport, target, size=datalen,
+                expected_data=data, serviced=datalen)
+        self.send_and_evaluate_copy(self.blockerport, target, dst_target=copy_target,
+                size=datalen, serviced=datalen)
+        self.send_and_evaluate_read(self.blockerport, copy_target, size=datalen,
+                expected_data=data)
 
 
-class FiledTest(XsegTest):
+    def test_delete(self):
+        datalen = 1024
+        data = get_random_string(datalen, 16)
+        target = "mytarget"
+        self.send_and_evaluate_delete(self.blockerport, target, False)
+        self.send_and_evaluate_write(self.blockerport, target, data=data)
+        self.send_and_evaluate_read(self.blockerport, target, size=datalen,
+                expected_data=data)
+        self.send_and_evaluate_delete(self.blockerport, target, True)
+        data = '\x00' * datalen
+        self.send_and_evaluate_read(self.blockerport, target, size=datalen, expected_data=data)
+
+    def test_hash(self):
+        datalen = 1024
+        data = '\x00'*datalen
+        target = "target_zeros"
+
+
+        self.send_and_evaluate_write(self.blockerport, target, data=data,
+                serviced=datalen)
+        ret = self.get_hash_reply(sha256(data.rstrip('\x00')).hexdigest())
+        self.send_and_evaluate_hash(self.blockerport, target, size=datalen,
+                expected_data=ret, serviced=datalen)
+
+        target = "mytarget"
+        data = get_random_string(datalen, 16)
+        self.send_and_evaluate_write(self.blockerport, target, data=data,
+                serviced=datalen)
+        ret = self.get_hash_reply(sha256(data.rstrip('\x00')).hexdigest())
+        self.send_and_evaluate_hash(self.blockerport, target, size=datalen,
+                expected_data=ret, serviced=datalen)
+        self.send_and_evaluate_hash(self.blockerport, target, size=datalen,
+                expected_data=ret, serviced=datalen)
+        self.send_and_evaluate_hash(self.blockerport, target, size=datalen,
+                expected_data=ret, serviced=datalen)
+
+    def test_locking(self):
+        target = "mytarget"
+        self.send_and_evaluate_acquire(self.blockerport, target, expected=True)
+        self.send_and_evaluate_acquire(self.blockerport, target, expected=True)
+        self.send_and_evaluate_release(self.blockerport, target, expected=True)
+        self.send_and_evaluate_release(self.blockerport, target, expected=False)
+        self.send_and_evaluate_acquire(self.blockerport, target, expected=True)
+        stop_peer(self.blocker)
+        start_peer(self.blocker)
+        self.send_and_evaluate_acquire(self.blockerport, target, expected=False)
+        self.send_and_evaluate_release(self.blockerport, target, expected=False)
+        self.send_and_evaluate_release(self.blockerport, target, force=True,
+                expected=True)
+
+
+class FiledTest(BlockerTest, XsegTest):
     filed_args = {
             'role': 'testfiled',
             'spec': XsegTest.spec,
@@ -991,110 +1095,60 @@ class FiledTest(XsegTest):
     def setUp(self):
         super(FiledTest, self).setUp()
         try:
-            self.filed = self.get_filed(self.filed_args, clean=True)
-            self.filedport = self.filed.portno_start
-            start_peer(self.filed)
+            self.blocker = self.get_filed(self.filed_args, clean=True)
+            self.blockerport = self.blocker.portno_start
+            start_peer(self.blocker)
         except Exception as e:
             super(FiledTest, self).tearDown()
             raise e
 
     def tearDown(self):
-        stop_peer(self.filed)
+        stop_peer(self.blocker)
         super(FiledTest, self).tearDown()
-
-    def test_write_read(self):
-        datalen = 1024
-        data = get_random_string(datalen, 16)
-        target = "mytarget"
-        xinfo = self.get_reply_info(datalen)
-
-        self.send_and_evaluate_write(self.filedport, target, data=data,
-                serviced=datalen)
-        self.send_and_evaluate_read(self.filedport, target, size=datalen,
-                expected_data=data)
-        self.send_and_evaluate_info(self.filedport, target, expected_data=xinfo)
-        stop_peer(self.filed)
-        start_peer(self.filed)
-        self.send_and_evaluate_read(self.filedport, target, size=datalen,
-                expected_data=data)
-        self.send_and_evaluate_info(self.filedport, target, expected_data=xinfo)
-
-    def test_info(self):
-        datalen = 1024
-        data = get_random_string(datalen, 16)
-        target = "mytarget"
-        self.send_and_evaluate_write(self.filedport, target, data=data,
-                serviced=datalen)
-        xinfo = self.get_reply_info(datalen)
-        self.send_and_evaluate_info(self.filedport, target, expected_data=xinfo)
-
-    def test_copy(self):
-        datalen = 1024
-        data = get_random_string(datalen, 16)
-        target = "mytarget"
-        copy_target = "copy_target"
-
-        self.send_and_evaluate_write(self.filedport, target, data=data,
-                serviced=datalen)
-        self.send_and_evaluate_read(self.filedport, target, size=datalen,
-                expected_data=data, serviced=datalen)
-        self.send_and_evaluate_copy(self.filedport, target, dst_target=copy_target,
-                size=datalen, serviced=datalen)
-        self.send_and_evaluate_read(self.filedport, copy_target, size=datalen,
-                expected_data=data)
 
     def test_locking(self):
         target = "mytarget"
-        self.send_and_evaluate_acquire(self.filedport, target, expected=True)
-        self.send_and_evaluate_acquire(self.filedport, target, expected=True)
-        self.send_and_evaluate_release(self.filedport, target, expected=True)
-        self.send_and_evaluate_release(self.filedport, target, expected=False)
-        self.send_and_evaluate_acquire(self.filedport, target, expected=True)
-        stop_peer(self.filed)
+        self.send_and_evaluate_acquire(self.blockerport, target, expected=True)
+        self.send_and_evaluate_acquire(self.blockerport, target, expected=True)
+        self.send_and_evaluate_release(self.blockerport, target, expected=True)
+        self.send_and_evaluate_release(self.blockerport, target, expected=False)
+        self.send_and_evaluate_acquire(self.blockerport, target, expected=True)
+        stop_peer(self.blocker)
         new_filed_args = copy(self.filed_args)
         new_filed_args['unique_str'] = 'ThisisSparta'
-        self.filed = Filed(**new_filed_args)
-        start_peer(self.filed)
-        self.send_and_evaluate_acquire(self.filedport, target, expected=False)
-        self.send_and_evaluate_release(self.filedport, target, expected=False)
-        self.send_and_evaluate_release(self.filedport, target, force=True,
+        self.blocker = Filed(**new_filed_args)
+        start_peer(self.blocker)
+        self.send_and_evaluate_acquire(self.blockerport, target, expected=False)
+        self.send_and_evaluate_release(self.blockerport, target, expected=False)
+        self.send_and_evaluate_release(self.blockerport, target, force=True,
                 expected=True)
 
-    def test_delete(self):
-        datalen = 1024
-        data = get_random_string(datalen, 16)
-        target = "mytarget"
-        self.send_and_evaluate_delete(self.filedport, target, False)
-        self.send_and_evaluate_write(self.filedport, target, data=data)
-        self.send_and_evaluate_read(self.filedport, target, size=datalen,
-                expected_data=data)
-        self.send_and_evaluate_delete(self.filedport, target, True)
-        data = '\x00' * datalen
-        self.send_and_evaluate_read(self.filedport, target, size=datalen, expected_data=data)
+class SosdTest(BlockerTest, XsegTest):
+    filed_args = {
+            'role': 'testsosd',
+            'spec': XsegTest.spec,
+            'nr_ops': 16,
+            'portno_start': 0,
+            'portno_end': 0,
+            'daemon': True,
+            'log_level': 3,
+            'pool': 'test_sosd',
+            'nr_threads': 3,
+            }
 
-    def test_hash(self):
-        datalen = 1024
-        data = '\x00'*datalen
-        target = "target_zeros"
+    def setUp(self):
+        super(SosdTest, self).setUp()
+        try:
+            self.blocker = self.get_sosd(self.filed_args, clean=True)
+            self.blockerport = self.blocker.portno_start
+            start_peer(self.blocker)
+        except Exception as e:
+            super(SosdTest, self).tearDown()
+            raise e
 
-
-        self.send_and_evaluate_write(self.filedport, target, data=data,
-                serviced=datalen)
-        ret = self.get_hash_reply(sha256(data.rstrip('\x00')).hexdigest())
-        self.send_and_evaluate_hash(self.filedport, target, size=datalen,
-                expected_data=ret, serviced=datalen)
-
-        target = "mytarget"
-        data = get_random_string(datalen, 16)
-        self.send_and_evaluate_write(self.filedport, target, data=data,
-                serviced=datalen)
-        ret = self.get_hash_reply(sha256(data.rstrip('\x00')).hexdigest())
-        self.send_and_evaluate_hash(self.filedport, target, size=datalen,
-                expected_data=ret, serviced=datalen)
-        self.send_and_evaluate_hash(self.filedport, target, size=datalen,
-                expected_data=ret, serviced=datalen)
-        self.send_and_evaluate_hash(self.filedport, target, size=datalen,
-                expected_data=ret, serviced=datalen)
+    def tearDown(self):
+        stop_peer(self.blocker)
+        super(SosdTest, self).tearDown()
 
 if __name__=='__main__':
     init()
