@@ -16,9 +16,9 @@
 #     REV=$(KDREV)
 #endif
 
-export VERSION := $(shell head -n 1 debian/changelog | sed -r 's/.* \(([0-9](\.[1-9])+.*)-[0-9]+\) .*/\1/g')
+export VERSION := $(shell head -n 1 debian/changelog | sed -r 's/.* \(([0-9](\.[1-9])+.*)-[0-9]+.*\) .*/\1/g')
 export RAW_VERSION := $(shell echo $(VERSION) | sed 's/~//g')
-export PKG_VERSION := $(shell head -n 1 debian/changelog | sed -r 's/.* \(([0-9](\.[1-9])+.*-[0-9]+)\) .*/\1/g')
+export PKG_VERSION := $(shell head -n 1 debian/changelog | sed -r 's/.* \(([0-9](\.[1-9])+.*-[0-9]+.*)\) .*/\1/g')
 
 # determine fglrx-source package version and warn user if it doesn't match
 SRC_PKG_VERSION := $(shell dpkg -s archipelago-modules-source | grep '^Version:' | cut -d' ' -f2)
