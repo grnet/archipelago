@@ -167,18 +167,10 @@ def list_volumes(**kwargs):
 
 @exclusive(get_port=True)
 def remove(name, **kwargs):
-    try:
-        for f in os.listdir(XSEGBD_SYSFS + "devices/"):
-            d_id = open(XSEGBD_SYSFS + "devices/" + f + "/id")
-            d_id = d_id.read().strip()
-            target = open(XSEGBD_SYSFS + "devices/" + f + "/target")
-            target = target.read().strip()
-            if target == name:
-                raise Error("Volume mapped on device %s%s" % (DEVICE_PREFIX,
-                            d_id))
-
-    except Exception, reason:
-        raise Error(name + ': ' + str(reason))
+    device = is_mapped(name)
+    if device is not None:
+        raise Error("Volume %s mapped on device %s%s" % (name, DEVICE_PREFIX,
+                    device))
 
     ret = False
 	vtool_port = get_vtool_port
@@ -198,6 +190,12 @@ def map_volume(name, **kwargs):
     vport = peers['vlmcd'].portno_start
     if not loaded_module(xsegbd):
         raise Error("Xsegbd module not loaded")
+
+    device = is_mapped(name)
+    if device is not None:
+        raise Error("Volume %s already mapped on device %s%s" % (name,
+            DEVICE_PREFIX, device))
+
     prev = config['XSEGBD_START']
     try:
         result = [int(open(XSEGBD_SYSFS + "devices/" + f + "/srcport").read().
