@@ -75,6 +75,8 @@ xseg/xseg_api.py: xseg.xml
 
 xseg/xprotocol.py: xprotocol.xml
 	$(XML2PY) -d -k defst -c $< -o $@
+	sed -i -e 's/xseg_reply_map_scatterlist \* 0/POINTER(xseg_reply_map_scatterlist)/g' xseg/xprotocol.py
+
 
 install:
 	if [ ! -e xseg/version.py ] ; then \
