@@ -100,7 +100,7 @@ def is_mapped(volume):
 
 
 @exclusive
-def create(name, size=None, snap=None, **kwargs):
+def create(name, size=None, snap=None, cont_addr=False, **kwargs):
     if len(name) < 6:
         raise Error("Name should have at least len 6")
     if size is None and snap is None:
@@ -117,7 +117,7 @@ def create(name, size=None, snap=None, **kwargs):
     xseg_ctx = Xseg_ctx(config['SPEC'], config['VTOOL'])
     mport = peers['mapperd'].portno_start
     req = Request.get_clone_request(xseg_ctx, mport, snap, clone=name,
-            clone_size=size)
+            clone_size=size, cont_addr=cont_addr)
     req.submit()
     req.wait()
     ret = req.success()
