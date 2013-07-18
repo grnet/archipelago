@@ -49,33 +49,47 @@
 #include <math.h>
 #include <string.h>
 
-#define PRINT_SIG(__who, __sig)									\
-	fprintf(stdout, "%s (%lu): id %lu, object %lu, offset %lu\n",		\
-			#__who, (uint64_t)(__sig),							\
-			((struct signature *)__sig)->id,					\
-			((struct signature *)__sig)->object,				\
+#define PRINT_SIG(__who, __sig)						\
+	fprintf(stdout, "%s (%lu): id %lu, object %lu, offset %lu\n",	\
+			#__who, (uint64_t)(__sig),			\
+			((struct signature *)__sig)->id,		\
+			((struct signature *)__sig)->object,		\
 			((struct signature *)__sig)->offset);
 
 struct timespec delay = {0, 4000000};
 
-/******************************\
- * Static miscellaneous tools *
-\******************************/
-static inline uint64_t __get_id()
+__attribute__ ((unused))
+void inspect_obv(struct object_vars *obv)
 {
-	return atol(global_id + 6); /* cut the "bench-" part*/
+	XSEGLOG2(&lc, D, "Struct object vars:\n"
+			"\tname: %s (%d),\n"
+			"\tprefix: %s (%d),\n"
+			"\tseed: %lu (%d),\n"
+			"\tobjnum: %lu (%d)",
+			obv->name, obv->namelen, obv->prefix, obv->prefixlen,
+			obv->seed, obv->seedlen,
+			obv->objnum, obv->objnumlen);
 }
 
-static inline uint64_t __get_object_from_name(char *name)
-{
-	return atol(name + IDLEN); /* cut the "bench-908135-" part*/
-}
-
-static inline uint64_t __get_object(struct bench *prefs, uint64_t new)
+uint64_t __get_object(struct bench *prefs, uint64_t new)
 {
 	if (prefs->ts > 0)
 		new = new / (prefs->os / prefs->bs);
 	return new;
+}
+
+/******************************\
+ * Static miscellaneous tools *
+\******************************/
+static inline uint64_t __get_object_from_name(struct object_vars *obv,
+		char *name)
+{
+	/* In case of --objname switch */
+	if (obv->name[0])
+		return 0;
+
+	/* Keep only the object number */
+	return atol(name + obv->namelen - obv->objnumlen);
 }
 
 static inline int __snap_to_bound8(uint64_t space)
@@ -88,7 +102,7 @@ static inline double __timespec2double(struct timespec num)
 	return (double) (num.tv_sec * pow(10, 9) + num.tv_nsec);
 }
 
-static inline void __write_sig(struct bench_lfsr *sg,	uint64_t *d, uint64_t s,
+static inline void __write_sig(struct bench_lfsr *sg, uint64_t *d, uint64_t s,
 		int pos)
 {
 	uint64_t i;
@@ -152,32 +166,35 @@ static struct tm_result __separate_by_order(double num)
 static void __calculate_bw(struct bench *prefs, double iops, struct bw *bw)
 {
 	bw->val = iops * prefs->bs;
-	strcpy(bw->unit, "B/s");
 
-	if (bw->val < 1024)
+	if (bw->val < 1024) {
+		strcpy(bw->unit, "B/s");
 		return;
+	}
 
 	bw->val = bw->val / 1024;
-	strcpy(bw->unit, "KB/s");
 
-	if (bw->val < 1024)
+	if (bw->val < 1024) {
+		strcpy(bw->unit, "KB/s");
 		return;
+	}
 
 	bw->val = bw->val / 1024;
-	strcpy(bw->unit, "MB/s");
 
-	if (bw->val < 1024)
+	if (bw->val < 1024) {
+		strcpy(bw->unit, "MB/s");
 		return;
+	}
 
 	bw->val = bw->val / 1024;
 	strcpy(bw->unit, "GB/s");
 }
 
-static double __calculate_iops(struct bench *prefs, double elapsed_ns)
+static double __calculate_iops(uint64_t requests, double elapsed_ns)
 {
 	/* elapsed_ns is in nanoseconds, so we convert it to seconds */
 	double elapsed = elapsed_ns / pow(10,9);
-	return (prefs->status->received / elapsed);
+	return (requests / elapsed);
 }
 
 /******************************\
@@ -261,8 +278,44 @@ int read_progress(char *progress)
 {
 	if (strncmp(progress, "no", MAX_ARG_LEN + 1) == 0)
 		return PROGRESS_NO;
-	if (strncmp(progress, "yes", MAX_ARG_LEN + 1) == 0)
-		return PROGRESS_YES;
+	if (strncmp(progress, "req", MAX_ARG_LEN + 1) == 0)
+		return PROGRESS_REQ;
+	if (strncmp(progress, "io", MAX_ARG_LEN + 1) == 0)
+		return PROGRESS_IO;
+	if (strncmp(progress, "both", MAX_ARG_LEN + 1) == 0)
+		return PROGRESS_BOTH;
+	return -1;
+}
+
+/*
+ * Read interval in percentage or raw mode and return its length (in requests)
+ * If syntax is invalid, return 0.
+ */
+uint64_t read_interval(struct bench *prefs, char *str_interval)
+{
+	char *unit = NULL;
+	uint64_t interval;
+
+	interval = strtoll(str_interval, &unit, 10);
+
+	/* If interval is raw number of requests */
+	if (!unit[0] && interval < prefs->status->max)
+		return interval;
+
+	/* If interval is percentage of max requests */
+	if (strncmp(unit, "%", MAX_ARG_LEN + 1) == 0 &&
+			interval > 0 && interval < 100)
+		return calculate_interval(prefs, interval);
+
+	return 0;
+}
+
+int read_ping(char *ping)
+{
+	if (strncmp(ping, "no", MAX_ARG_LEN + 1) == 0)
+		return PING_MODE_OFF;
+	if (strncmp(ping, "yes", MAX_ARG_LEN + 1) == 0)
+		return PING_MODE_ON;
 	return -1;
 }
 
@@ -275,29 +328,82 @@ int read_pattern(char *pattern)
 	return -1;
 }
 
+int validate_seed(struct bench *prefs, unsigned long seed)
+{
+	if (seed < pow(10, prefs->objvars->seedlen))
+		return 0;
+	return -1;
+}
+
 /*******************\
  * Print functions *
 \*******************/
 
-void print_io_stats(struct bench *prefs, double elapsed)
+uint64_t calculate_interval(struct bench *prefs, uint64_t percentage)
 {
-	struct bw bw;
-	double iops;
+	uint64_t interval = round((double)prefs->status->max *
+			(double)percentage / 100);
 
-	/*
-	 * We could malloc struct bw in __calculate_bw, but it's safer in cases when
-	 * there is no memory left.
-	 */
-	iops = __calculate_iops(prefs, elapsed);
-	__calculate_bw(prefs, iops, &bw);
+	if (!interval)
+		interval = 1;
 
-	fprintf(stdout, "           ~~~~~~~~~~~~~~~~~~~~~~~~\n");
-	fprintf(stdout, "Bandwidth:    %.3lf %s\n", bw.val, bw.unit);
-	fprintf(stdout, "IOPS:         %.3lf\n", iops);
-	fflush(stdout);
+	return interval;
 }
 
-void print_stats(struct bench *prefs)
+int calculate_report_lines(struct bench *prefs)
+{
+	int progress = GET_FLAG(PROGRESS, prefs->flags);
+	int lines = 0;
+
+	if (progress == PROGRESS_REQ ||	progress == PROGRESS_BOTH) {
+		lines = 6;
+		if ((GET_FLAG(VERIFY, prefs->flags) != VERIFY_NO) &&
+				(prefs->op == X_READ))
+			lines++;
+	}
+	if (progress == PROGRESS_IO ||	progress == PROGRESS_BOTH) {
+		lines += 1;
+		if (prefs->op == X_READ || prefs->op == X_WRITE)
+			lines++;
+	}
+
+	return lines;
+}
+
+void clear_report_lines(int lines)
+{
+	fprintf(stdout, "\033[%dA\033[J", lines);
+}
+
+void print_divider()
+{
+	fprintf(stdout, "           ~~~~~~~~~~~~~~~~~~~~~~~~\n");
+}
+
+void print_io_stats(struct bench *prefs)
+{
+	struct timer *tm = prefs->total_tm;
+	struct bw bw;
+	double elapsed;
+	double iops;
+
+	if (!prefs->status->received) {
+		if (prefs->op == X_READ || prefs->op == X_WRITE)
+			fprintf(stdout, "Bandwidth:    NaN\n");
+		fprintf(stdout, "IOPS:         NaN\n");
+		return;
+	}
+
+	elapsed = __timespec2double(tm->elapsed_time);
+	iops = __calculate_iops(prefs->rep->interval, elapsed);
+	__calculate_bw(prefs, iops, &bw);
+
+	if (prefs->op == X_READ || prefs->op == X_WRITE)
+		fprintf(stdout, "Bandwidth:    %.3lf %s\n", bw.val, bw.unit);
+	fprintf(stdout, "IOPS:         %.3lf\n", iops);
+}
+
+void print_req_stats(struct bench *prefs)
 {
 	fprintf(stdout, "\n"
 			"Requests total:     %10lu\n"
@@ -308,10 +414,11 @@ void print_stats(struct bench *prefs)
 			prefs->status->submitted,
 			prefs->status->received,
 			prefs->status->failed);
-	if ((prefs->op == X_READ) && (GET_FLAG(VERIFY, prefs->flags) != VERIFY_NO))
-		fprintf(stdout, "Requests corrupted: %10lu\n", prefs->status->corrupted);
+	if ((prefs->op == X_READ) &&
+			(GET_FLAG(VERIFY, prefs->flags) != VERIFY_NO))
+		fprintf(stdout, "Requests corrupted: %10lu\n",
+				prefs->status->corrupted);
 	fprintf(stdout, "\n");
-	fflush(stdout);
 }
 
 void print_remaining(struct bench *prefs)
@@ -323,11 +430,11 @@ void print_remaining(struct bench *prefs)
 		fprintf(stdout, "Requests remaining: %10lu\n", remaining);
 	else
 		fprintf(stdout, "All requests have been served.\n");
-	fflush(stdout);
 }
 
-void print_res(struct bench *prefs, struct timer *tm, char *type)
+void print_total_res(struct bench *prefs)
 {
+	struct timer *tm = prefs->total_tm;
 	struct tm_result res;
 	double sum;
 
@@ -335,69 +442,83 @@ void print_res(struct bench *prefs, struct timer *tm, char *type)
 	res = __separate_by_order(sum);
 
 	fprintf(stdout, "\n");
-	fprintf(stdout, "              %s\n", type);
+	fprintf(stdout, "              Benchmark results\n");
 	fprintf(stdout, "           ========================\n");
 	fprintf(stdout, "             |-s-||-ms-|-us-|-ns-|\n");
 	fprintf(stdout, "Total time:   %3u. %03u  %03u  %03u\n",
 			res.s, res.ms, res.us, res.ns);
-	fflush(stdout);
+}
 
-	if (!prefs->status->received)
+void print_rec_res(struct bench *prefs)
+{
+	struct timer *tm = prefs->rec_tm;
+	struct tm_result res;
+	double sum;
+
+	if (!prefs->status->received) {
+		fprintf(stdout, "Avg. latency: NaN\n");
 		return;
+	}
 
+	sum = __timespec2double(tm->sum);
 	res = __separate_by_order(sum / prefs->status->received);
 
-	fprintf(stdout, "Mean Time:    %3u. %03u  %03u  %03u\n",
+	fprintf(stdout, "Avg. latency: %3u. %03u  %03u  %03u\n",
 			res.s, res.ms, res.us, res.ns);
+}
+
+static void __print_progress(struct bench *prefs)
+{
+	int progress = GET_FLAG(PROGRESS, prefs->flags);
+
+	if (progress == PROGRESS_REQ ||	progress == PROGRESS_BOTH)
+			print_req_stats(prefs);
+	if (progress == PROGRESS_IO ||	progress == PROGRESS_BOTH)
+			print_io_stats(prefs);
 	fflush(stdout);
+}
 
-	//TODO: Add std
-
-	print_io_stats(prefs, sum);
+void print_dummy_progress(struct bench *prefs)
+{
+	__print_progress(prefs);
 }
 
 void print_progress(struct bench *prefs)
 {
-	int lines = 6;
-
-	if ((prefs->op == X_READ) && (GET_FLAG(VERIFY, prefs->flags) != VERIFY_NO))
-		lines++;
-
-	fprintf(stdout, "\033[%dA\033[J", lines);
-	print_stats(prefs);
+	timer_stop(prefs, prefs->total_tm, NULL);
+	clear_report_lines(prefs->rep->lines);
+	__print_progress(prefs);
+	timer_start(prefs, prefs->total_tm);
 }
 
 /**************************\
  * Benchmarking functions *
 \**************************/
 
-void create_id(unsigned long seed)
-{
-	if (seed > pow(10, 9))
-		XSEGLOG2(&lc, W, "Seed larger than 10^9, only its first 9 digits will "
-				"be used\n");
-
-	//nanoseconds can't be more than 9 digits
-	snprintf(global_id, IDLEN + 1, "bench-%09lu", seed);
-}
-
-void create_target(struct bench *prefs, struct xseg_request *req,
-		uint64_t new)
+void create_target(struct bench *prefs, struct xseg_request *req)
 {
 	struct xseg *xseg = prefs->peer->xseg;
+	struct object_vars *obv = prefs->objvars;
 	char *req_target;
-	char buf[TARGETLEN + 1];
 
 	req_target = xseg_get_target(xseg, req);
 
-	//For read/write, the target object may not correspond to `new`, which is
-	//actually the chunk number.
-	new = __get_object(prefs, new);
-	snprintf(buf, TARGETLEN + 1, "%s-%016lu", global_id, new);
-	strncpy(req_target, buf, TARGETLEN);
-	XSEGLOG2(&lc, D, "Target name of request is %s\n", buf);
+	/*
+	 * For read/write, the target object may not correspond to `new`, which
+	 * is actually the chunk number.
+	 * Also, we use one extra byte while writting the target's name to store
+	 * the null character and not overflow, but this will not be part of the
+	 * target's name
+	 */
+	if (obv->prefix[0]) {
+		snprintf(req_target, obv->namelen + 1, "%s-%0*lu-%0*lu",
+				obv->prefix, obv->seedlen, obv->seed,
+				obv->objnumlen, obv->objnum);
+	} else {
+		strncpy(req_target, obv->name, obv->namelen);
+	}
+	XSEGLOG2(&lc, D, "Target name of request is %s\n", req_target);
 }
-
 
 uint64_t determine_next(struct bench *prefs)
 {
@@ -415,12 +536,6 @@ uint64_t calculate_offset(struct bench *prefs, uint64_t new)
 		return 0;
 }
 
-uint64_t calculate_prog_quantum(struct bench *prefs)
-{
-	return round((double)prefs->status->max / 20.0);
-}
-
-
 /*
  * ***********************************************
  * `create_chunk` handles 3 identifiers:
@@ -429,7 +544,7 @@ uint64_t calculate_prog_quantum(struct bench *prefs)
  * 3. The chunk offset in the object
  *
  * ************************************************
- * `_create_chunk_full` takes the above 3 identifiers and feeds them as seeds
+ * `readwrite_chunk_full` takes the above 3 identifiers and feeds them as seeds
  * in 63-bit LFSRs. The numbers generated are written consecutively in chunk's
  * memory range. For example, for a 72-byte chunk:
  *
@@ -448,21 +563,29 @@ uint64_t calculate_prog_quantum(struct bench *prefs)
  * **************************************************
  * In both cases, special care is taken not to exceed the chunk's memory range.
  * Also, the bare minimum chunk to verify should be 48 bytes. This limit is set
- * by _create_chunk_meta, which expects to write in a memory at least this big.
+ * by readwrite_chunk_meta, which expects to write in a memory at least this
+ * big.
+ *
+ * **************************************************
+ * Note: The diagram above also represents the x86_64's endianness.
+ * Endianness must be taken into careful consideration when examining a memory
+ * chunk.
  */
-static int _readwrite_chunk_full(struct xseg *xseg, struct xseg_request *req,
-		uint64_t id, uint64_t object)
+static int readwrite_chunk_full(struct bench *prefs, struct xseg_request *req)
 {
 	struct bench_lfsr id_lfsr;
 	struct bench_lfsr obj_lfsr;
 	struct bench_lfsr off_lfsr;
+	struct xseg *xseg = prefs->peer->xseg;
+	uint64_t id = prefs->objvars->seed;
+	uint64_t object = prefs->objvars->objnum;
 	uint64_t *d = (uint64_t *)xseg_get_data(xseg, req);
 	uint64_t s = req->size;
 
 	/* Create 63-bit LFSRs */
-	lfsr_init(&id_lfsr, 0x7FFFFFFF, id, 0);
-	lfsr_init(&obj_lfsr, 0x7FFFFFFF, object, 0);
-	lfsr_init(&off_lfsr, 0x7FFFFFFF, req->offset, 0);
+	lfsr_init(&id_lfsr, 0x7FFFFFFFFFFFFFFF, id, 0);
+	lfsr_init(&obj_lfsr, 0x7FFFFFFFFFFFFFFF, object, 0);
+	lfsr_init(&off_lfsr, 0x7FFFFFFFFFFFFFFF, req->offset, 0);
 
 	if (s < sizeof(struct signature)) {
 		XSEGLOG2(&lc, E, "Too small chunk size (%lu butes). Leaving.", s);
@@ -490,12 +613,14 @@ static int _readwrite_chunk_full(struct xseg *xseg, struct xseg_request *req,
 	return 0;
 }
 
-static int _readwrite_chunk_meta(struct xseg *xseg, struct xseg_request *req,
-		uint64_t id, uint64_t object)
+static int readwrite_chunk_meta(struct bench *prefs, struct xseg_request *req)
 {
+	struct xseg *xseg = prefs->peer->xseg;
+	struct signature sig;
+	uint64_t id = prefs->objvars->seed;
+	uint64_t object = prefs->objvars->objnum;
 	char *d = xseg_get_data(xseg, req);
 	uint64_t s = req->size;
-	struct signature sig;
 	int sig_s = sizeof(struct signature);
 	int r = 0;
 
@@ -504,7 +629,8 @@ static int _readwrite_chunk_meta(struct xseg *xseg, struct xseg_request *req,
 	sig.offset = req->offset;
 
 	if (s < sig_s) {
-		XSEGLOG2(&lc, E, "Too small chunk size (%lu butes). Leaving.", s);
+		XSEGLOG2(&lc, E, "Too small chunk size (%lu butes). "
+				"Leaving.", s);
 		return 1;
 	}
 
@@ -527,13 +653,9 @@ static int _readwrite_chunk_meta(struct xseg *xseg, struct xseg_request *req,
 /*
  * We want these functions to be as fast as possible in case we haven't asked
  * for verification
- * TODO: Make them prettier but keep the speed of this implementation
  */
 void create_chunk(struct bench *prefs, struct xseg_request *req, uint64_t new)
 {
-	struct xseg *xseg = prefs->peer->xseg;
-	uint64_t id;
-	uint64_t object;
 	int verify;
 
 	verify = GET_FLAG(VERIFY, prefs->flags);
@@ -541,25 +663,23 @@ void create_chunk(struct bench *prefs, struct xseg_request *req, uint64_t new)
 		case VERIFY_NO:
 			break;
 		case VERIFY_META:
-			id = __get_id();
-			object = __get_object(prefs, new);
-			_readwrite_chunk_meta(xseg, req, id, object);
+			inspect_obv(prefs->objvars);
+			readwrite_chunk_meta(prefs, req);
 			break;
 		case VERIFY_FULL:
-			id = __get_id();
-			object = __get_object(prefs, new);
-			_readwrite_chunk_full(xseg, req, id, object);
+			inspect_obv(prefs->objvars);
+			readwrite_chunk_full(prefs, req);
 			break;
 		default:
-			XSEGLOG2(&lc, W, "Unexpected verification mode: %d\n", verify);
+			XSEGLOG2(&lc, W, "Unexpected verification mode: %d\n",
+					verify);
 	}
 }
 
 int read_chunk(struct bench *prefs, struct xseg_request *req)
 {
 	struct xseg *xseg = prefs->peer->xseg;
-	uint64_t id;
-	uint64_t object;
+	struct object_vars *obv = prefs->objvars;
 	char *target;
 	int verify;
 	int r = 0;
@@ -569,19 +689,20 @@ int read_chunk(struct bench *prefs, struct xseg_request *req)
 		case VERIFY_NO:
 			break;
 		case VERIFY_META:
-			id = __get_id();
 			target = xseg_get_target(xseg, req);
-			object = __get_object_from_name(target);
-			r = _readwrite_chunk_meta(xseg, req, id, object);
+			obv->objnum = __get_object_from_name(obv, target);
+			inspect_obv(prefs->objvars);
+			r = readwrite_chunk_meta(prefs, req);
 			break;
 		case VERIFY_FULL:
-			id = __get_id();
 			target = xseg_get_target(xseg, req);
-			object = __get_object_from_name(target);
-			r = _readwrite_chunk_full(xseg, req, id, object);
+			obv->objnum = __get_object_from_name(obv, target);
+			inspect_obv(prefs->objvars);
+			r = readwrite_chunk_full(prefs, req);
 			break;
 		default:
-			XSEGLOG2(&lc, W, "Unexpected verification mode: %d\n", verify);
+			XSEGLOG2(&lc, W, "Unexpected verification mode: %d\n",
+					verify);
 	}
 	return r;
 }
