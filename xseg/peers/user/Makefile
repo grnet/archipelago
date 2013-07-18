@@ -36,7 +36,7 @@
 
 include $(XSEG_HOME)/base.mk
 #PEERS := xseg archip-sosd archip-mapperd archip-vlmcd archip-filed archip-bench
-PEERS := xseg archip-mapperd archip-vlmcd archip-filed archip-bench archip-dummy
+PEERS := xseg archip-sosd archip-mapperd archip-vlmcd archip-filed archip-bench archip-dummy
 
 FILES="Makefile"
 FILES+=$(shell ls *.h)
