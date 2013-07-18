@@ -341,7 +341,11 @@ static int do_accepted_pr(struct peerd *peer, struct peer_req *pr)
 		case X_INFO: vio->mreq->op = X_INFO; break;
 		case X_CLOSE: vio->mreq->op = X_CLOSE; break;
 		case X_OPEN: vio->mreq->op = X_OPEN; break;
-		case X_SNAPSHOT: vio->mreq->op = X_SNAPSHOT; break;
+		case X_SNAPSHOT:
+			     //FIXME hack
+			     vio->mreq->op = X_SNAPSHOT;
+			     vio->mreq->data = pr->req->data;
+			     break;
 		default: goto out_put;
 	}
 	xseg_set_req_data(peer->xseg, vio->mreq, pr);
@@ -454,17 +458,35 @@ static int handle_accepted(struct peerd *peer, struct peer_req *pr,
 static int mapping_info(struct peerd *peer, struct peer_req *pr)
 {
 	struct vlmc_io *vio = __get_vlmcio(pr);
+	struct xseg_request *req = pr->req;
+	char *target;
+	char buf[XSEG_MAX_TARGETLEN + 1];
+	int r;
+
 	if (vio->mreq->state & XS_FAILED){
 		XSEGLOG2(&lc, E, "Info req %lx failed",
 				(unsigned long)vio->mreq);
 		vio->err = 1;
 	}
 	else {
+		if (req->datalen < sizeof(struct xseg_reply_info)) {
+			target = xseg_get_target(peer->xseg, req);
+			strncpy(buf, target, req->targetlen);
+			r = xseg_resize_request(peer->xseg, req, req->targetlen, sizeof(struct xseg_reply_info));
+			if (r < 0) {
+				XSEGLOG2(&lc, E, "Cannot resize request");
+				vio->err = 1;
+				goto out;
+			}
+			target = xseg_get_target(peer->xseg, req);
+			strncpy(target, buf, req->targetlen);
+		}
 		struct xseg_reply_info *xinfo = (struct xseg_reply_info *)xseg_get_data(peer->xseg, vio->mreq);
 		char *data = xseg_get_data(peer->xseg, pr->req);
 		struct xseg_reply_info *xreply = (struct xseg_reply_info *)data;
 		xreply->size = xinfo->size;
 	}
+out:
 	xseg_put_request(peer->xseg, vio->mreq, pr->portno);
 	vio->mreq = NULL;
 	conclude_pr(peer, pr);
@@ -542,23 +564,6 @@ static int mapping_snapshot(struct peerd *peer, struct peer_req *pr)
 		XSEGLOG2(&lc, E, "req %lx (op: %d) failed",
 				(unsigned long)vio->mreq, vio->mreq->op);
 		vio->err = 1;
-	}
-	else {
-		struct xseg_reply_snapshot *xreply = (struct xseg_reply_snapshot *) xseg_get_data(peer->xseg, vio->mreq);
-		char buf[XSEG_MAX_TARGETLEN];
-		strncpy(buf, target, pr->req->targetlen);
-		int r = xseg_resize_request(peer->xseg, pr->req, pr->req->targetlen, sizeof(struct xseg_reply_snapshot));
-		if (r < 0) {
-			XSEGLOG2(&lc, E, "Cannot resize request");
-			vio->err = 1;
-		}
-		else {
-			target = xseg_get_target(peer->xseg, pr->req);
-			strncpy(target, buf, pr->req->targetlen);
-			char *data = xseg_get_data(peer->xseg, pr->req);
-			struct xseg_reply_snapshot *xsnapshot = (struct xseg_reply_snapshot *) data;
-			*xsnapshot = *xreply;
-		}
 	}
 
 	xseg_put_request(peer->xseg, vio->mreq, pr->portno);

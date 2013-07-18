@@ -307,7 +307,7 @@ xhash_delete__(xhash_t *xhash, xhashidx key, bool vals)
 
     for (;;) {
         if ( item_unused(xhash, idx, vals) ){
-            return -2;
+            return -XHASH_ENOENT;
         }
 
         if ( !item_dummy(xhash, idx, vals) && cmp_fun(kvs[idx],key)){

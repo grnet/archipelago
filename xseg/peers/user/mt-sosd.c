@@ -43,16 +43,13 @@
 #include <openssl/sha.h>
 #include <ctype.h>
 #include <errno.h>
-
-#ifndef SHA256_DIGEST_SIZE
-#define SHA256_DIGEST_SIZE 32
-#endif
-/* hex representation of sha256 value takes up double the sha256 size */
-#define HEXLIFIED_SHA256_DIGEST_SIZE (SHA256_DIGEST_SIZE << 1)
+#include <hash.h>
 
 
 #define LOCK_SUFFIX "_lock"
 #define LOCK_SUFFIX_LEN 5
+#define HASH_SUFFIX "_hash"
+#define HASH_SUFFIX_LEN 5
 
 #define MAX_POOL_NAME 64
 #define MAX_OBJ_NAME (XSEG_MAX_TARGETLEN + LOCK_SUFFIX_LEN + 1)
@@ -69,60 +66,14 @@ void custom_peer_usage()
 		"\n");
 }
 
-/* hexlify function. 
- * Unsafe. Doesn't check if data length is odd!
- */
-static void hexlify(unsigned char *data, char *hex)
-{
-        int i;
-        for (i=0; i<SHA256_DIGEST_LENGTH; i++)
-                sprintf(hex+2*i, "%02x", data[i]);
-}
-/*
-static void unhexlify(char *hex, unsigned char *data)
-{
-        int i;
-        char c;
-        for (i=0; i<SHA256_DIGEST_LENGTH; i++){
-                data[i] = 0;
-                c = hex[2*i];
-                if (isxdigit(c)){
-                        if (isdigit(c)){
-                                c-= '0';
-                        }
-                        else {
-                                c = tolower(c);
-                                c = c-'a' + 10;
-                        }
-                }
-                else {
-                        c = 0;
-                }
-                data[i] |= (c << 4) & 0xF0;
-                c = hex[2*i+1];
-                if (isxdigit(c)){
-                        if (isdigit(c)){
-                                c-= '0';
-                        }
-                        else {
-                                c = tolower(c);
-                                c = c-'a' + 10;
-                        }
-                }
-                else {
-                        c = 0;
-                }
-                data[i] |= c & 0x0F;
-        }
-}
-*/
-
 enum rados_state {
 	ACCEPTED = 0,
 	PENDING = 1,
 	READING = 2,
 	WRITING = 3,
-	STATING = 4
+	STATING = 4,
+	PREHASHING = 5,
+	POSTHASHING= 6
 };
 
 struct radosd {
@@ -266,8 +217,10 @@ int handle_info(struct peerd *peer, struct peer_req *pr)
 	struct xseg_request *req = pr->req;
 	//struct radosd *rados = (struct radosd *) peer->priv;
 	struct rados_io *rio = (struct rados_io *) pr->priv;
-	char *req_data = xseg_get_data(peer->xseg, req);
-	struct xseg_reply_info *xinfo = (struct xseg_reply_info *)req_data;
+	char *req_data;
+	struct xseg_reply_info *xinfo;
+	char buf[XSEG_MAX_TARGETLEN + 1];
+	char *target;
 
 	if (rio->state == ACCEPTED) {
 		XSEGLOG2(&lc, I, "Getting info of %s", rio->obj_name);
@@ -279,6 +232,21 @@ int handle_info(struct peerd *peer, struct peer_req *pr)
 		}
 	}
 	else {
+		if (req->datalen < sizeof(struct xseg_reply_info)) {
+			target = xseg_get_target(peer->xseg, req);
+			strncpy(buf, target, req->targetlen);
+			r = xseg_resize_request(peer->xseg, req, req->targetlen, sizeof(struct xseg_reply_info));
+			if (r < 0) {
+				XSEGLOG2(&lc, E, "Cannot resize request");
+				fail(peer, pr);
+				return 0;
+			}
+			target = xseg_get_target(peer->xseg, req);
+			strncpy(target, buf, req->targetlen);
+		}
+
+		req_data = xseg_get_data(peer->xseg, req);
+		xinfo = (struct xseg_reply_info *)req_data;
 		if (pr->retval < 0){
 			xinfo->size = 0;
 			XSEGLOG2(&lc, E, "Getting info of %s failed", rio->obj_name);	
@@ -299,6 +267,12 @@ int handle_read(struct peerd *peer, struct peer_req *pr)
 	struct rados_io *rio = (struct rados_io *) (pr->priv);
 	struct xseg_request *req = pr->req;
 	char *data;
+
+	if (req->datalen < req->size) {
+		XSEGLOG2(&lc, E, "Request datalen is less than req size");
+		return -1;
+	}
+
 	if (rio->state == ACCEPTED) {
 		if (!req->size) {
 			complete(peer, pr);
@@ -324,15 +298,15 @@ int handle_read(struct peerd *peer, struct peer_req *pr)
 			/* reached end of object. zero out rest of data
 			 * requested from this object
 			 */
-			memset(data + req->serviced, 0, req->datalen - req->serviced);
-			req->serviced = req->datalen;
+			memset(data + req->serviced, 0, req->size - req->serviced);
+			req->serviced = req->size;
 		}
 		else if (pr->retval == -2) {
 			XSEGLOG2(&lc, I, "Reading of %s return -2. "
 					"Zeroing out data", rio->obj_name);
 			/* object not found. return zeros instead */
-			memset(data, 0, req->datalen);
-			req->serviced = req->datalen;
+			memset(data, 0, req->size);
+			req->serviced = req->size;
 		}
 		else {
 			XSEGLOG2(&lc, E, "Reading of %s failed", rio->obj_name);
@@ -340,7 +314,7 @@ int handle_read(struct peerd *peer, struct peer_req *pr)
 			fail(peer, pr);
 			return 0;
 		}
-		if (req->serviced >= req->datalen) {
+		if (req->serviced >= req->size) {
 			XSEGLOG2(&lc, I, "Reading of %s completed", rio->obj_name);
 			complete(peer, pr);
 			return 0;
@@ -369,6 +343,11 @@ int handle_read(struct peerd *peer, struct peer_req *pr)
 
 int handle_write(struct peerd *peer, struct peer_req *pr)
 {
+	if (pr->req->datalen < pr->req->size) {
+		XSEGLOG2(&lc, E, "Request datalen is less than req size");
+		return -1;
+	}
+
 	struct rados_io *rio = (struct rados_io *) (pr->priv);
 	struct xseg_request *req = pr->req;
 	if (rio->state == ACCEPTED) {
@@ -399,7 +378,7 @@ int handle_write(struct peerd *peer, struct peer_req *pr)
 		XSEGLOG2(&lc, I, "Writing of %s callback", rio->obj_name);
 		if (pr->retval == 0) {
 			XSEGLOG2(&lc, I, "Writing of %s completed", rio->obj_name);
-			req->serviced = req->datalen;
+			req->serviced = req->size;
 			complete(peer, pr);
 			return 0;
 		}
@@ -538,20 +517,22 @@ out_src:
 	return 0;
 }
 
-int handle_snapshot(struct peerd *peer, struct peer_req *pr)
+int handle_hash(struct peerd *peer, struct peer_req *pr)
 {
 	//struct radosd *rados = (struct radosd *) peer->priv;
 	struct xseg_request *req = pr->req;
 	struct rados_io *rio = (struct rados_io *) pr->priv;
+	uint64_t trailing_zeros = 0;
+	unsigned char sha[SHA256_DIGEST_SIZE];
+	struct xseg_reply_hash *xreply;
 	int r;
+	char hash_name[HEXLIFIED_SHA256_DIGEST_SIZE + 1];
+	uint32_t pos;
 
 	if (rio->state == ACCEPTED){
-		struct xseg_request_snapshot *xsnapshot;
-		xsnapshot = (struct xseg_request_snapshot *)xseg_get_data(peer->xseg, req);
-		(void)xsnapshot; //ignore it
-		XSEGLOG2(&lc, I, "Starting snapshot of object %s", rio->obj_name);
+		XSEGLOG2(&lc, I, "Starting hashing of object %s", rio->obj_name);
 		if (!req->size) {
-			complete(peer, pr); //or fail?
+			fail(peer, pr); //or fail?
 			return 0;
 		}
 
@@ -564,6 +545,38 @@ int handle_snapshot(struct peerd *peer, struct peer_req *pr)
 			r = -1;
 			goto out_src;
 		}
+
+		rio->second_name[0] = 0;
+		rio->state = PREHASHING;
+		pos = 0;
+		strncpy(hash_name, rio->obj_name, strlen(rio->obj_name));
+		pos += strlen(rio->obj_name);
+		strncpy(hash_name+pos, HASH_SUFFIX, HASH_SUFFIX_LEN);
+		pos += HASH_SUFFIX_LEN;
+		hash_name[pos] = 0;
+
+		if (do_aio_generic(peer, pr, X_READ, hash_name, rio->second_name,
+			HEXLIFIED_SHA256_DIGEST_SIZE, 0) < 0) {
+			XSEGLOG2(&lc, I, "Reading of %s failed on do_aio_read", rio->obj_name);
+			fail(peer, pr);
+			r = -1;
+			goto out_buf;
+		}
+	} else if (rio->state == PREHASHING) {
+		if (rio->second_name[0] != 0) {
+			XSEGLOG2(&lc, D, "Precalculated hash found");
+			xreply = (struct xseg_reply_hash*)xseg_get_data(peer->xseg, req);
+			r = xseg_resize_request(peer->xseg, pr->req, pr->req->targetlen,
+					sizeof(struct xseg_reply_hash));
+			strncpy(xreply->target, rio->second_name, HEXLIFIED_SHA256_DIGEST_SIZE);
+			xreply->targetlen = HEXLIFIED_SHA256_DIGEST_SIZE;
+
+			XSEGLOG2(&lc, I, "Calculated %s as hash of %s",
+					rio->second_name, rio->obj_name);
+			req->serviced = req->size;
+			goto out_buf;
+
+		}
 		rio->state = READING;
 		rio->read = 0;
 		XSEGLOG2(&lc, I, "Reading %s", rio->obj_name);
@@ -574,8 +587,7 @@ int handle_snapshot(struct peerd *peer, struct peer_req *pr)
 			r = -1;
 			goto out_buf;
 		}
-	}
-	else if (rio->state == READING){
+	} else if (rio->state == READING){
 		XSEGLOG2(&lc, I, "Reading of %s callback", rio->obj_name);
 		if (pr->retval >= 0)
 			rio->read += pr->retval;
@@ -588,7 +600,6 @@ int handle_snapshot(struct peerd *peer, struct peer_req *pr)
 		if (!pr->retval || rio->read >= req->size) {
 			XSEGLOG2(&lc, I, "Reading of %s completed", rio->obj_name);
 			//rstrip here in case zeros were written in the end
-			uint64_t trailing_zeros = 0;
 			for (;trailing_zeros < rio->read; trailing_zeros++)
 				if (rio->buf[rio->read-trailing_zeros -1])
 					break;
@@ -596,21 +607,19 @@ int handle_snapshot(struct peerd *peer, struct peer_req *pr)
 					rio->read, trailing_zeros);
 
 			rio->read -= trailing_zeros;
-			//calculate snapshot name
-			unsigned char sha[SHA256_DIGEST_SIZE];
 			SHA256((unsigned char *) rio->buf, rio->read, sha);
-			r = xseg_resize_request(peer->xseg, pr->req, pr->req->targetlen,
-					sizeof(struct xseg_reply_snapshot));
+			hexlify(sha, SHA256_DIGEST_SIZE, rio->second_name);
+			rio->second_name[HEXLIFIED_SHA256_DIGEST_SIZE] = 0;
 
-			struct xseg_reply_snapshot *xreply;
-			xreply = (struct xseg_reply_snapshot *)xseg_get_data(peer->xseg, req);
-			hexlify(sha, xreply->target);
+			xreply = (struct xseg_reply_hash*)xseg_get_data(peer->xseg, req);
+			r = xseg_resize_request(peer->xseg, pr->req, pr->req->targetlen,
+					sizeof(struct xseg_reply_hash));
+			strncpy(xreply->target, rio->second_name, HEXLIFIED_SHA256_DIGEST_SIZE);
 			xreply->targetlen = HEXLIFIED_SHA256_DIGEST_SIZE;
 
-			strncpy(rio->second_name, xreply->target, xreply->targetlen);
-			rio->second_name[xreply->targetlen] = 0;
-			XSEGLOG2(&lc, I, "Calculated %s as snapshot of %s",
+			XSEGLOG2(&lc, I, "Calculated %s as hash of %s",
 					rio->second_name, rio->obj_name);
+
 
 			//aio_stat
 			rio->state = STATING;
@@ -648,7 +657,7 @@ int handle_snapshot(struct peerd *peer, struct peer_req *pr)
 		else {
 			XSEGLOG2(&lc, I, "Stating %s completed Successfully."
 					"No need to write.", rio->second_name);
-			XSEGLOG2(&lc, I, "Snapshot of object %s to object %s completed",
+			XSEGLOG2(&lc, I, "Hash of object %s to object %s completed",
 					rio->obj_name, rio->second_name);
 			req->serviced = req->size;
 			r = 0;
@@ -657,25 +666,50 @@ int handle_snapshot(struct peerd *peer, struct peer_req *pr)
 
 	}
 	else if (rio->state == WRITING){
-		struct xseg_reply_snapshot *xreply;
-		xreply = (struct xseg_reply_snapshot *)xseg_get_data(peer->xseg, req);
-		(void)xreply;
 		XSEGLOG2(&lc, I, "Writing of %s callback", rio->obj_name);
 		if (pr->retval == 0) {
 			XSEGLOG2(&lc, I, "Writing of %s completed", rio->second_name);
-			XSEGLOG2(&lc, I, "Snapshot of object %s to object %s completed",
+			XSEGLOG2(&lc, I, "Hash of object %s to object %s completed",
 					rio->obj_name, rio->second_name);
-			req->serviced = req->size;
-			r = 0;
-			goto out_buf;
+
+			pos = 0;
+			strncpy(hash_name, rio->obj_name, strlen(rio->obj_name));
+			pos += strlen(rio->obj_name);
+			strncpy(hash_name+pos, HASH_SUFFIX, HASH_SUFFIX_LEN);
+			pos += HASH_SUFFIX_LEN;
+			hash_name[pos] = 0;
+
+			rio->state = POSTHASHING;
+			if (do_aio_generic(peer, pr, X_WRITE, hash_name, rio->second_name,
+						HEXLIFIED_SHA256_DIGEST_SIZE, 0) < 0) {
+				XSEGLOG2(&lc, E, "Writing of %s failed on do_aio_write", hash_name);
+				r = -1;
+				goto out_buf;
+			}
+			return 0;
 		}
 		else {
 			XSEGLOG2(&lc, E, "Writing of %s failed", rio->obj_name);
-			XSEGLOG2(&lc, E, "Snapshot of object %s failed",
+			XSEGLOG2(&lc, E, "Hash of object %s failed",
 								rio->obj_name);
 			r = -1;
 			goto out_buf;
 		}
+	} else if (rio->state == POSTHASHING) {
+		XSEGLOG2(&lc, I, "Writing of prehashed value callback");
+		if (pr->retval == 0) {
+			XSEGLOG2(&lc, I, "Writing of prehashed value completed");
+			XSEGLOG2(&lc, I, "Hash of object %s to object %s completed",
+					rio->obj_name, rio->second_name);
+
+		}
+		else {
+			XSEGLOG2(&lc, E, "Writing of prehash failed");
+		}
+		req->serviced = req->size;
+		r = 0;
+		goto out_buf;
+
 	}
 	else {
 		XSEGLOG2(&lc, E, "Unknown state");
@@ -1027,8 +1061,8 @@ int dispatch(struct peerd *peer, struct peer_req *pr, struct xseg_request *req,
 			handle_acquire(peer, pr); break;
 		case X_RELEASE:
 			handle_release(peer, pr); break;
-		case X_SNAPSHOT:
-			handle_snapshot(peer, pr); break;
+		case X_HASH:
+			handle_hash(peer, pr); break;
 
 		default:
 			fail(peer, pr);

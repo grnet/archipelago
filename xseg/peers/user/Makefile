@@ -35,7 +35,8 @@
 .PHONY: default all clean install install-src
 
 include $(XSEG_HOME)/base.mk
-PEERS := xseg archip-sosd archip-mapperd archip-vlmcd archip-pfiled archip-bench
+#PEERS := xseg archip-sosd archip-mapperd archip-vlmcd archip-filed archip-bench
+PEERS := xseg archip-sosd archip-mapperd archip-vlmcd archip-filed archip-bench archip-dummy
 
 FILES="Makefile"
 FILES+=$(shell ls *.h)
@@ -51,11 +52,8 @@ default: $(PEERS)
 
 #all: filed xseg sosd vlmcd mapperd
 #all: filed xseg vlmcd mapperd
-all: filed xseg archip-sosd dummy archip-vlmcd mapperd archip-mapperd pfiled monitor vlmc-xseg archip-vlmcd archip-pfiled archip-bench
+all: xseg archip-sosd archip-dummy archip-vlmcd mapperd archip-mapperd pfiled monitor vlmc-xseg archip-vlmcd archip-filed archip-bench
 
-
-filed: filed.c $(BASE)/xseg/xseg.h
-	$(CC) $(CFLAGS) -o $@ $< $(INC) -L$(LIB) -lxseg -lpthread
 
 vlmcd: vlmcd.c common.c $(BASE)/xseg/xseg.h $(BASE)/xseg/protocol.h common.h
 	$(CC) $(CFLAGS) -o $@ $< common.c $(INC) -L$(LIB) -lxseg
@@ -66,39 +64,45 @@ mapperd: mapperd.c common.c $(BASE)/xseg/xseg.h $(BASE)/xseg/protocol.h common.h
 sosd: sosd.c $(BASE)/xseg/xseg.h $(BASE)/util_libs/user/sos/sos.h
 	$(CC) $(CFLAGS) -o $@ $< $(INC) -L$(LIB) -lxseg -lsos
 
-xseg: xseg-tool.c $(BASE)/xtypes/xheap.c $(BASE)/xseg/xseg.h
-	$(CC) $(CFLAGS) -o $@ $< $(BASE)/xtypes/xheap.c $(INC) -L$(LIB) -lxseg
-
-archip-sosd: mt-sosd.c peer.c peer.h
-	$(CC) $(CFLAGS) -o $@ $< peer.c $(INC) -L$(LIB) -lxseg -lrados -lpthread \
-							-lcrypto -DMT
-dummy: dummy.c peer.c peer.h
-	$(CC) $(CFLAGS) -o $@ $< peer.c $(INC) -L$(LIB) -lxseg -lpthread -DMT
-
-archip-bench: bench-xseg.c peer.c bench-timer.c bench-lfsr.c bench-utils.c bench-xseg.h peer.h bench-lfsr.h
-	$(CC) $(CFLAGS) -o $@ $(CPREQS) $(INC) -L$(LIB) -lxseg -lpthread -lm
-
 monitor: monitor.c peer.c peer.h
 	$(CC) $(CFLAGS) -o $@ $< peer.c $(INC) -L$(LIB) -lxseg -lpthread -DMT
-
-mt-vlmcd: mt-vlmcd.c peer.c peer.h $(BASE)/xseg/protocol.h
-	$(CC) $(CFLAGS) -o $@ $< peer.c $(INC) -L$(LIB) -lxseg -lpthread -DMT
-
-archip-pfiled: mt-pfiled.c peer.c peer.h $(BASE)/xseg/protocol.h
-	$(CC) $(CFLAGS) -o $@ $< peer.c $(INC) -L$(LIB) -lxseg -lpthread -DMT \
-							-lcrypto
-
-archip-vlmcd: mt-vlmcd.c peer.c peer.h $(BASE)/xseg/protocol.h
-	$(CC) $(CFLAGS) -o $@ $< peer.c $(INC) -L$(LIB) -lxseg
-
-archip-mapperd: mt-mapperd.c peer.c peer.h $(BASE)/xseg/protocol.h
-	$(CC) $(CFLAGS) -o $@ $< peer.c $(INC) -L$(LIB) -DST_THREADS -lxseg -lst -lcrypto
 
 pfiled: pfiled.c common.c $(BASE)/xseg/xseg.h $(BASE)/xseg/protocol.h common.h
 	$(CC) $(CFLAGS) -o $@ $< common.c  $(INC) -L$(LIB) -lxseg -lpthread
 
 vlmc-xseg: vlmc-tool.c $(BASE)/xseg/xseg.h
 	$(CC) $(CFLAGS) -o $@ $< $(INC) -L$(LIB) -lxseg
+
+xseg: xseg-tool.c $(BASE)/xtypes/xheap.c $(BASE)/xseg/xseg.h
+	$(CC) $(CFLAGS) -o $@ $< $(BASE)/xtypes/xheap.c $(INC) -L$(LIB) -lxseg
+
+archip-sosd: mt-sosd.c hash.c hash.h peer.c peer.h
+	$(CC) $(CFLAGS) -o $@ $(CPREQS) $(INC) -L$(LIB) -lxseg -lrados -lpthread \
+							-lcrypto -DMT
+archip-dummy: dummy.c peer.c peer.h
+	$(CC) $(CFLAGS) -o $@ $< peer.c $(INC) -L$(LIB) -lxseg -lpthread -DMT
+
+BENCH_PREQ=bench-xseg.c peer.c bench-lfsr.c bench-timer.c bench-utils.c \
+	   bench-xseg.h peer.h bench-lfsr.h $(BASE)/xseg/protocol.h
+
+archip-bench: $(BENCH_PREQ)
+	$(CC) $(CFLAGS) -o $@ $(CPREQS) $(INC) -L$(LIB) -lxseg -lpthread -lm
+
+archip-filed: filed.c peer.c peer.h hash.c hash.h $(BASE)/xseg/protocol.h
+	$(CC) $(CFLAGS) -o $@ $(CPREQS) $(INC) -L$(LIB) -lxseg -lpthread -DMT \
+							-lcrypto
+
+archip-vlmcd: mt-vlmcd.c peer.c peer.h $(BASE)/xseg/protocol.h
+	$(CC) $(CFLAGS) -o $@ $< peer.c $(INC) -L$(LIB) -lxseg
+
+MAPPER_PREQ=mapper.c mapper.h peer.c peer.h hash.h hash.c mapper-handling.c \
+	    mapper-versions.h mapper-versions.c mapper-version0.h mapper-version0.c \
+	    mapper-version1.h mapper-version1.c mapper-version2.h mapper-version2.c \
+	    $(BASE)/xseg/protocol.h
+
+archip-mapperd: $(MAPPER_PREQ)
+	$(CC) $(CFLAGS) -o $@ $(CPREQS) $(INC) -L$(LIB) -DST_THREADS \
+							-lxseg -lst -lcrypto
 
 install:
 	install -d $(DESTDIR)$(bindir)
@@ -113,5 +117,6 @@ install-src:
 	done
 
 clean:
-	rm -f filed xseg sosd vlmcd mapperd archip-sosd monitor archip-mapperd \
-		pfiled vlmc-xseg archip-vlmcd mt-vlmcd archip-pfiled archip-bench
+	rm -f xseg sosd vlmcd mapperd archip-sosd monitor archip-mapperd \
+		pfiled vlmc-xseg archip-vlmcd archip-filed archip-bench \
+		archip-dummy
