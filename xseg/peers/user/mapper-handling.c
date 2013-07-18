@@ -599,8 +599,8 @@ struct xseg_request * __copyup_object(struct peer_req *pr, struct map_node *mn)
 
 	strncpy(new_target, MAPPER_PREFIX, MAPPER_PREFIX_LEN);
 
-	hexlify((unsigned char *)&map->epoch, HEXLIFIED_EPOCH, hexlified_epoch);
-	hexlify((unsigned char *)&mn->objectidx, HEXLIFIED_INDEX, hexlified_index);
+	hexlify((unsigned char *)&map->epoch, sizeof(map->epoch), hexlified_epoch);
+	hexlify((unsigned char *)&mn->objectidx, sizeof(mn->objectidx), hexlified_index);
 	strncpy(tmp, map->volume, map->volumelen);
 	tmp += map->volumelen;
 	strncpy(tmp, "_", 1);
