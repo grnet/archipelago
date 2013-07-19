@@ -92,7 +92,7 @@ void custom_peer_usage()
 		"    --progress| both    | Show progress of benchmark:\n"
 		"	       |         |     [req|io|both|no]\n"
 		"    --interval| 5%%     | Intervals at which progress is shown\n"
-		"    --ping    | yes     | Ping target before starting:\n"
+		"    --ping    | no      | Ping target before starting:\n"
 		"              |         |     [yes|no]\n"
 		"    --prefix  | bench   | Add a common prefix to all object names\n"
 		"    --objname | None    | Use only one object with this name\n"
@@ -574,7 +574,7 @@ reseed:
 
 	/* Pinging the target peer is on by default */
 	if (!ping[0])
-		strcpy(ping, "yes");
+		strcpy(ping, "no");
 	r = read_ping(ping);
 	if (r < 0) {
 		XSEGLOG2(&lc, E, "Invalid syntax: --ping %s\n", ping);
