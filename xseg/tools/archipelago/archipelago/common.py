@@ -359,7 +359,8 @@ config = {
     'SPEC': "segdev:xsegbd:1024:5120:12",
     'XSEGBD_START': 0,
     'XSEGBD_END': 499,
-    'VTOOL': 1003,
+    'VTOOL_START': 1003,
+    'VTOOL_END': 1003,
     #RESERVED 1023
 }
 
@@ -474,7 +475,7 @@ def check_conf():
         validatePortRange(peers[role].portno_start, peers[role].portno_end,
                           xseg_ports)
 
-    validatePortRange(config['VTOOL'], config['VTOOL'], xseg_ports)
+    validatePortRange(config['VTOOL_START'], config['VTOOL_END'], xseg_ports)
     validatePortRange(config['XSEGBD_START'], config['XSEGBD_END'],
                       xseg_ports)
     return True
@@ -515,8 +516,12 @@ def construct_peers():
 
     #return exclusive_args
 
-def get_random_vlmc_port():
-    return random.randint(config['VTOOL_START'], config['VTOOL_END'])
+vtool_port = None
+def get_vlmc_port():
+    global vtool_port
+    if vtool_port is None:
+        vtool_port = random.randint(config['VTOOL_START'], config['VTOOL_END'])
+    return vtool_port
 
 acquired_locks = {}
 
@@ -534,11 +539,7 @@ def get_lock(lock_file):
     return fd
 
 def exclusive(get_port=False):
-    port = None
-    if get_port:
-        port = get_random_vlmc_port()
-
-    def wrap(func):
+    def wrap(fn):
         def lock(*args, **kwargs):
             if not os.path.exists(LOCK_PATH):
                 try:
@@ -549,8 +550,9 @@ def exclusive(get_port=False):
             if not os.path.isdir(LOCK_PATH):
                 raise Error("Locking error: %s is not a directory" % LOCK_PATH)
 
-            if port is not None:
-                lock_file = os.path.join(LOCK_PATH, VLMC_LOCK_FILE + '_' + str(port))
+            if get_port:
+                vtool_port = get_vlmc_port()
+                lock_file = os.path.join(LOCK_PATH, VLMC_LOCK_FILE + '_' + str(vtool_port))
             else:
                 lock_file = os.path.join(LOCK_PATH, VLMC_LOCK_FILE)
             try:
