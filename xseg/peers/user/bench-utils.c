@@ -139,12 +139,19 @@ int read_progress(char *progress)
 {
 	if (strncmp(progress, "no", MAX_ARG_LEN + 1) == 0)
 		return PROGRESS_NO;
-	if (strncmp(progress, "req", MAX_ARG_LEN + 1) == 0)
-		return PROGRESS_REQ;
-	if (strncmp(progress, "io", MAX_ARG_LEN + 1) == 0)
-		return PROGRESS_IO;
-	if (strncmp(progress, "both", MAX_ARG_LEN + 1) == 0)
-		return PROGRESS_BOTH;
+	if (strncmp(progress, "yes", MAX_ARG_LEN + 1) == 0)
+		return PROGRESS_YES;
+	return -1;
+}
+
+int read_progress_type(char *ptype)
+{
+	if (strncmp(ptype, "req", MAX_ARG_LEN + 1) == 0)
+		return PTYPE_REQ;
+	if (strncmp(ptype, "io", MAX_ARG_LEN + 1) == 0)
+		return PTYPE_IO;
+	if (strncmp(ptype, "both", MAX_ARG_LEN + 1) == 0)
+		return PTYPE_BOTH;
 	return -1;
 }
 

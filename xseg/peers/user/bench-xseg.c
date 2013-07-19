@@ -101,11 +101,13 @@ void custom_peer_usage()
 		"\n"
 		"d) Progress report options: \n"
 		"  --------------------------------------------\n"
+		"    --progress  | yes     | Show progress of benchmark:\n"
+		"                |         |     [yes|no]\n"
+		"    --ptype     | both    | Progress report type:\n"
+		"                |         |     [req|io|both]\n"
+		"    --pinterval | 5%%      | Intervals at which progress is shown\n"
 		"    --insanity  | sane    | Adjust insanity level of benchmark:\n"
 		"                |         |     [sane|eccentric|manic|paranoid]\n"
-		"    --progress  | both    | Show progress of benchmark:\n"
-		"                |         |     [req|io|both|no]\n"
-		"    --interval  | 5%%      | Intervals at which progress is shown\n"
 		"\n"
 		"e) Misc options: \n"
 		"  --------------------------------------------\n"
@@ -136,7 +138,7 @@ void custom_peer_usage()
 		"   be:\n"
 		"           obj-000000999-000000000000009\n"
 		"\n"
-		" * The above object name structure can by bypassed with the\n"
+		" * The above object name structure can be bypassed with the\n"
 		"   --objname <object name> argument. This implies the\n"
 		"   following:\n"
 		"\n"
@@ -158,11 +160,11 @@ void custom_peer_usage()
 		"\n"
 		" * Interval is commonly a percentage of max requests. This\n"
 		"   means that when a user gives:\n"
-		"           --interval 33%%\n"
+		"           --pinterval 33%%\n"
 		"\n"
 		"   the progress report will be printed 3 times during the\n"
 		"   benchmark. Else, if the user wants to, he/she can give:\n"
-		"           --interval 1234\n"
+		"           --pinterval 1234\n"
 		"\n"
 		"  and the progress report will be printed every 1234\n"
 		"  requests.\n"
@@ -182,7 +184,8 @@ int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 	char insanity[MAX_ARG_LEN + 1];
 	char verify[MAX_ARG_LEN + 1];
 	char progress[MAX_ARG_LEN + 1];
-	char interval[MAX_ARG_LEN + 1];
+	char ptype[MAX_ARG_LEN + 1];
+	char pinterval[MAX_ARG_LEN + 1];
 	char ping[MAX_ARG_LEN + 1];
 	char prefix[XSEG_MAX_TARGETLEN + 1];
 	char objname[XSEG_MAX_TARGETLEN + 1];
@@ -208,7 +211,8 @@ int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 	verify[0] = 0;
 	request_cap[0] = 0;
 	progress[0] = 0;
-	interval[0] = 0;
+	ptype[0] = 0;
+	pinterval[0] = 0;
 	ping[0] = 0;
 	prefix[0] = 0;
 	objname[0] = 0;
@@ -270,7 +274,8 @@ int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 	READ_ARG_STRING("--insanity", insanity, MAX_ARG_LEN);
 	READ_ARG_STRING("--verify", verify, MAX_ARG_LEN);
 	READ_ARG_STRING("--progress", progress, MAX_ARG_LEN);
-	READ_ARG_STRING("--interval", interval, MAX_ARG_LEN);
+	READ_ARG_STRING("--ptype", ptype, MAX_ARG_LEN);
+	READ_ARG_STRING("--pinterval", pinterval, MAX_ARG_LEN);
 	READ_ARG_STRING("--ping", ping, MAX_ARG_LEN);
 	READ_ARG_STRING("--prefix", prefix, XSEG_MAX_TARGETLEN);
 	READ_ARG_STRING("--objname", objname, XSEG_MAX_TARGETLEN);
@@ -553,36 +558,51 @@ reseed:
 		prefs->status->max = rc;
 	}
 
-	/* Benchmarking progress printing is on by default */
+	/**********************************\
+	 * Progress report initialization *
+	\**********************************/
+
+	/* Progress report is on by default */
 	if (!progress[0])
-		strcpy(progress, "both");
+		strcpy(progress, "yes");
 	r = read_progress(progress);
 	if (r < 0) {
 		XSEGLOG2(&lc, E, "Invalid syntax: --progress %s\n", progress);
 		goto arg_fail;
 	}
 	SET_FLAG(PROGRESS, prefs->flags, r);
-	prefs->rep->lines = calculate_report_lines(prefs);
 
 	/*
-	 * Progress report interval definition makes no sense with disabled
-	 * progress reports.
+	 * Progress report interval definition or progress type definition makes
+	 * no sense with disabled progress reports.
 	 */
 	if ((GET_FLAG(PROGRESS, prefs->flags) == PROGRESS_NO) &&
-			interval[0]) {
-		XSEGLOG2(&lc, E, "Cannot define progress interval without "
-				"enabling progress report\n");
+			(pinterval[0] || ptype[0])) {
+		XSEGLOG2(&lc, E, "Cannot define progress interval or progress "
+				"type without enabling progress report\n");
 		goto arg_fail;
 	}
 
 	if (GET_FLAG(PROGRESS, prefs->flags) != PROGRESS_NO) {
+		/* Progress type is 'both' by default */
+		if (!ptype[0])
+			strcpy(ptype, "both");
+		prefs->rep->type = read_progress_type(ptype);
+		if (prefs->rep->type < 0) {
+			XSEGLOG2(&lc, E, "Invalid syntax: --ptype %s\n", ptype);
+			goto arg_fail;
+		}
+		prefs->rep->lines = calculate_report_lines(prefs);
+	}
+
+	if (GET_FLAG(PROGRESS, prefs->flags) != PROGRESS_NO) {
 		/* By default, we print every 5% */
-		if (!interval[0])
-			strcpy(interval, "5%");
-		prefs->rep->interval = read_interval(prefs, interval);
+		if (!pinterval[0])
+			strcpy(pinterval, "5%");
+		prefs->rep->interval = read_interval(prefs, pinterval);
 		if (prefs->rep->interval == 0) {
-			XSEGLOG2(&lc, E, "Invalid syntax: --interval %s\n",
-					interval);
+			XSEGLOG2(&lc, E, "Invalid syntax: --pinterval %s\n",
+					pinterval);
 			goto arg_fail;
 		}
 	}

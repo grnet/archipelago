@@ -120,16 +120,16 @@ static double __calculate_iops(uint64_t requests, double elapsed_ns)
 
 int calculate_report_lines(struct bench *prefs)
 {
-	int progress = GET_FLAG(PROGRESS, prefs->flags);
+	int ptype = prefs->rep->type;
 	int lines = 0;
 
-	if (progress == PROGRESS_REQ ||	progress == PROGRESS_BOTH) {
+	if (ptype == PTYPE_REQ || ptype == PTYPE_BOTH) {
 		lines = 6;
 		if ((GET_FLAG(VERIFY, prefs->flags) != VERIFY_NO) &&
 				(prefs->op == X_READ))
 			lines++;
 	}
-	if (progress == PROGRESS_IO ||	progress == PROGRESS_BOTH) {
+	if (ptype == PTYPE_IO || ptype == PTYPE_BOTH) {
 		lines += 1;
 		if (prefs->op == X_READ || prefs->op == X_WRITE)
 			lines++;
@@ -237,11 +237,11 @@ void print_rec_res(struct bench *prefs)
 
 static void __print_progress(struct bench *prefs)
 {
-	int progress = GET_FLAG(PROGRESS, prefs->flags);
+	int ptype = prefs->rep->type;
 
-	if (progress == PROGRESS_REQ ||	progress == PROGRESS_BOTH)
+	if (ptype == PTYPE_REQ || ptype == PTYPE_BOTH)
 			print_req_stats(prefs);
-	if (progress == PROGRESS_IO ||	progress == PROGRESS_BOTH)
+	if (ptype == PTYPE_IO || ptype == PTYPE_BOTH)
 			print_io_stats(prefs);
 	fflush(stdout);
 }
