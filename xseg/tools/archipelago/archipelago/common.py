@@ -517,7 +517,7 @@ def construct_peers():
     #return exclusive_args
 
 vtool_port = None
-def get_vlmc_port():
+def get_vtool_port():
     global vtool_port
     if vtool_port is None:
         vtool_port = random.randint(config['VTOOL_START'], config['VTOOL_END'])
@@ -551,7 +551,7 @@ def exclusive(get_port=False):
                 raise Error("Locking error: %s is not a directory" % LOCK_PATH)
 
             if get_port:
-                vtool_port = get_vlmc_port()
+                vtool_port = get_vtool_port()
                 lock_file = os.path.join(LOCK_PATH, VLMC_LOCK_FILE + '_' + str(vtool_port))
             else:
                 lock_file = os.path.join(LOCK_PATH, VLMC_LOCK_FILE)
