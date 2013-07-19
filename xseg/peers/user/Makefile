@@ -83,6 +83,7 @@ archip-dummy: dummy.c peer.c peer.h
 	$(CC) $(CFLAGS) -o $@ $< peer.c $(INC) -L$(LIB) -lxseg -lpthread -DMT
 
 BENCH_PREQ=bench-xseg.c peer.c bench-lfsr.c bench-timer.c bench-utils.c \
+	   bench-report.c bench-verify.c				\
 	   bench-xseg.h peer.h bench-lfsr.h $(BASE)/xseg/protocol.h
 
 archip-bench: $(BENCH_PREQ)
