@@ -1000,7 +1000,7 @@ class Request(object):
 
     @classmethod
     def get_clone_request(cls, xseg, dst, target, clone=None, clone_size=0,
-			cont_addr = False):
+            cont_addr = False):
         datalen = sizeof(xseg_request_clone)
         xclone = xseg_request_clone()
         xclone.target = target
@@ -1012,7 +1012,7 @@ class Request(object):
             flags = XF_CONTADDR
 
         return cls(xseg, dst, clone, op=X_CLONE, data=xclone, datalen=datalen,
-				flags=flags)
+                flags=flags)
 
     @classmethod
     def get_open_request(cls, xseg, dst, target):
