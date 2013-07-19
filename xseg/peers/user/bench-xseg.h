@@ -54,7 +54,6 @@
 #define CLOCK_BENCH CLOCK_MONOTONIC
 #endif
 
-
 #define MAX_ARG_LEN 10
 
 /*
@@ -89,9 +88,12 @@
 #define PROGRESS_FLAG_POS 5
 #define PROGRESS_BITMASK 3	/* i.e. "11" in binary form */
 #define PROGRESS_NO 0
-#define PROGRESS_REQ 1
-#define PROGRESS_IO 2
-#define PROGRESS_BOTH 3
+#define PROGRESS_YES 1
+
+/* This is not part of flags per se, but is relative to progress */
+#define PTYPE_REQ 0
+#define PTYPE_IO 1
+#define PTYPE_BOTH 2
 
 /* Ping option occupies 7th flag bit */
 #define PING_FLAG_POS 7
@@ -101,13 +103,19 @@
 
 /*
  * Current bench flags representation:
- * 64  9  8  7  6  5  4  3  2  1 : bits
- * ... 0  0  0  0  0  0  0  0  0
- *       |_||____||____||____||_|
- *        ^    ^    ^	  ^    ^
- *	  |    |    |	  |    |
- *	ping   | insanity | pattern
- *	     progress   verify
+ * 63
+ * .
+ * .
+ * .
+ * 8
+ * 7 <-- ping
+ * 6 <-- progress
+ * 5 <--   〃
+ * 4 <-- insanity
+ * 3 <--   〃
+ * 2 <-- verify
+ * 1 <--   〃
+ * 0 <-- pattern
  */
 
 /*
@@ -171,6 +179,7 @@ struct req_status {
 };
 
 struct progress_report {
+	int type;
 	uint64_t prev_recv;
 	uint64_t interval;
 	int lines;
@@ -235,6 +244,7 @@ int read_pattern(char *pattern);
 int read_insanity(char *insanity);
 int read_verify(char *insanity);
 int read_progress(char *progress);
+int read_progress_type(char *ptype);
 uint64_t read_interval(struct bench *prefs, char *str_interval);
 int read_ping(char *progress);
 void clear_report_lines(int lines);
