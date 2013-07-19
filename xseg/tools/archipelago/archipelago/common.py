@@ -51,7 +51,10 @@ import signal
 from subprocess import check_call
 from collections import namedtuple
 import socket
+import random
 
+
+random.seed()
 hostname = socket.gethostname()
 
 valid_role_types = ['file_blocker', 'rados_blocker', 'mapperd', 'vlmcd']
@@ -481,37 +484,79 @@ def construct_peers():
     return peers
 
 
-def exclusive(fn):
-    def exclusive_args(**kwargs):
-        if not os.path.exists(LOCK_PATH):
-            try:
-                os.mkdir(LOCK_PATH)
-            except OSError, (err, reason):
-                print >> sys.stderr, reason
-        if not os.path.isdir(LOCK_PATH):
-            sys.stderr.write("Locking error: ")
-            print >> sys.stderr, LOCK_PATH + " is not a directory"
-            return -1
-        lock_file = os.path.join(LOCK_PATH, VLMC_LOCK_FILE)
-        while True:
-            try:
-                fd = os.open(lock_file, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
-                break
-            except OSError, (err, reason):
-                print >> sys.stderr, reason
-                if err == errno.EEXIST:
-                    time.sleep(0.2)
-                else:
-                    raise OSError(err, lock_file + ' ' + reason)
-        try:
-            r = fn(**kwargs)
-        finally:
-            os.close(fd)
-            os.unlink(lock_file)
-        return r
+#def exclusive(fn):
+    #def exclusive_args(**kwargs):
+        #if not os.path.exists(LOCK_PATH):
+            #try:
+                #os.mkdir(LOCK_PATH)
+            #except OSError, (err, reason):
+                #print >> sys.stderr, reason
+        #if not os.path.isdir(LOCK_PATH):
+            #sys.stderr.write("Locking error: ")
+            #print >> sys.stderr, LOCK_PATH + " is not a directory"
+            #return -1
+        #lock_file = os.path.join(LOCK_PATH, VLMC_LOCK_FILE)
+        #while True:
+            #try:
+                #fd = os.open(lock_file, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+                #break
+            #except OSError, (err, reason):
+                #print >> sys.stderr, reason
+                #if err == errno.EEXIST:
+                    #time.sleep(0.2)
+                #else:
+                    #raise OSError(err, lock_file + ' ' + reason)
+        #try:
+            #r = fn(**kwargs)
+        #finally:
+            #os.close(fd)
+            #os.unlink(lock_file)
+        #return r
 
-    return exclusive_args
+    #return exclusive_args
 
+def get_random_vlmc_port():
+    return random.randint(config['VTOOL_START'], config['VTOOL_END'])
+
+def exclusive(get_port=False):
+    port = None
+    if get_port:
+        port = get_random_vlmc_port()
+
+    def wrap(func):
+        def lock(*args, **kwargs):
+            if not os.path.exists(LOCK_PATH):
+                try:
+                    os.mkdir(LOCK_PATH)
+                except OSError, (err, reason):
+                    print >> sys.stderr, reason
+
+            if not os.path.isdir(LOCK_PATH):
+                raise Error("Locking error: %s is not a directory" % LOCK_PATH)
+
+            if port is not None:
+                lock_file = os.path.join(LOCK_PATH, VLMC_LOCK_FILE + '_' + str(port))
+            else:
+                lock_file = os.path.join(LOCK_PATH, VLMC_LOCK_FILE)
+            while True:
+                try:
+                    fd = os.open(lock_file, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+                    break
+                except OSError, (err, reason):
+                    print >> sys.stderr, lock_file, reason
+                    if err == errno.EEXIST:
+                        time.sleep(0.2)
+                    else:
+                        raise OSError(err, lock_file + ' ' + reason)
+            try:
+                r = fn(*args, port=port, **kwargs)
+            finally:
+                os.close(fd)
+                os.unlink(lock_file)
+            return r
+
+        return lock
+    return wrap
 
 def loadrc(rc):
     try:
