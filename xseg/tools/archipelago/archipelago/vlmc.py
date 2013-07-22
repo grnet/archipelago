@@ -115,7 +115,7 @@ def create(name, size=None, snap=None, cont_addr=False, **kwargs):
 
     ret = False
     vtool_port = get_vtool_port()
-    xseg_ctx = Xseg_ctx(config['SPEC'], vtool_port)
+    xseg_ctx = Xseg_ctx(segment.get_spec(), vtool_port)
     mport = peers['mapperd'].portno_start
     req = Request.get_clone_request(xseg_ctx, mport, snap, clone=name,
             clone_size=size, cont_addr=cont_addr)
@@ -134,7 +134,7 @@ def snapshot(name, snap_name=None, cli=False, **kwargs):
         raise Error("Name should have at least len 6")
 
     vtool_port = get_vtool_port()
-    xseg_ctx = Xseg_ctx(config['SPEC'], vtool_port)
+    xseg_ctx = Xseg_ctx(segment.get_spec(), vtool_port)
     vport = peers['vlmcd'].portno_start
     req = Request.get_snapshot_request(xseg_ctx, vport, name, snap=snap_name)
     req.submit()
@@ -174,7 +174,7 @@ def remove(name, **kwargs):
 
     ret = False
     vtool_port = get_vtool_port()
-    xseg_ctx = Xseg_ctx(config['SPEC'], vtool_port)
+    xseg_ctx = Xseg_ctx(segment.get_spec(), vtool_port)
     mport = peers['mapperd'].portno_start
     req = Request.get_delete_request(xseg_ctx, mport, name)
     req.submit()
@@ -274,7 +274,7 @@ def lock(name, cli=False, **kwargs):
     name = ARCHIP_PREFIX + name
 
     vtool_port = get_vtool_port()
-    xseg_ctx = Xseg_ctx(config['SPEC'], vtool_port)
+    xseg_ctx = Xseg_ctx(segment.get_spec(), vtool_port)
     mbport = peers['blockerm'].portno_start
     ret = Request.get_acquire_request(xseg_ctx, mbport, name)
     req.submit()
@@ -295,7 +295,7 @@ def unlock(name, force=False, cli=False, **kwargs):
     name = ARCHIP_PREFIX + name
 
     vtool_port = get_vtool_port()
-    xseg_ctx = Xseg_ctx(config['SPEC'], vtool_port)
+    xseg_ctx = Xseg_ctx(segment.get_spec(), vtool_port)
     mbport = peers['blockerm'].portno_start
     req = Request.get_release_request(xseg_ctx, mbport, name, force=force)
     req.submit()
@@ -315,7 +315,7 @@ def open_volume(name, cli=False, **kwargs):
 
     ret = False
     vtool_port = get_vtool_port()
-    xseg_ctx = Xseg_ctx(config['SPEC'], vtool_port)
+    xseg_ctx = Xseg_ctx(segment.get_spec(), vtool_port)
     vport = peers['vlmcd'].portno_start
     ret = Request.get_open_request(xseg_ctx, vport, name)
     req.submit()
@@ -335,7 +335,7 @@ def close_volume(name, cli=False, **kwargs):
 
     ret = False
     vtool_port = get_vtool_port()
-    xseg_ctx = Xseg_ctx(config['SPEC'], vtool_port)
+    xseg_ctx = Xseg_ctx(segment.get_spec(), vtool_port)
     vport = peers['vlmcd'].portno_start
     ret = Request.get_close_request(xseg_ctx, vport, name)
     req.submit()
@@ -355,7 +355,7 @@ def info(name, cli=False, **kwargs):
 
     ret = False
     vtool_port = get_vtool_port()
-    xseg_ctx = Xseg_ctx(config['SPEC'], vtool_port)
+    xseg_ctx = Xseg_ctx(segment.get_spec(), vtool_port)
     mport = peers['mapperd'].portno_start
     req = Request.get_info_request(xseg_ctx, mport, name)
     req.submit()

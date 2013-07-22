@@ -58,9 +58,11 @@ random.seed()
 hostname = socket.gethostname()
 
 valid_role_types = ['file_blocker', 'rados_blocker', 'mapperd', 'vlmcd']
+valid_segment_types = ['segdev', 'posix']
 
 peers = dict()
 xsegbd_args = []
+segment = None
 modules = ['xseg', 'segdev', 'xseg_posix', 'xseg_pthread', 'xseg_segdev']
 xsegbd = 'xsegbd'
 
@@ -356,7 +358,12 @@ class Vlmcd(Peer):
 
 config = {
     'CEPH_CONF_FILE': '/etc/ceph/ceph.conf',
-    'SPEC': "segdev:xsegbd:1024:5120:12",
+#    'SPEC': "segdev:xsegbd:1024:5120:12",
+    'SEGMENT_TYPE': 'segdev',
+    'SEGMENT_NAME': 'xsegbd',
+    'SEGMENT_PORTS': 1024,
+    'SEGMENT_SIZE': 5120,
+    'SEGMENT_ALIGNMENT': 12,
     'XSEGBD_START': 0,
     'XSEGBD_END': 499,
     'VTOOL_START': 1003,
@@ -394,6 +401,64 @@ class Error(Exception):
     def __str__(self):
         return self.msg
 
+class Segment(object):
+    type = 'segdev'
+    name = 'xsegbd'
+    ports = 1024
+    size = 5120
+    alignment = 12
+
+    spec = None
+
+    def __init__(self, type, name, ports, size, align=12):
+        initialize_xseg()
+        self.type = type
+        self.name = name
+        self.ports = ports
+        self.size = size
+        self.alignment = align
+
+        if self.type not in valid_segment_types:
+            raise Error("Segment type not valid")
+        if self.alignment != 12:
+            raise Error("Wrong alignemt")
+
+        self.spec = self.get_spec()
+
+    def get_spec(self):
+        if not self.spec:
+            params = [self.type, self.name, self.ports, self.size, self.alignment]
+            self.spec = ':'.join(params).encode()
+        return self.spec
+
+    def create(self):
+        #fixme blocking....
+        xconf = xseg_config()
+        c_spec = create_string_buffer(self.spec)
+        xseg_parse_spec(c_spec, xconf)
+        r = xseg_create(xconf)
+        if r < 0:
+            raise Error("Cannot create segment")
+
+    def destroy(self):
+        #fixme blocking....
+        try:
+            xseg = self.join()
+            xseg_leave(xseg)
+            xseg_destroy(xseg)
+        except Exception:
+            raise Error("Cannot destroy segment")
+
+    def join(self):
+        xconf = xseg_config()
+        spec_buf = create_string_buffer(self.spec)
+        xseg_parse_spec(spec_buf, xconf)
+        ctx = xseg_join(xconf.type, xconf.name, "posix",
+                        cast(0, cb_null_ptrtype))
+        if not ctx:
+            raise Error("Cannot join segment")
+
+        return ctx
 
 def check_conf():
     port_ranges = []
@@ -424,25 +489,15 @@ def check_conf():
                             (portno_start, portno_end,  start, end))
         port_ranges.append((portno_start, portno_end))
 
-    splitted_spec = str(config['SPEC']).split(':')
-    if len(splitted_spec) < 5:
-        raise Error("Invalid spec")
+    xseg_type = config['SEGMENT_TYPE']
+    xseg_name = config['SEGMENT_NAME']
+    xseg_ports = config['SEGMENT_PORTS']
+    xseg_size = config['SEGMENT_SIZE']
+    xseg_align = config['SEGMENT_ALIGNMENT']
 
-    xseg_type = splitted_spec[0]
-    xseg_name = splitted_spec[1]
-    xseg_ports = int(splitted_spec[2])
-    xseg_heapsize = int(splitted_spec[3])
-    xseg_align = int(splitted_spec[4])
+    global segment
+    segment = Segment(xseg_type, xseg_name, xseg_ports, xseg_size, xseg_align)
 
-    if xseg_type != "segdev":
-        raise Error("Segment type not segdev")
-        return False
-    if xseg_name != "xsegbd":
-        raise Error("Segment name not equal xsegbd")
-        return False
-    if xseg_align != 12:
-        raise Error("Wrong alignemt")
-        return False
 
     try:
         if not config['roles']:
@@ -459,16 +514,16 @@ def check_conf():
             raise Error("No config found for %s" % role)
 
         if role_type == 'file_blocker':
-            peers[role] = Filed(role=role, spec=config['SPEC'].encode(),
+            peers[role] = Filed(role=role, spec=segment.get_spec(),
                                  prefix=ARCHIP_PREFIX, **role_config)
         elif role_type == 'rados_blocker':
-            peers[role] = Sosd(role=role, spec=config['SPEC'].encode(),
+            peers[role] = Sosd(role=role, spec=segment.get_spec(),
                                **role_config)
         elif role_type == 'mapperd':
-            peers[role] = Mapperd(role=role, spec=config['SPEC'].encode(),
+            peers[role] = Mapperd(role=role, spec=segment.get_spec(),
                                   **role_config)
         elif role_type == 'vlmcd':
-            peers[role] = Vlmcd(role=role, spec=config['SPEC'].encode(),
+            peers[role] = Vlmcd(role=role, spec=segment.get_spec(),
                                 **role_config)
         else:
             raise Error("No valid peer type: %s" % role_type)
@@ -478,43 +533,16 @@ def check_conf():
     validatePortRange(config['VTOOL_START'], config['VTOOL_END'], xseg_ports)
     validatePortRange(config['XSEGBD_START'], config['XSEGBD_END'],
                       xseg_ports)
+
+    xsegbd_range = config['XSEGBD_END'] - config['XSEGBD_START']
+    vlmcd_range = peers['vlmcd'].portno_end - peers['vlmcd'].portno_end
+    if xsegbd_range > vlmcd_range:
+        raise Error("Xsegbd port range must be smaller that vlmcd port range")
     return True
 
 
 def construct_peers():
     return peers
-
-
-#def exclusive(fn):
-    #def exclusive_args(**kwargs):
-        #if not os.path.exists(LOCK_PATH):
-            #try:
-                #os.mkdir(LOCK_PATH)
-            #except OSError, (err, reason):
-                #print >> sys.stderr, reason
-        #if not os.path.isdir(LOCK_PATH):
-            #sys.stderr.write("Locking error: ")
-            #print >> sys.stderr, LOCK_PATH + " is not a directory"
-            #return -1
-        #lock_file = os.path.join(LOCK_PATH, VLMC_LOCK_FILE)
-        #while True:
-            #try:
-                #fd = os.open(lock_file, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
-                #break
-            #except OSError, (err, reason):
-                #print >> sys.stderr, reason
-                #if err == errno.EEXIST:
-                    #time.sleep(0.2)
-                #else:
-                    #raise OSError(err, lock_file + ' ' + reason)
-        #try:
-            #r = fn(**kwargs)
-        #finally:
-            #os.close(fd)
-            #os.unlink(lock_file)
-        #return r
-
-    #return exclusive_args
 
 vtool_port = None
 def get_vtool_port():
@@ -650,34 +678,6 @@ def initialize_xseg():
         xseg_initialized = True
 
 
-def create_segment(spec):
-    #fixme blocking....
-    initialize_xseg()
-    xconf = xseg_config()
-    c_spec = create_string_buffer(spec)
-    xseg_parse_spec(c_spec, xconf)
-    r = xseg_create(xconf)
-    if r < 0:
-        raise Error("Cannot create segment")
-
-
-def destroy_segment(spec):
-    #fixme blocking....
-    try:
-        initialize_xseg()
-        xconf = xseg_config()
-        c_spec = create_string_buffer(spec)
-        xseg_parse_spec(c_spec, xconf)
-        xseg = xseg_join(xconf.type, xconf.name, "posix",
-                         cast(0, cb_null_ptrtype))
-        if not xseg:
-            raise Error("Cannot join segment")
-        xseg_leave(xseg)
-        xseg_destroy(xseg)
-    except Exception:
-        raise Error("Cannot destroy segment")
-
-
 def check_running(name, pid=None):
     for p in psutil.process_iter():
         if p.name[0:len(name)] == name:
@@ -709,13 +709,8 @@ class Xseg_ctx(object):
     port = None
     portno = None
 
-    def __init__(self, spec, portno):
-        initialize_xseg()
-        xconf = xseg_config()
-        spec_buf = create_string_buffer(spec)
-        xseg_parse_spec(spec_buf, xconf)
-        ctx = xseg_join(xconf.type, xconf.name, "posix",
-                        cast(0, cb_null_ptrtype))
+    def __init__(self, segment, portno):
+        ctx = segment.join()
         if not ctx:
             raise Error("Cannot join segment")
         port = xseg_bind_port(ctx, portno, c_void_p(0))
@@ -772,22 +767,6 @@ class Xseg_ctx(object):
 class Request(object):
     xseg_ctx = None
     req = None
-
-    #def __init__(self, xseg_ctx, dst_portno, targetlen, datalen):
-        #ctx = xseg_ctx.ctx
-        #if not ctx:
-            #raise Error("No context")
-        #req = xseg_get_request(ctx, xseg_ctx.portno, dst_portno, X_ALLOC)
-        #if not req:
-            #raise Error("Cannot get request")
-        #r = xseg_prep_request(ctx, req, targetlen, datalen)
-        #if r < 0:
-            #xseg_put_request(ctx, req, xseg_ctx.portno)
-            #raise Error("Cannot prepare request")
-##       print hex(addressof(req.contents))
-        #self.req = req
-        #self.xseg_ctx = xseg_ctx
-        #return
 
     def __init__(self, xseg_ctx, dst_portno, target, datalen=0, size=0, op=None,
                  data=None, flags=0, offset=0):
