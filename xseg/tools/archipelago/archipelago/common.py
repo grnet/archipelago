@@ -1024,3 +1024,7 @@ class Request(object):
     @classmethod
     def get_hash_request(cls, xseg, dst, target, size=0, offset=0):
         return cls(xseg, dst, target, op=X_HASH, size=size, offset=offset)
+
+    @classmethod
+    def get_hash_request(cls, xseg, dst, target):
+        return cls(xseg, dst, target, op=X_HASH)

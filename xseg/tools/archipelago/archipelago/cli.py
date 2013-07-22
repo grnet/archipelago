@@ -158,6 +158,13 @@ def vlmc_parser():
     map_info_parser.add_argument('-v', '--verbose',  action='store_true',
                                  default=False, help='')
 
+    hash_parser = subparsers.add_parser('hash', help='Hash snapshot')
+    #group = hash_parser.add_mutually_exclusive_group(required=True)
+    hash_parser.add_argument('-p', '--pool', type=str, nargs='?',
+                                 help='for backwards compatiblity with rbd')
+    hash_parser.add_argument('name', type=str,  help='Snapshot name')
+    hash_parser.set_defaults(func=vlmc.hash)
+
     return parser
 
 

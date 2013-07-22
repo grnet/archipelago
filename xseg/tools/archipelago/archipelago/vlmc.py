@@ -148,6 +148,30 @@ def snapshot(name, snap_name=None, cli=False, **kwargs):
     if cli:
         sys.stdout.write("Snapshot name: %s\n" % snap_name)
 
+@exclusive(get_port=True)
+def hash(name, cli=False, **kwargs):
+    if len(name) < 6:
+        raise Error("Name should have at least len 6")
+
+    vtool_port = get_vtool_port()
+    xseg_ctx = Xseg_ctx(segment.get_spec(), vtool_port)
+    mport = peers['mapperd'].portno_start
+    req = Request.get_hash_request(xseg_ctx, mport, name)
+    req.submit()
+    req.wait()
+    ret = req.success()
+    if ret:
+        xhash = req.get_data(xseg_reply_hash).contents
+        hash_name = ctypes.string_at(xhash.target, xhash.targetlen)
+    req.put()
+    xseg_ctx.shutdown()
+
+    if not ret:
+        raise Error("vlmc hash failed")
+    if cli:
+        sys.stdout.write("Hash name: %s\n" % hash_name)
+        return hash_name
+
 def list_volumes(**kwargs):
     if isinstance(peers['blockerm'], Sosd):
         import rados
