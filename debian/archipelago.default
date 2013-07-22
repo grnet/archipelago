@@ -1,10 +1,27 @@
 # xseg
-SPEC="segdev:xsegbd:1024:5120:12"
+#SPEC="segdev:xsegbd:1024:5120:12"
+SEGMENT_PORTS = 1024
+SEGMENT_SIZE = 5120
 
 XSEGBD_START=0
 XSEGBD_END=499
-VTOOL=1003
+VTOOL_START=1003
+VTOOL_END=1022
 
+# (peer role, peer type)
+# Mandatory peer roles:
+# 	blockerb
+# 	blockerm
+# 	mapperd
+# 	vlmcd
+#
+# Available peer types:
+# 	rados_blocker
+# 	file_blocker
+# 	mapperd
+# 	vlmcd
+# Order matters. Peers will be started with list order and stopped with reversed
+# order.
 roles = [('blockerb', 'rados_blocker'),
          ('blockerm', 'rados_blocker'),
          ('mapperd', 'mapperd'),
