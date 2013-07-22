@@ -1,5 +1,5 @@
 /*
- * Copyright 2012 GRNET S.A. All rights reserved.
+ * Copyright 2013 GRNET S.A. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or
  * without modification, are permitted provided that the following
@@ -32,63 +32,44 @@
  * or implied, of GRNET S.A.
  */
 
-#ifndef _PROTOCOL_H
-#define _PROTOCOL_H
 
-#ifdef __KERNEL__
-#include <linux/types.h>
-#else
-#include <stdint.h>
-#endif
+#ifndef __XBINHEAP_H
+#define __XBINHEAP_H
 
-/*
- * Reply structures.
- * Every X_OP returns a corresponding xseg_reply_op struct
- * for structured replies. See <xseg/xseg.h> for the list of ops.
- */
-struct xseg_reply_info {
-	uint64_t size;
+#include <xtypes/domain.h>
+#include <sys/util.h>
+
+typedef uint64_t xbinheapidx;
+typedef xbinheapidx xbinheap_handler;
+#define NoNode (xbinheapidx)-1
+#define XBINHEAP_MAX (uint32_t)(1<<0)
+#define XBINHEAP_MIN (uint32_t)(1<<1)
+
+struct xbinheap_node {
+	xbinheapidx key;
+	xbinheapidx value;
+	xbinheapidx h;
 };
 
-#define XSEG_MAX_TARGETLEN 256
-
-#if (XSEG_MAX_TARGETLEN < 64)
-#warning "XSEG_MAX_TARGETLEN should be at least 64!"
-#undef XSEG_MAX_TARGETLEN
-#define XSEG_MAX_TARGETLEN 64
-#endif
-
-struct xseg_reply_map_scatterlist {
-	char target[XSEG_MAX_TARGETLEN];
-	uint32_t targetlen;
-	uint64_t offset;
-	uint64_t size;
+struct xbinheap {
+	xbinheapidx size;
+	xbinheapidx count;
+	uint32_t flags;
+	xbinheapidx *indexes;
+	struct xbinheap_node *nodes;
 };
 
-struct xseg_reply_map {
-	uint32_t cnt;
-	struct xseg_reply_map_scatterlist segs[];
-};
+xbinheap_handler xbinheap_insert(struct xbinheap *h, xbinheapidx key,
+		xbinheapidx value);
+int xbinheap_empty(struct xbinheap *h);
+xbinheapidx xbinheap_peak(struct xbinheap *h);
+xbinheapidx xbinheap_extract(struct xbinheap *h);
+int xbinheap_increasekey(struct xbinheap *h, xbinheap_handler idx,
+		xbinheapidx newkey);
+int xbinheap_decreasekey(struct xbinheap *h, xbinheap_handler idx,
+		xbinheapidx newkey);
+xbinheapidx xbinheap_getkey(struct xbinheap *h, xbinheap_handler idx);
+int xbinheap_init(struct xbinheap *h, xbinheapidx size, uint32_t flags, void *mem);
+void xbinheap_free(struct xbinheap *h);
 
-struct xseg_request_clone {
-        char target[XSEG_MAX_TARGETLEN];
-	uint32_t targetlen;
-        uint64_t size;
-};
-
-struct xseg_request_copy {
-        char target[XSEG_MAX_TARGETLEN];
-	uint32_t targetlen;
-};
-
-struct xseg_request_snapshot {
-        char target[XSEG_MAX_TARGETLEN];
-	uint32_t targetlen;
-};
-
-struct xseg_reply_hash {
-	char target[XSEG_MAX_TARGETLEN];
-	uint32_t targetlen;
-};
-
-#endif
+#endif /* __XBINHEAP_H */

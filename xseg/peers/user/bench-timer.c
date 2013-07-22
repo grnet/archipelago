@@ -49,6 +49,34 @@
 #define SEC 1000000000 //1sec = 10^9 nsec
 #define SEC2 (uint64_t) SEC*SEC //1sec*1sec = 10^18 nsec^2
 
+/*
+ * Get elapsed time by subtracting start time from end time.
+ * Subtraction can result to a negative value, so we check for both cases
+ */
+static inline void timespecsub(struct timespec *end,
+		struct timespec *start, struct timespec *result)
+{
+	if (start->tv_nsec > end->tv_nsec) {
+		result->tv_nsec = SEC - start->tv_nsec + end->tv_nsec;
+		result->tv_sec = end->tv_sec - start->tv_sec - 1;
+	} else {
+		result->tv_nsec = end->tv_nsec - start->tv_nsec;
+		result->tv_sec = end->tv_sec - start->tv_sec;
+	}
+}
+
+static inline void timespecadd(struct timespec *a,
+		struct timespec *b, struct timespec *result)
+{
+	if (a->tv_nsec + b->tv_nsec >= SEC) {
+		result->tv_nsec = a->tv_nsec + b->tv_nsec - SEC;
+		result->tv_sec = a->tv_sec + b->tv_sec + 1;
+	} else {
+		result->tv_nsec = a->tv_nsec + b->tv_nsec;
+		result->tv_sec = a->tv_sec + b->tv_sec;
+	}
+}
+
 int init_timer(struct timer **tm, int insanity)
 {
 	*tm = malloc(sizeof(struct timer));
@@ -66,7 +94,6 @@ void timer_start(struct bench *prefs, struct timer *timer)
 {
 	//We need a low-latency way to get current time in nanoseconds.
 	//QUESTION: Is this way the best way?
-	//RAW means that we trust the system's oscilator isn't screwed up
 	if (GET_FLAG(INSANITY, prefs->flags) < timer->insanity)
 		return;
 
@@ -74,48 +101,30 @@ void timer_start(struct bench *prefs, struct timer *timer)
 }
 
 void timer_stop(struct bench *prefs, struct timer *timer,
-		struct timespec *start)
+		struct timespec *start_time)
 {
 	struct timespec end_time;
-	volatile struct timespec elapsed_time;
-	struct timespec start_time;
 
-	if (GET_FLAG(INSANITY, prefs->flags)< timer->insanity)
+	if (GET_FLAG(INSANITY, prefs->flags) < timer->insanity)
 		return;
 
 	/*
-	 * There are timers such as rec_tm whose start_time cannot be trusted and
-	 * the submission time is stored in other structs (e.g. struct
+	 * There are timers such as rec_tm whose start_time cannot be trusted
+	 * and the submission time is stored in other structs (e.g. struct
 	 * peer_request).
 	 * In this case, the submission time must be passed explicitly to this
 	 * function using the "start" argument.
 	 */
-	if (!start)
-		start_time = timer->start_time;
-	else
-		start_time = *start;
+	if (!start_time)
+		start_time = &timer->start_time;
 
 	clock_gettime(CLOCK_BENCH, &end_time);
 
-	//Get elapsed time by subtracting start time from end time.
-	//Subtraction can result to a negative value, so we check for both cases
-	if (start_time.tv_nsec > end_time.tv_nsec) {
-		elapsed_time.tv_nsec = SEC - start_time.tv_nsec + end_time.tv_nsec;
-		elapsed_time.tv_sec = end_time.tv_sec - start_time.tv_sec - 1;
-	} else {
-		elapsed_time.tv_nsec = end_time.tv_nsec - start_time.tv_nsec;
-		elapsed_time.tv_sec = end_time.tv_sec - start_time.tv_sec;
-	}
+	timespecsub(&end_time, start_time, &timer->elapsed_time);
 
 	//Add the elapsed time to the current sum for this timer.
 	//For accuracy, nanoseconds' sum has to be always less that 10^9
-	if (elapsed_time.tv_nsec + timer->sum.tv_nsec > SEC){
-		timer->sum.tv_nsec += elapsed_time.tv_nsec;
-		timer->sum.tv_sec += elapsed_time.tv_sec + 1;
-	} else {
-		timer->sum.tv_nsec += elapsed_time.tv_nsec;
-		timer->sum.tv_sec += elapsed_time.tv_sec;
-	}
+	timespecadd(&timer->elapsed_time, &timer->sum, &timer->sum);
 
 #if 0
 	struct timespec2 elapsed_time_sq;

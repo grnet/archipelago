@@ -56,6 +56,8 @@ def vlmc_parser():
                                help='create from snapshot')
     create_parser.add_argument('-p', '--pool', type=str, nargs='?',
                                help='for backwards compatiblity with rbd')
+    create_parser.add_argument('-c', '--contaddr', type=str, nargs='?',
+                               help='specify the snapshot as content addressable')
     create_parser.add_argument('name', type=str,  help='volume/device name')
     create_parser.set_defaults(func=vlmc.create)
 
@@ -98,7 +100,8 @@ def vlmc_parser():
     #group = snapshot_parser.add_mutually_exclusive_group(required=True)
     snapshot_parser.add_argument('-p', '--pool', type=str, nargs='?',
                                  help='for backwards compatiblity with rbd')
-    snapshot_parser.add_argument('name', type=str,  help='volume/device name')
+    snapshot_parser.add_argument('name', type=str,  help='volume name')
+    snapshot_parser.add_argument('snap_name', type=str,  help='Snapshot name')
     snapshot_parser.set_defaults(func=vlmc.snapshot)
 
     ls_parser = subparsers.add_parser('ls', help='List volumes')
@@ -154,6 +157,13 @@ def vlmc_parser():
                                  help='for backwards compatiblity with rbd')
     map_info_parser.add_argument('-v', '--verbose',  action='store_true',
                                  default=False, help='')
+
+    hash_parser = subparsers.add_parser('hash', help='Hash snapshot')
+    #group = hash_parser.add_mutually_exclusive_group(required=True)
+    hash_parser.add_argument('-p', '--pool', type=str, nargs='?',
+                                 help='for backwards compatiblity with rbd')
+    hash_parser.add_argument('name', type=str,  help='Snapshot name')
+    hash_parser.set_defaults(func=vlmc.hash)
 
     return parser
 

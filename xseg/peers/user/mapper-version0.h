@@ -1,5 +1,5 @@
 /*
- * Copyright 2012 GRNET S.A. All rights reserved.
+ * Copyright 2013 GRNET S.A. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or
  * without modification, are permitted provided that the following
@@ -32,63 +32,50 @@
  * or implied, of GRNET S.A.
  */
 
-#ifndef _PROTOCOL_H
-#define _PROTOCOL_H
+#ifndef MAPPERVERSION0_H
 
-#ifdef __KERNEL__
-#include <linux/types.h>
-#else
-#include <stdint.h>
-#endif
+#define MAPPERVERSION0_H
 
-/*
- * Reply structures.
- * Every X_OP returns a corresponding xseg_reply_op struct
- * for structured replies. See <xseg/xseg.h> for the list of ops.
+#include <unistd.h>
+#include <hash.h>
+#include <peer.h>
+#include <mapper.h>
+
+/* version 0 functions */
+
+/* no header */
+#define v0_mapheader_size 0
+
+/* Maximum length of an object name in memory */
+#define v0_max_objectlen (HEXLIFIED_SHA256_DIGEST_SIZE)
+
+/* Required size in storage to store object information.
+ *
+ * max object len in disk. just the unhexlified name.
  */
-struct xseg_reply_info {
-	uint64_t size;
-};
+#define v0_objectsize_in_map (SHA256_DIGEST_SIZE)
 
-#define XSEG_MAX_TARGETLEN 256
+int read_object_v0(struct map_node *mn, unsigned char *buf);
+void object_to_map_v0(unsigned char* buf, struct map_node *mn);
+struct xseg_request * prepare_write_object_v0(struct peer_req *pr,
+				struct map *map, struct map_node *mn);
+//int read_map_v0(struct map *m, unsigned char * data);
+int read_map_metadata_v0(struct map *map, unsigned char *metadata,
+		uint32_t metadata_len);
+int load_map_data_v0(struct peer_req *pr, struct map *map);
+int write_map_metadata_v0(struct peer_req *pr, struct map *map);
+int write_map_data_v0(struct peer_req *pr, struct map *map);
 
-#if (XSEG_MAX_TARGETLEN < 64)
-#warning "XSEG_MAX_TARGETLEN should be at least 64!"
-#undef XSEG_MAX_TARGETLEN
-#define XSEG_MAX_TARGETLEN 64
-#endif
+/*.read_map = read_map_v0,	\*/
+#define map_functions_v0 {				\
+			.object_to_map = object_to_map_v0, \
+			.read_object = read_object_v0,	\
+			.prepare_write_object = prepare_write_object_v0,\
+			.load_map_data = load_map_data_v0, \
+			.write_map_metadata = write_map_metadata_v0, \
+			.write_map_data = write_map_data_v0, \
+			.read_map_metadata = read_map_metadata_v0 \
+			}
 
-struct xseg_reply_map_scatterlist {
-	char target[XSEG_MAX_TARGETLEN];
-	uint32_t targetlen;
-	uint64_t offset;
-	uint64_t size;
-};
 
-struct xseg_reply_map {
-	uint32_t cnt;
-	struct xseg_reply_map_scatterlist segs[];
-};
-
-struct xseg_request_clone {
-        char target[XSEG_MAX_TARGETLEN];
-	uint32_t targetlen;
-        uint64_t size;
-};
-
-struct xseg_request_copy {
-        char target[XSEG_MAX_TARGETLEN];
-	uint32_t targetlen;
-};
-
-struct xseg_request_snapshot {
-        char target[XSEG_MAX_TARGETLEN];
-	uint32_t targetlen;
-};
-
-struct xseg_reply_hash {
-	char target[XSEG_MAX_TARGETLEN];
-	uint32_t targetlen;
-};
-
-#endif
+#endif /* end MAPPERVERSION0_H */

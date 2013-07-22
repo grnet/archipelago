@@ -39,7 +39,7 @@ from xseg.xseg_api import *
 from xseg.xprotocol import *
 from ctypes import CFUNCTYPE, cast, c_void_p, addressof, string_at, memmove, \
     create_string_buffer, pointer, sizeof, POINTER, byref
-
+import ctypes
 cb_null_ptrtype = CFUNCTYPE(None, uint32_t)
 
 import os
@@ -50,14 +50,23 @@ import errno
 import signal
 from subprocess import check_call
 from collections import namedtuple
+import socket
+import random
+
+
+random.seed()
+hostname = socket.gethostname()
 
 valid_role_types = ['file_blocker', 'rados_blocker', 'mapperd', 'vlmcd']
+valid_segment_types = ['segdev', 'posix']
 
 peers = dict()
 xsegbd_args = []
+segment = None
 modules = ['xseg', 'segdev', 'xseg_posix', 'xseg_pthread', 'xseg_segdev']
 xsegbd = 'xsegbd'
 
+BIN_DIR = '/usr/bin/'
 DEFAULTS = '/etc/default/archipelago'
 
 #system defaults
@@ -77,7 +86,7 @@ CHARDEV_MINOR = 0
 
 REQS = 512
 
-FILE_BLOCKER = 'archip-pfiled'
+FILE_BLOCKER = 'archip-filed'
 RADOS_BLOCKER = 'archip-sosd'
 MAPPER = 'archip-mapperd'
 VLMC = 'archip-vlmcd'
@@ -96,11 +105,11 @@ class Peer(object):
         if not self.executable:
             raise Error("Executable must be provided for %s" % role)
 
-        if not portno_start:
+        if portno_start is None:
             raise Error("Portno_start must be provied for %s" % role)
         self.portno_start = portno_start
 
-        if not portno_end:
+        if portno_end is None:
             raise Error("Portno_end must be provied for %s" % role)
         self.portno_end = portno_end
 
@@ -153,7 +162,7 @@ class Peer(object):
     def start(self):
         if self.get_pid():
             raise Error("Peer has valid pidfile")
-        cmd = [self.executable] + self.cli_opts
+        cmd = [os.path.join(BIN_DIR, self.executable)] + self.cli_opts
         try:
             check_call(cmd, shell=False)
         except Exception as e:
@@ -214,13 +223,13 @@ class Peer(object):
         if self.pidfile:
             self.cli_opts.append("--pidfile")
             self.cli_opts.append(self.pidfile)
-        if self.portno_start:
+        if self.portno_start is not None:
             self.cli_opts.append("-sp")
             self.cli_opts.append(str(self.portno_start))
-        if self.portno_end:
+        if self.portno_end is not None:
             self.cli_opts.append("-ep")
             self.cli_opts.append(str(self.portno_end))
-        if self.log_level:
+        if self.log_level is not None:
             self.cli_opts.append("-v")
             self.cli_opts.append(str(self.log_level))
         if self.spec:
@@ -258,33 +267,37 @@ class Sosd(MTpeer):
             self.cli_opts.append(self.pool)
 
 
-class Pfiled(MTpeer):
-    def __init__(self, pithos_dir=None, archip_dir=None, prefix=None):
+class Filed(MTpeer):
+    def __init__(self, archip_dir=None, prefix=None, fdcache=None,
+                 unique_str=None, **kwargs):
         self.executable = FILE_BLOCKER
-        self.pithos_dir = pithos_dir
         self.archip_dir = archip_dir
         self.prefix = prefix
+        self.fdcache = fdcache
+        self.unique_str = unique_str
 
-        super(Pfiled, self).__init__(**kwargs)
-
-        if not self.pithos_dir:
-            raise Error("%s: Pithos dir must be set" % self.role)
-        if not os.path.isdir(self.pithos_dir):
-            raise Error("%s: Pithos dir invalid" % self.role)
+        super(Filed, self).__init__(**kwargs)
 
         if not self.archip_dir:
             raise Error("%s: Archip dir must be set" % self.role)
         if not os.path.isdir(self.archip_dir):
             raise Error("%s: Archip dir invalid" % self.role)
+        if not self.fdcache:
+            self.fdcache = 2*self.nr_ops
+        if not self.unique_str:
+            self.unique_str = hostname + '_' + str(self.portno_start)
 
         if self.cli_opts is None:
             self.cli_opts = []
-        self.set_pfiled_cli_options()
+        self.set_filed_cli_options()
 
-    def set_pfiled_cli_options(self):
-        if self.pithos_dir:
-            self.cli_opts.append("--pithos")
-            self.cli_opts.append(self.pithos_dir)
+    def set_filed_cli_options(self):
+        if self.unique_str:
+            self.cli_opts.append("--uniquestr")
+            self.cli_opts.append(self.unique_str)
+        if self.fdcache:
+            self.cli_opts.append("--fdcache")
+            self.cli_opts.append(str(self.fdcache))
         if self.archip_dir:
             self.cli_opts.append("--archip")
             self.cli_opts.append(self.archip_dir)
@@ -296,7 +309,12 @@ class Pfiled(MTpeer):
 class Mapperd(Peer):
     def __init__(self, blockerm_port=None, blockerb_port=None, **kwargs):
         self.executable = MAPPER
+        if blockerm_port is None:
+            raise Error("blockerm_port must be provied for %s" % role)
         self.blockerm_port = blockerm_port
+
+        if blockerb_port is None:
+            raise Error("blockerb_port must be provied for %s" % role)
         self.blockerb_port = blockerb_port
         super(Mapperd, self).__init__(**kwargs)
 
@@ -305,10 +323,10 @@ class Mapperd(Peer):
         self.set_mapperd_cli_options()
 
     def set_mapperd_cli_options(self):
-        if self.blockerm_port:
+        if self.blockerm_port is not None:
             self.cli_opts.append("-mbp")
             self.cli_opts.append(str(self.blockerm_port))
-        if self.blockerb_port:
+        if self.blockerb_port is not None:
             self.cli_opts.append("-bp")
             self.cli_opts.append(str(self.blockerb_port))
 
@@ -316,7 +334,12 @@ class Mapperd(Peer):
 class Vlmcd(Peer):
     def __init__(self, blocker_port=None, mapper_port=None, **kwargs):
         self.executable = VLMC
+        if blocker_port is None:
+            raise Error("blocker_port must be provied for %s" % role)
         self.blocker_port = blocker_port
+
+        if mapper_port is None:
+            raise Error("mapper_port must be provied for %s" % role)
         self.mapper_port = mapper_port
         super(Vlmcd, self).__init__(**kwargs)
 
@@ -325,20 +348,26 @@ class Vlmcd(Peer):
         self.set_vlmcd_cli_opts()
 
     def set_vlmcd_cli_opts(self):
-        if self.blocker_port:
+        if self.blocker_port is not None:
             self.cli_opts.append("-bp")
             self.cli_opts.append(str(self.blocker_port))
-        if self.mapper_port:
+        if self.mapper_port is not None:
             self.cli_opts.append("-mp")
             self.cli_opts.append(str(self.mapper_port))
 
 
 config = {
     'CEPH_CONF_FILE': '/etc/ceph/ceph.conf',
-    'SPEC': "segdev:xsegbd:1024:5120:12",
+#    'SPEC': "segdev:xsegbd:1024:5120:12",
+    'SEGMENT_TYPE': 'segdev',
+    'SEGMENT_NAME': 'xsegbd',
+    'SEGMENT_PORTS': 1024,
+    'SEGMENT_SIZE': 5120,
+    'SEGMENT_ALIGNMENT': 12,
     'XSEGBD_START': 0,
     'XSEGBD_END': 499,
-    'VTOOL': 1003,
+    'VTOOL_START': 1003,
+    'VTOOL_END': 1003,
     #RESERVED 1023
 }
 
@@ -372,6 +401,64 @@ class Error(Exception):
     def __str__(self):
         return self.msg
 
+class Segment(object):
+    type = 'segdev'
+    name = 'xsegbd'
+    ports = 1024
+    size = 5120
+    alignment = 12
+
+    spec = None
+
+    def __init__(self, type, name, ports, size, align=12):
+        initialize_xseg()
+        self.type = type
+        self.name = name
+        self.ports = ports
+        self.size = size
+        self.alignment = align
+
+        if self.type not in valid_segment_types:
+            raise Error("Segment type not valid")
+        if self.alignment != 12:
+            raise Error("Wrong alignemt")
+
+        self.spec = self.get_spec()
+
+    def get_spec(self):
+        if not self.spec:
+            params = [self.type, self.name, self.ports, self.size, self.alignment]
+            self.spec = ':'.join(params).encode()
+        return self.spec
+
+    def create(self):
+        #fixme blocking....
+        xconf = xseg_config()
+        c_spec = create_string_buffer(self.spec)
+        xseg_parse_spec(c_spec, xconf)
+        r = xseg_create(xconf)
+        if r < 0:
+            raise Error("Cannot create segment")
+
+    def destroy(self):
+        #fixme blocking....
+        try:
+            xseg = self.join()
+            xseg_leave(xseg)
+            xseg_destroy(xseg)
+        except Exception:
+            raise Error("Cannot destroy segment")
+
+    def join(self):
+        xconf = xseg_config()
+        spec_buf = create_string_buffer(self.spec)
+        xseg_parse_spec(spec_buf, xconf)
+        ctx = xseg_join(xconf.type, xconf.name, "posix",
+                        cast(0, cb_null_ptrtype))
+        if not ctx:
+            raise Error("Cannot join segment")
+
+        return ctx
 
 def check_conf():
     port_ranges = []
@@ -402,25 +489,15 @@ def check_conf():
                             (portno_start, portno_end,  start, end))
         port_ranges.append((portno_start, portno_end))
 
-    splitted_spec = str(config['SPEC']).split(':')
-    if len(splitted_spec) < 5:
-        raise Error("Invalid spec")
+    xseg_type = config['SEGMENT_TYPE']
+    xseg_name = config['SEGMENT_NAME']
+    xseg_ports = config['SEGMENT_PORTS']
+    xseg_size = config['SEGMENT_SIZE']
+    xseg_align = config['SEGMENT_ALIGNMENT']
 
-    xseg_type = splitted_spec[0]
-    xseg_name = splitted_spec[1]
-    xseg_ports = int(splitted_spec[2])
-    xseg_heapsize = int(splitted_spec[3])
-    xseg_align = int(splitted_spec[4])
+    global segment
+    segment = Segment(xseg_type, xseg_name, xseg_ports, xseg_size, xseg_align)
 
-    if xseg_type != "segdev":
-        raise Error("Segment type not segdev")
-        return False
-    if xseg_name != "xsegbd":
-        raise Error("Segment name not equal xsegbd")
-        return False
-    if xseg_align != 12:
-        raise Error("Wrong alignemt")
-        return False
 
     try:
         if not config['roles']:
@@ -437,63 +514,96 @@ def check_conf():
             raise Error("No config found for %s" % role)
 
         if role_type == 'file_blocker':
-            peers[role] = Pfiled(role=role, spec=config['SPEC'].encode(),
+            peers[role] = Filed(role=role, spec=segment.get_spec(),
                                  prefix=ARCHIP_PREFIX, **role_config)
         elif role_type == 'rados_blocker':
-            peers[role] = Sosd(role=role, spec=config['SPEC'].encode(),
+            peers[role] = Sosd(role=role, spec=segment.get_spec(),
                                **role_config)
         elif role_type == 'mapperd':
-            peers[role] = Mapperd(role=role, spec=config['SPEC'].encode(),
+            peers[role] = Mapperd(role=role, spec=segment.get_spec(),
                                   **role_config)
         elif role_type == 'vlmcd':
-            peers[role] = Vlmcd(role=role, spec=config['SPEC'].encode(),
+            peers[role] = Vlmcd(role=role, spec=segment.get_spec(),
                                 **role_config)
         else:
             raise Error("No valid peer type: %s" % role_type)
         validatePortRange(peers[role].portno_start, peers[role].portno_end,
                           xseg_ports)
 
-    validatePortRange(config['VTOOL'], config['VTOOL'], xseg_ports)
+    validatePortRange(config['VTOOL_START'], config['VTOOL_END'], xseg_ports)
     validatePortRange(config['XSEGBD_START'], config['XSEGBD_END'],
                       xseg_ports)
+
+    xsegbd_range = config['XSEGBD_END'] - config['XSEGBD_START']
+    vlmcd_range = peers['vlmcd'].portno_end - peers['vlmcd'].portno_end
+    if xsegbd_range > vlmcd_range:
+        raise Error("Xsegbd port range must be smaller that vlmcd port range")
     return True
 
 
 def construct_peers():
     return peers
 
+vtool_port = None
+def get_vtool_port():
+    global vtool_port
+    if vtool_port is None:
+        vtool_port = random.randint(config['VTOOL_START'], config['VTOOL_END'])
+    return vtool_port
 
-def exclusive(fn):
-    def exclusive_args(**kwargs):
-        if not os.path.exists(LOCK_PATH):
-            try:
-                os.mkdir(LOCK_PATH)
-            except OSError, (err, reason):
-                print >> sys.stderr, reason
-        if not os.path.isdir(LOCK_PATH):
-            sys.stderr.write("Locking error: ")
-            print >> sys.stderr, LOCK_PATH + " is not a directory"
-            return -1
-        lock_file = os.path.join(LOCK_PATH, VLMC_LOCK_FILE)
-        while True:
-            try:
-                fd = os.open(lock_file, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
-                break
-            except OSError, (err, reason):
-                print >> sys.stderr, reason
-                if err == errno.EEXIST:
-                    time.sleep(0.2)
-                else:
-                    raise OSError(err, lock_file + ' ' + reason)
+acquired_locks = {}
+
+def get_lock(lock_file):
+    while True:
         try:
-            r = fn(**kwargs)
-        finally:
-            os.close(fd)
-            os.unlink(lock_file)
-        return r
+            fd = os.open(lock_file, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+            break
+        except OSError, (err, reason):
+            print >> sys.stderr, lock_file, reason
+            if err == errno.EEXIST:
+                time.sleep(0.2)
+            else:
+                raise OSError(err, lock_file + ' ' + reason)
+    return fd
 
-    return exclusive_args
+def exclusive(get_port=False):
+    def wrap(fn):
+        def lock(*args, **kwargs):
+            if not os.path.exists(LOCK_PATH):
+                try:
+                    os.mkdir(LOCK_PATH)
+                except OSError, (err, reason):
+                    print >> sys.stderr, reason
 
+            if not os.path.isdir(LOCK_PATH):
+                raise Error("Locking error: %s is not a directory" % LOCK_PATH)
+
+            if get_port:
+                vtool_port = get_vtool_port()
+                lock_file = os.path.join(LOCK_PATH, VLMC_LOCK_FILE + '_' + str(vtool_port))
+            else:
+                lock_file = os.path.join(LOCK_PATH, VLMC_LOCK_FILE)
+            try:
+                depth = acquired_locks[lock_file]
+                if depth == 0:
+                    fd = get_lock(lock_file)
+            except KeyError:
+                acquired_locks[lock_file] = 0
+                fd = get_lock(lock_file)
+
+            acquired_locks[lock_file] += 1
+            try:
+                r = fn(*args, port=port, **kwargs)
+            finally:
+                acquired_locks[lock_file] -= 1
+                depth = acquired_locks[lock_file]
+                if depth == 0:
+                    os.close(fd)
+                    os.unlink(lock_file)
+            return r
+
+        return lock
+    return wrap
 
 def loadrc(rc):
     try:
@@ -568,32 +678,6 @@ def initialize_xseg():
         xseg_initialized = True
 
 
-def create_segment():
-    #fixme blocking....
-    initialize_xseg()
-    xconf = xseg_config()
-    xseg_parse_spec(str(config['SPEC']), xconf)
-    r = xseg_create(xconf)
-    if r < 0:
-        raise Error("Cannot create segment")
-
-
-def destroy_segment():
-    #fixme blocking....
-    try:
-        initialize_xseg()
-        xconf = xseg_config()
-        xseg_parse_spec(str(config['SPEC']), xconf)
-        xseg = xseg_join(xconf.type, xconf.name, "posix",
-                         cast(0, cb_null_ptrtype))
-        if not xseg:
-            raise Error("Cannot join segment")
-        xseg_leave(xseg)
-        xseg_destroy(xseg)
-    except Exception:
-        raise Error("Cannot destroy segment")
-
-
 def check_running(name, pid=None):
     for p in psutil.process_iter():
         if p.name[0:len(name)] == name:
@@ -625,12 +709,8 @@ class Xseg_ctx(object):
     port = None
     portno = None
 
-    def __init__(self, spec, portno):
-        initialize_xseg()
-        xconf = xseg_config()
-        xseg_parse_spec(create_string_buffer(spec), xconf)
-        ctx = xseg_join(xconf.type, xconf.name, "posix",
-                        cast(0, cb_null_ptrtype))
+    def __init__(self, segment, portno):
+        ctx = segment.join()
         if not ctx:
             raise Error("Cannot join segment")
         port = xseg_bind_port(ctx, portno, c_void_p(0))
@@ -655,16 +735,50 @@ class Xseg_ctx(object):
 
     def shutdown(self):
         if self.ctx:
-            xseg_quit_local_signal(self.ctx, self.portno)
+        #    xseg_quit_local_signal(self.ctx, self.portno)
             xseg_leave(self.ctx)
         self.ctx = None
+
+    def wait_request(self):
+        while True:
+            received = xseg_receive(self.ctx, self.portno, 0)
+            if received:
+                return received
+            else:
+                xseg_prepare_wait(self.ctx, self.portno)
+                xseg_wait_signal(self.ctx, 10000000)
+                xseg_cancel_wait(self.ctx, self.portno)
+
+    def wait_requests(self, requests):
+        while True:
+            received = self.wait_request()
+            for req in requests:
+                xseg_req = req.req
+                if addressof(received.contents) == \
+                            addressof(xseg_req.contents):
+                    return req
+            p = xseg_respond(self.ctx, received, self.portno, X_ALLOC)
+            if p == NoPort:
+                xseg_put_request(self.ctx, received, self.portno)
+            else:
+                xseg_signal(self.ctx, p)
 
 
 class Request(object):
     xseg_ctx = None
     req = None
 
-    def __init__(self, xseg_ctx, dst_portno, targetlen, datalen):
+    def __init__(self, xseg_ctx, dst_portno, target, datalen=0, size=0, op=None,
+                 data=None, flags=0, offset=0):
+        if not target:
+            raise Error("No target")
+        targetlen = len(target)
+        if not datalen and data:
+            if isinstance(data, basestring):
+                datalen = len(data)
+            else:
+                datalen = sizeof(data)
+
         ctx = xseg_ctx.ctx
         if not ctx:
             raise Error("No context")
@@ -675,18 +789,24 @@ class Request(object):
         if r < 0:
             xseg_put_request(ctx, req, xseg_ctx.portno)
             raise Error("Cannot prepare request")
-#        print hex(addressof(req.contents))
         self.req = req
         self.xseg_ctx = xseg_ctx
-        return
+ 
+        if not self.set_target(target):
+            self.put()
+            raise Error("Cannot set target")
 
-    def __del__(self):
-        if self.req:
-            if xq_count(byref(self.req.contents.path)) == 0:
-                xseg_put_request(self.xseg_ctx.ctx, self.req,
-                                 self.xseg_ctx.portno)
-        self.req = None
-        return False
+        if (data):
+            if not self.set_data(data):
+                self.put()
+                raise Error("Cannot set data")
+
+        self.set_size(size)
+        self.set_op(op)
+        self.set_flags(flags)
+        self.set_offset(offset)
+
+        return
 
     def __enter__(self):
         if not self.req:
@@ -694,12 +814,22 @@ class Request(object):
         return self
 
     def __exit__(self, type_, value, traceback):
-        if self.req:
-            if xq_count(byref(self.req.contents.path)) == 0:
-                xseg_put_request(self.xseg_ctx.ctx, self.req,
-                                 self.xseg_ctx.portno)
+        self.put()
         self.req = None
         return False
+
+    def put(self, force=False):
+        if not self.req:
+            return False;
+        if not force:
+            if xq_count(byref(self.req.contents.path)) > 0:
+                return False
+        xseg_put_request(self.xseg_ctx.ctx, self.req, self.xseg_ctx.portno)
+        self.req = None
+        return True
+
+    def get_datalen(self):
+        return self.req.contents.datalen
 
     def set_op(self, op):
         self.req.contents.op = op
@@ -718,6 +848,12 @@ class Request(object):
 
     def set_size(self, size):
         self.req.contents.size = size
+
+    def get_serviced(self):
+        return self.req.contents.serviced
+
+    def set_serviced(self, serviced):
+        self.req.contents.serviced = serviced
 
     def set_flags(self, flags):
         self.req.contents.flags = flags
@@ -743,15 +879,20 @@ class Request(object):
 
     def set_data(self, data):
         """Sets requests data. Data should be a xseg protocol structure"""
-        if sizeof(data) != self.req.contents.datalen:
-            return False
+        if isinstance(data, basestring):
+            if len(data) != self.req.contents.datalen:
+                return False
+            p_data = create_string_buffer(data)
+        else:
+            if sizeof(data) != self.req.contents.datalen:
+                return False
+            p_data = pointer(data)
         c_data = xseg_get_data_nonstatic(self.xseg_ctx.ctx, self.req)
-        p_data = pointer(data)
         memmove(c_data, p_data, self.req.contents.datalen)
 
         return True
 
-    def get_data(self, _type):
+    def get_data(self, _type=None):
         """return a pointer to the data buffer of the request, casted to the
         selected type"""
 #        print "data addr " + str(addressof(xseg_get_data_nonstatic(\
@@ -778,32 +919,112 @@ class Request(object):
     def wait(self):
         """Wait until the associated xseg_request is responded, discarding any
         other requests that may be received in the meantime"""
-        while True:
-            received = xseg_receive(self.xseg_ctx.ctx, self.xseg_ctx.portno, 0)
-            if received:
-#                print addressof(cast(self.req, c_void_p))
-#                print addressof(cast(received, c_void_p))
-#                print addressof(self.req.contents)
-#                print addressof(received.contents)
-                if addressof(received.contents) == \
-                        addressof(self.req.contents):
-#                if addressof(cast(received, c_void_p)) == \
-#                        addressof(cast(self.req, c_void_p)):
-                    break
-                else:
-                    p = xseg_respond(self.xseg_ctx.ctx, received,
-                                     self.xseg_ctx.portno, X_ALLOC)
-                    if p == NoPort:
-                        xseg_put_request(self.xseg_ctx.ctx, received,
-                                         self.xseg_ctx.portno)
-                    else:
-                        xseg_signal(self.xseg_ctx.ctx, p)
-            else:
-                xseg_prepare_wait(self.xseg_ctx.ctx, self.xseg_ctx.portno)
-                xseg_wait_signal(self.xseg_ctx.ctx, 10000000)
-                xseg_cancel_wait(self.xseg_ctx.ctx, self.xseg_ctx.portno)
-        return True
+        self.xseg_ctx.wait_requests([self])
 
     def success(self):
-        return bool((self.req.contents.state & XS_SERVED) and not
+        if not bool(self.req.contents.state & XS_SERVED) and not \
+            bool(self.req.contents.state & XS_FAILED):
+            raise Error("Request not completed, nor Failed")
+        return bool((self.req.contents.state & XS_SERVED) and not \
                    (self.req.contents.state & XS_FAILED))
+
+    @classmethod
+    def get_write_request(cls, xseg, dst, target, data=None, offset=0,
+            datalen=0):
+        if data is None:
+            data = ""
+        size = len(data)
+        if not datalen:
+            datalen = size
+
+        return cls(xseg, dst, target, op=X_WRITE, data=data, offset=offset,
+                   size=size, datalen=datalen)
+
+    @classmethod
+    def get_read_request(cls, xseg, dst, target, size=0, offset=0, datalen=0):
+        if not datalen:
+            datalen=size
+        return cls(xseg, dst, target, op=X_READ, offset=offset, size=size,
+                   datalen=datalen)
+
+    @classmethod
+    def get_info_request(cls, xseg, dst, target):
+        return cls(xseg, dst, target, op=X_INFO)
+
+    @classmethod
+    def get_copy_request(cls, xseg, dst, target, copy_target=None, size=0, offset=0):
+        datalen = sizeof(xseg_request_copy)
+        xcopy = xseg_request_copy()
+        xcopy.target = target
+        xcopy.targetlen = len(target)
+        return cls(xseg, dst, copy_target, op=X_COPY, data=xcopy, datalen=datalen,
+                size=size, offset=offset)
+    @classmethod
+    def get_acquire_request(cls, xseg, dst, target, wait=False):
+        flags = 0
+        if not wait:
+            flags = XF_NOSYNC
+        return cls(xseg, dst, target, op=X_ACQUIRE, flags=flags)
+
+    @classmethod
+    def get_release_request(cls, xseg, dst, target, force=False):
+        flags = 0
+        if force:
+            flags = XF_FORCE
+        return cls(xseg, dst, target, op=X_RELEASE, flags=flags)
+
+    @classmethod
+    def get_delete_request(cls, xseg, dst, target):
+        return cls(xseg, dst, target, op=X_DELETE)
+
+    @classmethod
+    def get_clone_request(cls, xseg, dst, target, clone=None, clone_size=0,
+            cont_addr = False):
+        datalen = sizeof(xseg_request_clone)
+        xclone = xseg_request_clone()
+        xclone.target = target
+        xclone.targetlen= len(target)
+        xclone.size = clone_size
+
+        flags = 0
+        if cont_addr:
+            flags = XF_CONTADDR
+
+        return cls(xseg, dst, clone, op=X_CLONE, data=xclone, datalen=datalen,
+                flags=flags)
+
+    @classmethod
+    def get_open_request(cls, xseg, dst, target):
+        return cls(xseg, dst, target, op=X_OPEN)
+
+    @classmethod
+    def get_close_request(cls, xseg, dst, target):
+        return cls(xseg, dst, target, op=X_CLOSE)
+
+    @classmethod
+    def get_snapshot_request(cls, xseg, dst, target, snap=None):
+        datalen = sizeof(xseg_request_snapshot)
+        xsnapshot = xseg_request_snapshot()
+        xsnapshot.target = snap
+        xsnapshot.targetlen= len(snap)
+
+        return cls(xseg, dst, target, op=X_SNAPSHOT, data=xsnapshot,
+                datalen=datalen)
+
+    @classmethod
+    def get_mapr_request(cls, xseg, dst, target, offset=0, size=0):
+        return cls(xseg, dst, target, op=X_MAPR, offset=offset, size=size,
+                datalen=0)
+
+    @classmethod
+    def get_mapw_request(cls, xseg, dst, target, offset=0, size=0):
+        return cls(xseg, dst, target, op=X_MAPW, offset=offset, size=size,
+                datalen=0)
+
+    @classmethod
+    def get_hash_request(cls, xseg, dst, target, size=0, offset=0):
+        return cls(xseg, dst, target, op=X_HASH, size=size, offset=offset)
+
+    @classmethod
+    def get_hash_request(cls, xseg, dst, target):
+        return cls(xseg, dst, target, op=X_HASH)

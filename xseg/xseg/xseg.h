@@ -226,12 +226,14 @@ struct xseg_task {
 #define X_OPEN     14
 #define X_CLOSE    15
 #define	X_SNAPSHOT 16
+#define X_HASH	   17
 
 /* REQ FLAGS */
 #define XF_NOSYNC    (1 << 0)
 #define XF_FLUSH     (1 << 1)
 #define XF_FUA       (1 << 2)
 #define XF_FORCE     (1 << 3)
+#define XF_CONTADDR  (1 << 4)
 
 /* PORT FLAGS */
 

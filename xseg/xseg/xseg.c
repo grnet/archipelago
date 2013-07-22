@@ -632,7 +632,7 @@ int xseg_create(struct xseg_config *cfg)
 
 	xops = &type->ops;
 	cfg->name[XSEG_NAMESIZE-1] = 0;
-	XSEGLOG("creating segment of size %llu\n", size);
+//	XSEGLOG("creating segment of size %llu\n", size);
 	r = xops->allocate(cfg->name, size);
 	if (r) {
 		XSEGLOG("cannot allocate segment!\n");

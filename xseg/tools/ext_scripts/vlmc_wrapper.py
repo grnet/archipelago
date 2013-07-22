@@ -60,7 +60,12 @@ def create(env):
     """Create a new vlmc Image
     """
     name, size, origin = env
-    vlmc.create(name=name, size=int(size), snap=origin)
+    cont_addr = False
+	if origin and origin.startswith('pithos:'):
+        cont_addr = True
+        origin = origin[7:]
+
+    vlmc.create(name=name, size=int(size), snap=origin, cont_addr=cont_addr)
     return 0
 
 
