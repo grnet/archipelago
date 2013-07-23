@@ -427,7 +427,8 @@ class Segment(object):
 
     def get_spec(self):
         if not self.spec:
-            params = [self.type, self.name, self.ports, self.size, self.alignment]
+            params = [self.type, self.name, str(self.ports), str(self.size),
+                      str(self.alignment)]
             self.spec = ':'.join(params).encode()
         return self.spec
 
@@ -535,11 +536,13 @@ def check_conf():
                       xseg_ports)
 
     xsegbd_range = config['XSEGBD_END'] - config['XSEGBD_START']
-    vlmcd_range = peers['vlmcd'].portno_end - peers['vlmcd'].portno_end
+    vlmcd_range = peers['vlmcd'].portno_end - peers['vlmcd'].portno_start
     if xsegbd_range > vlmcd_range:
         raise Error("Xsegbd port range must be smaller that vlmcd port range")
     return True
 
+def get_segment():
+    return segment
 
 def construct_peers():
     return peers
@@ -593,7 +596,7 @@ def exclusive(get_port=False):
 
             acquired_locks[lock_file] += 1
             try:
-                r = fn(*args, port=port, **kwargs)
+                r = fn(*args, **kwargs)
             finally:
                 acquired_locks[lock_file] -= 1
                 depth = acquired_locks[lock_file]

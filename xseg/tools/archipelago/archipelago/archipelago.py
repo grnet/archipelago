@@ -196,7 +196,7 @@ def start(user=False, role=None, cli=False, **kwargs):
         time.sleep(0.5)
         make_segdev(cli)
         time.sleep(0.5)
-        segment.create()
+        get_segment().create()
         time.sleep(0.5)
         start_peers(peers, cli)
         load_module(xsegbd, xsegbd_args)

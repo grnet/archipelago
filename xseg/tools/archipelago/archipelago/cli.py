@@ -56,7 +56,8 @@ def vlmc_parser():
                                help='create from snapshot')
     create_parser.add_argument('-p', '--pool', type=str, nargs='?',
                                help='for backwards compatiblity with rbd')
-    create_parser.add_argument('-c', '--contaddr', type=str, nargs='?',
+    create_parser.add_argument('-ca', '--contaddr',  action='store_true',
+                               default=False,
                                help='specify the snapshot as content addressable')
     create_parser.add_argument('name', type=str,  help='volume/device name')
     create_parser.set_defaults(func=vlmc.create)
