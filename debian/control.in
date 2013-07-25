@@ -3,7 +3,7 @@ Section: otherosfs
 Priority: extra
 Maintainer: Filippos Giannakos <philipgian@grnet.gr>
 Build-Depends: debhelper (>= 7.0.50~), dkms(>=2.1.0.0), python, libst1,
- librados-dev(=0.61.2+grnet2-1), libssl-dev, gccxml,
+ librados-dev(=0.61.2+grnet2-1) | librados-dev(>=0.65), libssl-dev, gccxml,
  python-ctypeslib
 Standards-Version: 3.9.1
 X-Python-Version: >=2.6
@@ -33,7 +33,8 @@ Package: python-archipelago
 Section: python
 Architecture: any
 Depends: ${misc:Depends}, ${python:Depends}, python-xseg(=${binary:Version}),
- python-ceph, python-pkg-resources
+ python-pkg-resources
+Recommends: python-ceph
 Provides: ${python:Provides}
 Description: Python archipelago module
  Extended Description here
@@ -43,9 +44,15 @@ Architecture: amd64
 Depends: ${misc:Depends},  ${shlibs:Depends}, ${python:Depends},
  libxseg0(=${binary:Version}), python-xseg(=${binary:Version}),
  python-archipelago(=${binary:Version}),
- librados2(=0.61.2+grnet2-1),
  archipelago-modules-#VERSION# | archipelago-modules-dkms(=${binary:Version})
 Description:  Provides archipelago infrastructure
+ Extended Description here
+
+Package: archipelago-rados
+Architecture: amd64
+Depends: ${misc:Depends}, ${shlibs:Depends}, archipelago(=${binary:Version}),
+ librados2(=0.61.2+grnet2-1) | librados2(>=0.65)
+Description: Provides archipelago rados driver
  Extended Description here
 
 Package: archipelago-dbg
