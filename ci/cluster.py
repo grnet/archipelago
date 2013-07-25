@@ -155,7 +155,7 @@ class ConfigClient(object):
     def set_logger(cls, name):
         """Foo"""
         cls.logger = logging.getLogger(name)
-        cls.logger.setLevel(logging.DEBUG)
+        cls.logger.setLevel(logging.INFO)
         handler = logging.StreamHandler()
         handler.setFormatter(_MyFormatter())
         cls.logger.addHandler(handler)
@@ -225,7 +225,7 @@ class CloudClient(ConfigClient):
     def set_logger(cls, name):
         """Foo"""
         cls.logger = logging.getLogger(name)
-        cls.logger.setLevel(logging.DEBUG)
+        cls.logger.setLevel(logging.INFO)
         handler = logging.StreamHandler()
         handler.setFormatter(_MyFormatter())
         cls.logger.addHandler(handler)
@@ -305,7 +305,7 @@ class Server(CloudClient):
     def __init__(self, config_id):
         CloudClient.__init__(self)
         self.logger = logging.getLogger(config_id)
-        self.logger.setLevel(logging.DEBUG)
+        self.logger.setLevel(logging.INFO)
         handler = logging.StreamHandler()
         handler.setFormatter(_MyFormatter())
         self.logger.addHandler(handler)
@@ -569,7 +569,7 @@ class Cluster(ConfigClient):
 
         # Setup logger
         self.logger = logging.getLogger('Cluster')
-        self.logger.setLevel(logging.DEBUG)
+        self.logger.setLevel(logging.INFO)
         handler = logging.StreamHandler()
         handler.setFormatter(_MyFormatter())
         self.logger.addHandler(handler)
