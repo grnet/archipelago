@@ -24,6 +24,7 @@ override_dh_dkms:
 override_dh_strip:
 	dh_strip -plibxseg0 --dbg-package=libxseg0-dbg
 	dh_strip -parchipelago --dbg-package=archipelago-dbg
+	dh_strip -parchipelago-rados --dbg-package=archipelago-rados-dbg
 
 override_dh_installinit:
 	dh_installinit --no-start

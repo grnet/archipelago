@@ -62,6 +62,13 @@ Depends: ${misc:Depends}, archipelago(=${binary:Version})
 Description:  Provides archipelago-dbg infrastructure
  Extended Description here
 
+Package: archipelago-rados-dbg
+Architecture: amd64
+Section: debug
+Depends: ${misc:Depends}, archipelago-rados(=${binary:Version})
+Description:  Provides archipelago-rados-dbg infrastructure
+ Extended Description here
+
 Package: archipelago-ganeti
 Architecture: any
 Depends: ${misc:Depends}, python(>=2.6), archipelago(=${binary:Version}),
