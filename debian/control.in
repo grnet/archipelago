@@ -33,7 +33,7 @@ Package: python-archipelago
 Section: python
 Architecture: any
 Depends: ${misc:Depends}, ${python:Depends}, python-xseg(=${binary:Version}),
- python-ceph
+ python-ceph, python-pkg-resources
 Provides: ${python:Provides}
 Description: Python archipelago module
  Extended Description here
