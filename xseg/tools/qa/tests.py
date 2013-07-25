@@ -33,7 +33,7 @@
 
 import archipelago
 from archipelago.common import Xseg_ctx, Request, Filed, Mapperd, Vlmcd, Sosd, \
-        create_segment, destroy_segment, Error
+        Error, Segment
 from archipelago.archipelago import start_peer, stop_peer
 import random as rnd
 import unittest2 as unittest
@@ -86,7 +86,7 @@ def merkle_hash(hashes):
 
 def init():
     rnd.seed()
-    archipelago.common.BIN_DIR=os.path.join(os.getcwd(), '../../peers/user/')
+#    archipelago.common.BIN_DIR=os.path.join(os.getcwd(), '../../peers/user/')
     archipelago.common.LOGS_PATH=os.path.join(os.getcwd(), 'logs')
     archipelago.common.PIDFILE_PATH=os.path.join(os.getcwd(), 'pids')
     if not os.path.isdir(archipelago.common.LOGS_PATH):
@@ -97,23 +97,25 @@ def init():
     recursive_remove(archipelago.common.LOGS_PATH)
 
 class XsegTest(unittest.TestCase):
-    xseg = None
     myport = 15
     spec = "posix:testsegment:16:256:12".encode()
     blocksize = 4*1024*1024
+    segment = None
 
     def setUp(self):
+        self.segment = Segment('posix', 'testsegment', 16, 256, 12)
         try:
-            create_segment(self.spec)
+            self.segment.create()
         except Exception as e:
-            destroy_segment(self.spec)
-            create_segment(self.spec)
-        self.xseg = Xseg_ctx(self.spec, self.myport)
+            self.segment.destroy()
+            self.segment.create()
+        self.xseg = Xseg_ctx(self.segment, self.myport)
 
     def tearDown(self):
         if self.xseg:
             self.xseg.shutdown()
-        destroy_segment(self.spec)
+        if self.segment:
+            self.segment.destroy()
 
     @staticmethod
     def get_reply_info(size):
