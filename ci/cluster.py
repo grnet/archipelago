@@ -137,7 +137,7 @@ class _MyFormatter(logging.Formatter):
             self._fmt = _yellow("[W] %(msg)s")
         elif record.levelno == logging.ERROR:
             self._fmt = _red("[E] %(msg)s")
-        result = super(_MyFormatter, self).format(record)
+        result = logging.Formatter.format(self, record)
         self._fmt = format_orig
         return result
 
@@ -616,8 +616,11 @@ class Cluster(ConfigClient):
 
             self.wait_status(submitted, "ACTIVE")
 
-            for s in self.servers:
-                s.ping(100)
+            if self.config.has_option('Global', 'okeanos_io'):
+                io = self.config.getboolean('Global', 'okeanos_io')
+                if not io:
+                    for s in self.servers:
+                        s.ping(100)
 
             for s in self.servers:
                 s.inject_files()
