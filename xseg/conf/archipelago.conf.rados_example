@@ -22,8 +22,8 @@ VTOOL_END=1022
 # 	vlmcd
 # Order matters. Peers will be started with list order and stopped with reversed
 # order.
-roles = [('blockerb', 'file_blocker'),
-         ('blockerm', 'file_blocker'),
+roles = [('blockerb', 'rados_blocker'),
+         ('blockerm', 'rados_blocker'),
          ('mapperd', 'mapperd'),
          ('vlmcd', 'vlmcd')]
 
@@ -38,20 +38,16 @@ blockerb= {
     'portno_start': 1000,
     'portno_end': 1000,
     'log_level': 3,
-    'nr_ops': 64,
-    'nr_threads': 64,
-    'archip_dir': '/srv/archip/blocks',
-    'fdcache': 512,
+    'nr_ops': 512,
+    'pool': 'blocks'
 }
 
 blockerm = {
     'portno_start': 1002,
     'portno_end': 1002,
     'log_level': 3,
-    'nr_ops': 64,
-    'nr_threads': 64,
-    'archip_dir': '/srv/archip/maps',
-    'fdcache': 512,
+    'nr_ops': 512,
+    'pool': 'maps'
 }
 
 mapperd = {
