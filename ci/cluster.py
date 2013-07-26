@@ -92,6 +92,10 @@ def capture_streams(func):
         return ret
     return inner
 
+def get_port_from_ip(ip):
+    ip = ip.split('.')
+    port = 10000 + int(ip[2]) * 256 + int(ip[3])
+    return port
 
 class Timeout(Exception):
     timeout = 0
@@ -457,6 +461,12 @@ class Server(CloudClient):
         except:
             server_ip = None
         server_port = 22
+        if server_ip and self.config.has_option('Global', 'okeanos_io'):
+            io = self.config.getboolean('Global', 'okeanos_io')
+            if io:
+                server_port = get_port_from_ip(server_ip)
+                server_ip = "gate.okeanos.io"
+
         self.logger.debug("Server's IPv4 is %s" % _green(server_ip))
         self.logger.debug("Server's ssh port is %s" % _green(server_port))
         self.ipv4 = server_ip
