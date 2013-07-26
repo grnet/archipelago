@@ -60,6 +60,8 @@ clean: $(XSEG_CLEAN_TARGETS)
 	rm $(CONFIG)
 
 install: $(XSEG_INSTALL_TARGETS)
+	install -d $(DESTDIR)$(confdir)
+	install -o 0 -g 0 -m 644 -t $(DESTDIR)$(confdir) conf/archipelago.conf
 
 install-src: $(XSEG_INSTALLSRC_TARGETS) $(XSEG_INSTALLSRC_DIRS)
 	install -d $(DESTDIR)$(srcdir)/lib

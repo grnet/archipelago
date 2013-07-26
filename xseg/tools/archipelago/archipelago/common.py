@@ -67,7 +67,7 @@ modules = ['xseg', 'segdev', 'xseg_posix', 'xseg_pthread', 'xseg_segdev']
 xsegbd = 'xsegbd'
 
 BIN_DIR = '/usr/bin/'
-DEFAULTS = '/etc/default/archipelago'
+DEFAULTS = '/etc/archipelago/archipelago.conf'
 
 #system defaults
 ARCHIP_PREFIX = 'archip_'
