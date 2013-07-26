@@ -6,3 +6,5 @@ usr/bin/archip-dummy
 usr/bin/archip-filed
 usr/bin/archip-mapperd
 usr/bin/archip-vlmcd
+
+etc/archipelago/
