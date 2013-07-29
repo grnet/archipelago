@@ -982,7 +982,7 @@ class Request(object):
 
     @classmethod
     def get_clone_request(cls, xseg, dst, target, clone=None, clone_size=0,
-            cont_addr = False):
+            cont_addr=False):
         datalen = sizeof(xseg_request_clone)
         xclone = xseg_request_clone()
         xclone.target = target
