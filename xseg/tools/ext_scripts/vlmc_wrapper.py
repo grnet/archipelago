@@ -61,7 +61,7 @@ def create(env):
     """
     name, size, origin = env
     cont_addr = False
-	if origin and origin.startswith('pithos:'):
+    if origin and origin.startswith('pithos:'):
         cont_addr = True
         origin = origin[7:]
 

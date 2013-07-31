@@ -1,0 +1,17 @@
+[Global]
+#files = ../xseg/tools/qa/tests.py, /root/
+cleanup_servers = True
+install_cmd = apt-get --yes install
+build_timeout = 240
+servers = archipelago-test
+#flavor_id = 1
+#image_id = 1f8454f0-8e3e-4b6c-ab8e-5236b728dffe
+#auth_url = https://accounts.okeanos.grnet.gr/identity/v2.0/
+auth_url = https://accounts.okeanos.io/identity/v2.0/
+destroy_on_error = True
+packages = htop, vim, python-psutil, python-pkg-resources, python-unittest2, libst1, dkms, debhelper, make, bzip2, linux-headers-amd64
+update_cmd = apt-get update
+okeanos_io = True
+flavor_id = 706
+image_id = 895242b9-af8a-48c5-8218-60e1fb2e985b
+
