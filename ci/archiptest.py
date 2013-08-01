@@ -7,6 +7,12 @@ class TestCluster(Cluster):
     def execute_test(self, ci_dir, packages_dir):
         tests = os.path.join(ci_dir, '../xseg/tools/qa')
         self.inject_file(tests, '/root')
+        self.execute_command('mkdir  -p /etc/ceph/')
+        ceph_conf = os.path.join(ci_dir, 'ceph.conf')
+        self.inject_file(ceph_conf, '/etc/ceph/ceph.conf')
+        ceph_apt = os.path.join(ci_dir, 'ceph.list')
+        self.inject_file(ceph_apt, '/etc/apt/sources.list.d/')
+        self.install_packages(['ceph-common', 'librados2'])
         self.inject_file(packages_dir, '/root')
         cmd = """dpkg -i \
         libxseg0_*_amd64.deb                    \
@@ -16,18 +22,20 @@ class TestCluster(Cluster):
         archipelago-modules-dkms_*_amd64.deb    \
         archipelago_*_amd64.deb                 \
         archipelago-dbg_*_amd64.deb             \
+        archipelago-rados_*_amd64.deb           \
+        archipelago-rados-dbg_*_amd64.deb       \
         archipelago-ganeti_*_amd64.deb"""
         remote_folder = os.path.normpath(packages_dir)
         remote_folder = os.path.basename(remote_folder)
         self.execute_command('cd /root/' + remote_folder + ' ; ' + cmd)
-        #self.execute_command('python /root/qa/tests.py -v', verbose=True)
-        self.execute_command('python /root/qa/tests.py -v FiledTest', verbose=True)
-        self.execute_command('python /root/qa/tests.py -v MapperdTest', verbose=True)
-        self.execute_command('python /root/qa/tests.py -v VlmcdTest', verbose=True)
+        self.execute_command('python /root/qa/tests.py -v', verbose=True)
+#        self.execute_command('python /root/qa/tests.py -v FiledTest', verbose=True)
+#        self.execute_command('python /root/qa/tests.py -v MapperdTest', verbose=True)
+#        self.execute_command('python /root/qa/tests.py -v VlmcdTest', verbose=True)
         self.execute_command('mkdir  -p /srv/archip/blocks')
         self.execute_command('mkdir  -p /srv/archip/maps')
         self.execute_command('mkdir  -p /mnt/mountpoint')
-        self.execute_command('archipelago start', verbose=True)
+        self.execute_command('archipelago start')
         self.execute_command('python /root/qa/basictest.py', verbose=True)
 
 if __name__ == '__main__':

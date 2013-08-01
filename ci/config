@@ -1,7 +1,7 @@
 [Global]
 #files = ../xseg/tools/qa/tests.py, /root/
 cleanup_servers = True
-install_cmd = apt-get --yes install
+install_cmd = apt-get --yes --force-yes install
 build_timeout = 240
 servers = archipelago-test
 #flavor_id = 1
