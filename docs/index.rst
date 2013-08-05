@@ -25,18 +25,18 @@ This is accomplished by maintaining a map for each volume, to map offset in a
 volume with a single object. The exact offset inside the object, is calculated
 statically from the fixed object size and the offset in the volume. But having
 this map and the composition subsystems, allow us to do much more than simple
-volume composition.  Archipelago offers Copy-On-Write snapshotable volumes.
+volume composition.  Archipelago offers Copy-On-Write snapshottable volumes.
 Furthermore, each snapshot can be hashed, to allow deduplication to play its
-part, reducing the storage cost of each hashed object. Further more, Archipelago
+part, reducing the storage cost of each hashed object. Furthermore, Archipelago
 can integrate with Pithos, and use Pithos images to provision a volume with
 Copy-On-Write semantics (i.e. a clone). Since Pithos images are already hashed,
 we can store Archipelago hashed volumes, which are indistinguishable from a Pithos
 image, along with the Pithos images, to enable further deduplication, or even
 registering an archipelago hashed snapshot as Pithos image file.
 
-Having stated all that, Archipelago is used by Cyclades and Ganeti for fast VM
-provisioning based on CoW volumes. Moreover, it enables live migration of
-thinly-provisioned VMs with no physically shared storage.
+Archipelago is used by Cyclades and Ganeti for fast VM provisioning based on CoW
+volumes. Moreover, it enables live migration of thinly-provisioned VMs with no
+physically shared storage.
 
 
 Contents:

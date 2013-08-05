@@ -38,7 +38,7 @@ other nodes running archipelago
 Archipelago main asset is that it decouples the
 composition/snapshot/cloning/deduplicating logic from the storage backend used.
 It provides a software stack where the aforementioned logic and volume handling
-is implemented and through pluggable storage drivers, it can operate over
+is implemented and through plugable storage drivers, it can operate over
 different storage types. So, Archipelago greatly reduces the need of each
 individual storage manufacturer or developer, to develop the same set of
 features for their storage solution.
