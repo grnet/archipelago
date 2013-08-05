@@ -565,7 +565,9 @@ static int generic_peerd_loop(void *arg)
 	xport portno_start = peer->portno_start;
 	xport portno_end = peer->portno_end;
 	pid_t pid = syscall(SYS_gettid);
-	uint64_t threshold=1000/(1 + portno_end - portno_start);
+	uint64_t threshold = peer->threshold;
+	threshold /= (1 + portno_end - portno_start);
+	threshold += 1;
 	uint64_t loops;
 
 	XSEGLOG2(&lc, I, "%s has tid %u.\n", id, pid);
@@ -632,7 +634,8 @@ static struct xseg *join(char *spec)
 }
 
 static struct peerd* peerd_init(uint32_t nr_ops, char* spec, long portno_start,
-			long portno_end, uint32_t nr_threads, xport defer_portno)
+			long portno_end, uint32_t nr_threads, xport defer_portno,
+			uint64_t threshold)
 {
 	int i;
 	struct peerd *peer;
@@ -650,6 +653,7 @@ static struct peerd* peerd_init(uint32_t nr_ops, char* spec, long portno_start,
 	}
 	peer->nr_ops = nr_ops;
 	peer->defer_portno = defer_portno;
+	peer->threshold = threshold;
 #ifdef MT
 	peer->nr_threads = nr_threads;
 	peer->thread = calloc(nr_threads, sizeof(struct thread));
@@ -811,6 +815,7 @@ int main(int argc, char *argv[])
 	int daemonize = 0, help = 0;
 	uint32_t nr_ops = 16;
 	uint32_t nr_threads = 1;
+	uint64_t threshold = 1000;
 	unsigned int debug_level = 0;
 	xport defer_portno = NoPort;
 	pid_t old_pid;
@@ -843,6 +848,7 @@ int main(int argc, char *argv[])
 	READ_ARG_BOOL("-d", daemonize);
 	READ_ARG_BOOL("-h", help);
 	READ_ARG_BOOL("--help", help);
+	READ_ARG_ULONG("--threshold", threshold);
 	READ_ARG_STRING("--pidfile", pidfile, MAX_PIDFILE_LEN);
 	END_READ_ARGS();
 
@@ -897,7 +903,7 @@ int main(int argc, char *argv[])
 		goto out;
 	}
 
-	peer = peerd_init(nr_ops, spec, portno_start, portno_end, nr_threads, defer_portno);
+	peer = peerd_init(nr_ops, spec, portno_start, portno_end, nr_threads, defer_portno, threshold);
 	if (!peer){
 		r = -1;
 		goto out;

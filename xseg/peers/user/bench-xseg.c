@@ -854,7 +854,9 @@ int bench_peerd_loop(void *arg)
 	xport portno_start = peer->portno_start;
 	xport portno_end = peer->portno_end;
 	pid_t pid = syscall(SYS_gettid);
-	uint64_t threshold=1000/(1 + portno_end - portno_start);
+	uint64_t threshold = peer->threshold;
+        threshold /= (1 + portno_end - portno_start);
+	threshold += 1;
 	uint64_t next_report = prefs->rep->interval;
 	uint64_t loops;
 	int r;

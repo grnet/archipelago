@@ -106,6 +106,7 @@ struct peerd {
 	xport portno_start;
 	xport portno_end;
 	long nr_ops;
+	uint64_t threshold;
 	xport defer_portno;
 	struct peer_req *peer_reqs;
 	struct xq free_reqs;
