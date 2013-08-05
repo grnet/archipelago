@@ -81,14 +81,15 @@
 
 void custom_peer_usage(char *argv0)
 {
-	fprintf(stderr, "Custom peer options:\n"
-		"--pithos PATH --archip VPATH --prefix PREFIX\n\n"
-		"where:\n"
-		"\tPATH: path to pithos data blocks\n"
-		"\tVPATH: path to modified volume blocks\n"
-		"\tPREFIX: Common prefix of Archipelagos objects to be"
-		"striped during filesystem hierarchy creation\n"
-	       );
+	 fprintf(stderr, "General peer options:\n"
+                "  Option        | Default    | \n"
+                "  --------------------------------------------\n"
+                "    --fdcache   | 2 * nr_ops | Fd cache size\n"
+                "    --archip    | None       | Archipelago directory\n"
+                "    --prefix    | None       | Common prefix of objects that should be stripped\n"
+                "    --uniquestr | None       | Unique string for this instance\n"
+                "\n"
+               );
 }
 
 /* fdcache_node flags */
