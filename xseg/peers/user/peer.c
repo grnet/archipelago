@@ -669,6 +669,8 @@ static struct peerd* peerd_init(uint32_t nr_ops, char* spec, long portno_start,
 #else
 	if (!xq_alloc_seq(&peer->free_reqs, nr_ops, nr_ops))
 		goto malloc_fail;
+	if (peer->free_reqs.size < peer->nr_ops)
+		peer->nr_ops = peer->free_reqs.size;
 #endif
 	peer->peer_reqs = calloc(nr_ops, sizeof(struct peer_req));
 	if (!peer->peer_reqs){
