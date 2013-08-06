@@ -1494,16 +1494,18 @@ int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 		XSEGLOG2(&lc, E, "Could not get limit for max fds");
 		return -1;
 	}
-	//check max fds. (> fdcache + nr_ops)
-	//TODO assert fdcache > 2*nr_ops or add waitq
-	if (rlim.rlim_cur < pfiled->maxfds + peer->nr_ops - 4) {
-		XSEGLOG2(&lc, E, "FD limit %d is less than fdcache + nr_ops -4(%u)",
-				rlim.rlim_cur, pfiled->maxfds + peer->nr_ops - 4);
-		return -1;
-	}
+	//TODO check nr_ops == nr_threads.
+	//
 	r = xcache_init(&pfiled->cache, pfiled->maxfds, &c_ops, XCACHE_LRU_HEAP, peer);
 	if (r < 0)
 		return -1;
+	//check max fds. (> fdcache + nr_threads)
+	//TODO assert fdcache > 2*nr_threads or add waitq
+	if (rlim.rlim_cur < pfiled->cache.size + peer->nr_threads - 4) {
+		XSEGLOG2(&lc, E, "FD limit %d is less than cachesize + nr_ops -4(%u)",
+				rlim.rlim_cur, pfiled->cache.size + peer->nr_ops - 4);
+		return -1;
+	}
 
 out:
 	return ret;
