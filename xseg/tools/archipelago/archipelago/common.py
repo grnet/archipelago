@@ -277,14 +277,17 @@ class Sosd(MTpeer):
 
 class Filed(MTpeer):
     def __init__(self, archip_dir=None, prefix=None, fdcache=None,
-                 unique_str=None, **kwargs):
+                 unique_str=None, nr_threads=1, nr_ops=16, **kwargs):
         self.executable = FILE_BLOCKER
         self.archip_dir = archip_dir
         self.prefix = prefix
         self.fdcache = fdcache
         self.unique_str = unique_str
+        nr_threads = nr_ops
+        if self.fdcache and fdcache < 2*nr_threads:
+            raise Error("Fdcache should be greater than 2*nr_threads")
 
-        super(Filed, self).__init__(**kwargs)
+        super(Filed, self).__init__(nr_threads=nr_threads, nr_ops=nr_ops, **kwargs)
 
         if not self.archip_dir:
             raise Error("%s: Archip dir must be set" % self.role)
