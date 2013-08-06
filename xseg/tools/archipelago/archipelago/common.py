@@ -91,6 +91,8 @@ RADOS_BLOCKER = 'archip-sosd'
 MAPPER = 'archip-mapperd'
 VLMC = 'archip-vlmcd'
 
+def is_power2(x):
+    return bool(x != 0 and (x & (x-1)) == 0)
 
 class Peer(object):
     cli_opts = None
@@ -102,15 +104,22 @@ class Peer(object):
             raise Error("Role was not provided")
         self.role = role
 
+        self.nr_ops = nr_ops
+        if not self.nr_ops > 0:
+            raise Error("Invalid nr_ops for %s" % role)
+
+        if not is_power2(self.nr_ops):
+            raise Error("nr_ops of %s is not a power of 2" % role)
+
         if not self.executable:
             raise Error("Executable must be provided for %s" % role)
 
         if portno_start is None:
-            raise Error("Portno_start must be provied for %s" % role)
+            raise Error("Portno_start must be provided for %s" % role)
         self.portno_start = portno_start
 
         if portno_end is None:
-            raise Error("Portno_end must be provied for %s" % role)
+            raise Error("Portno_end must be provided for %s" % role)
         self.portno_end = portno_end
 
         self.daemon = daemon
@@ -148,7 +157,6 @@ class Peer(object):
                 raise Error("Cannot create path %s" %
                             os.path.dirname(self.pidfile))
 
-        self.nr_ops = nr_ops
         self.log_level = log_level
 
         if self.log_level < 0 or self.log_level > 3:
