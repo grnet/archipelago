@@ -26,6 +26,10 @@ appropriate storage driver is used.
 Archipelago Overview
 ====================
 
+.. image:: images/archipelago-overview.png
+    :target: _images/archipelago-overview.png
+    :scale: 70
+
 Archipelago, as mentioned before, is a distributed storage layer that provides
 volumes with the ability to snapshot them and clone them to create new ones,
 independently from the actual storage. Archipelago software stack is deployed on
@@ -125,6 +129,9 @@ the original request.
 
 Archipelago APIs
 ================
+
+.. image:: images/archipelago-apis.png
+    :target: _images/archipelago-apis.png
 
 Archipelago allows users to manage and access volume backed by various storage
 types. In order to do that, archipelago provides multiple endpoints for the user
