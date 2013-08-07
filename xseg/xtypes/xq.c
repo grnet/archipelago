@@ -63,10 +63,12 @@ void xq_init_map(struct xq *xq,
 		 void *mem)
 {
 	xqindex t, *qmem = mem;
+	xq->size = __snap(size);
+	if (count > xq->size)
+		count = xq->size;
 	xq->head = count + 1;
 	xq->tail = 0;
 	XPTRSET(&xq->queue, qmem);
-	xq->size = __snap(size);
 	for (t = 0; t < count; t++)
 		qmem[t] = mapfn(t);
 	xlock_release(&xq->lock);
@@ -75,10 +77,12 @@ void xq_init_map(struct xq *xq,
 void xq_init_seq(struct xq *xq, xqindex size, xqindex count, void *mem)
 {
 	xqindex t, *qmem = mem;
+	xq->size = __snap(size);
+	if (count > xq->size)
+		count = xq->size;
 	xq->head = count + 1;
 	xq->tail = 0;
 	XPTRSET(&xq->queue, qmem);
-	xq->size = __snap(size);
 	for (t = 0; t < count; t++)
 		qmem[t] = t;
 	xlock_release(&xq->lock);
