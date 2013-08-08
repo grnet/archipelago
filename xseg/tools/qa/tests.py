@@ -1026,6 +1026,8 @@ class BlockerTest(object):
                 expected_data=data, serviced=datalen)
         self.send_and_evaluate_copy(self.blockerport, target, dst_target=copy_target,
                 size=datalen, serviced=datalen)
+        self.send_and_evaluate_copy(self.blockerport, target, dst_target=copy_target,
+                size=datalen+1, serviced=datalen+1)
         self.send_and_evaluate_read(self.blockerport, copy_target, size=datalen,
                 expected_data=data)
 
