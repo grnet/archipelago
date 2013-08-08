@@ -75,6 +75,8 @@
 #define WRITE 1
 #define READ 2
 
+#define min(_a, _b) (_a < _b ? _a : _b)
+
 /*
  * Globals, holding command-line arguments
  */
@@ -648,6 +650,7 @@ static void handle_copy(struct peerd *peer, struct peer_req *pr)
 	char *buf = malloc(MAX_PATH_SIZE + MAX_FILENAME_SIZE);
 	int src = -1, dst = -1, r = -1;
 	ssize_t c = 0, bytes;
+	ssize_t limit = 0;
 
 	XSEGLOG2(&lc, I, "Handle copy started for pr: %p, req: %p", pr, pr->req);
 	if (!buf){
@@ -690,8 +693,10 @@ static void handle_copy(struct peerd *peer, struct peer_req *pr)
 	}
 
 	c = 0;
-	while (c < st.st_size) {
-		bytes = sendfile(dst, src, NULL, st.st_size - c);
+
+	limit = min(req->size, st.st_size);
+	while (c < limit) {
+		bytes = sendfile(dst, src, NULL, limit - c);
 		if (bytes < 0) {
 			XSEGLOG2(&lc, E, "Copy failed for %s", buf);
 			r = -1;
@@ -703,6 +708,9 @@ static void handle_copy(struct peerd *peer, struct peer_req *pr)
 
 out:
 	req->serviced = c;
+	if (limit && c == limit)
+		req->serviced = req->size;
+
 	if (src > 0)
 		close(src);
 	free(buf);
