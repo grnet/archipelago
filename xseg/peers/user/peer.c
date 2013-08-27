@@ -43,6 +43,7 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <errno.h>
+#include <sched.h>
 #ifdef MT
 #include <pthread.h>
 #endif
@@ -65,7 +66,15 @@
 //FIXME this should not be defined here probably
 #define MAX_SPEC_LEN 128
 #define MAX_PIDFILE_LEN 512
+#define MAX_CPUS_LEN 512
 
+/* Define the cpus on which the threads/process will be pinned */
+struct cpu_list {
+	int cpus[48];
+	int len;
+};
+
+struct cpu_list cpu_list;
 volatile unsigned int terminated = 0;
 unsigned int verbose = 0;
 struct log_ctx lc;
@@ -473,8 +482,24 @@ void *init_thread_loop(void *arg)
 {
 	struct thread *t = (struct thread *) arg;
 	struct peerd *peer = t->peer;
+	pthread_t thread = pthread_self();
+	long int thread_num = t - t->peer->thread;
 	char *thread_id;
 	int i;
+
+	cpu_set_t mask;
+	int r;
+
+	if (cpu_list.len) {
+		CPU_ZERO(&mask);
+		CPU_SET(cpu_list.cpus[thread_num], &mask);
+		r = pthread_setaffinity_np(thread, sizeof(mask), &mask);
+		if (r < 0) {
+			perror("sched_setaffinity");
+			return NULL;
+		}
+	}
+
 
 	/*
 	 * We need an identifier for every thread that will spin in peerd_loop.
@@ -489,7 +514,7 @@ void *init_thread_loop(void *arg)
 	 * chars should be more than enough.
 	 */
 	thread_id = malloc(13 * sizeof(char));
-	snprintf(thread_id, 13, "Thread %ld", t - t->peer->thread);
+	snprintf(thread_id, 13, "Thread %ld", thread_num);
 	for (i = 0; thread_id[i]; i++) {}
 	t->arg = (void *)realloc(thread_id, i-1);
 	pthread_setspecific(threadkey, t);
@@ -602,6 +627,19 @@ static int generic_peerd_loop(void *arg)
 static int init_peerd_loop(struct peerd *peer)
 {
 	struct xseg *xseg = peer->xseg;
+	cpu_set_t mask;
+	int r;
+
+	if (cpu_list.len) {
+		CPU_ZERO(&mask);
+		CPU_SET(cpu_list.cpus[0], &mask);
+
+		r = sched_setaffinity(0, sizeof(mask), &mask);
+		if (r < 0) {
+			perror("sched_setaffinity");
+			return -1;
+		}
+	}
 
 	peer->peerd_loop(peer);
 	custom_peer_finalize(peer);
@@ -781,6 +819,23 @@ int pidfile_open(char *path, pid_t *old_pid)
 	return fd;
 }
 
+int get_cpu_list(char *cpus, struct cpu_list *cpu_list)
+{
+	char *tok, *rem;
+	int i = 0;
+
+	while ((tok = strtok(cpus, ",")) != NULL) {
+		cpu_list->cpus[i++] = strtol(tok, &rem, 10);
+		if (strlen(rem) > 0)	/* Not a number */
+			return -1;
+		cpus = NULL;
+	}
+
+	cpu_list->len = i;
+
+	return 0;
+}
+
 void usage(char *argv0)
 {
 	fprintf(stderr, "Usage: %s [general options] [custom peer options]\n\n", argv0);
@@ -799,6 +854,8 @@ void usage(char *argv0)
 #ifdef MT
 		"    -t        | No      | Number of threads \n"
 #endif
+		"    --cpus    | No      | Coma-separated list of CPUs\n"
+		"              |         | to pin the process or threads\n"
 		"\n"
 	       );
 	custom_peer_usage();
@@ -824,10 +881,12 @@ int main(int argc, char *argv[])
 	char spec[MAX_SPEC_LEN + 1];
 	char logfile[MAX_LOGFILE_LEN + 1];
 	char pidfile[MAX_PIDFILE_LEN + 1];
+	char cpus[MAX_CPUS_LEN + 1];
 
 	logfile[0] = 0;
 	pidfile[0] = 0;
 	spec[0] = 0;
+	cpus[0] = 0;
 
 	//capture here -g spec, -n nr_ops, -p portno, -t nr_threads -v verbose level
 	// -dp xseg_portno to defer blocking requests
@@ -849,6 +908,7 @@ int main(int argc, char *argv[])
 	READ_ARG_BOOL("-h", help);
 	READ_ARG_BOOL("--help", help);
 	READ_ARG_ULONG("--threshold", threshold);
+	READ_ARG_STRING("--cpus", cpus, MAX_CPUS_LEN);
 	READ_ARG_STRING("--pidfile", pidfile, MAX_PIDFILE_LEN);
 	END_READ_ARGS();
 
@@ -889,6 +949,30 @@ int main(int argc, char *argv[])
 	}
 
 	pidfile_write(pid_fd);
+
+	if (cpus[0]) {
+		r = get_cpu_list(cpus, &cpu_list);
+
+		if (r < 0) {
+			XSEGLOG2(&lc, E, "--cpus %s: Invalid input", cpus);
+			goto out;
+		}
+#ifdef MT
+		if (nr_threads != cpu_list.len) {
+			XSEGLOG2(&lc, E, "--cpus %s: Number of "
+					"threads (%d) and CPUs don't match",
+					cpus, nr_threads);
+			goto out;
+		}
+#else
+		if (cpu_list.len != 1) {
+			XSEGLOG2(&lc, E, "--cpus %s: Too many CPUs for a "
+					"single process", cpus);
+			goto out;
+		}
+#endif
+	}
+
 
 	//TODO perform argument sanity checks
 	verbose = debug_level;
