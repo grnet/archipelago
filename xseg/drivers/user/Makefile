@@ -43,7 +43,7 @@ FILES+=$(shell ls *.c)
 SUBDIR:=$(subst $(XSEG_HOME),,$(CURDIR))
 
 
-DRIVERS=xseg_posix xseg_segdev xseg_pthread
+DRIVERS=xseg_posix xseg_segdev xseg_pthread xseg_posixfd
 DRVOBJS=$(DRIVERS:=.o)
 DRVSOS=$(DRIVERS:=.so)
 
@@ -71,6 +71,12 @@ xseg_pthread.o: xseg_pthread.c $(BASE)/xseg/xseg.h $(BASE)/drivers/xseg_pthread.
 
 xseg_pthread.so: xseg_pthread.o $(BASE)/sys/user/xseg_user.o
 	$(CC) -shared -lpthread -o $@ $< $(BASE)/sys/user/xseg_user.o 
+
+xseg_posixfd.o: xseg_posixfd.c $(BASE)/xseg/xseg.h $(BASE)/drivers/xseg_posixfd.h
+	$(CC) $(CFLAGS) $(INC) -fPIC -c -o $@ $<
+
+xseg_posixfd.so: xseg_posixfd.o $(BASE)/sys/user/xseg_user.o
+	$(CC) -shared -o $@ $< $(BASE)/sys/user/xseg_user.o
 
 .PHONY: lib
 lib:

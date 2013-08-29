@@ -1002,9 +1002,9 @@ int xseg_cancel_wait(struct xseg *xseg, uint32_t portno)
 	return xseg->priv->peer_type.peer_ops.cancel_wait(xseg, portno);
 }
 
-int xseg_wait_signal(struct xseg *xseg, uint32_t usec_timeout)
+int xseg_wait_signal(struct xseg *xseg, void *sd, uint32_t usec_timeout)
 {
-	return xseg->priv->peer_type.peer_ops.wait_signal(xseg, usec_timeout);
+	return xseg->priv->peer_type.peer_ops.wait_signal(xseg, sd, usec_timeout);
 }
 
 int xseg_signal(struct xseg *xseg, xport portno)
@@ -1818,6 +1818,10 @@ char* xseg_get_target_nonstatic(struct xseg* xseg, struct xseg_request *req)
         return xseg_get_target(xseg, req);
 }
 
+void* xseg_get_signal_desc_nonstatic(struct xseg *xseg, struct xseg_port *port)
+{
+	return xseg_get_signal_desc(xseg, port);
+}
 
 #ifdef __KERNEL__
 #include <linux/module.h>

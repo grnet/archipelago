@@ -77,7 +77,7 @@ static int posix_cancel_wait(struct xseg *xseg, uint32_t portno)
 	return -1;
 }
 
-static int posix_wait_signal(struct xseg *xseg, uint32_t timeout)
+static int posix_wait_signal(struct xseg *xseg, void *sd, uint32_t timeout)
 {
 	return -1;
 }

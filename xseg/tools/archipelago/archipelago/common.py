@@ -38,7 +38,7 @@
 from xseg.xseg_api import *
 from xseg.xprotocol import *
 from ctypes import CFUNCTYPE, cast, c_void_p, addressof, string_at, memmove, \
-    create_string_buffer, pointer, sizeof, POINTER, byref
+    create_string_buffer, pointer, sizeof, POINTER, byref, c_int, c_char, Structure
 import ctypes
 cb_null_ptrtype = CFUNCTYPE(None, uint32_t)
 
@@ -52,7 +52,7 @@ from subprocess import check_call
 from collections import namedtuple
 import socket
 import random
-
+from select import select
 
 random.seed()
 hostname = socket.gethostname()
@@ -93,6 +93,29 @@ VLMC = 'archip-vlmcd'
 
 def is_power2(x):
     return bool(x != 0 and (x & (x-1)) == 0)
+
+#hack to test green waiting with python gevent.
+class posixfd_signal_desc(Structure):
+    pass
+posixfd_signal_desc._fields_ = [
+    ('signal_file', c_char * sizeof(c_void_p)),
+    ('fd', c_int),
+    ('flag', c_int),
+]
+
+def xseg_wait_signal_green(ctx, sd, timeout):
+    posixfd_sd = cast(sd, POINTER(posixfd_signal_desc))
+    fd = posixfd_sd.contents.fd
+    select([fd], [], [], timeout/1000000.0)
+    while True:
+        try:
+            os.read(fd, 512)
+        except OSError as (e,msg):
+            if e == 11:
+                break
+            else:
+                raise OSError(e, msg)
+
 
 class Peer(object):
     cli_opts = None
@@ -472,7 +495,7 @@ class Segment(object):
         xconf = xseg_config()
         spec_buf = create_string_buffer(self.spec)
         xseg_parse_spec(spec_buf, xconf)
-        ctx = xseg_join(xconf.type, xconf.name, "posix",
+        ctx = xseg_join(xconf.type, xconf.name, "posixfd",
                         cast(0, cb_null_ptrtype))
         if not ctx:
             raise Error("Cannot join segment")
@@ -724,11 +747,11 @@ def check_pidfile(name):
 
     return pid
 
-
 class Xseg_ctx(object):
     ctx = None
     port = None
     portno = None
+    signal_desc = None
 
     def __init__(self, segment, portno):
         ctx = segment.join()
@@ -737,10 +760,14 @@ class Xseg_ctx(object):
         port = xseg_bind_port(ctx, portno, c_void_p(0))
         if not port:
             raise Error("Cannot bind to port")
+        sd = xseg_get_signal_desc_nonstatic(ctx, port)
+        if not sd:
+            raise Error("Cannot get signal descriptor")
         xseg_init_local_signal(ctx, portno)
         self.ctx = ctx
         self.port = port
         self.portno = portno
+        self.signal_desc = sd
 
     def __del__(self):
         return
@@ -768,7 +795,7 @@ class Xseg_ctx(object):
                 xseg_cancel_wait(self.ctx, self.portno)
                 return received
             else:
-                xseg_wait_signal(self.ctx, 10000000)
+                xseg_wait_signal_green(self.ctx, self.signal_desc, 10000000)
 
     def wait_requests(self, requests):
         while True:

@@ -907,7 +907,7 @@ send_request:
 			}
 		}
 		XSEGLOG2(&lc, I, "%s goes to sleep\n", id);
-		xseg_wait_signal(xseg, 10000000UL);
+		xseg_wait_signal(xseg, peer->sd, 10000000UL);
 		xseg_cancel_wait(xseg, peer->portno_start);
 		XSEGLOG2(&lc, I, "%s woke up\n", id);
 	}

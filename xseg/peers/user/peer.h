@@ -111,6 +111,7 @@ struct peerd {
 	struct peer_req *peer_reqs;
 	struct xq free_reqs;
 	int (*peerd_loop)(void *arg);
+	void *sd;
 	void *priv;
 #ifdef MT
 	uint32_t nr_threads;

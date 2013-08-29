@@ -161,7 +161,7 @@ struct xseg_peer_operations {
 	int   (*signal_leave)(struct xseg *xseg);
 	int   (*prepare_wait)(struct xseg *xseg, uint32_t portno);
 	int   (*cancel_wait)(struct xseg *xseg, uint32_t portno);
-	int   (*wait_signal)(struct xseg *xseg, uint32_t usec_timeout);
+	int   (*wait_signal)(struct xseg *xseg, void *sd, uint32_t usec_timeout);
 	int   (*signal)(struct xseg *xseg, uint32_t portno);
 	void *(*malloc)(uint64_t size);
 	void *(*realloc)(void *mem, uint64_t size);
@@ -424,6 +424,7 @@ struct xseg_request *  xseg_accept          ( struct xseg         * xseg,
                                               uint32_t              portno    );
 
                 int    xseg_wait_signal     ( struct xseg         * xseg,
+					      void 		  * sd,
                                               uint32_t              utimeout  );
 
                 int    xseg_signal          ( struct xseg         * xseg,
@@ -440,6 +441,7 @@ struct xseg_port* xseg_get_port(struct xseg *xseg, uint32_t portno);
 
 extern char* xseg_get_data_nonstatic(struct xseg* xseg, struct xseg_request *req);
 extern char* xseg_get_target_nonstatic(struct xseg* xseg, struct xseg_request *req);
+extern void* xseg_get_signal_desc_nonstatic(struct xseg *xseg, struct xseg_port *port);
 
 static inline uint32_t xseg_portno(struct xseg *xseg, struct xseg_port *port)
 {

@@ -1586,7 +1586,7 @@ int wait_reply(struct peerd *peer, struct xseg_request *expected_req)
 				}
 			}
 		}
-		xseg_wait_signal(xseg, 1000000UL);
+		xseg_wait_signal(xseg, peer->sd, 1000000UL);
 	}
 }
 
