@@ -47,6 +47,17 @@ different storage types. So, Archipelago greatly reduces the need of each
 individual storage manufacturer or developer, to develop the same set of
 features for their storage solution.
 
+Archipelago APIs
+================
+
+.. image:: images/archipelago-apis.png
+    :target: _images/archipelago-apis.png
+
+Archipelago allows users to manage and access volume backed by various storage
+types. In order to do that, archipelago provides multiple endpoints for the user
+to interact (block device driver, qemu driver, user provided process, command
+line tool, etc).
+
 Archipelago Architecture
 ========================
 
@@ -127,19 +138,11 @@ volume composer then communicates with the blocker responsible for holding the
 objects where the actual data reside and composes the responses, to respond to
 the original request.
 
-Archipelago APIs
-================
-
-.. image:: images/archipelago-apis.png
-    :target: _images/archipelago-apis.png
-
-Archipelago allows users to manage and access volume backed by various storage
-types. In order to do that, archipelago provides multiple endpoints for the user
-to interact (block device driver, qemu driver, user provided process, command
-line tool, etc).
-
 Archipelago Integration with synnefo and ganeti
 ===============================================
 
 How everything ties together in a real world awesome cloud infra.
 
+.. image:: images/synnefo-archipelago.png
+     :target: _images/synnefo-archipelago.png
+     :scale: 50

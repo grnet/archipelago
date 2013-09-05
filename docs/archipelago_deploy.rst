@@ -175,6 +175,10 @@ Available commands:
   size is created. If size is not specified, the new volume inherits the size
   from the snapshot.
 
+* **snapshot**: create a snapshot with the given name from the specified volume.
+
+  Usage: ``vlmc snapshot <volumename> <snapshotname>``
+
 * **remove**: removes the volume.
 
   Usage: ``vlmc remove <volumename>``
