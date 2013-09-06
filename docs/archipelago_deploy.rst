@@ -153,22 +153,27 @@ Usage:
 
 Available commands:
 
+* **showmapped**: Shows the mapped volumes and the archipelago devices on that
+  node.
+
+  Usage: ``$ vlmc showmapped``
+
 * **map**: maps the volume to a xsegbd device
 
   Usage: ``$ vlmc map <volumename>``
 
 * **unmap**: unmaps the specified device from the system.
 
-  Usage: ``vlmc unmap </dev/xsegbd[1-..]>``
+  Usage: ``$ vlmc unmap </dev/xsegbd[1-..]>``
 
 * **create**: creates a new volume with an optional specified size from an optional
   specified snapshot
 
-  Usage: ``vlmc create <volumename> --snap <snapname> --size <size>``
+  Usage: ``$ vlmc create <volumename> --snap <snapname> --size <size>``
 
-  Usage: ``vlmc create <volumename> --snap <snapname>``
+  Usage: ``$ vlmc create <volumename> --snap <snapname>``
 
-  Usage: ``vlmc create <volumename> --size <size>``
+  Usage: ``$ vlmc create <volumename> --size <size>``
 
   The ``--snap`` and ``--size`` are both optional, but at least one of them is
   mandatory. If snap is not specified, then a blank volume with the specified
@@ -177,11 +182,11 @@ Available commands:
 
 * **snapshot**: create a snapshot with the given name from the specified volume.
 
-  Usage: ``vlmc snapshot <volumename> <snapshotname>``
+  Usage: ``$ vlmc snapshot <volumename> <snapshotname>``
 
 * **remove**: removes the volume.
 
-  Usage: ``vlmc remove <volumename>``
+  Usage: ``$ vlmc remove <volumename>``
 
   This does not actually delete the blocks, just make the volume inaccessible
   for usage. The actual blocks are removed later, when a garbage collection is
@@ -189,16 +194,16 @@ Available commands:
 
 * **list**: Provides a list of archipelago volume currently found on storage
 
-  Usage: ``vlmc list``
+  Usage: ``$ vlmc list``
 
 * **info**: shows volume information. Currently returns only the volume size.
 
-  Usage: ``vlmc info <volumename>``
+  Usage: ``$ vlmc info <volumename>``
 
 * **open**: opens an archipelago volume. That is, taking all the necessary locks
   and also make the rest of the infrastructure aware of the operation.
 
-  Usage: ``vlmc open <volumename>``
+  Usage: ``$ vlmc open <volumename>``
 
   This operation succeeds if the volume is alread opened by the current host.
 
@@ -206,7 +211,7 @@ Available commands:
   functions in the insfrastrure to successfully release the volume. Also
   releases all the acquired locks.
 
-  Usage: ``vlmc close <volumename>``
+  Usage: ``$ vlmc close <volumename>``
 
   A explicit ``close`` command should be invoked an explicit ``open``, to
   release the volume, unless another action triggered an implicit ``close``.
@@ -214,7 +219,7 @@ Available commands:
 * **lock**: locks a volume. This step allow the administrator to lock an
   archipelago volume, independently from the rest of the infrastructure.
 
-  Usage: ``vlmc lock <volumename>``
+  Usage: ``$ vlmc lock <volumename>``
 
   The locks are idempotent for the current owner of the lock. That is, a lock
   operation will succeed when the volume is already locked by the same blocker.
@@ -222,7 +227,7 @@ Available commands:
 * **unlock**: unlocks a volume. This allow the administrator to unlock a volume,
   independently from the rest of the infrastructure.
 
-  Usage: ``vlmc unlock [-f] <volumename>``
+  Usage: ``$ vlmc unlock [-f] <volumename>``
 
   The unlock option can be performed only by the blocker that acquired the lock
   in the first place. To unlock a volume from another blocker, ``-f`` option
