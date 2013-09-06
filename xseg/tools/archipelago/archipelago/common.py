@@ -754,14 +754,14 @@ class Xseg_ctx(object):
         self.ctx = None
 
     def wait_request(self):
+        xseg_prepare_wait(self.ctx, self.portno)
         while True:
             received = xseg_receive(self.ctx, self.portno, 0)
             if received:
+                xseg_cancel_wait(self.ctx, self.portno)
                 return received
             else:
-                xseg_prepare_wait(self.ctx, self.portno)
                 xseg_wait_signal(self.ctx, 10000000)
-                xseg_cancel_wait(self.ctx, self.portno)
 
     def wait_requests(self, requests):
         while True:
