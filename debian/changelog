@@ -1,3 +1,10 @@
+archipelago (0.3.1-1) stable; urgency=low
+
+  * Bug fix in sosd
+  * Add librados dependency (>=0.65)
+
+ -- Filippos Giannakos <philipgian@grnet.gr>  Mon, 09 Sep 2013 13:25:39 +0300
+
 archipelago (0.3-1) stable; urgency=low
 
   * Update librados dependency to v0.61.2+grnet2
