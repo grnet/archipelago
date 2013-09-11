@@ -498,7 +498,7 @@ class Server(CloudClient):
             io = self.config.getboolean('Global', 'okeanos_io')
             if io:
                 server_port = get_port_from_ip(server_ip)
-                server_ip = "gate.okeanos.io"
+                server_ip = "gate.demo.synnefo.org"
 
         self.logger.debug("Server's IPv4 is %s" % _green(server_ip))
         self.logger.debug("Server's ssh port is %s" % _green(server_port))
