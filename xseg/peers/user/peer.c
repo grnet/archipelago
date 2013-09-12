@@ -39,6 +39,7 @@
 #include <unistd.h>
 #include <sys/syscall.h>
 #include <sys/time.h>
+#include <sys/resource.h>
 #include <signal.h>
 #include <sys/stat.h>
 #include <fcntl.h>
@@ -106,6 +107,23 @@ void signal_handler(int signal)
 #endif
 }
 
+/*
+ * We want to both print the backtrace and dump the core. To do so, we fork a
+ * process that prints its stack trace, that should be the same as the parents.
+ * Then we wait for 1 sec and we abort. The reason we don't abort immediately
+ * is because it may interrupt the printing of the backtrace.
+ */
+void segv_handler(int signal)
+{
+	if (fork() == 0) {
+		xseg_printtrace();
+		_exit(1);
+	}
+
+	sleep(1);
+	abort();
+}
+
 void renew_logfile(int signal)
 {
 //	XSEGLOG2(&lc, I, "Caught signal. Renewing logfile");
@@ -116,6 +134,7 @@ static int setup_signals(struct peerd *peer)
 {
 	int r;
 	struct sigaction sa;
+	struct rlimit rlim;
 #ifdef MT
 	global_peer = peer;
 #endif
@@ -129,6 +148,24 @@ static int setup_signals(struct peerd *peer)
 	if (r < 0)
 		return r;
 	r = sigaction(SIGQUIT, &sa, NULL);
+	if (r < 0)
+		return r;
+
+	/*
+	 * Get the current limits for core files and raise them to the largest
+	 * value possible
+	 */
+	if (getrlimit(RLIMIT_CORE, &rlim) < 0)
+		return r;
+
+	rlim.rlim_cur = rlim.rlim_max;
+
+	if (setrlimit(RLIMIT_CORE, &rlim) < 0)
+		return r;
+
+	/* Install handler for segfaults */
+	sa.sa_handler = segv_handler;
+	r = sigaction(SIGSEGV, &sa, NULL);
 	if (r < 0)
 		return r;
 
