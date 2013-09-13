@@ -271,11 +271,11 @@ class XsegTest(unittest.TestCase):
             self.assertTrue(req.put())
         return send_and_evaluate
 
-    def send_write(self, dst, target, data=None, offset=0, datalen=0):
+    def send_write(self, dst, target, data=None, offset=0, datalen=0, flags=0):
         #assert datalen >= size
 #        req = self.get_req(X_WRITE, dst, target, data, size=size, offset=offset, datalen=datalen)
         req = Request.get_write_request(self.xseg, dst, target, data=data,
-                offset=offset, datalen=datalen)
+                offset=offset, datalen=datalen, flags=flags)
         req.submit()
         return req
 

@@ -944,7 +944,7 @@ class Request(object):
 
     @classmethod
     def get_write_request(cls, xseg, dst, target, data=None, offset=0,
-            datalen=0):
+            datalen=0, flags=0):
         if data is None:
             data = ""
         size = len(data)
@@ -952,7 +952,7 @@ class Request(object):
             datalen = size
 
         return cls(xseg, dst, target, op=X_WRITE, data=data, offset=offset,
-                   size=size, datalen=datalen)
+                   size=size, datalen=datalen, flags=flags)
 
     @classmethod
     def get_read_request(cls, xseg, dst, target, size=0, offset=0, datalen=0):
