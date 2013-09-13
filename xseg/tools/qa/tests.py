@@ -628,6 +628,7 @@ class VlmcdTest(XsegTest):
             req = self.xseg.wait_requests(reqs)
             self.evaluate_req(req, data=xinfo)
             reqs.remove(req)
+            self.assertTrue(req.put())
 
     def test_hash(self):
         blocksize = self.blocksize
@@ -852,6 +853,7 @@ class MapperdTest(XsegTest):
             req = self.xseg.wait_requests(reqs)
             self.evaluate_req(req, data=xinfo)
             reqs.remove(req)
+            self.assertTrue(req.put())
 
     def test_open(self):
         volume = "myvolume"
@@ -874,6 +876,7 @@ class MapperdTest(XsegTest):
             req = self.xseg.wait_requests(reqs)
             self.evaluate_req(req)
             reqs.remove(req)
+            self.assertTrue(req.put())
 
     def test_close(self):
         volume = "myvolume"
@@ -923,6 +926,7 @@ class MapperdTest(XsegTest):
             req = self.xseg.wait_requests(reqs)
             self.evaluate_req(req, data=ret)
             reqs.remove(req)
+            self.assertTrue(req.put())
 
     def test_mapw(self):
         blocksize = self.blocksize
@@ -986,6 +990,7 @@ class MapperdTest(XsegTest):
             req = self.xseg.wait_requests(reqs)
             self.evaluate_req(req, data=ret)
             reqs.remove(req)
+            self.assertTrue(req.put())
 
 class BlockerTest(object):
     def test_write_read(self):
