@@ -322,6 +322,12 @@ static int do_accepted_pr(struct peerd *peer, struct peer_req *pr)
 		XSEGLOG2(&lc, I, "Completing flush request");
 		pr->req->serviced = pr->req->size;
 		conclude_pr(peer, pr);
+		xqindex xqi;
+		while (vi->pending_reqs && !(vi->flags & VF_VOLUME_FREEZED) &&
+				(xqi = __xq_pop_head(vi->pending_reqs)) != Noneidx) {
+			struct peer_req *ppr = (struct peer_req *) xqi;
+			do_accepted_pr(peer, ppr);
+		}
 		return 0;
 	}
 
