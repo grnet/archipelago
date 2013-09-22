@@ -1,46 +1,34 @@
 Archipelago
 ^^^^^^^^^^^
 
-Archipelago is a distributed software defined storage solution that decouples
-cloning and snapshotting logic from the actual storage used.
 
-Every Volume inside a VM can be thought of as a linearly addressable set of
-fixed-size blocks. The storage of the actual blocks is orthogonal to the task of
-exposing a single block device for use by each VM. Bridging the gap between the
-VMs performing random access to Volumes and the storage of actual blocks is
-Archipelago: a custom storage handling layer which handled volumes as set of
-distinct blocks in the backend, a process we call volume composition.
+Overview
+========
 
-For the actual storage of blocks, Archipelago is agnostic to the storage backend
-used. Through plugable storage drivers, Archipelago can support multiple storage
-backends to suit the needs of each deployment. We currently provide two storage
-drivers. One for simple files, where each object is stored as a single file on the
-(shared) filesystem, and one for objects backed by RADOS. RADOS is the
-distributed object store which supports the Ceph parallel filesystem. With RADOS,
-we can solve the problem of reliable, fault-tolerant object storage through
-replication on multiple storage nodes.
+Archipelago is a distributed storage layer that decouples Volume and File
+operations/logic from the actual underlying storage technology, used to store
+data. It provides a unified way to provision, handle and present Volumes and
+Files independently of the storage backend. It also implements thin clones,
+snapshots, and deduplication, and has pluggable drivers for different backend
+storage technologies. It was primarily designed to solve problems that arise on
+large scale cloud environments. Archipelago's end goal is to:
 
-As mentioned before, Archipelago composes the volume through individual blocks.
-This is accomplished by maintaining a map for each volume, to map offset in a
-volume with a single object. The exact offset inside the object, is calculated
-statically from the fixed object size and the offset in the volume. But having
-this map and the composition subsystems, allow us to do much more than simple
-volume composition.  Archipelago offers Copy-On-Write snapshottable volumes.
-Furthermore, each snapshot can be hashed, to allow deduplication to play its
-part, reducing the storage cost of each hashed object. Furthermore, Archipelago
-can integrate with Pithos, and use Pithos images to provision a volume with
-Copy-On-Write semantics (i.e. a clone). Since Pithos images are already hashed,
-we can store Archipelago hashed volumes, which are indistinguishable from a Pithos
-image, along with the Pithos images, to enable further deduplication, or even
-registering an archipelago hashed snapshot as Pithos image file.
+ * Decouple storage logic from the actual data store
+ * Provide logic for thin cloning and snapshotting
+ * Provide logic for deduplication
+ * Provide different endpoint drivers to access Volumes and Files
+ * Provide backend drivers for different storage technologies
 
-Archipelago is used by Cyclades and Ganeti for fast VM provisioning based on CoW
-volumes. Moreover, it enables live migration of thinly-provisioned VMs with no
-physically shared storage.
+It has been designed to help with the further commoditization of storage and in
+the same time ease the integration and/or migration between different backend
+storage technologies, without changing the way Volumes and Files are accessed.
 
+Archipelago is written in C.
 
-Contents:
-*********
+The following documentation describes the exact problem, the idea behind
+Archipelago, the Archipelago architecture and internals, and the different
+drivers for endpoints and backend storage. Furthermore, we describe how to
+install, configure and use Archipelago:
 
 .. toctree::
    :maxdepth: 2
