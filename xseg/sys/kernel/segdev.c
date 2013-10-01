@@ -36,6 +36,7 @@
  *
  */
 
+#include <linux/version.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/moduleparam.h>
@@ -276,6 +277,29 @@ out:
 	return ret;
 }
 
+static int segdev_fault(struct vm_area_struct *vma, struct vm_fault *vmf)
+{
+	struct segdev *dev;
+	int ret;
+
+	dev = segdev_get(0);
+	ret = IS_ERR(dev) ? PTR_ERR(dev) : 0;
+	if (ret)
+		return -EBUSY;
+
+	vmf->page = vmalloc_to_page(dev->segment + (vmf->pgoff << PAGE_SHIFT));
+	get_page(vmf->page);
+
+	segdev_put(dev);
+
+	return 0;
+}
+
+static struct vm_operations_struct vm_ops =
+{
+	.fault		= segdev_fault,
+};
+
 static int segdev_mmap(struct file *file, struct vm_area_struct *vma)
 {
 	struct segdev_file *vf = file->private_data;
@@ -303,15 +327,16 @@ static int segdev_mmap(struct file *file, struct vm_area_struct *vma)
 	if (!(vma->vm_flags & VM_SHARED))
 		goto out_put;
 
-	/* the segment is vmalloc() so we have to iterate through
-         * all pages and laboriously map them one by one. */
-	for (; start < end; start += PAGE_SIZE, ptr += PAGE_SIZE) {
-		ret = remap_pfn_range(vma, start, vmalloc_to_pfn(ptr),
-				      PAGE_SIZE, vma->vm_page_prot);
-		if (ret)
-			goto out_put; /* mmap syscall should clean up, right? */
-	}
+	/* set pages reserved */
 
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(3,5,0)
+	vma->vm_flags |= VM_RESERVED;
+#else
+	vma->vm_flags |= VM_IO | VM_DONTEXPAND;
+#endif
+
+	/* set vma ops */
+	vma->vm_ops = &vm_ops;
 	ret = 0;
 
 out_put:
@@ -320,7 +345,7 @@ out:
 	return ret;
 }
 
-static struct file_operations segdev_ops = 
+static struct file_operations segdev_ops =
 {
         .owner		= THIS_MODULE,
 	.open		= segdev_open,
