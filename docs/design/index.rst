@@ -29,6 +29,7 @@ We present on the list below the design docs so far:
    :glob:
 
    design_cached_namespaces
+   design_xseg_signals
 
 .. _rubber duck effect: http://en.wikipedia.org/wiki/Rubber_duck_debugging
 .. [#] The overhead of writing the design doc is a whole different story...
