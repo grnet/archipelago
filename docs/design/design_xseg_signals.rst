@@ -3,6 +3,9 @@
 Design doc for xseg signaling
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+This document describes the current state of signaling mechanism on xseg and
+proposes a new designe to decouple the signal types from the peer types.
+
 Current State
 =============
 
@@ -22,8 +25,8 @@ This approach has worked so far, but has a major limitation. It tightly couples
 the peer type with the signaling mechanism. This does not allow having multiple
 signaling mechanisms for the same peer type.
 
-Design overview
-===============
+Proposed changes
+================
 
 This design attempts to introduce separate signal types and to decouple them from the peer types.
 This comprises of the following:
