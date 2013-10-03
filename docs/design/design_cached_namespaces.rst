@@ -7,94 +7,186 @@ Current state
 =============
 
 Currently, cached has been created to index only objects. However, there are
-three more entities in Archipelago:
+more entities in Archipelago:
 
 * volume locks
-* volume (?) hashes
+* volume hashes
+* maps
 * volumes
 
-These entities should also be able to be cached, which means that cached must
-add support for them.
+The functionality this design doc proposes has three parts:
 
-Moreover, these categories are differentiated with the use of namespaces, which
-cached (and Archipelago by extension), must also support.
-
-Finally, since cached will cache disparate entities, it should be able to
-support different policies (e.g. cache size, cache write policy etc.) for each
-of them.
+#. The identification support for these namespaces
+#. The ability to cache objects that belong in different
+   namespaces in a generic manner.
+#. The enforcing of different policies (e.g. cache size, cache write policy
+   etc.) for each namespace.
 
 Design overview
 ===============
 
-The handling of each category should be as modular as possible, meaning that
-once cached identifies in what category an entity belongs, it should follow a
-path that does not affect the rest of the categories.
+We propose the addition of a logic layer in cached, that will allow different
+namespaces to co-exist. This layer should provide each namespace with the
+following:
 
-This means that our design is separated in three parts:
+* A place where cached-specific policies will be stored
+* A place where the control functions (xworkq, xwaitq), indexes (xcache) and data
+  (buckets) will be stored.
 
-#. `Identification of namespaces`_
-#. `Indexing of entities in different namespaces`_
-#. `Request handling for different namespaces`_
+Moreover, we do not want to add to cached any extra logic for the handling of
+objects that belongs in different namespaces, since that would result in a
+messy code. Instead, cached should treat each namespace object as any other
+object, which means that `struct ce` should cover equally maps, objects and
+volumes.
 
-Identification of namespaces
------------------------------
+The question arises then, what will cached use namespaces for?
 
-Although cached could identify the namespace of an entity by some special
-characters in its name, it is better and faster to simply read a "namespace
-tag" that can come along with the XSEG request.
+It will use them for two things:
 
-This means two things:
+* Propagate the namespace of an object to the other peers, since all
+  Archipelago will operate with namespaces.
+* Apply different policies for each namespace. For example, the administrator
+  may want to commission 16MB for maps, 1G for objects and 128G for volumes.
+  Also, he/she may want maps to have a writethrough policy whereas objects and
+  volumes a writeback policy.
 
-#. The peer that issues a request must also tag it with the correct namespace
-#. The namespaces must be defined in libxseg.
+Besides the above, for all indents and purposes everything is an object for
+cached.
 
-Moreover, when cached creates its own requests, it must also tag them before it
-sends them to the blocker.
+Advanced design issues
+=======================
 
-Indexing of entities in different namespaces
----------------------------------------------
+Bucket indexing
+----------------
 
-For each namespace that a cached instantiation is configured to cache, there
-will be an xcache that will index its entities.
+As philipgian has observed, a static bucket array will not scale for objects
+such as volumes for the following reason:
 
-Furthermore, each xcache must have variable number of entries, defined
-by the user, as it happens now. Moreover, besides xcache, the user must be able
-to set peripheral parameters such as the number of entries, the cache size etc.
+Consider that we index a 200GB volume. If we partition it to 4k buckets, we
+potentially have to track over 50 million buckets. A static array that at least
+tracks these buckets (64-bit pointer) will take over 400MB of space. And that's
+just for a single volume.
 
-Request handling for different namespaces
-------------------------------------------
+To this end, we need an index mechanism with the following characteristics:
 
-A new level of indirection is introduced after a request is accepted/received.
-Namely, cached will have to identify the namespace for this request and sent it
-to the appropriate channels. This should be the only point where at the same
-lines of code, the more than one namespaces are referenced.
+#. Fast insertion, lookups and removal of indexed objects (miracle-making
+   capabilities preferred but optional)
+#. Sorting of the indexes, so that we can write to, claim and free bucket
+   ranges fast.
+
+The above requirements  adumbrate a B+ tree index. This is not final however
+and we are in the process of looking for an alternative solution.
+
+Finally, since objects that belong in the same namespace can have arbitrary
+size, the index mechanism should be able to grow without an upper bound.
 
 Implementation details
 ======================
 
-Before cached can begin identifying namespaces, we must define them globally.
-We propose the following tags::
+Namespace arguments
+--------------------
 
-  XSEG_LOCK 0
-  XSEG_HASH 1
-  XSEG_OBJECT 2
-  XSEG_VOLUME 3
-
-Moreover, since objects carry on their name an implied namespace, there is a
-need for a namespace seperator::
-
-  XSEG_NAMESPACE_SEPARATOR ':' (or '-')
-
-This requires an Archipelago wide-change to every request issued by a peer.
-We will add one more argument to the `xseg_prep_request()` or `xseg_get_request`
-function that will be the namespace tag of the request.
-
-As for how cached will know what namespaces will it cache, there will be the
-following arguments::
+To instruct cached to cache a specific namespace, we will have the following
+arguments::
 
   -{lock, hash, object, volume}
 
 that will accept a series of tokens::
 
    $nr_entries:$cache_size:[$bucket_size]:[$write_cache_policy]
+
+This renders previous arguments such as -mo (max objects), -cs (cache size),
+-bs (bucket size) invalid and will be incorporated into the `-{lock, hash,
+object, volume}` arguments that we presented.
+
+Cached struct refactoring
+--------------------------
+
+Currently, cached struct holds object specific statistics and counters as well
+as xworkqs and xwaitqs that are related to xcache and object buckets.
+
+The introduction of namespaces means that this:
+
+.. code-block:: c
+
+        struct cached {
+                struct xcache * cache;
+                uint64_t total_size;
+                uint64_t max_objects; 
+                uint64_t max_req_size;
+                uint32_t object_size;  
+                uint32_t bucket_size; 
+                uint32_t buckets_per_object;
+                uint64_t total_buckets; 
+                xport bportno;
+                int write_policy;
+                struct xworkq workq;
+                struct xworkq bucket_workq;
+                struct xwaitq pending_waitq;
+                struct xwaitq bucket_waitq;
+                struct xwaitq req_waitq;
+                unsigned char * bucket_data;
+                struct xq bucket_indexes;
+                struct xlock bucket_lock;
+                //scheduler
+                uint64_t * bucket_alloc_status_counters;
+                uint64_t * bucket_data_status_counters;
+                double threshold;
+        };
+
+should turn to this
+
+.. code-block:: c
+
+        struct cached {
+                xport bportno;
+                struct xworkq workq;
+                struct xwaitq req_waitq; // this is probably generic
+                struct cached_namespace cns[MAX_NAMESPACES]
+        };
+
+The entry point for everything that cached needs for a namespace is the
+following:
+
+.. code-block:: c
+
+        struct cached_namespace {
+                struct xcache * cache;
+                uint64_t total_size;
+                uint64_t max_objects; 
+                uint64_t max_req_size;
+                uint32_t object_size;           // this can go
+                uint32_t bucket_size; 
+                uint32_t buckets_per_object;
+                uint64_t total_buckets; 
+                xport bportno;
+                int write_policy;
+                struct xworkq workq;
+                struct xworkq bucket_workq;
+                struct xwaitq pending_waitq;
+                struct xwaitq bucket_waitq;
+                unsigned char * bucket_data;
+                struct xq bucket_indexes;       //this should be handled differently
+                struct xlock bucket_lock;
+                //scheduler
+                uint64_t * bucket_alloc_status_counters;
+                uint64_t * bucket_data_status_counters;
+                double threshold;
+                struct cached * cached;
+        }
+
+The memory overhead of having an uninitialized struct as the above for 4-5 namespaces
+should be very small.
+
+Note that we have to refactor all our code to get the correct `struct
+cached_namespace` instead of the generic `struct cached` that we have now.
+
+Policies per namespace
+-----------------------
+
+For the time-being, the only policies that we have is the cache write policy
+and the number of entries and cache size that we index. For now, these can be
+scattered in the above struct and our code will consult the respective
+namespace struct for its policies.
+
 
