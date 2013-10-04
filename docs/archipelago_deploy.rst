@@ -22,12 +22,24 @@ Archipelago consists of the following packages:
 * ``archipelago-ganeti``: ganeti ext storage scripts, that enable ganeti to
   provision VMs over archipelago
 
+To be able to download all Archipelago components you need to add the following
+lines in your ``/etc/apt/sources.list`` file:
 
+.. code-block:: console
 
-Installing ``archipelago-ganeti`` from the apt repository should fetch all the
-necessary dependencies, based on the dkms infrastructure. Install also
-``archipelago-rados`` to enable RADOS storage backend.
+   deb http://apt.dev.grnet.gr unstable/
+   deb-src http://apt.dev.grnet.gr unstable/
 
+and import the our repository's GPG key:
+
+.. code-block:: console
+
+   curl https://dev.grnet.gr/files/apt-grnetdev.pub | apt-key add -
+
+Then install the Archipelago packages. Installing ``archipelago-ganeti`` from
+the apt repository should fetch all the necessary dependencies, based on the
+dkms infrastructure. Install also ``archipelago-rados`` if you want to enable
+the RADOS backend driver:
 
 .. code-block:: console
 
@@ -52,9 +64,18 @@ package by installing archipelago-modules-source and performing:
 Archipelago configuration
 *************************
 
-Archipelago configuration file is located to :
+The Archipelago configuration file is:
 ``/etc/archipelago/archipelago.conf``
 
+If your machine features < 6GB of RAM you need to set the ``SEGMENT_SIZE``
+accordingly to a lower value. (e.g., for a machine with 2GB of RAM, you can set
+it to 1GB). You should also create the two directories to store maps and blocks
+and define them accordingly inside the ``blockerb`` and ``blockerm`` settings
+of the configuration file (these are needed for the File backend driver to
+work). These are the minimum settings you need to change before starting
+Archipelago.
+
+Below is a list of all configuration settings:
 
 ``SEGMENT_PORTS``
     **Description** : Max number of ports in the segment.
@@ -114,14 +135,15 @@ Vlmc specific options:
 Archipelago commands
 ********************
 
-``archipelago`` provides basic functionality for archipelago.
+Once you configure Archipelago, you are then ready to start it.
+
+The ``archipelago`` tool provides the basic commands to control Archipelago.
 
 Usage:
 
 .. code-block:: console
 
   $ archipelago [-u] command
-
 
 Currently it supports the following commands:
 
@@ -136,14 +158,13 @@ Currently it supports the following commands:
 
 ``role`` is one of the roles defined on the configuration file.
 
+``start``, ``stop``, ``restart`` can be combined with the ``-u / --user``
+option to affect only the userspace peers supporting Archipelago.
 
-``start``, ``stop``, ``restart`` can be combined with the ``-u / --user`` option
-to affect only the userspace peers supporting archipelago.
+Archipelago volume commands
+***************************
 
-Archipelago advanced commands
-*****************************
-
-The ``vlmc`` tool provides a way to interact with archipelago volumes
+The ``vlmc`` tool provides a way to interact with Archipelago volumes
 
 Usage:
 
@@ -192,9 +213,9 @@ Available commands:
   for usage. The actual blocks are removed later, when a garbage collection is
   invoked.
 
-* **list**: Provides a list of archipelago volume currently found on storage
-
-  Usage: ``$ vlmc list``
+.. * **list**: Provides a list of archipelago volume currently found on storage
+..
+..   Usage: ``$ vlmc list``
 
 * **info**: shows volume information. Currently returns only the volume size.
 
