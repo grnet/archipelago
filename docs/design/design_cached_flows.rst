@@ -6,229 +6,274 @@ Design doc for flow support in cached
 Current state
 ==============
 
-There is currently no flow support in Archipelago whatsoever. However, since we
-expect to support it shortly, cached can provide some preliminary support.
+There are currently no flows in Archipelago. However, since we expect to
+support them shortly, cached should decide on how it will handle them.
 
-Moreover, cached has currently no way of knowing the objects of a volume,
-so that we can flush them in case of a flush request. This is an urgent feature
-and since the first flow implementation will probably refer to a unique volume,
-this means that by indexing which objects belong to each flow, we will
-essentially know the objects of a volume.
+The introduction of flows is essential for the correct management of volumes by
+cached. More specifically, cached has currently no way of knowing the objects
+of a volume, so that it can flush them in case of a flush request. However, if
+there was a flow or a family of flows associated with each volume, this problem
+would be trivial to solve.
+
+Objectives
+==========
+
+The objectives for our implementation are:
+
+#. Index the cached objects of volumes and flows.
+#. Create a cache that has a **global** size limit in object data (buckets) and
+   index (size of hash table, cache entries etc.) **per namespace**.
+#. Support custom **flow** limits and policies.
+   Typically:
+
+   * Size limit for index and object data.
+   * Different cache write policies for each flow.
+
+Moreover, a design goal is to build around these objectives but make our design
+extensible enough in order to be prepared for the full introduction of flows with
+minimal refactoring.
+
+.. note::
+
+        We don't want to introduce the concept of volumes in cached. Instead,
+        we will use the more generic term "resource". Thus, the cached objects
+        of a resource will be considered as cached objects of a flow or family
+        of flows that originate from the same resource.
+
+.. note::
+
+        Having a limit for index data and object data is awkward. Ideally,
+        there should be a unified limit for both the index and object data and
+        if that limit is hit, free entries from the index or buckets
+        accordingly.  We acknowledge this issue, but it is not severe and can
+        be addressed in another design doc.
+
+Flows
+=====
+
+Although flows will be better explained in the appropriate design doc, we will
+present in this section a basic explanation of them to understand what we
+expect to handle.
+
+First of all, we define as **minor flow** a tagged series of requests that
+follow the same I/O path and have the same policies and limitations. For
+example, a flow of writes for a volume's blocks can be considered as a minor
+flow.
+
+Moreover, we define as **major flow** a collective of minor flows that *may*
+share the same path, policies and limitations, but **strictly** refer to the
+same resource (commonly a volume). For example, a major flow can be a  collective
+of minor flows for read/write operations on the maps/blocks of a volume, since
+they have originated from the same resource.
+
+Furthermore, we expect to provide a different I/O path and policies for
+different namespaces of a resource, e.g. we may want to cache a volume's maps
+in write-through mode and its blocks in write-back. This example shows that it
+would be more natural if different namespaces of a resource were tagged as
+separate **minor flows** too.
 
 Design overview
 ================
 
-XSEG requests should have a flow ID in them. We can feed this ID to a
-special-purpose index (xhash) that will track the flows for which we have
-objects cached. To be compliant with namespaces, there should be one such index
-for each namespace.
+The design that we propose for cached is the following:
 
-For each flow, we will keep its cached objects on a list and when we want to
-operate on all the objects of the flow, we will simply traverse this list.
+|cached-design|
 
-Flow policies
-===============
+We separate cached in 4 levels:
 
-This design doc also paves the way for policies per flow. The contribution of
-this doc to this subject is the following:
+#. Top level: In this level, we keep an **index** of the major/minor flows for
+   which we have cached objects, as well as global statistics of allocated
+   buckets, index size etc.
+#. Flow level: In this level, we **cache** the objects that belong in a **minor flow** (called "flow
+   objects" from now on).
+   Moreover, we point to the flow-specific policies and limits.
+#. Object level: In this level, we keep an **index** of the original objects as they exist
+   in Archipelago. The objects remain indexed as long as a flow object
+   has a reference on them.
+#. Bucket level: In this level, we keep an **index** of the buckets that an object has claimed.
 
-For every flow, we maintain an LRU list of its objects. Also, we keep a policy
-struct (black box for now) in each flow so that cached can consult it in the
-future.
-
-Implementation details
+Design of components
 ======================
 
-To begin with, we want to index all flows and since any object can belong to a
-unique flow, we will create an xhash called `flow_index`. This index should
-hold the same number of entries as the original xcache struct, which will be
-renamed to `obj_cache`.
+Major flows/minor flows
+-----------------------
 
-Moreover, each flow will need an xworkq for safe operations on its objects. We
-propose the following flow struct for each flow:
+We have explained in the `Flows`_ section what are the minor/major flows. What
+we want to clarify in this section is the way we will index these.
 
-.. code-block:: c
+When cached receives an xseg request, two of the fields that it will check is
+the minor and major flow id of the request. Using these, it can
+populate the flow index.
 
-        struct cached_flow {
-                struct xworkq workq;
-                xlock lock;
-                object_list;
-                flow_policies;
-        }
+First, we will keep the major flows in an xindex (more about `xindex` in the
+respective design doc). We expect that for the first iteration, the minor flows
+of a major flow will be very few (probably less than 5) so we can keep them in a
+list.
 
-Moreover, we introduce the following struct for each object that will be
-associated with a flow:
+Also, for the first iteration, we expect that the number of major/minor flows
+at any time will be manageable (not more than a 1000) so we can delegate the
+task of unindexing/evicting an active flow in the future. However, inactive
+flows, i.e.  flows with no cached objects must be removed.
 
-.. code-block:: c
+To sum up, a major flow is considered active as long as it indexes at least one
+minor flow. A minor flow is considered active as long as it has at least one
+cached object. In all other cases, the flow will be removed.
 
-        struct cached_flow_entry {
-                flow_id;
-                lru_list;
-                uint32_t status;
-                xcache handler h;
-        }
+In the design diagram, the minor flows are the purple lines and the major flows are
+the posts that keep them together. Moreover, the flow index is the red index at
+the top of the diagram.
 
-The status of `cached_flow_entry` (`fe` for short) has the following possible
-values:
+Flow objects
+------------
 
-* **FE_FREE**, which indicates that the `fe` is not allocated.
-* **FE_ALLOCATED**, which indicates that the `fe` is allocated but not indexed.
-* **FE_READY**, which indicates that the `fe` has been indexed and can be used.
-* **FE_ERROR**, which indicates that the `fe` has encountered an error.
+Flow objects have been created because we need a way to cache the target object
+of a request, but also be able to share it with other flows (e.g. due to CoW).
 
-Furthermore, we present another structure, similar to `cio` (which will be
-renamed to `oio` (`obj_io`)) but for flow operations. It is called `fio` and is
-the following:
+Thus, we need support for multiple flows to point reliably to the same object.
+Also, we need a way to know how many buckets has a flow allocated for an object, as well as
+to make sure that this shared object is not evicted for as long as it is cached
+by a flow. So, our solution is not to index the original object but the "flow object", a
+reference to the object from the viewpoint of a flow.
 
-.. code-block:: c
+The flow object has the same name as the original object and holds a reference
+to it.  Also, it has statistics that refer solely to the buckets that the flow
+has allocated. However, since it is merely a reference, it does not cache the
+data. Instead, it provides a pointer to the original object that holds the
+data.
 
-        struct flow_io {
-                uint32_t state;
-                flow id;
-                uint32_t pending_reqs;
-                struct work work;
-        };
+In the design diagram, the flow objects correspond to the purple labels that
+hang from a flow.
 
-This struct will be stored in the `peer_request` struct and will be used when the
-peer wants to enqueue a job in the flow workq. Also, the `fio` states will be the following:
+Original objects
+------------------
 
-* **FIO_READY**, which indicates that the `fio` does not currently do any job.
-* **FIO_BUSY**, which indicates that the `fio` is busy with a job.
-* **FIO_ERROR**, which indicates that the `fio` has encountered an error.
+In contrast to the original implementation of cached, we do not keep the original
+objects in an xcache. The reason we do so is because the flow objects are responsible
+for the correct handling and data propagation of objects.
 
-The integration with the existing `oio`  will be done with the help of a
-wrapper struct, the `cached_custom_ios` which can be seen below:
+Thus, we keep the original objects in an xindex. They retain their xworkqs and
+xwaitqs but they are no longer referenced by the xseg requests. Instead, they are
+referenced by the flow objects.
 
-.. code-block:: c
+In the design diagram, the original objects are the blue circles that are
+referenced by the flow objects.
 
-        struct cached_io {
-                struct flow_io fio;
-                struct obj_io oio;
-                struct xwaitq waitq;
-                struct work;
-
-
-This wrapper struct does not contain only the `fio` and `cio`, but also a waitq
-that can be used to execute jobs that wait until the `fio` and `cio` have no
-`pending_reqs` left.
-
-In a nutshell, the synchronization between the `flow_cache` and `obj_cache` has
-to tackle two challenging issues:
-
-#. Coherency: there is bound to be a window frame that an object will be in one
-   of the two caches. Make this frame as small as possible and guarantee that
-   probes to these tables will result in something coherent.
-#. Locking: we don't want two different xcaches to share locks, which means
-   that synchronization will be difficult.
-
-We now present how we will handle each operation on flows. Keep in mind that
-for each operation there are two stages: a) getting access to the flow and
-b) getting access to the requested object(s).
-There are the following operations:
-
-* `Insertion`_
-* `Update`_
-* `Flushing`_
-* `Deletion`_
-
-Insertion
-----------
-
-The insertion operation aims to index a {flow, object} tuple. This tuple is
-represented by the `fe`; the flow id stands for the flow while the xcache
-handler for the object.
-
-This struct is allocated in the `on_init` handler of cached, which is use to
-initialize a `ce`. If the initialized `ce` is not inserted, then likewise our
-initialized struct is not inserted too and it can be safely freed. This way, we
-know for sure that we will index only new insertions and not reinsertions.
-
-At this point, we have to index the initialized flow entry. Before we do so, we
-must ensure that the associated flow id has been indexed in the xhash. If not,
-we must insert it before we proceed.
-
-After we have verified that the flow id has been inserted, we can insert the
-object in the `cached_flow` object list. Before we do so, we update the
-object's refcount, since we will operate on it, and create an insertion job
-using `fio`. Also, we increment its `pending_reqs` and mark it as **FIO_BUSY**.
-Then, we enqueue this insertion job for the initialized `fe` in the flow workq.
-
-The insertion job will do the following:
-
-.. code-block:: c
-
-        append the object to the list
-        mark its status as FE_READY
-        put the ce
-        decrement fio->pending_reqs
-        signal the waitq of cached_io
-
-While this job is pending to be executed, cached can process the request for
-the object. Once it has finished however, it must ensure that the object has
-been inserted before it completes the request. This can be done safely as so:
-
-.. code-block:: c
-
-        if fio or cio have pending reqs
-                enqueue cached_complete in the waitq of cached_io
-
-All we have to do then is to make sure that when we decrement the pending_reqs
-of either `fio` or `oio` and they reach zero, we will signal this waitq. This
-is a feature that was wrongfully missing from the cached logic and its
-implementation has been long due.
-
-Update
+Buckets
 -------
 
-We update an `fe` in all the other cases besides insertion, i.e. when we simply
-update the reference of a `cache_entry`. Updates refer to the position of the
-object in the LRU list of a flow.
+The only change that is introduced for buckets is that we need to know which bucket
+has been allocated for a flow object. We keep track of this information by adding
+an extra field in the bucket index, the id of the flow object.
 
-Similar to insertions, updates can be issued asynchronously. The difference is
-that in our case, we update
-the refcount of the ce and issue the following job:
+.. note::
 
-.. code-block:: c
+        This information could be kept in a special index of a flow object.
+        However, consider the case where a bucket that has been allocated by flow1
+        is dirtied by flow2. In this scenario we need to notify instantly flow1 for this
+        change, thus this solution makes this much easier.
 
-        update the position of the object in the LRU
-        put the ce
-        decrement fio->pending_reqs
-        signal the waitq of cached_io
+Cached operations
+=======================
 
-Flushing
----------
+Read/Write
+-----------
 
-When a flow asks to flush its cached objects, we must first enqueue the
-following job to the flow workq:
+Let's see step by step the handling of a new read/write request:
 
-.. code-block:: c
+#. We read the **major flow** field of the request. We give this to the top
+   level index to check if the major flow is indexed.
 
-        for each object of the list
-                check if object is still cached
-                enqueue flush work to the object workq
+   * If it is **not indexed**, we initialize a new major flow entry and index
+     it. Also, we update the refcount of the major flow.
+
+#. We read the **minor flow** field of the request. We check if the indexed
+   major flow also indexes this minor flow
+
+   * If it is **not indexed**, we initialize a new minor flow entry and insert
+     it in the list. Also, we do all the necessary initializations (e.g.
+     initialization of xcache) and update the refcount of the minor flow.
+
+#. We check if the **flow object** is cached by the minor flow.
+
+   * If it is **not cached**, we create a new flow object entry and insert it
+     in the xcache. Also, we update its refcount and do all the necessary
+     initializations.
+   * If it is **cached**, we update its refcount, store its handler in the
+     request and proceed
+
+#. We check if the **flow object** has a pointer/handler to the **original object**.
+
+   * If it does not have any, e.g. because we have just inserted the flow object
+     in the xcache, we proceed to the next step.
+   * If it does, we can skip the next step.
+
+#. We check if the **original object** is indexed.
+
+   * If it is **indexed**, we update its reference count and store its handler to the
+     flow object
+   * If it is **not indexed**, we initialize an original object entry and
+     insert it in the xindex for the **respective namespace**. Then, we do the
+     necessary initializations, update its refcount and store its handler in
+     the flow object
+
+#. We enqueue our work in the **workq** of the **original object**.
+#. Once we enter the **workq** we can read/modify the data of the **original object**. There are
+   the following two scenarios:
+
+   * The request range includes unallocated portions of the object's data:
+
+     #. We claim the necessary number of buckets,
+     #. update the bucket index of the original object and then
+     #. store the flow object handler in these buckets.
+
+   * If the bucket exists, the request can freely read or write to it.
+   * In **either case**, **any update** to the original object's buckets must
+     update the statistics of four different entities:
+
+     #. The object,
+     #. the flow object **that has allocated the bucket**,
+     #. the minor flow and
+     #. cached.
+
+     Fortunately, this is an operation that can
+     be done with atomic gets/puts, so we can proceed without a lock.
+
+#. After the **request** has been **completed**, we put the **flow object
+   handler** that is stored in the request.
 
 
-Deletion
----------
+Snapshot
+--------------
 
-We delete objects from the `flow index` when we no longer keep them in the
-object cache. To do so, we can enqueue the following job in the on_put function
-of `obj_cache`:
+In order to get a snapshot of a resource, we need a way to
+flush its dirty data. The data may have been dirtied by one or more flows, but
+we are certain that these flows will belong in the same major flow.
 
-.. code-block:: c
+This means that we can check the major flow id of the flush/snapshot request and
+send a flush request to all the minor flows.
 
-        remove object from list
-        free allocated resources
+.. note::
 
-We can safely do so since the stale flow entries that may be encountered by
-a flushing operation will be handled correctly.
+        The flush request may be tagged with the flow id of the snapshot
+        request, but for now it will be tagged with the flow id of the flow
+        objects.
 
-Notes
-======
-1) The `lru_list` will be a list similar to the O(1) lru used in xcache, which
-means that this lru must move from the xcache code and become an xtype of its
-own.
+ENOSPC scenarios
+-----------------
 
-2) It would be handy if xcache could be used to index the flows. This way, the
-allocation of flows will become very easy as it's already implemented.
+For every flow, we will try to flush its dirty data once its dirty threshold
+exceeds a specified level. This preemptive measure however is not enough. There
+are two cases when we can run out of space:
+
+#. When we run out of global space for the index/object data, according to the
+   limits of the namespace.
+#. When we run out of space for the flow index/data, according to the flow
+   policy.
+
+In the first case, we can send a flush request to a random flow. This flush
+request should attempt to get the necessary buckets to replenish the bucket
+pool. The second case is a subset of the first case and is handled accordingly,
+i.e.  we sent a flush request for that specific flow.
+
+.. |cached-design| image:: /images/cached-design.svg
 
