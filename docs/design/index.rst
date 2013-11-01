@@ -31,6 +31,7 @@ We present on the list below the design docs so far:
    design_cached_namespaces
    design_cached_flows
    design_xseg_signals
+   design_xindex
 
 .. _rubber duck effect: http://en.wikipedia.org/wiki/Rubber_duck_debugging
 .. [#] The overhead of writing the design doc is a whole different story...
