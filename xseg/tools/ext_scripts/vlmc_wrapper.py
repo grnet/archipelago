@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-# Copyright (C) 2012 Greek Research and Technology Network
+# Copyright (C) 2013 Greek Research and Technology Network
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -44,28 +44,38 @@ from archipelago import vlmc as vlmc
 
 
 def ReadEnv():
-    """Read the enviromental variables
-    """
-
+    """Read the enviromental variables"""
     name = os.getenv("VOL_NAME")
     if name is None:
         sys.stderr.write('The environment variable VOL_NAME is missing.\n')
         return None
-    size = os.getenv("VOL_SIZE")
-    origin = os.getenv("EXTP_ORIGIN")
-    return (name, size, origin)
+
+    return {"name": name,
+            "size": os.getenv("VOL_SIZE"),
+            "origin": os.getenv("EXTP_ORIGIN"),
+            "snapshot_name": os.getenv("VOL_SNAPSHOT_NAME"),
+            }
 
 
 def create(env):
-    """Create a new vlmc Image
-    """
-    name, size, origin = env
-    cont_addr = False
-    if origin and origin.startswith('pithos:'):
-        cont_addr = True
-        origin = origin[7:]
+    """Create a new vlmc Image."""
+    name = env.get("name")
+    size = env.get("size")
+    origin = env.get("origin")
 
-    vlmc.create(name=name, size=int(size), snap=origin, cont_addr=cont_addr)
+    sys.stderr.write("Creating volume '%s' of size '%s' from '%s'\n"
+                     % (name, size, origin))
+    vlmc.create(name=name, size=int(size), snap=origin)
+    return 0
+
+
+def snapshot(env):
+    """Create a snapshot of an existing vlmc Image."""
+    name = env.get("name")
+    snapshot_name = env.get("snapshot_name")
+    sys.stderr.write("Creating snapshot '%s' from '%s'\n" %
+                     (snapshot_name, name))
+    vlmc.snapshot(name=name, snap_name=snapshot_name)
     return 0
 
 
@@ -75,9 +85,10 @@ def attach(env):
     This function maps an existing vlmc Image to a block device
     e.g. /dev/xsegbd{X} and returns the device path. If the mapping
     already exists, it returns the corresponding device path.
+
     """
 
-    name, _, _ = env
+    name = env.get("name")
 
     # Check if the mapping already exists
     d_id = vlmc.is_mapped(name)
@@ -98,8 +109,9 @@ def detach(env):
 
     This function unmaps an vlmc device from the Image it is mapped to.
     It is idempotent if the mapping doesn't exist at all.
+
     """
-    name, _, _ = env
+    name = env.get("name")
 
     #try:
     # Check if the mapping already exists
@@ -115,25 +127,29 @@ def detach(env):
 
 
 def grow(env):
-    """Grow an existing vlmc Image
-    """
-    name, size, _ = env
+    """Grow an existing vlmc Image"""
+    name = env.get("name")
+    size = env.get("size")
 
+    sys.stderr.write("Resizing '%s'. New size '%s'\n" % (name, size))
     vlmc.resize(name=name, size=int(size))
     return 0
 
 
 def remove(env):
-    """ Delete a vlmc Image
-    """
+    """Delete a vlmc Image"""
+    name = env.get("name")
 
-    name, _, _ = env
-
+    sys.stderr.write("Deleting '%s'\n" % name)
     vlmc.remove(name=name)
     return 0
 
 
 def verify(env):
+    return 0
+
+
+def setinfo(env):
     return 0
 
 
@@ -145,23 +161,26 @@ def main():
 
     loadrc(None)
 
-    try:
-        action = {
-            'attach': attach,
-            'create': create,
-            'detach': detach,
-            'grow': grow,
-            'remove': remove,
-            'verify': verify
-        }[os.path.basename(sys.argv[0])]
-    except:
-        sys.stderr.write("Op not supported\n")
-        return 1
+    actions = {
+        'create': create,
+        'snapshot': snapshot,
+        'attach': attach,
+        'detach': detach,
+        'grow': grow,
+        'remove': remove,
+        'verify': verify,
+        'setinfo': setinfo,
+    }
 
     try:
+        action_name = os.path.basename(sys.argv[0])
+        action = actions[action_name]
         return action(env)
+    except KeyError:
+        sys.stderr.write("Action '%s' not supported\n" % action_name)
+        return 1
     except Error as e:
-        sys.stderr.write(str(e) + '\n')
+        sys.stderr.write("Archipelago error: %s\n" % e)
         return 1
 
 if __name__ == "__main__":
