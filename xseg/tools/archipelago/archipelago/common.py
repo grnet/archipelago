@@ -657,48 +657,37 @@ def exclusive(get_port=False):
         return lock
     return wrap
 
-def createBDict(cfg, section):
-	sec_dic = {}
-	sec_dic['portno_start'] = cfg.getint(section, 'portno_start')
-	sec_dic['portno_end'] = cfg.getint(section, 'portno_end')
-	sec_dic['log_level'] = cfg.getint(section, 'log_level')
-	sec_dic['nr_ops'] = cfg.getint(section, 'nr_ops')
-	try:
-		sec_dic['nr_threads'] = cfg.getint(section, 'nr_threads')
-		sec_dic['archip_dir'] = cfg.get(section, 'archip_dir')
-		sec_dic['fdcache'] = cfg.getint(section, 'fdcache')
-	except:
-		sec_dic['pool'] = cfg.get(section, 'pool')
-	return sec_dic
-
-def createMDict(cfg, section):
-	sec_dic = {}
-	sec_dic['portno_start'] = cfg.getint(section, 'portno_start')
-	sec_dic['portno_end'] = cfg.getint(section, 'portno_end')
-	sec_dic['log_level'] = cfg.getint(section, 'log_level')
-	sec_dic['nr_ops'] = cfg.getint(section, 'nr_ops')
-	sec_dic['blockerb_port'] = cfg.getint(section, 'blockerb_port')
-	sec_dic['blockerm_port'] = cfg.getint(section, 'blockerm_port')
-	return sec_dic
-
-def createVDict(cfg, section):
-	sec_dic = {}
-	sec_dic['portno_start'] = cfg.getint(section, 'portno_start')
-	sec_dic['portno_end'] = cfg.getint(section, 'portno_end')
-	sec_dic['log_level'] = cfg.getint(section, 'log_level')
-	sec_dic['nr_ops'] = cfg.getint(section, 'nr_ops')
-	sec_dic['blocker_port'] = cfg.getint(section, 'blocker_port')
-	sec_dic['mapper_port'] = cfg.getint(section, 'mapper_port')
-	return sec_dic
+def createDict(cfg, section):
+    sec_dic = {}
+    sec_dic['portno_start'] = cfg.getint(section, 'portno_start')
+    sec_dic['portno_end'] = cfg.getint(section, 'portno_end')
+    sec_dic['log_level'] = cfg.getint(section, 'log_level')
+    sec_dic['nr_ops'] = cfg.getint(section, 'nr_ops')
+    if section == "BLOCKERB" or section == "BLOCKERM":
+        try:
+            sec_dic['nr_threads'] = cfg.getint(section, 'nr_threads')
+            sec_dic['archip_dir'] = cfg.get(section, 'archip_dir')
+            sec_dic['fdcache'] = cfg.getint(section, 'fdcache')
+        except:
+            sec_dic['pool'] = cfg.get(section, 'pool')
+    elif section == "MAPPERD":
+        sec_dic['blockerb_port'] = cfg.getint(section, 'blockerb_port')
+        sec_dic['blockerm_port'] = cfg.getint(section, 'blockerm_port')
+    elif section == "VLMCD":
+        sec_dic['blocker_port'] = cfg.getint(section, 'blocker_port')
+        sec_dic['mapper_port'] = cfg.getint(section, 'mapper_port')
+    else:
+        raise Exception("No such section '%s'" % section)
+    return sec_dic
 
 
 def loadrc(rc):
     try:
         if rc is None:
-	    cfg_dir = os.path.expanduser(DEFAULTS)
+            cfg_dir = os.path.expanduser(DEFAULTS)
         else:
-	    cfg_dir = rc
-	cfg_fd = open(cfg_dir)
+            cfg_dir = rc
+        cfg_fd = open(cfg_dir)
     except:
         raise Error("Cannot read config file")
 
@@ -711,10 +700,10 @@ def loadrc(rc):
     config['VTOOL_START'] = cfg.getint('XSEG','VTOOL_START')
     config['VTOOL_END'] = cfg.getint('XSEG','VTOOL_END')
     config['roles'] = eval(cfg.get('ROLES','order'))
-    config['blockerb'] = createBDict(cfg, 'BLOCKERB')
-    config['blockerm'] = createBDict(cfg, 'BLOCKERM')
-    config['mapperd'] = createMDict(cfg, 'MAPPERD')
-    config['vlmcd'] = createVDict(cfg, 'VLMCD')
+    config['blockerb'] = createDict(cfg, 'BLOCKERB')
+    config['blockerm'] = createDict(cfg, 'BLOCKERM')
+    config['mapperd'] = createDict(cfg, 'MAPPERD')
+    config['vlmcd'] = createDict(cfg, 'VLMCD')
 
     if not check_conf():
         raise Error("Invalid conf file")
@@ -910,7 +899,7 @@ class Request(object):
             raise Error("Cannot prepare request")
         self.req = req
         self.xseg_ctx = xseg_ctx
- 
+
         if not self.set_target(target):
             self.put()
             raise Error("Cannot set target")
