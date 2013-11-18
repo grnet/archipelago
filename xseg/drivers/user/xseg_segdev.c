@@ -138,7 +138,8 @@ static void *segdev_map(const char *name, uint64_t size, struct xseg *seg)
 	int fd;
 
 	if (seg)
-		XSEGLOG("struct xseg * not NULL. Ignoring...\n");
+		//XSEGLOG("struct xseg * not NULL. Ignoring...\n");
+		;
 
 	fd = opendev();
 	if (fd < 0)
