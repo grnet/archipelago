@@ -46,6 +46,8 @@ EFILES+="create"
 EFILES+="grow"
 EFILES+="remove"
 EFILES+="verify"
+EFILES+="setinfo"
+EFILES+="snapshot"
 
 SUBDIR:=$(subst $(XSEG_HOME),,$(CURDIR))
 
