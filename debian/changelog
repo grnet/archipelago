@@ -1,3 +1,9 @@
+archipelago (0.3.2-1) wheezy; urgency=low
+
+  * Add 'snapshot' and 'setinfo' actions to ext scripts
+
+ -- Filippos Giannakos <philipgian@grnet.gr>  Wed, 27 Nov 2013 16:07:39 +0300
+
 archipelago (0.3.1-1) wheezy; urgency=low
 
   * Bug fix in sosd
