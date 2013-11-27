@@ -43,7 +43,7 @@ Architecture: amd64
 Depends: ${misc:Depends},  ${shlibs:Depends}, ${python:Depends},
  libxseg0(=${binary:Version}), python-xseg(=${binary:Version}),
  python-archipelago(=${binary:Version}),
- librados2(=0.61.2+grnet2-1),
+ librados2(=0.61.2+grnet2-1) | librados2(>=0.65),
  archipelago-modules-#VERSION# | archipelago-modules-dkms(=${binary:Version})
 Description:  Provides archipelago infrastructure
  Extended Description here
