@@ -1027,17 +1027,20 @@ int dispatch(struct peerd *peer, struct peer_req *pr, struct xseg_request *req,
 {
 	struct rados_io *rio = (struct rados_io *) (pr->priv);
 	char *target = xseg_get_target(peer->xseg, pr->req);
-	unsigned int end = (pr->req->targetlen > MAX_OBJ_NAME) ? MAX_OBJ_NAME : pr->req->targetlen;
-	strncpy(rio->obj_name, target, end);
-	rio->obj_name[end] = 0;
-	//log_pr("dispatch", pr);
-	if (reason == dispatch_accept)
+	unsigned int end = (pr->req->targetlen > MAX_OBJ_NAME) ?
+		MAX_OBJ_NAME : pr->req->targetlen;
+
+	if (reason == dispatch_accept) {
+		strncpy(rio->obj_name, target, end);
+		rio->obj_name[end] = 0;
 		rio->state = ACCEPTED;
+		rio->read = 0;
+	}
 
 	switch (pr->req->op){
 		case X_READ:
 			handle_read(peer, pr); break;
-		case X_WRITE: 
+		case X_WRITE:
 			handle_write(peer, pr); break;
 		case X_DELETE:
 			if (canDefer(peer))
