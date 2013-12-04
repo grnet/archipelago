@@ -271,11 +271,11 @@ class XsegTest(unittest.TestCase):
             self.assertTrue(req.put())
         return send_and_evaluate
 
-    def send_write(self, dst, target, data=None, offset=0, datalen=0):
+    def send_write(self, dst, target, data=None, offset=0, datalen=0, flags=0):
         #assert datalen >= size
 #        req = self.get_req(X_WRITE, dst, target, data, size=size, offset=offset, datalen=datalen)
         req = Request.get_write_request(self.xseg, dst, target, data=data,
-                offset=offset, datalen=datalen)
+                offset=offset, datalen=datalen, flags=flags)
         req.submit()
         return req
 
@@ -628,6 +628,63 @@ class VlmcdTest(XsegTest):
             req = self.xseg.wait_requests(reqs)
             self.evaluate_req(req, data=xinfo)
             reqs.remove(req)
+            self.assertTrue(req.put())
+
+    def test_flush(self):
+        datalen = 1024
+        data = get_random_string(datalen, 16)
+        volume = "myvolume"
+        volsize = 10*1024*1024
+
+        #This may seems weird, but actually vlmcd flush, only guarantees that
+        #there are no pending operation the volume. On a volume that does not
+        #exists, this is always true, so this should succeed.
+        self.send_and_evaluate_write(self.vlmcdport, volume, data="",
+                flags=XF_FLUSH, expected=True)
+        self.send_and_evaluate_clone(self.mapperdport, "", clone=volume,
+                clone_size=volsize)
+        self.send_and_evaluate_write(self.vlmcdport, volume, data="",
+                flags=XF_FLUSH)
+        self.send_and_evaluate_write(self.vlmcdport, volume, data=data,
+                serviced=datalen)
+        self.send_and_evaluate_write(self.vlmcdport, volume, data="",
+                flags=XF_FLUSH)
+
+    def test_flush2(self):
+        volume = "myvolume"
+        volsize = 10*1024*1024
+        datalen = 1024
+        data = get_random_string(datalen, 16)
+
+        self.send_and_evaluate_clone(self.mapperdport, "", clone=volume,
+                clone_size=volsize)
+        xinfo = self.get_reply_info(volsize)
+        reqs = Set([])
+        reqs.add(self.send_write(self.vlmcdport, volume, data=data))
+        reqs.add(self.send_write(self.vlmcdport, volume, data=data))
+        reqs.add(self.send_write(self.vlmcdport, volume, data=data))
+        reqs.add(self.send_write(self.vlmcdport, volume, data=data))
+        reqs.add(self.send_write(self.vlmcdport, volume, data=data))
+        reqs.add(self.send_write(self.vlmcdport, volume, data=data))
+        reqs.add(self.send_write(self.vlmcdport, volume, data=data))
+        reqs.add(self.send_write(self.vlmcdport, volume, data=data))
+        reqs.add(self.send_write(self.vlmcdport, volume, data=data))
+        reqs.add(self.send_write(self.vlmcdport, volume, data=data))
+        reqs.add(self.send_write(self.vlmcdport, volume, data=data))
+        reqs.add(self.send_write(self.vlmcdport, volume, data=data))
+        reqs.add(self.send_write(self.vlmcdport, volume, data=data))
+        reqs.add(self.send_write(self.vlmcdport, volume, data="", flags=XF_FLUSH))
+        reqs.add(self.send_write(self.vlmcdport, volume, data=data))
+        reqs.add(self.send_write(self.vlmcdport, volume, data=data))
+        reqs.add(self.send_write(self.vlmcdport, volume, data=data))
+        reqs.add(self.send_write(self.vlmcdport, volume, data=data))
+        reqs.add(self.send_write(self.vlmcdport, volume, data=data))
+        reqs.add(self.send_write(self.vlmcdport, volume, data=data))
+        while len(reqs) > 0:
+            req = self.xseg.wait_requests(reqs)
+            self.evaluate_req(req)
+            reqs.remove(req)
+            self.assertTrue(req.put())
 
     def test_hash(self):
         blocksize = self.blocksize
@@ -852,6 +909,7 @@ class MapperdTest(XsegTest):
             req = self.xseg.wait_requests(reqs)
             self.evaluate_req(req, data=xinfo)
             reqs.remove(req)
+            self.assertTrue(req.put())
 
     def test_open(self):
         volume = "myvolume"
@@ -874,6 +932,7 @@ class MapperdTest(XsegTest):
             req = self.xseg.wait_requests(reqs)
             self.evaluate_req(req)
             reqs.remove(req)
+            self.assertTrue(req.put())
 
     def test_close(self):
         volume = "myvolume"
@@ -923,6 +982,7 @@ class MapperdTest(XsegTest):
             req = self.xseg.wait_requests(reqs)
             self.evaluate_req(req, data=ret)
             reqs.remove(req)
+            self.assertTrue(req.put())
 
     def test_mapw(self):
         blocksize = self.blocksize
@@ -986,6 +1046,7 @@ class MapperdTest(XsegTest):
             req = self.xseg.wait_requests(reqs)
             self.evaluate_req(req, data=ret)
             reqs.remove(req)
+            self.assertTrue(req.put())
 
 class BlockerTest(object):
     def test_write_read(self):

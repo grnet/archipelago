@@ -204,6 +204,7 @@ def remove(name, **kwargs):
     req.submit()
     req.wait()
     ret = req.success()
+    req.put()
     xseg_ctx.shutdown()
     if not ret:
         raise Error("vlmc removal failed")

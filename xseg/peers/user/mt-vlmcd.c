@@ -255,6 +255,14 @@ static int conclude_pr(struct peerd *peer, struct peer_req *pr)
 	return 0;
 }
 
+static int should_freeze_volume(struct xseg_request *req)
+{
+	if (req->op == X_CLOSE || req->op == X_SNAPSHOT ||
+		(req->op == X_WRITE && !req->size && (req->flags & XF_FLUSH)))
+		return 1;
+	return 0;
+}
+
 static int do_accepted_pr(struct peerd *peer, struct peer_req *pr)
 {
 	struct vlmcd *vlmc = __get_vlmcd(peer);
@@ -283,7 +291,7 @@ static int do_accepted_pr(struct peerd *peer, struct peer_req *pr)
 		return -1;
 	}
 
-	if (pr->req->op == X_CLOSE || pr->req->op == X_SNAPSHOT){
+	if (should_freeze_volume(pr->req)){
 		XSEGLOG2(&lc, I, "Freezing volume %s", vi->name);
 		vi->flags |= VF_VOLUME_FREEZED;
 		if (vi->active_reqs){
@@ -299,6 +307,7 @@ static int do_accepted_pr(struct peerd *peer, struct peer_req *pr)
 			//assert vi->pending_pr == pr
 			vi->pending_pr = NULL;
 		}
+
 	}
 
 	vi->active_reqs++;
@@ -309,9 +318,16 @@ static int do_accepted_pr(struct peerd *peer, struct peer_req *pr)
 			(pr->req->flags & (XF_FLUSH|XF_FUA))){
 		//hanlde flush requests here, so we don't mess with mapper
 		//because of the -1 offset
+		vi->flags &= ~VF_VOLUME_FREEZED;
 		XSEGLOG2(&lc, I, "Completing flush request");
 		pr->req->serviced = pr->req->size;
 		conclude_pr(peer, pr);
+		xqindex xqi;
+		while (vi->pending_reqs && !(vi->flags & VF_VOLUME_FREEZED) &&
+				(xqi = __xq_pop_head(vi->pending_reqs)) != Noneidx) {
+			struct peer_req *ppr = (struct peer_req *) xqi;
+			do_accepted_pr(peer, ppr);
+		}
 		return 0;
 	}
 
