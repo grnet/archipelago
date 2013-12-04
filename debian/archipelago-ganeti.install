@@ -10,3 +10,4 @@
 #
 usr/share/ganeti/*
 var/log/ganeti/extstorage
+etc/ganeti/hooks
