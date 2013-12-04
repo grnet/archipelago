@@ -1,3 +1,10 @@
+archipelago (0.3.3-1) wheezy; urgency=low
+
+  * Add support for FLUSH in vlmc
+  * Add ganeti pre migrate hook
+
+ -- Filippos Giannakos <philipgian@grnet.gr>  Wed, 04 DEC 2013 17:30:39 +0300
+
 archipelago (0.3.2-1) wheezy; urgency=low
 
   * Add 'snapshot' and 'setinfo' actions to ext scripts
