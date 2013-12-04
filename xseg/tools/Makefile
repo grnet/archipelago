@@ -46,18 +46,22 @@ SUBDIR:=$(subst $(XSEG_HOME),,$(CURDIR))
 default:
 	make -C archipelago
 	make -C ext_scripts
+	make -C ganeti-hooks
 
 clean:
 	make -C archipelago clean
 	make -C ext_scripts clean
+	make -C ganeti-hooks clean
 
 install:
 	make -C archipelago install
 	make -C ext_scripts install
+	make -C ganeti-hooks install
 
 install-src:
 	make -C archipelago install-src
 	make -C ext_scripts install-src
+	make -C ganeti-hooks install-src
 	install -d $(DESTDIR)$(srcdir)$(SUBDIR) ;
 	@for f in $(FILES) ; do \
 		install -o 0 -g 0 -m 644 -t $(DESTDIR)$(srcdir)$(SUBDIR) $$f ; \

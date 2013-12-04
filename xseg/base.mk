@@ -70,6 +70,7 @@ moduledir=/lib/modules/$(KVER)/extra/
 srcdir=/usr/src/archipelago-modules-dkms-$(VERSION)/xseg/
 ganetidir=/usr/share/ganeti/extstorage/archipelago/
 confdir=/etc/archipelago/
+ganetihooksdir=/etc/ganeti/hooks/
 
 INC=-I$(BASE)
 INC+=-I$(BASE)/peers/$(TARGET)
