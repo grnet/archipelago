@@ -99,7 +99,6 @@ def is_mapped(volume):
     return None
 
 
-@exclusive(get_port=True)
 def create(name, size=None, snap=None, cont_addr=False, **kwargs):
     if len(name) < 6:
         raise Error("Name should have at least len 6")
@@ -114,8 +113,7 @@ def create(name, size=None, snap=None, cont_addr=False, **kwargs):
         size = size << 20
 
     ret = False
-    vtool_port = get_vtool_port()
-    xseg_ctx = Xseg_ctx(get_segment(), vtool_port)
+    xseg_ctx = Xseg_ctx(get_segment())
     mport = peers['mapperd'].portno_start
     req = Request.get_clone_request(xseg_ctx, mport, snap, clone=name,
             clone_size=size, cont_addr=cont_addr)
@@ -128,13 +126,11 @@ def create(name, size=None, snap=None, cont_addr=False, **kwargs):
         raise Error("vlmc creation failed")
 
 
-@exclusive(get_port=True)
 def snapshot(name, snap_name=None, cli=False, **kwargs):
     if len(name) < 6:
         raise Error("Name should have at least len 6")
 
-    vtool_port = get_vtool_port()
-    xseg_ctx = Xseg_ctx(get_segment(), vtool_port)
+    xseg_ctx = Xseg_ctx(get_segment())
     vport = peers['vlmcd'].portno_start
     req = Request.get_snapshot_request(xseg_ctx, vport, name, snap=snap_name)
     req.submit()
@@ -148,13 +144,11 @@ def snapshot(name, snap_name=None, cli=False, **kwargs):
     if cli:
         sys.stdout.write("Snapshot name: %s\n" % snap_name)
 
-@exclusive(get_port=True)
 def hash(name, cli=False, **kwargs):
     if len(name) < 6:
         raise Error("Name should have at least len 6")
 
-    vtool_port = get_vtool_port()
-    xseg_ctx = Xseg_ctx(get_segment(), vtool_port)
+    xseg_ctx = Xseg_ctx(get_segment())
     mport = peers['mapperd'].portno_start
     req = Request.get_hash_request(xseg_ctx, mport, name)
     req.submit()
@@ -189,7 +183,6 @@ def list_volumes(**kwargs):
         raise Error("Invalid storage")
 
 
-@exclusive(get_port=True)
 def remove(name, **kwargs):
     device = is_mapped(name)
     if device is not None:
@@ -197,8 +190,7 @@ def remove(name, **kwargs):
                     device))
 
     ret = False
-    vtool_port = get_vtool_port()
-    xseg_ctx = Xseg_ctx(get_segment(), vtool_port)
+    xseg_ctx = Xseg_ctx(get_segment())
     mport = peers['mapperd'].portno_start
     req = Request.get_delete_request(xseg_ctx, mport, name)
     req.submit()
@@ -291,15 +283,13 @@ def resize(name, size, **kwargs):
         raise Error(name + ': ' + str(reason))
 
 
-@exclusive(get_port=True)
 def lock(name, cli=False, **kwargs):
     if len(name) < 6:
         raise Error("Name should have at least len 6")
 
     name = ARCHIP_PREFIX + name
 
-    vtool_port = get_vtool_port()
-    xseg_ctx = Xseg_ctx(get_segment(), vtool_port)
+    xseg_ctx = Xseg_ctx(get_segment())
     mbport = peers['blockerm'].portno_start
     ret = Request.get_acquire_request(xseg_ctx, mbport, name)
     req.submit()
@@ -312,15 +302,13 @@ def lock(name, cli=False, **kwargs):
         sys.stdout.write("Volume locked\n")
 
 
-@exclusive(get_port=True)
 def unlock(name, force=False, cli=False, **kwargs):
     if len(name) < 6:
         raise Error("Name should have at least len 6")
 
     name = ARCHIP_PREFIX + name
 
-    vtool_port = get_vtool_port()
-    xseg_ctx = Xseg_ctx(get_segment(), vtool_port)
+    xseg_ctx = Xseg_ctx(get_segment())
     mbport = peers['blockerm'].portno_start
     req = Request.get_release_request(xseg_ctx, mbport, name, force=force)
     req.submit()
@@ -333,14 +321,12 @@ def unlock(name, force=False, cli=False, **kwargs):
         sys.stdout.write("Volume unlocked\n")
 
 
-@exclusive(get_port=True)
 def open_volume(name, cli=False, **kwargs):
     if len(name) < 6:
         raise Error("Name should have at least len 6")
 
     ret = False
-    vtool_port = get_vtool_port()
-    xseg_ctx = Xseg_ctx(get_segment(), vtool_port)
+    xseg_ctx = Xseg_ctx(get_segment())
     vport = peers['vlmcd'].portno_start
     ret = Request.get_open_request(xseg_ctx, vport, name)
     req.submit()
@@ -353,14 +339,12 @@ def open_volume(name, cli=False, **kwargs):
         sys.stdout.write("Volume opened\n")
 
 
-@exclusive(get_port=True)
 def close_volume(name, cli=False, **kwargs):
     if len(name) < 6:
         raise Error("Name should have at least len 6")
 
     ret = False
-    vtool_port = get_vtool_port()
-    xseg_ctx = Xseg_ctx(get_segment(), vtool_port)
+    xseg_ctx = Xseg_ctx(get_segment())
     vport = peers['vlmcd'].portno_start
     ret = Request.get_close_request(xseg_ctx, vport, name)
     req.submit()
@@ -373,14 +357,12 @@ def close_volume(name, cli=False, **kwargs):
         sys.stdout.write("Volume closed\n")
 
 
-@exclusive(get_port=True)
 def info(name, cli=False, **kwargs):
     if len(name) < 6:
         raise Error("Name should have at least len 6")
 
     ret = False
-    vtool_port = get_vtool_port()
-    xseg_ctx = Xseg_ctx(get_segment(), vtool_port)
+    xseg_ctx = Xseg_ctx(get_segment())
     mport = peers['mapperd'].portno_start
     req = Request.get_info_request(xseg_ctx, mport, name)
     req.submit()
