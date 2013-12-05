@@ -77,6 +77,9 @@ EXPORT_SYMBOL(xseg_set_freequeue_size);
 EXPORT_SYMBOL(xseg_get_data_nonstatic);
 EXPORT_SYMBOL(xseg_get_target_nonstatic);
 EXPORT_SYMBOL(xseg_get_signal_desc_nonstatic);
+EXPORT_SYMBOL(xseg_bind_dynport);
+EXPORT_SYMBOL(xseg_leave_dynport);
+EXPORT_SYMBOL(xseg_portno_nonstatic);
 
 EXPORT_SYMBOL(xseg_snprintf);
 EXPORT_SYMBOL(__xseg_errbuf);

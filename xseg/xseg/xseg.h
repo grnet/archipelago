@@ -176,6 +176,7 @@ struct xseg_peer {
 struct xseg_config {
 	uint64_t heap_size;	/* heap size in MB */
 	uint32_t nr_ports;
+	uint32_t dynports;
 	uint32_t page_shift;	/* the alignment unit */
 	char type[XSEG_TNAMESIZE]; /* zero-terminated identifier */
 	char name[XSEG_NAMESIZE];  /* zero-terminated identifier */
@@ -489,4 +490,7 @@ int xseg_set_freequeue_size(struct xseg *xseg, xport portno, xqindex size,
 xport xseg_forward(struct xseg *xseg, struct xseg_request *req, xport new_dst,
 		xport portno, uint32_t flags);
 
+struct xseg_port *xseg_bind_dynport(struct xseg *xseg);
+int xseg_leave_dynport(struct xseg *xseg, struct xseg_port *port);
+extern uint32_t xseg_portno_nonstatic(struct xseg *xseg, struct xseg_port *port);
 #endif
