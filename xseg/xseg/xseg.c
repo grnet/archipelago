@@ -1705,6 +1705,10 @@ struct xseg_port *xseg_bind_dynport(struct xseg *xseg)
 	maxno = xseg->config.nr_ports;
 
 	__lock_segment(xseg);
+	driver = __enable_driver(xseg, &xseg->priv->peer_type);
+	if (driver < 0)
+		return NULL;
+
 	for (portno = xseg->config.dynports; portno < maxno; portno++) {
 		if (!xseg->ports[portno]) {
 			port = xseg_alloc_port(xseg, X_ALLOC, XSEG_DEF_REQS);
@@ -1719,13 +1723,19 @@ struct xseg_port *xseg_bind_dynport(struct xseg *xseg)
 			if (port->owner != Noone)
 				continue;
 
-			if (port->signal_desc)
-				has_sd = 1;
+			if (port->signal_desc) {
+				if (port->peer_type == driver) {
+					has_sd = 1;
+				} else {
+					/* Just abandon the old signal desc.
+					 * We can't be really sure when to free
+					 * it.
+					 * Minor memory leak.
+					 */
+					port->signal_desc = 0;
+				}
+			}
 		}
-
-		driver = __enable_driver(xseg, &xseg->priv->peer_type);
-		if (driver < 0)
-			break;
 		if (!has_sd){
 			peer_data = __get_peer_type_data(xseg, (uint64_t) driver);
 			if (!peer_data)
