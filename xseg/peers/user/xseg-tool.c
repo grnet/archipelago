@@ -109,11 +109,16 @@ uint64_t reqs;
  */
 
 xport sport = NoPort;
+void *sd;
+
 static void init_local_signal() 
 {
+	struct xseg_port *port;
 	if (xseg && sport != srcport){
 		xseg_init_local_signal(xseg, srcport);
 		sport = srcport;
+		port = xseg_get_port(xseg, srcport);
+		sd = xseg_get_signal_desc(xseg, port);
 	}
 }
 
@@ -757,9 +762,9 @@ void log_req(int logfd, uint32_t portno2, uint32_t portno1, int op, int method,
 
 #define LOG_ACCEPT  0
 #define LOG_RECEIVE 1
-
 int cmd_bridge(uint32_t portno1, uint32_t portno2, char *logfile, char *how)
 {
+#if 0
 	struct xseg_request *req;
 	int logfd, method;
 	if (!strcmp(logfile, "-"))
@@ -832,7 +837,7 @@ int cmd_bridge(uint32_t portno1, uint32_t portno2, char *logfile, char *how)
 	}
 
 	close(logfd);
-
+#endif
 	return 0;
 }
 
@@ -924,7 +929,7 @@ int cmd_rndwrite(long loops, int32_t seed, uint32_t targetlen, uint32_t chunksiz
 		}
 
 		if (!submitted && !received)
-			xseg_wait_signal(xseg, 1000000);
+			xseg_wait_signal(xseg, sd, 1000000);
 
 			if (nr_submitted % 1000 == 0 && !reported) {
 				reported = 1;
@@ -1010,7 +1015,7 @@ int cmd_rnddelete(long loops, int32_t seed, uint32_t targetlen)
 		}
 
 		if (!submitted && !received)
-			xseg_wait_signal(xseg, 1000000);
+			xseg_wait_signal(xseg, sd, 1000000);
 
 			if (nr_submitted % 1000 == 0 && !reported) {
 				reported = 1;
@@ -1122,7 +1127,7 @@ int cmd_rndread(long loops, int32_t seed, uint32_t targetlen, uint32_t chunksize
 		}
 
 		if (!submitted && !received)
-			xseg_wait_signal(xseg, 1000000);
+			xseg_wait_signal(xseg, sd, 1000000);
 
 		if (nr_submitted % 1000 == 0 && !reported) {
 			reported = 1;
@@ -1213,7 +1218,7 @@ int cmd_submit_reqs(long loops, long concurrent_reqs, int op)
 		}
 
 		if (!submitted && !received)
-			xseg_wait_signal(xseg, 10000000L);
+			xseg_wait_signal(xseg, sd, 10000000L);
 
 		if (nr_received >= loops)
 			break;
@@ -1672,6 +1677,7 @@ int cmd_finish(unsigned long nr, int fail)
 	char *buf = malloc(sizeof(char) * 8128);
 	char *req_target, *req_data;
 	xseg_bind_port(xseg, srcport, NULL);
+	init_local_signal();
 	xport p;
 
 	for (; nr--;) {
@@ -1700,7 +1706,7 @@ int cmd_finish(unsigned long nr, int fail)
 			continue;
 		}
 		++nr;
-		xseg_wait_signal(xseg, 10000000L);
+		xseg_wait_signal(xseg, sd, 10000000L);
 	}
 
 	free(buf);
@@ -1779,7 +1785,7 @@ int cmd_wait(uint32_t nr)
 		if (ret)
 			return -1;
 
-		ret = xseg_wait_signal(xseg, 1000000);
+		ret = xseg_wait_signal(xseg, sd, 1000000);
 		ret = xseg_cancel_wait(xseg, srcport);
 		if (ret)
 			return -1;
