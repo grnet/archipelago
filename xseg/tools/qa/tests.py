@@ -86,7 +86,7 @@ def merkle_hash(hashes):
 
 def init():
     rnd.seed()
-    archipelago.common.BIN_DIR=os.path.join(os.getcwd(), '../../peers/user/')
+#    archipelago.common.BIN_DIR=os.path.join(os.getcwd(), '../../peers/user/')
     archipelago.common.LOGS_PATH=os.path.join(os.getcwd(), 'logs')
     archipelago.common.PIDFILE_PATH=os.path.join(os.getcwd(), 'pids')
     if not os.path.isdir(archipelago.common.LOGS_PATH):
