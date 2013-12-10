@@ -97,19 +97,18 @@ def init():
     recursive_remove(archipelago.common.LOGS_PATH)
 
 class XsegTest(unittest.TestCase):
-    myport = 15
-    spec = "posix:testsegment:16:256:12".encode()
+    spec = "posix:testsegment:8:16:256:12".encode()
     blocksize = 4*1024*1024
     segment = None
 
     def setUp(self):
-        self.segment = Segment('posix', 'testsegment', 16, 256, 12)
+        self.segment = Segment('posix', 'testsegment', 8, 16, 256, 12)
         try:
             self.segment.create()
         except Exception as e:
             self.segment.destroy()
             self.segment.create()
-        self.xseg = Xseg_ctx(self.segment, self.myport)
+        self.xseg = Xseg_ctx(self.segment)
 
     def tearDown(self):
         if self.xseg:
