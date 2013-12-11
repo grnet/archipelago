@@ -661,23 +661,37 @@ def createDict(cfg, section):
     sec_dic = {}
     sec_dic['portno_start'] = cfg.getint(section, 'portno_start')
     sec_dic['portno_end'] = cfg.getint(section, 'portno_end')
-    sec_dic['log_level'] = cfg.getint(section, 'log_level')
     sec_dic['nr_ops'] = cfg.getint(section, 'nr_ops')
-    if section == "BLOCKERB" or section == "BLOCKERM":
-        try:
-            sec_dic['nr_threads'] = cfg.getint(section, 'nr_threads')
-            sec_dic['archip_dir'] = cfg.get(section, 'archip_dir')
+    if cfg.has_option(section, 'logfile'):
+        sec_dic['logfile'] = str(cfg.get(section, 'logfile'))
+    if cfg.has_option(section, 'threshold'):
+        sec_dic['threshold'] = cfg.getint(section, 'threshold')
+    if cfg.has_option(section, 'log_level'):
+        sec_dic['log_level'] = cfg.getint(section, 'log_level')
+
+    t = str(cfg.get(section, 'type'))
+    if t == 'file_blocker':
+        sec_dic['nr_threads'] = cfg.getint(section, 'nr_threads')
+        sec_dic['archip_dir'] = cfg.get(section, 'archip_dir')
+        if cfg.has_option(section, 'fdcache'):
             sec_dic['fdcache'] = cfg.getint(section, 'fdcache')
-        except:
-            sec_dic['pool'] = cfg.get(section, 'pool')
-    elif section == "MAPPERD":
+        if cfg.has_option(section, 'direct'):
+            sec_dic['direct'] = cfg.getboolean(section, 'direct')
+        if cfg.has_option(section, 'unique_str'):
+            sec_dic['unique_str'] = cfg.getint(section, 'unique_str')
+        if cfg.has_option(section, 'prefix'):
+            sec_dic['prefix'] = cfg.getint(section, 'prefix')
+    elif t == 'rados_blocker':
+        if cfg.has_option(section, 'nr_threads'):
+            sec_dic['nr_threads'] = cfg.getint(section, 'nr_threads')
+        sec_dic['pool'] = cfg.get(section, 'pool')
+    elif t == 'mapperd':
         sec_dic['blockerb_port'] = cfg.getint(section, 'blockerb_port')
         sec_dic['blockerm_port'] = cfg.getint(section, 'blockerm_port')
-    elif section == "VLMCD":
+    elif t == 'vlmcd':
         sec_dic['blocker_port'] = cfg.getint(section, 'blocker_port')
         sec_dic['mapper_port'] = cfg.getint(section, 'mapper_port')
-    else:
-        raise Exception("No such section '%s'" % section)
+
     return sec_dic
 
 
@@ -694,16 +708,18 @@ def loadrc(rc):
     cfg = ConfigParser.ConfigParser()
     cfg.readfp(cfg_fd)
     config['SEGMENT_PORTS'] = cfg.getint('XSEG','SEGMENT_PORTS')
+    config['SEGMENT_DYNPORTS'] = cfg.getint('XSEG', 'SEGMENT_DYNPORTS')
     config['SEGMENT_SIZE'] = cfg.getint('XSEG','SEGMENT_SIZE')
     config['XSEGBD_START'] = cfg.getint('XSEG','XSEGBD_START')
     config['XSEGBD_END'] = cfg.getint('XSEG','XSEGBD_END')
     config['VTOOL_START'] = cfg.getint('XSEG','VTOOL_START')
     config['VTOOL_END'] = cfg.getint('XSEG','VTOOL_END')
-    config['roles'] = eval(cfg.get('ROLES','order'))
-    config['blockerb'] = createDict(cfg, 'BLOCKERB')
-    config['blockerm'] = createDict(cfg, 'BLOCKERM')
-    config['mapperd'] = createDict(cfg, 'MAPPERD')
-    config['vlmcd'] = createDict(cfg, 'VLMCD')
+    roles = cfg.get('PEERS', 'ROLES')
+    roles = str(roles)
+    roles = roles.split(' ')
+    config['roles'] = [(r, str(cfg.get(r, 'type'))) for r in roles]
+    for r in roles:
+        config[r] = createDict(cfg, r)
 
     if not check_conf():
         raise Error("Invalid conf file")

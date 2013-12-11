@@ -24,11 +24,11 @@ VTOOL_END=1022
 # 	vlmcd
 # Order matters. Peers will be started with list order and stopped with reversed
 # order.
-[ROLES]
-order=[('blockerb', 'rados_blocker'),
-         ('blockerm', 'rados_blocker'),
-         ('mapperd', 'mapperd'),
-         ('vlmcd', 'vlmcd')]
+[PEERS]
+ROLES="blockerb blockerm mapperd vlmcd"
+# Order matters. Peers will be started with list order and stopped with reversed
+# order.
+ORDER="blockerb blockerm mapperd vlmcd"
 
 #nr_ops: Max number of flying operations
 #log_level: verbosity levels for each xseg peer
@@ -37,21 +37,24 @@ order=[('blockerb', 'rados_blocker'),
 #            2 - Info
 #            3 - Debug
 
-[BLOCKERB]
+[blockerb]
+type=rados_blocker
 portno_start=1000
 portno_end=1000
 log_level=3
 nr_ops=512
 pool=blocks
 
-[BLOCKERM]
+[blockerm]
+type=rados_blocker
 portno_start=1002
 portno_end=1002
 log_level=3
 nr_ops=512
 pool=maps
 
-[MAPPERD]
+[mapperd]
+type=mapperd
 portno_start=1001
 portno_end=1001
 log_level=3
@@ -59,7 +62,8 @@ nr_ops=512
 blockerb_port=1000
 blockerm_port=1002
 
-[VLMCD]
+[vlmcd]
+type=vlmcd
 portno_start=500
 portno_end=999
 log_level=3
