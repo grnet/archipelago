@@ -12,6 +12,6 @@ destroy_on_error = True
 packages = htop, vim, python-psutil, python-pkg-resources, python-unittest2, libst1, dkms, debhelper, make, bzip2, linux-headers-amd64
 update_cmd = apt-get update
 okeanos_io = True
-flavor_id = 706
+flavor_id = 917
 image_id = 895242b9-af8a-48c5-8218-60e1fb2e985b
 network = 24715
