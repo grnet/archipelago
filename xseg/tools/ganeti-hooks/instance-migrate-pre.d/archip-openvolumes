@@ -39,7 +39,7 @@ def archip_premigrate():
         return 1
 
     if template != 'ext':
-        return 1
+        return 0
 
     count = int(count)
     hooks_log("Found %d disks" % count)
