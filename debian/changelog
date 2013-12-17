@@ -1,9 +1,15 @@
+archipelago (0.3.4-1) wheezy; urgency=low
+
+  * Fix bug in pre-migrate hook
+
+ -- Filippos Giannakos <philipgian@grnet.gr>  Wed, 17 Dec 2013 14:07:11 +0200
+
 archipelago (0.3.3-1) wheezy; urgency=low
 
   * Add support for FLUSH in vlmc
   * Add ganeti pre migrate hook
 
- -- Filippos Giannakos <philipgian@grnet.gr>  Wed, 04 DEC 2013 17:30:39 +0300
+ -- Filippos Giannakos <philipgian@grnet.gr>  Wed, 04 Dec 2013 17:30:39 +0200
 
 archipelago (0.3.2-1) wheezy; urgency=low
 
