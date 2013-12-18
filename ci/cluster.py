@@ -338,6 +338,7 @@ class Server(CloudClient):
     install_cmd = None
     update_cmd = None
     files = []
+    network = None
 
     def __init__(self, config_id):
         CloudClient.__init__(self)
@@ -461,6 +462,7 @@ class Server(CloudClient):
         self.user = server['metadata']['users']
         self.logger.debug("Server's admin user is %s" % _green(self.user))
         self.passwd= server['adminPass']
+        self.network = network
         self.logger.debug(
             "Server's admin password is %s" % _green(self.passwd))
         if wait:
@@ -494,7 +496,13 @@ class Server(CloudClient):
             else:
                 raise Exception("Server id is not set")
         try:
-            server_ip = server['attachments'][0]['ipv4']
+            if self.network:
+                networks = [n for n in server['attachments']
+                            if str(n['network_id']) == str(self.network)]
+            else:
+                networks = server['attachments']
+
+            server_ip = networks[0]['ipv4']
         except:
             server_ip = None
         server_port = 22
