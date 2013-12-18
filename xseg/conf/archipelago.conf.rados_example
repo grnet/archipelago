@@ -25,10 +25,10 @@ VTOOL_END=1022
 # Order matters. Peers will be started with list order and stopped with reversed
 # order.
 [PEERS]
-ROLES="blockerb blockerm mapperd vlmcd"
+ROLES=blockerb blockerm mapperd vlmcd
 # Order matters. Peers will be started with list order and stopped with reversed
 # order.
-ORDER="blockerb blockerm mapperd vlmcd"
+ORDER=blockerb blockerm mapperd vlmcd
 
 #nr_ops: Max number of flying operations
 #log_level: verbosity levels for each xseg peer
