@@ -96,7 +96,7 @@ def attach(env):
 
     # Check if the mapping already exists
     d_id = vlmc.is_mapped(name)
-    if d_id:
+    if d_id is not None:
       # The mapping exists. Return it.
         sys.stdout.write("%s" % str(DEVICE_PREFIX + str(d_id)))
         return 0
