@@ -120,7 +120,7 @@ def detach(env):
     #try:
     # Check if the mapping already exists
     d_id = vlmc.is_mapped(name)
-    if d_id:
+    if d_id is not None:
         # The mapping exists. Unmap the vlmc device.
         vlmc.unmap_volume(name=str(DEVICE_PREFIX + str(d_id)))
     #assert(vlmc.is_mapped(name) == None)
