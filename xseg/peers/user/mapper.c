@@ -850,6 +850,10 @@ static int do_snapshot(struct peer_req *pr, struct map *map)
 	put_map(snap_map);
 
 	map->state &= ~MF_MAP_SNAPSHOTTING;
+
+	if (map->opened_count == cur_count)
+		close_map(pr, map);
+
 	XSEGLOG2(&lc, I, "Snapshot for map %s completed", map->volume);
 	return 0;
 
