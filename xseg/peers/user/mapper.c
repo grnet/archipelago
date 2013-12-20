@@ -767,6 +767,9 @@ static int do_snapshot(struct peer_req *pr, struct map *map)
 
 	//create new map struct with name snapshot name and flag readonly.
 	snap_map = create_map(snapname, snapnamelen, MF_ARCHIP);
+	if (!snap_map) {
+		goto out_err;
+	}
 
 	//open/load map to check if snap exists
 	r = open_map(pr, snap_map, 0);
