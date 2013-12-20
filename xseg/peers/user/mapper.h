@@ -154,6 +154,7 @@ struct map {
 	volatile uint32_t ref;
 	volatile uint32_t waiters;
 	st_cond_t cond;
+	uint64_t opened_count;
 
 	volatile uint32_t users;
 	volatile uint32_t waiters_users;
