@@ -595,16 +595,20 @@ static int dropcache(struct peer_req *pr, struct map *map)
 
 static int do_close(struct peer_req *pr, struct map *map)
 {
-	if (map->state & MF_MAP_EXCLUSIVE){
-		/* Do not close the map while there are pending requests on the
-		 * map nodes.
-		 */
-		wait_all_map_objects_ready(map);
-		/* do not drop cache if close failed and map not deleted */
-		if (close_map(pr, map) < 0 && !(map->flags & MF_MAP_DELETED))
-			return -1;
+	if (!(map->state & MF_MAP_EXCLUSIVE)) {
+		XSEGLOG2(&lc, E, "Attempted to close a not opened map");
+		return -1;
 	}
-	return dropcache(pr, map);
+
+	/* Do not close the map while there are pending requests on the
+	 * map nodes.
+	 */
+	wait_all_map_objects_ready(map);
+	if (close_map(pr, map) < 0) {
+		return -1;
+	}
+
+	return 0;
 }
 
 static int do_hash(struct peer_req *pr, struct map *map)
@@ -1115,7 +1119,7 @@ struct map * get_map(struct peer_req *pr, char *name, uint32_t namelen,
 	struct peerd *peer = pr->peer;
 	struct mapperd *mapper = __get_mapperd(peer);
 	struct map *map = find_map_len(mapper, name, namelen, flags);
-	if (!map){
+	if (!map) {
 		if (flags & MF_LOAD){
 			map = create_map(name, namelen, flags);
 			if (!map)
@@ -1145,6 +1149,7 @@ struct map * get_map(struct peer_req *pr, char *name, uint32_t namelen,
 				XSEGLOG2(&lc, E, "Loaded deleted map %s. Failing...",
 						map->volume);
 				do_close(pr, map);
+				dropcache(pr, map);
 				signal_map(map);
 				put_map(map);
 				return NULL;

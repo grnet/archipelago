@@ -266,6 +266,8 @@ int close_map(struct peer_req *pr, struct map *map)
 	put_request(pr, req);
 	if (err)
 		return -1;
+	else
+		map->state &= ~MF_MAP_EXCLUSIVE;
 	return 0;
 }
 
