@@ -50,6 +50,8 @@
 #include <mapper.h>
 #include <mapper-versions.h>
 
+uint64_t cur_count = 0;
+
 extern st_cond_t req_cond;
 /* pithos considers this a block full of zeros, so should we.
  * it is actually the sha256 hash of nothing.
@@ -1438,6 +1440,8 @@ int dispatch_accepted(struct peerd *peer, struct peer_req *pr,
 	//mio->state = ACCEPTED;
 	mio->err = 0;
 	mio->cb = NULL;
+	cur_count++;
+	mio->count = cur_count;
 	switch (pr->req->op) {
 		/* primary xseg operations of mapper */
 		case X_CLONE: action = handle_clone; break;

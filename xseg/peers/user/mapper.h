@@ -173,6 +173,7 @@ struct mapper_io {
 	volatile int active;
 	void *priv;
 	volatile uint64_t pending_reqs;
+	uint64_t count;
 };
 
 /* usefull abstraction macros for context switching */
