@@ -2,6 +2,7 @@
 
 import os
 import sys
+import socket
 
 from archipelago import vlmc as vlmc
 from archipelago.common import loadrc
@@ -57,5 +58,14 @@ def archip_premigrate():
 
 if __name__ == '__main__':
     loadrc(None)
+
+    try:
+        primary = os.getenv("GANETI_INSTANCE_PRIMARY")
+    except:
+        exit(0)
+
+    if socket.getfqdn() != primary:
+        exit(0)
+
     exit(archip_premigrate())
 
