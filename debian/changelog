@@ -1,3 +1,9 @@
+archipelago (0.3.5-1) wheezy; urgency=low
+
+  * Fix bug in pre-migrate hook
+
+ -- Filippos Giannakos <philipgian@grnet.gr>  Wed, 23 Dec 2013 18:07:11 +0200
+
 archipelago (0.3.4-1) wheezy; urgency=low
 
   * Fix bug in pre-migrate hook
