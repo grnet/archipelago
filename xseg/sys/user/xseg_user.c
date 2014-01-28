@@ -290,20 +290,14 @@ void __xseg_log2(struct log_ctx *lc, enum log_level level, char *fmt, ...)
 	return;
 }
 
+/* FIXME: This is not async safe */
 void xseg_printtrace(void)
 {
-	void *array[10];
+	void *array[20];
 	size_t size;
-	char **strings;
-	int i;
 
-	size = backtrace (array, 10);
-	strings = backtrace_symbols (array, size);
-
-	XSEGLOG("Obtained %zd stack frames.\n", size);
-
-	for (i = 0; i < size; i++)
-		XSEGLOG ("%s\n", strings[i]);
-
-	free (strings);
+	XSEGLOG("Backtrace:");
+	size = backtrace(array, 20);
+	/* stderr should be open since we don't close it */
+	backtrace_symbols_fd(array, size, 2);
 }

@@ -99,7 +99,7 @@ class Peer(object):
 
     def __init__(self, role=None, daemon=True, nr_ops=16,
                  logfile=None, pidfile=None, portno_start=None,
-                 portno_end=None, log_level=0, spec=None):
+                 portno_end=None, log_level=0, spec=None, threshold=None):
         if not role:
             raise Error("Role was not provided")
         self.role = role
@@ -158,6 +158,7 @@ class Peer(object):
                             os.path.dirname(self.pidfile))
 
         self.log_level = log_level
+        self.threshold = threshold
 
         if self.log_level < 0 or self.log_level > 3:
             raise Error("%s: Invalid log level %d" %
@@ -243,6 +244,9 @@ class Peer(object):
         if self.spec:
             self.cli_opts.append("-g")
             self.cli_opts.append(self.spec)
+        if self.threshold:
+            self.cli_opts.append("--threshold")
+            self.cli_opts.append(str(self.threshold))
 
 
 class MTpeer(Peer):
