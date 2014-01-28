@@ -281,12 +281,13 @@ class Sosd(MTpeer):
 
 class Filed(MTpeer):
     def __init__(self, archip_dir=None, prefix=None, fdcache=None,
-                 unique_str=None, nr_threads=1, nr_ops=16, **kwargs):
+                 unique_str=None, nr_threads=1, nr_ops=16, direct=True, **kwargs):
         self.executable = FILE_BLOCKER
         self.archip_dir = archip_dir
         self.prefix = prefix
         self.fdcache = fdcache
         self.unique_str = unique_str
+        self.direct = direct
         nr_threads = nr_ops
         if self.fdcache and fdcache < 2*nr_threads:
             raise Error("Fdcache should be greater than 2*nr_threads")
@@ -319,6 +320,8 @@ class Filed(MTpeer):
         if self.prefix:
             self.cli_opts.append("--prefix")
             self.cli_opts.append(self.prefix)
+        if self.direct:
+            self.cli_opts.append("--directio")
 
 
 class Mapperd(Peer):
