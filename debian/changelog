@@ -1,3 +1,35 @@
+archipelago (0.3.5-1) wheezy; urgency=low
+
+  * Fix bug in pre-migrate hook
+
+ -- Filippos Giannakos <philipgian@grnet.gr>  Wed, 23 Dec 2013 18:07:11 +0200
+
+archipelago (0.3.4-1) wheezy; urgency=low
+
+  * Fix bug in pre-migrate hook
+
+ -- Filippos Giannakos <philipgian@grnet.gr>  Wed, 17 Dec 2013 14:07:11 +0200
+
+archipelago (0.3.3-1) wheezy; urgency=low
+
+  * Add support for FLUSH in vlmc
+  * Add ganeti pre migrate hook
+
+ -- Filippos Giannakos <philipgian@grnet.gr>  Wed, 04 Dec 2013 17:30:39 +0200
+
+archipelago (0.3.2-1) wheezy; urgency=low
+
+  * Add 'snapshot' and 'setinfo' actions to ext scripts
+
+ -- Filippos Giannakos <philipgian@grnet.gr>  Wed, 27 Nov 2013 16:07:39 +0300
+
+archipelago (0.3.1-1) wheezy; urgency=low
+
+  * Bug fix in sosd
+  * Add librados dependency (>=0.65)
+
+ -- Filippos Giannakos <philipgian@grnet.gr>  Mon, 09 Sep 2013 13:25:39 +0300
+
 archipelago (0.3-1) stable; urgency=low
 
   * Update librados dependency to v0.61.2+grnet2
