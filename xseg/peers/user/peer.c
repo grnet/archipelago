@@ -60,6 +60,8 @@
 
 #ifdef MT
 #define PEER_TYPE "pthread"
+#elif defined(FD)
+#define PEER_TYPE "posixfd"
 #else
 #define PEER_TYPE "posix"
 #endif
@@ -506,7 +508,7 @@ static void* thread_loop(void *arg)
 				loops = threshold;
 		}
 		XSEGLOG2(&lc, I, "Thread %u goes to sleep\n", (unsigned int) (t- peer->thread));
-		xseg_wait_signal(xseg, 10000000UL);
+		xseg_wait_signal(xseg, peer->sd, 10000000UL);
 		xseg_cancel_wait(xseg, peer->portno_start);
 		XSEGLOG2(&lc, I, "Thread %u woke up\n", (unsigned int) (t- peer->thread));
 	}
@@ -654,7 +656,7 @@ static int generic_peerd_loop(void *arg)
 		}
 #endif
 		XSEGLOG2(&lc, I, "%s goes to sleep\n", id);
-		xseg_wait_signal(xseg, 10000000UL);
+		xseg_wait_signal(xseg, peer->sd, 10000000UL);
 		xseg_cancel_wait(xseg, peer->portno_start);
 		XSEGLOG2(&lc, I, "%s woke up\n", id);
 	}
@@ -773,14 +775,15 @@ malloc_fail:
 	 * The first port we bind will have its signal_desc initialized by xseg
 	 * and the same signal_desc will be used for all the other ports.
 	 */
+	peer->sd = NULL;
 	for (p = peer->portno_start; p <= peer->portno_end; p++) {
-		port = xseg_bind_port(peer->xseg, p, sd);
+		port = xseg_bind_port(peer->xseg, p, peer->sd);
 		if (!port){
 			printf("cannot bind to port %u\n", (unsigned int) p);
 			return NULL;
 		}
 		if (p == peer->portno_start)
-			sd = xseg_get_signal_desc(peer->xseg, port);
+			peer->sd = xseg_get_signal_desc(peer->xseg, port);
 	}
 
 	printf("Peer on ports  %u-%u\n", peer->portno_start, peer->portno_end);

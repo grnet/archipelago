@@ -95,8 +95,8 @@ static void *pthread_map(const char *name, uint64_t size, struct xseg *seg)
 	struct xseg *xseg;
 	int fd;
 
-	if (seg)
-		XSEGLOG("struct xseg * is not NULL. Ignoring...\n");
+//	if (seg)
+//		XSEGLOG("struct xseg * is not NULL. Ignoring...\n");
 
 	fd = shm_open(name, O_RDWR, 0000);
 	if (fd < 0) {
@@ -333,7 +333,7 @@ static int pthread_cancel_wait(struct xseg *xseg, uint32_t portno)
 	return 0;
 }
 
-static int pthread_wait_signal(struct xseg *xseg, uint32_t usec_timeout)
+static int pthread_wait_signal(struct xseg *xseg, void *sd, uint32_t usec_timeout)
 {
 	int r;
 	siginfo_t siginfo;

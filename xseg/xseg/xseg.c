@@ -238,7 +238,7 @@ static char *strncopy(char *dest, const char *src, uint32_t n)
 
 int xseg_parse_spec(char *segspec, struct xseg_config *config)
 {
-	/* default: "posix:globalxseg:4:256:12" */
+	/* default: "posix:globalxseg:64:128:256:12" */
 	char *s = segspec, *sp = segspec;
 
 	/* type */
@@ -251,9 +251,14 @@ int xseg_parse_spec(char *segspec, struct xseg_config *config)
 	strncpy(config->name, s, XSEG_NAMESIZE);
 	config->name[XSEG_NAMESIZE-1] = 0;
 
+	/* dynports */
+	TOK(s, sp, "64");
+	config->dynports = strul(s);
+
 	/* nr_ports */
-	TOK(s, sp, "4");
+	TOK(s, sp, "128");
 	config->nr_ports = strul(s);
+
 
 	/* heap_size */
 	TOK(s, sp, "256");
@@ -934,6 +939,7 @@ struct xseg_port *xseg_alloc_port(struct xseg *xseg, uint32_t flags, uint64_t nr
 	port->alloc_reqs = 0;
 	port->max_alloc_reqs = XSEG_DEF_MAX_ALLOCATED_REQS;
 	port->flags = 0;
+	port->signal_desc = 0;
 
 
 	return port;
@@ -1002,9 +1008,9 @@ int xseg_cancel_wait(struct xseg *xseg, uint32_t portno)
 	return xseg->priv->peer_type.peer_ops.cancel_wait(xseg, portno);
 }
 
-int xseg_wait_signal(struct xseg *xseg, uint32_t usec_timeout)
+int xseg_wait_signal(struct xseg *xseg, void *sd, uint32_t usec_timeout)
 {
-	return xseg->priv->peer_type.peer_ops.wait_signal(xseg, usec_timeout);
+	return xseg->priv->peer_type.peer_ops.wait_signal(xseg, sd, usec_timeout);
 }
 
 int xseg_signal(struct xseg *xseg, xport portno)
@@ -1625,9 +1631,13 @@ struct xseg_port *xseg_bind_port(struct xseg *xseg, uint32_t req, void * sd)
 	int64_t driver;
 	int r;
 
-	if (req >= xseg->config.nr_ports) {
+	if (xseg->config.dynports >= xseg->config.nr_ports) {
+		return NULL;
+	}
+
+	if (req >= xseg->config.dynports) {
 		portno = 0;
-		maxno = xseg->config.nr_ports;
+		maxno = xseg->config.dynports;
 		force = 0;
 	} else {
 		portno = req;
@@ -1684,6 +1694,89 @@ out:
 	return port;
 }
 
+struct xseg_port *xseg_bind_dynport(struct xseg *xseg)
+{
+	uint32_t portno, maxno, id = __get_id();
+	struct xseg_port *port = NULL;
+	void *peer_data, *sigdesc;
+	int64_t driver;
+	int r, has_sd=0, port_allocated=0;
+
+	maxno = xseg->config.nr_ports;
+
+	__lock_segment(xseg);
+	driver = __enable_driver(xseg, &xseg->priv->peer_type);
+	if (driver < 0)
+		return NULL;
+
+	for (portno = xseg->config.dynports; portno < maxno; portno++) {
+		if (!xseg->ports[portno]) {
+			port = xseg_alloc_port(xseg, X_ALLOC, XSEG_DEF_REQS);
+			if (!port)
+				goto out;
+			xseg->ports[portno] = XPTR_MAKE(port, xseg->segment);
+			port_allocated = 1;
+		} else {
+			port = xseg_get_port(xseg, portno);
+			if (!port)
+				goto out;
+			if (port->owner != Noone)
+				continue;
+
+			if (port->signal_desc) {
+				if (port->peer_type == driver) {
+					has_sd = 1;
+				} else {
+					/* Just abandon the old signal desc.
+					 * We can't be really sure when to free
+					 * it.
+					 * Minor memory leak.
+					 */
+					port->signal_desc = 0;
+				}
+			}
+		}
+		if (!has_sd){
+			peer_data = __get_peer_type_data(xseg, (uint64_t) driver);
+			if (!peer_data)
+				break;
+			sigdesc = xseg->priv->peer_type.peer_ops.alloc_signal_desc(xseg, peer_data);
+			if (!sigdesc)
+				break;
+			r = xseg->priv->peer_type.peer_ops.init_signal_desc(xseg, sigdesc);
+			if (r < 0){
+				xseg->priv->peer_type.peer_ops.free_signal_desc(xseg, peer_data, sigdesc);
+				break;
+			}
+			port->signal_desc = XPTR_MAKE(sigdesc, xseg->segment);
+		}
+		port->peer_type = (uint64_t)driver;
+		port->owner = id;
+		port->portno = portno;
+		port->flags = CAN_ACCEPT | CAN_RECEIVE;
+		goto out;
+	}
+	if (port_allocated) {
+		xseg_free_port(xseg, port);
+		xseg->ports[portno] = 0;
+	}
+	port = NULL;
+out:
+	__unlock_segment(xseg);
+	return port;
+}
+
+int xseg_leave_dynport(struct xseg *xseg, struct xseg_port *port)
+{
+	if (!port)
+		return -1;
+
+	__lock_segment(xseg);
+	port->owner = Noone;
+	__unlock_segment(xseg);
+	return 0;
+}
+
 /*
  * set the limit of requests, a port can allocate.
  *
@@ -1713,7 +1806,7 @@ int xseg_set_max_requests(struct xseg *xseg, xport portno, uint64_t nr_reqs)
 	}
 	xlock_release(&port->fq_lock);
 
-	/* no lock here 
+	/* no lock here
 	 * if theres is a get_request in progress, it is not critical to enforce
 	 * the new limit.
 	 */
@@ -1816,6 +1909,16 @@ char* xseg_get_data_nonstatic(struct xseg* xseg, struct xseg_request *req)
 char* xseg_get_target_nonstatic(struct xseg* xseg, struct xseg_request *req)
 {
         return xseg_get_target(xseg, req);
+}
+
+void* xseg_get_signal_desc_nonstatic(struct xseg *xseg, struct xseg_port *port)
+{
+	return xseg_get_signal_desc(xseg, port);
+}
+
+uint32_t xseg_portno_nonstatic(struct xseg *xseg, struct xseg_port *port)
+{
+	return xseg_portno(xseg, port);
 }
 
 

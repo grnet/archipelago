@@ -38,7 +38,7 @@
 from xseg.xseg_api import *
 from xseg.xprotocol import *
 from ctypes import CFUNCTYPE, cast, c_void_p, addressof, string_at, memmove, \
-    create_string_buffer, pointer, sizeof, POINTER, byref
+    create_string_buffer, pointer, sizeof, POINTER, byref, c_int, c_char, Structure
 import ctypes
 cb_null_ptrtype = CFUNCTYPE(None, uint32_t)
 
@@ -52,7 +52,7 @@ from subprocess import check_call
 from collections import namedtuple
 import socket
 import random
-
+from select import select
 
 random.seed()
 hostname = socket.gethostname()
@@ -93,6 +93,29 @@ VLMC = 'archip-vlmcd'
 
 def is_power2(x):
     return bool(x != 0 and (x & (x-1)) == 0)
+
+#hack to test green waiting with python gevent.
+class posixfd_signal_desc(Structure):
+    pass
+posixfd_signal_desc._fields_ = [
+    ('signal_file', c_char * sizeof(c_void_p)),
+    ('fd', c_int),
+    ('flag', c_int),
+]
+
+def xseg_wait_signal_green(ctx, sd, timeout):
+    posixfd_sd = cast(sd, POINTER(posixfd_signal_desc))
+    fd = posixfd_sd.contents.fd
+    select([fd], [], [], timeout/1000000.0)
+    while True:
+        try:
+            os.read(fd, 512)
+        except OSError as (e,msg):
+            if e == 11:
+                break
+            else:
+                raise OSError(e, msg)
+
 
 class Peer(object):
     cli_opts = None
@@ -379,7 +402,8 @@ config = {
 #    'SPEC': "segdev:xsegbd:1024:5120:12",
     'SEGMENT_TYPE': 'segdev',
     'SEGMENT_NAME': 'xsegbd',
-    'SEGMENT_PORTS': 1024,
+    'SEGMENT_DYNPORTS': 1024,
+    'SEGMENT_PORTS': 2048,
     'SEGMENT_SIZE': 5120,
     'SEGMENT_ALIGNMENT': 12,
     'XSEGBD_START': 0,
@@ -422,16 +446,18 @@ class Error(Exception):
 class Segment(object):
     type = 'segdev'
     name = 'xsegbd'
-    ports = 1024
+    dyports = 1024
+    ports = 2048
     size = 5120
     alignment = 12
 
     spec = None
 
-    def __init__(self, type, name, ports, size, align=12):
+    def __init__(self, type, name, dynports, ports, size, align=12):
         initialize_xseg()
         self.type = type
         self.name = name
+        self.dynports = dynports
         self.ports = ports
         self.size = size
         self.alignment = align
@@ -440,13 +466,15 @@ class Segment(object):
             raise Error("Segment type not valid")
         if self.alignment != 12:
             raise Error("Wrong alignemt")
+        if self.dynports >= self.ports :
+            raise Error("Dynports >= max ports")
 
         self.spec = self.get_spec()
 
     def get_spec(self):
         if not self.spec:
-            params = [self.type, self.name, str(self.ports), str(self.size),
-                      str(self.alignment)]
+            params = [self.type, self.name, str(self.dynports), str(self.ports),
+                      str(self.size), str(self.alignment)]
             self.spec = ':'.join(params).encode()
         return self.spec
 
@@ -472,7 +500,7 @@ class Segment(object):
         xconf = xseg_config()
         spec_buf = create_string_buffer(self.spec)
         xseg_parse_spec(spec_buf, xconf)
-        ctx = xseg_join(xconf.type, xconf.name, "posix",
+        ctx = xseg_join(xconf.type, xconf.name, "posixfd",
                         cast(0, cb_null_ptrtype))
         if not ctx:
             raise Error("Cannot join segment")
@@ -510,12 +538,14 @@ def check_conf():
 
     xseg_type = config['SEGMENT_TYPE']
     xseg_name = config['SEGMENT_NAME']
+    xseg_dynports = config['SEGMENT_DYNPORTS']
     xseg_ports = config['SEGMENT_PORTS']
     xseg_size = config['SEGMENT_SIZE']
     xseg_align = config['SEGMENT_ALIGNMENT']
 
     global segment
-    segment = Segment(xseg_type, xseg_name, xseg_ports, xseg_size, xseg_align)
+    segment = Segment(xseg_type, xseg_name, xseg_dynports, xseg_ports, xseg_size,
+                      xseg_align)
 
 
     try:
@@ -724,23 +754,38 @@ def check_pidfile(name):
 
     return pid
 
-
 class Xseg_ctx(object):
     ctx = None
     port = None
     portno = None
+    signal_desc = None
+    dynalloc = False
 
-    def __init__(self, segment, portno):
+    def __init__(self, segment, portno=None):
         ctx = segment.join()
         if not ctx:
             raise Error("Cannot join segment")
-        port = xseg_bind_port(ctx, portno, c_void_p(0))
+        if portno == None:
+            port = xseg_bind_dynport(ctx)
+            portno = xseg_portno_nonstatic(ctx, port)
+            dynalloc = True
+        else:
+            port = xseg_bind_port(ctx, portno, c_void_p(0))
+            dynalloc = False
+
         if not port:
             raise Error("Cannot bind to port")
+
+        sd = xseg_get_signal_desc_nonstatic(ctx, port)
+        if not sd:
+            raise Error("Cannot get signal descriptor")
+
         xseg_init_local_signal(ctx, portno)
         self.ctx = ctx
         self.port = port
         self.portno = portno
+        self.dynalloc = dynalloc
+        self.signal_desc = sd
 
     def __del__(self):
         return
@@ -755,6 +800,8 @@ class Xseg_ctx(object):
         return False
 
     def shutdown(self):
+        if self.port is not None and self.dynalloc:
+                xseg_leave_dynport(self.ctx, self.port)
         if self.ctx:
         #    xseg_quit_local_signal(self.ctx, self.portno)
             xseg_leave(self.ctx)
@@ -768,7 +815,7 @@ class Xseg_ctx(object):
                 xseg_cancel_wait(self.ctx, self.portno)
                 return received
             else:
-                xseg_wait_signal(self.ctx, 10000000)
+                xseg_wait_signal_green(self.ctx, self.signal_desc, 10000000)
 
     def wait_requests(self, requests):
         while True:

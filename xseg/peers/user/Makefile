@@ -36,7 +36,8 @@
 
 include $(XSEG_HOME)/base.mk
 #PEERS := xseg archip-sosd archip-mapperd archip-vlmcd archip-filed archip-bench
-PEERS := xseg archip-sosd archip-mapperd archip-vlmcd archip-filed archip-bench archip-dummy
+#PEERS := xseg archip-sosd archip-mapperd archip-vlmcd archip-filed archip-bench archip-dummy
+PEERS := xseg archip-sosd archip-mapperd archip-vlmcd archip-filed archip-bench archip-dummy archip-benchfd
 
 FILES="Makefile"
 FILES+=$(shell ls *.h)
@@ -88,6 +89,9 @@ BENCH_PREQ=bench-xseg.c peer.c bench-lfsr.c bench-timer.c bench-utils.c \
 
 archip-bench: $(BENCH_PREQ)
 	$(CC) $(CFLAGS) -o $@ $(CPREQS) $(INC) -L$(LIB) -lxseg -lpthread -lm
+
+archip-benchfd: $(BENCH_PREQ)
+	$(CC) $(CFLAGS) -o $@ $(CPREQS) $(INC) -L$(LIB) -lxseg -lpthread -lm -DFD
 
 archip-filed: filed.c peer.c peer.h hash.c hash.h $(BASE)/xseg/protocol.h
 	$(CC) $(CFLAGS) -o $@ $(CPREQS) $(INC) -L$(LIB) -lxseg -lpthread -DMT \

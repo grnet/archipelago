@@ -276,7 +276,7 @@ static int segdev_cancel_wait(struct xseg *xseg, uint32_t portno)
 	return -0;
 }
 
-static int segdev_wait_signal(struct xseg *xseg, uint32_t timeout)
+static int segdev_wait_signal(struct xseg *xseg, void *sd, uint32_t timeout)
 {
 	return -1;
 }

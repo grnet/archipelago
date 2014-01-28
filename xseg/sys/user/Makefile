@@ -48,7 +48,7 @@ MAJOR=0
 MINOR=2
 AR=ar
 
-DRIVERS=xseg_posix xseg_segdev xseg_pthread
+DRIVERS=xseg_posix xseg_segdev xseg_pthread xseg_posixfd
 DRVDIR=$(BASE)/drivers/user
 DRVOBJS=$(addsuffix .o, $(addprefix $(DRVDIR)/, $(DRIVERS)))
 SHELL=/bin/bash

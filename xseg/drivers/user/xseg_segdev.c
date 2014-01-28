@@ -138,7 +138,8 @@ static void *segdev_map(const char *name, uint64_t size, struct xseg *seg)
 	int fd;
 
 	if (seg)
-		XSEGLOG("struct xseg * not NULL. Ignoring...\n");
+		//XSEGLOG("struct xseg * not NULL. Ignoring...\n");
+		;
 
 	fd = opendev();
 	if (fd < 0)
@@ -210,7 +211,7 @@ static int segdev_cancel_wait(struct xseg *xseg, uint32_t portno)
 	return -1;
 }
 
-static int segdev_wait_signal(struct xseg *xseg, uint32_t timeout)
+static int segdev_wait_signal(struct xseg *xseg, void *sd, uint32_t timeout)
 {
 	return -1;
 }
