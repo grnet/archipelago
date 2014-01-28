@@ -154,6 +154,7 @@ struct map {
 	volatile uint32_t ref;
 	volatile uint32_t waiters;
 	st_cond_t cond;
+	uint64_t opened_count;
 
 	volatile uint32_t users;
 	volatile uint32_t waiters_users;
@@ -173,6 +174,7 @@ struct mapper_io {
 	volatile int active;
 	void *priv;
 	volatile uint64_t pending_reqs;
+	uint64_t count;
 };
 
 /* usefull abstraction macros for context switching */

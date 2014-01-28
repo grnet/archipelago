@@ -266,6 +266,8 @@ int close_map(struct peer_req *pr, struct map *map)
 	put_request(pr, req);
 	if (err)
 		return -1;
+	else
+		map->state &= ~MF_MAP_EXCLUSIVE;
 	return 0;
 }
 
@@ -313,6 +315,7 @@ int open_map(struct peer_req *pr, struct map *map, uint32_t flags)
 {
 	int err;
 	struct xseg_request *req;
+	struct mapper_io *mio = __get_mapper_io(pr);
 
 	req = __open_map(pr, map, flags);
 	if (!req){
@@ -324,8 +327,10 @@ int open_map(struct peer_req *pr, struct map *map, uint32_t flags)
 	put_request(pr, req);
 	if (err)
 		return -1;
-	else
+	else {
 		map->state |= MF_MAP_EXCLUSIVE;
+		map->opened_count = mio->count;
+	}
 	return 0;
 }
 

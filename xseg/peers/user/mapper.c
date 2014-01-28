@@ -50,6 +50,8 @@
 #include <mapper.h>
 #include <mapper-versions.h>
 
+uint64_t cur_count = 0;
+
 extern st_cond_t req_cond;
 /* pithos considers this a block full of zeros, so should we.
  * it is actually the sha256 hash of nothing.
@@ -595,16 +597,20 @@ static int dropcache(struct peer_req *pr, struct map *map)
 
 static int do_close(struct peer_req *pr, struct map *map)
 {
-	if (map->state & MF_MAP_EXCLUSIVE){
-		/* Do not close the map while there are pending requests on the
-		 * map nodes.
-		 */
-		wait_all_map_objects_ready(map);
-		/* do not drop cache if close failed and map not deleted */
-		if (close_map(pr, map) < 0 && !(map->flags & MF_MAP_DELETED))
-			return -1;
+	if (!(map->state & MF_MAP_EXCLUSIVE)) {
+		XSEGLOG2(&lc, E, "Attempted to close a not opened map");
+		return -1;
 	}
-	return dropcache(pr, map);
+
+	/* Do not close the map while there are pending requests on the
+	 * map nodes.
+	 */
+	wait_all_map_objects_ready(map);
+	if (close_map(pr, map) < 0) {
+		return -1;
+	}
+
+	return 0;
 }
 
 static int do_hash(struct peer_req *pr, struct map *map)
@@ -763,6 +769,9 @@ static int do_snapshot(struct peer_req *pr, struct map *map)
 
 	//create new map struct with name snapshot name and flag readonly.
 	snap_map = create_map(snapname, snapnamelen, MF_ARCHIP);
+	if (!snap_map) {
+		goto out_err;
+	}
 
 	//open/load map to check if snap exists
 	r = open_map(pr, snap_map, 0);
@@ -841,6 +850,10 @@ static int do_snapshot(struct peer_req *pr, struct map *map)
 	put_map(snap_map);
 
 	map->state &= ~MF_MAP_SNAPSHOTTING;
+
+	if (map->opened_count == cur_count)
+		close_map(pr, map);
+
 	XSEGLOG2(&lc, I, "Snapshot for map %s completed", map->volume);
 	return 0;
 
@@ -1115,7 +1128,7 @@ struct map * get_map(struct peer_req *pr, char *name, uint32_t namelen,
 	struct peerd *peer = pr->peer;
 	struct mapperd *mapper = __get_mapperd(peer);
 	struct map *map = find_map_len(mapper, name, namelen, flags);
-	if (!map){
+	if (!map) {
 		if (flags & MF_LOAD){
 			map = create_map(name, namelen, flags);
 			if (!map)
@@ -1145,6 +1158,7 @@ struct map * get_map(struct peer_req *pr, char *name, uint32_t namelen,
 				XSEGLOG2(&lc, E, "Loaded deleted map %s. Failing...",
 						map->volume);
 				do_close(pr, map);
+				dropcache(pr, map);
 				signal_map(map);
 				put_map(map);
 				return NULL;
@@ -1430,6 +1444,8 @@ int dispatch_accepted(struct peerd *peer, struct peer_req *pr,
 	//mio->state = ACCEPTED;
 	mio->err = 0;
 	mio->cb = NULL;
+	cur_count++;
+	mio->count = cur_count;
 	switch (pr->req->op) {
 		/* primary xseg operations of mapper */
 		case X_CLONE: action = handle_clone; break;
