@@ -445,12 +445,16 @@ class Server(CloudClient):
         else:
             return False
 
-    def create(self, wait=False):
+    def create(self, wait=False, network=None):
         if self.status and self.status != "DELETED":
             return False
         self.logger.info("Create a new server..")
+        networks = []
+        if network:
+            networks.extend([{"uuid": network.strip()}])
         server = self.cyclades_client.create_server(self.name, self.flavor_id,
-                                                    self.image_id)
+                                                    self.image_id,
+                                                    networks=networks)
         self.server = server
         self.server_id = server['id']
         self.logger.debug("Server got id %s" % _green(self.server_id))
@@ -639,12 +643,15 @@ class Cluster(ConfigClient):
     def create(self):
         if self.cleanup_servers:
             self.destroy()
+        network = None
+        if self.config.has_option('Global', 'network'):
+            network = self.config.get('Global', 'network')
 
         try:
             submitted = []
             for s in self.servers:
                 if not s.status or s.status != "ACTIVE":
-                    s.create()
+                    s.create(network=network)
                     submitted.append(s)
 
             self.wait_status(submitted, "ACTIVE")
