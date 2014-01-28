@@ -291,7 +291,7 @@ def lock(name, cli=False, **kwargs):
 
     xseg_ctx = Xseg_ctx(get_segment())
     mbport = peers['blockerm'].portno_start
-    ret = Request.get_acquire_request(xseg_ctx, mbport, name)
+    req = Request.get_acquire_request(xseg_ctx, mbport, name)
     req.submit()
     req.wait()
     ret = req.success()
@@ -328,7 +328,7 @@ def open_volume(name, cli=False, **kwargs):
     ret = False
     xseg_ctx = Xseg_ctx(get_segment())
     vport = peers['vlmcd'].portno_start
-    ret = Request.get_open_request(xseg_ctx, vport, name)
+    req = Request.get_open_request(xseg_ctx, vport, name)
     req.submit()
     req.wait()
     ret = req.success()
@@ -346,7 +346,7 @@ def close_volume(name, cli=False, **kwargs):
     ret = False
     xseg_ctx = Xseg_ctx(get_segment())
     vport = peers['vlmcd'].portno_start
-    ret = Request.get_close_request(xseg_ctx, vport, name)
+    req = Request.get_close_request(xseg_ctx, vport, name)
     req.submit()
     req.wait()
     ret = req.success()

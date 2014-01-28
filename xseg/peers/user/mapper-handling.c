@@ -353,11 +353,11 @@ int write_map(struct peer_req* pr, struct map *map)
 	mio->cb = NULL;
 	mio->err = 0;
 
-	r = map_functions[map->version].write_map_metadata(pr, map);
+	r = map_functions[map->version].write_map_data(pr, map);
 	if (r < 0)
 		goto out;
 
-	r = map_functions[map->version].write_map_data(pr, map);
+	r = map_functions[map->version].write_map_metadata(pr, map);
 out:
 	map->state &= ~MF_MAP_WRITING;
 	return r;
@@ -448,13 +448,14 @@ int load_map_metadata(struct peer_req *pr, struct map *map)
 	}
 
 	version = *(uint32_t *)data;
-	if (map->version > MAP_LATEST_VERSION) {
+	if (version > MAP_LATEST_VERSION) {
 		XSEGLOG2(&lc, E, "Loaded invalid version %u > "
 				"latest version %u",
 				map->version, MAP_LATEST_VERSION);
 		goto out_put;
 	}
 
+	map->version = version;
 	r = map_functions[version].read_map_metadata(map, (unsigned char *)data,
 							req->serviced);
 	if (r < 0) {

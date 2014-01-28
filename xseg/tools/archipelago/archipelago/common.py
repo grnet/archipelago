@@ -53,6 +53,7 @@ from collections import namedtuple
 import socket
 import random
 from select import select
+import ConfigParser
 
 random.seed()
 hostname = socket.gethostname()
@@ -656,14 +657,69 @@ def exclusive(get_port=False):
         return lock
     return wrap
 
+def createDict(cfg, section):
+    sec_dic = {}
+    sec_dic['portno_start'] = cfg.getint(section, 'portno_start')
+    sec_dic['portno_end'] = cfg.getint(section, 'portno_end')
+    sec_dic['nr_ops'] = cfg.getint(section, 'nr_ops')
+    if cfg.has_option(section, 'logfile'):
+        sec_dic['logfile'] = str(cfg.get(section, 'logfile'))
+    if cfg.has_option(section, 'threshold'):
+        sec_dic['threshold'] = cfg.getint(section, 'threshold')
+    if cfg.has_option(section, 'log_level'):
+        sec_dic['log_level'] = cfg.getint(section, 'log_level')
+
+    t = str(cfg.get(section, 'type'))
+    if t == 'file_blocker':
+        sec_dic['nr_threads'] = cfg.getint(section, 'nr_threads')
+        sec_dic['archip_dir'] = cfg.get(section, 'archip_dir')
+        if cfg.has_option(section, 'fdcache'):
+            sec_dic['fdcache'] = cfg.getint(section, 'fdcache')
+        if cfg.has_option(section, 'direct'):
+            sec_dic['direct'] = cfg.getboolean(section, 'direct')
+        if cfg.has_option(section, 'unique_str'):
+            sec_dic['unique_str'] = cfg.getint(section, 'unique_str')
+        if cfg.has_option(section, 'prefix'):
+            sec_dic['prefix'] = cfg.getint(section, 'prefix')
+    elif t == 'rados_blocker':
+        if cfg.has_option(section, 'nr_threads'):
+            sec_dic['nr_threads'] = cfg.getint(section, 'nr_threads')
+        sec_dic['pool'] = cfg.get(section, 'pool')
+    elif t == 'mapperd':
+        sec_dic['blockerb_port'] = cfg.getint(section, 'blockerb_port')
+        sec_dic['blockerm_port'] = cfg.getint(section, 'blockerm_port')
+    elif t == 'vlmcd':
+        sec_dic['blocker_port'] = cfg.getint(section, 'blocker_port')
+        sec_dic['mapper_port'] = cfg.getint(section, 'mapper_port')
+
+    return sec_dic
+
+
 def loadrc(rc):
     try:
         if rc is None:
-            execfile(os.path.expanduser(DEFAULTS), config)
+            cfg_dir = os.path.expanduser(DEFAULTS)
         else:
-            execfile(rc, config)
+            cfg_dir = rc
+        cfg_fd = open(cfg_dir)
     except:
         raise Error("Cannot read config file")
+
+    cfg = ConfigParser.ConfigParser()
+    cfg.readfp(cfg_fd)
+    config['SEGMENT_PORTS'] = cfg.getint('XSEG','SEGMENT_PORTS')
+    config['SEGMENT_DYNPORTS'] = cfg.getint('XSEG', 'SEGMENT_DYNPORTS')
+    config['SEGMENT_SIZE'] = cfg.getint('XSEG','SEGMENT_SIZE')
+    config['XSEGBD_START'] = cfg.getint('XSEG','XSEGBD_START')
+    config['XSEGBD_END'] = cfg.getint('XSEG','XSEGBD_END')
+    config['VTOOL_START'] = cfg.getint('XSEG','VTOOL_START')
+    config['VTOOL_END'] = cfg.getint('XSEG','VTOOL_END')
+    roles = cfg.get('PEERS', 'ROLES')
+    roles = str(roles)
+    roles = roles.split(' ')
+    config['roles'] = [(r, str(cfg.get(r, 'type'))) for r in roles]
+    for r in roles:
+        config[r] = createDict(cfg, r)
 
     if not check_conf():
         raise Error("Invalid conf file")
@@ -859,7 +915,7 @@ class Request(object):
             raise Error("Cannot prepare request")
         self.req = req
         self.xseg_ctx = xseg_ctx
- 
+
         if not self.set_target(target):
             self.put()
             raise Error("Cannot set target")
