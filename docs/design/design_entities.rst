@@ -112,11 +112,11 @@ A **Volume** can be either read-only (also called a 'snapshot') or read-write
 (also called a 'clone'). There are three operations on Volumes:
 
 #. **Create**: Create a new empty Volume of specific size, with a specific name.
-#. **Clone**: Create a read-only Volume (clone) from an existing Volume.
+#. **Clone**: Create a read-write Volume (clone) from an existing Volume.
    The source Volume can be either read-only (clone) or read-write (snapshot).
    The new Volume may have a different size if specified so, as long as it is
    larger than the source.
-#. **Snapshot**: Create a read-write Volume (snapshot) from an existing Volume.
+#. **Snapshot**: Create a read-only Volume (snapshot) from an existing Volume.
    The source Volume can be either read-only (clone) or read-write (snapshot).
    The new Volume may have a different size if specified so, as long as it is
    larger than the source.
