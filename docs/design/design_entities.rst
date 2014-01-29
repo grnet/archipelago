@@ -21,8 +21,8 @@ Objective
 
 This design doc has the following objectives:
 
-#. Define the north and south bound of Archipelago and describe how it
-   interacts with a cloud platform and the underlying storage technology.
+#. Define the northbound and southbound interfaces of Archipelago and describe how
+   it interacts with a cloud platform and the underlying storage technology.
 #. Describe which peer falls into which category.
 #. Identify the different logical entities and name them.
 #. Rename management commands to reflect the above entities.
@@ -33,9 +33,9 @@ Archipelago topology
 
 We will divide Archipelago in three layers:
 
-* The north bound
+* The northbound interface
 * The Archipelago core
-* The south bound
+* The southbound interface
 
 Northbound interface
 --------------------
@@ -65,8 +65,8 @@ deduplication logic. It consists of the following peers:
 * the ``mapper`` peer
 
 The core stands in the middle in the Archipelago topology. It talks to the
-upper layers (cloud platform) through the north bound and to the lower layers
-(actual storage) through the south bound.
+upper layers (cloud platform) through the northbound interface and to the lower
+layers (actual storage) through the southbound interface.
 
 Southbound interface
 --------------------
