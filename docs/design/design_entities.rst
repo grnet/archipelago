@@ -37,17 +37,17 @@ We will divide Archipelago in three layers:
 * The Archipelago core
 * The south bound
 
-North bound
------------
+Northbound interface
+--------------------
 
-The north bound is where Archipelago interfaces with the cloud platform. In
-other words, it is the `endpoints` that Archipelago provides for use by the
-upper layers to access Archipelago resources [volumes or files]. Currently,
-these are:
+The northbound interface is where Archipelago interacts with the cloud
+platform. In other words, it is the `endpoints` that Archipelago provides for
+use by the upper layers to access Archipelago resources [volumes or files].
+Currently, these are:
 
-* block endpoints (via the ``xsegbd`` peer)
-* qemu endpoints (via the ``vlmc`` tool)
-* http endpoints (via the ``pithos`` peer)
+* block endpoints
+* qemu endpoints
+* http endpoints
 
 Each type of endpoint is served by the corresponding `endpoint driver`:
 
@@ -68,16 +68,16 @@ The core stands in the middle in the Archipelago topology. It talks to the
 upper layers (cloud platform) through the north bound and to the lower layers
 (actual storage) through the south bound.
 
-South bound
------------
+Southbound interface
+--------------------
 
-The south bound is where Archipelago interfaces with the underlying storage
-technology. It is the different `backends` that Archipelago can initiate to
-talk with the storage and store the actual data. Each backend handles a
-separate underlying storage entity of a specific type and multiple backends can
-be enabled simultaneously. Each backend uses a corresponding `backend driver`
-according to the type of storage it wants to communicate with. Currently, there
-are two backend drivers for two types of underlying storage:
+The southbound interface is where Archipelago interacts with the underlying
+storage technology. It is the different `backends` that Archipelago can
+initiate to talk with the storage and store the actual data. Each backend
+handles a separate underlying storage entity of a specific type and multiple
+backends can be enabled simultaneously. Each backend uses a corresponding
+`backend driver` according to the type of storage it wants to communicate with.
+Currently, there are two backend drivers for two types of underlying storage:
 
 * shared file driver (the ``filed`` peer)
 * RADOS driver (the ``sosd`` peer)
@@ -105,18 +105,36 @@ From the above, we identify the following entities:
    underlying storage.
 
 
+Volume operations
+=================
+
+A **Volume** can be either read-only (also called a 'snapshot') or read-write
+(also called a 'clone'). There are three operations on Volumes:
+
+#. **Create**: Create a new empty Volume of specific size, with a specific name.
+#. **Clone**: Create a read-only Volume (clone) from an existing Volume.
+   The source Volume can be either read-only (clone) or read-write (snapshot).
+   The new Volume may have a different size if specified so, as long as it is
+   larger than the source.
+#. **Snapshot**: Create a read-write Volume (snapshot) from an existing Volume.
+   The source Volume can be either read-only (clone) or read-write (snapshot).
+   The new Volume may have a different size if specified so, as long as it is
+   larger than the source.
+
+
 Management commands
 ===================
 
-After identifying the logical entities we should provide the corresponding
-commands to manage them:
+After identifying the logical entities and operations we should provide the
+corresponding commands to manage them:
 
 .. code-block:: console
 
-   # archip volume-list [--show-endpoint] [--show-backend]
-   # archip volume-info
-   # archip volume-create <volume-name> [--origin <volume-name>] [--size <size>]
-   # archip volume-snapshot <volume-name> --origin <volume-name>
+   # archip volume-list
+   # archip volume-info <volume-name>
+   # archip volume-clone <volume-name> [--name=<clone-name>] [--size <size>]
+   # archip volume-create --name=<volume-name> --size <size> [--backend=<backend-name>]
+   # archip volume-snapshot <volume-name> [--name <snapshot-name>] [--size <size>]
    # archip volume-present <volume-name> --endpoint-driver <endpoint-driver>
    # archip volume-unpresent <volume-name> | <endpoint>
    # archip volume-remove <volume-name>
@@ -126,10 +144,10 @@ commands to manage them:
    # archip volume-lock <volume-name>
    # archip volume-unlock [-f] <volume-name>
    # archip volume-showpresented [--filter-by:endpoint-driver=<endpoint-driver>,
-                                            backend-driver=<backend-driver>]
-                               [<volume-name>]
+                                              backend-driver=<backend-driver>]
+                                 [<volume-name>]
 
-   # archip enpoint-list [--show-volumes]
+   # archip endpoint-list [--show-volumes]
 
    # archip backend-list
    # archip backend-info
@@ -143,6 +161,6 @@ commands to manage them:
 .. note::
 
         driver-list could also be split to:
-        # edriver-list # for endpoint-driver
-        # bdriver-list # for backend-driver
+        # edriver-list    #for endpoint-driver
+        # bdriver-list    #for backend-driver
         to have a 1:1 mapping from entities to commands.
