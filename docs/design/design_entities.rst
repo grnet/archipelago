@@ -138,7 +138,7 @@ corresponding commands to manage them:
    # archip volume-present <volume-name> --endpoint-driver <endpoint-driver>
    # archip volume-unpresent <volume-name> | <endpoint>
    # archip volume-remove <volume-name>
-   # archip volume-move --from=<backend-name> --to=<backend-name>
+   # archip volume-move <volume-name> --from=<backend-name> --to=<backend-name>
    # archip volume-open <volume-name>
    # archip volume-close <volume-name>
    # archip volume-lock <volume-name>
