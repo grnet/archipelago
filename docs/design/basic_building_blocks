@@ -1,0 +1,108 @@
+Workqueue
+---------
+
+Work: A worker-agnostic action on some data.
+
+A work can be fully described by two things
+* an action
+* the data to perform the action
+
+By definition the work can be executed by anyone.
+
+We can define work queues where execution contextes enqueue works. Then the
+same or other execution contextes will dequeue and handle them.
+
+We can define a queue like that using the following primitives:
+
+**Enqueue** : Place a work in the queue.
+**Signal** : Start executing works from the queue.
+
+Once the job has been enqueued, it is pending for execution. The actual
+execution can be performed by any execution context that signals the queue.
+
+In order to make sure that the work will be executed, the enqueuer must make
+sure that the work queue will be signaled by an execution context that is aware
+of the new enqueue.
+
+Furthermore we can combine this logic with a lock. When an action needs to be
+performed on a resource that is protected by a lock, the naive approach is to
+wait for the lock to be available, acquire it (and thus cause other threads to
+wait), do the job and then release the lock. Since only one execution context
+can perform actions on a resource protected by a lock, a more robust approach is
+to place a work on a queue and signal it. The difference from the previous case,
+is that if the signalling action does not acquire the lock, it can just leave
+the work pending on the queue, continue with other stuff and rest assured that
+the current lock owner will execute the job for him.  This can happen by
+modifying the signal semantics, to only execute jobs if the associated lock is
+acquired.
+
+Similarly we can create condition based work queues where jobs are executed as
+long as a certain condition is true, and a combination of the two, a wait work
+queue that executes works with a lock under certain conditions.
+
+Jobhandler
+----------
+Another basic building block is a job handler.
+
+When a certain task can be split into multiple parallel subtasks, we can define
+a jobhandler to track the subtasks and notify via callback when all of them are
+finished (either successfully or with a failure).
+
+A job handler can be created as follows:
+# A jobhandler object with a registered callback function to be executed.
+# A register job primitive to increase the number of pending jobs.
+# A no-more-jobs primitive to notify that there are no more subjobs to be
+  registered.
+# A job completed/failed primitive to notify that a job has been completed/failed
+  (doesn't matter which one exactly).
+
+The jobhandler tracks down the pending jobs, and the callback gets executed when
+the final job finishes and there are no more jobs to be registered
+
+Epoched reference
+-----------------
+
+When having an object we want to share, we can use a reference count on it to
+track its usage and when to free its resources. The thing get complicated, when
+we want to invalidate the resource while there may still be users on it. What we
+want essentially, is to allow reference counting to take place, but when the
+resource is invalidated, the resources must not be get, but be free for put to
+free its resources when everybody stops using it.
+
+For this reason we can introduce an epoched reference counter. It is an entity
+that can atomically increase or decrease the reference count along with changing
+its epoch. This means that any get/put operations on the references and any
+increase/decrease operations on the epoch will be serialized.
+
+This can be used to build epoched reference counted handler for objects with
+invalidation support based on the following algorithm:
+
+Prerequisites:
+
+# The memory where the eref for each object must always be present.
+# We must store the last freed epoch of the object to handle parallel puts.
+
+Each time a resource is allocated, the reference starts at 1.
+epoched_object -> (epoch, object)
+
+get_object(epoched_object):
+        (cur_epoch, ref count) = inc_ref(epoched_object);
+        if (cur_epoch) == epoch_of(epoched_object):
+                OK();
+        //Cannot get another epoch of the object.
+        put_object(epoched_object);
+
+
+
+
+
+put_object(epoched_object):
+        (cur_epoch, ref_count) == dec_ref(epoched_object);
+        if (ref_count != 0)
+                OK();
+
+        if (CAS(&last_freed_epoch_of_object, &cur_epoch-1, &cur_epoch))
+                free_object();
+
+invalidate_object(epoched_object):
+        inc_epoch(epoched_object);
