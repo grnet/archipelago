@@ -58,7 +58,7 @@ In order to identify the above we propose tagging each request on creation with
 the following ids:
 
 - **Resource id** : which is unique for every resource. This can be a
-  monotonically increased 64-bit integer, assigned on resource creation.
+  monotonically increasing 64-bit integer, assigned on resource creation.
 - **Peer id** : which is unique for every peer type supported by Archipelago.
 - **Flow id** : Extra tag to group requests in an arbitrary way.
 
