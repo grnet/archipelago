@@ -92,10 +92,10 @@ def vlmc_parser():
     showmapped_parser.add_argument('-p', '--pool', type=str, nargs='?',
                                    help='for backwards compatiblity with rbd')
 
-    list_parser = subparsers.add_parser('list', help='List volumes')
-    list_parser.set_defaults(func=vlmc.list_volumes)
-    list_parser.add_argument('-p', '--pool', type=str, nargs='?',
-                             help='for backwards compatiblity with rbd')
+#    list_parser = subparsers.add_parser('list', help='List volumes')
+#    list_parser.set_defaults(func=vlmc.list_volumes)
+#    list_parser.add_argument('-p', '--pool', type=str, nargs='?',
+#                             help='for backwards compatiblity with rbd')
 
     snapshot_parser = subparsers.add_parser('snapshot', help='snapshot volume')
     #group = snapshot_parser.add_mutually_exclusive_group(required=True)
@@ -105,10 +105,10 @@ def vlmc_parser():
     snapshot_parser.add_argument('snap_name', type=str,  help='Snapshot name')
     snapshot_parser.set_defaults(func=vlmc.snapshot)
 
-    ls_parser = subparsers.add_parser('ls', help='List volumes')
-    ls_parser.set_defaults(func=vlmc.list_volumes)
-    ls_parser.add_argument('-p', '--pool', type=str, nargs='?',
-                           help='for backwards compatiblity with rbd')
+#    ls_parser = subparsers.add_parser('ls', help='List volumes')
+#    ls_parser.set_defaults(func=vlmc.list_volumes)
+#    ls_parser.add_argument('-p', '--pool', type=str, nargs='?',
+#                           help='for backwards compatiblity with rbd')
 
     resize_parser = subparsers.add_parser('resize', help='Resize volume')
     resize_parser.add_argument('-s', '--size', type=int,
@@ -150,14 +150,14 @@ def vlmc_parser():
     info_parser.add_argument('-p', '--pool', type=str, nargs='?',
                              help='for backwards compatiblity with rbd')
 
-    map_info_parser = subparsers.add_parser('mapinfo',
-                                            help='Show volume map_info')
-    map_info_parser.add_argument('name', type=str,  help='volume name')
-    map_info_parser.set_defaults(func=vlmc.mapinfo)
-    map_info_parser.add_argument('-p', '--pool', type=str, nargs='?',
-                                 help='for backwards compatiblity with rbd')
-    map_info_parser.add_argument('-v', '--verbose',  action='store_true',
-                                 default=False, help='')
+#    map_info_parser = subparsers.add_parser('mapinfo',
+#                                            help='Show volume map_info')
+#    map_info_parser.add_argument('name', type=str,  help='volume name')
+#    map_info_parser.set_defaults(func=vlmc.mapinfo)
+#    map_info_parser.add_argument('-p', '--pool', type=str, nargs='?',
+#                                 help='for backwards compatiblity with rbd')
+#    map_info_parser.add_argument('-v', '--verbose',  action='store_true',
+#                                 default=False, help='')
 
     hash_parser = subparsers.add_parser('hash', help='Hash snapshot')
     #group = hash_parser.add_mutually_exclusive_group(required=True)
