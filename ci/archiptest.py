@@ -48,9 +48,6 @@ class TestCluster(Cluster):
         self.install_packages(['ceph-common', 'librados2'])
         self.inject_file(packages_dir, '/root')
         cmd = """dpkg -i \
-        libxseg0_*_amd64.deb                    \
-        libxseg0-dbg_*_amd64.deb                \
-        python-xseg_*_amd64.deb                 \
         python-archipelago_*_amd64.deb          \
         archipelago_*_amd64.deb                 \
         archipelago-dbg_*_amd64.deb             \
