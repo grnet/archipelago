@@ -10,7 +10,7 @@ X-Python-Version: >=2.6
 Package: python-archipelago
 Section: python
 Architecture: any
-Depends: ${misc:Depends}, ${python:Depends}, python-xseg(>=0.3), python-xseg(<<0.4)
+Depends: ${misc:Depends}, ${python:Depends}, python-xseg(>=0.3), python-xseg(<<0.4),
  python-pkg-resources
 Recommends: python-ceph
 Provides: ${python:Provides}
