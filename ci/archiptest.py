@@ -47,6 +47,9 @@ class TestCluster(Cluster):
         self.inject_file(ceph_apt, '/etc/apt/sources.list.d/')
         self.install_packages(['ceph-common', 'librados2'])
         self.inject_file(packages_dir, '/root')
+        dev_apt = os.path.join(ci_dir, 'dev-grnet.list')
+        self.inject_file(dev_apt, '/etc/apt/sources.list.d/')
+        self.install_packages(['libxseg0', 'python-xseg', 'libxseg0-dev'])
         cmd = """dpkg -i \
         python-archipelago_*_amd64.deb          \
         archipelago_*_amd64.deb                 \
