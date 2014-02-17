@@ -10,7 +10,7 @@ X-Python-Version: >=2.6
 Package: python-archipelago
 Section: python
 Architecture: any
-Depends: ${misc:Depends}, ${python:Depends}, python-xseg(=${binary:Version}),
+Depends: ${misc:Depends}, ${python:Depends}, python-xseg(>=0.3), python-xseg(<0.4)
  python-pkg-resources
 Recommends: python-ceph
 Provides: ${python:Provides}
@@ -20,14 +20,15 @@ Description: Python archipelago module
 Package: archipelago
 Architecture: amd64
 Depends: ${misc:Depends},  ${shlibs:Depends}, ${python:Depends},
- libxseg0(=${binary:Version}),  python-archipelago(=${binary:Version}),
+ libxseg0(>=0.3), libxseg0(<0.4), python-archipelago(=${binary:Version}),
 Description:  Provides archipelago infrastructure
  Extended Description here
 
 Package: archipelago-rados
 Architecture: amd64
 Depends: ${misc:Depends}, ${shlibs:Depends}, archipelago(=${binary:Version}),
- librados2(=0.61.2+grnet2-1) | librados2(>=0.65)
+ librados2(=0.61.2+grnet2-1) | librados2(>=0.65),
+ libxseg0(>=0.3), libxseg0(<0.4)
 Description: Provides archipelago rados driver
  Extended Description here
 
