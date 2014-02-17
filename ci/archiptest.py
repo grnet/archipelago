@@ -52,7 +52,6 @@ class TestCluster(Cluster):
         libxseg0-dbg_*_amd64.deb                \
         python-xseg_*_amd64.deb                 \
         python-archipelago_*_amd64.deb          \
-        archipelago-modules-dkms_*_amd64.deb    \
         archipelago_*_amd64.deb                 \
         archipelago-dbg_*_amd64.deb             \
         archipelago-rados_*_amd64.deb           \
@@ -65,11 +64,12 @@ class TestCluster(Cluster):
 #        self.execute_command('python /root/qa/tests.py -v FiledTest', verbose=True)
 #        self.execute_command('python /root/qa/tests.py -v MapperdTest', verbose=True)
 #        self.execute_command('python /root/qa/tests.py -v VlmcdTest', verbose=True)
-        self.execute_command('mkdir  -p /srv/archip/blocks')
-        self.execute_command('mkdir  -p /srv/archip/maps')
-        self.execute_command('mkdir  -p /mnt/mountpoint')
-        self.execute_command('archipelago start')
-        self.execute_command('python /root/qa/basictest.py', verbose=True)
+
+#        self.execute_command('mkdir  -p /srv/archip/blocks')
+#        self.execute_command('mkdir  -p /srv/archip/maps')
+#        self.execute_command('mkdir  -p /mnt/mountpoint')
+#        self.execute_command('archipelago start')
+#        self.execute_command('python /root/qa/basictest.py', verbose=True)
 
 if __name__ == '__main__':
     now = datetime.datetime.now().strftime('%b-%d-%I%M%p-%G')
