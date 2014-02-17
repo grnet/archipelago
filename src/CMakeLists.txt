@@ -57,6 +57,7 @@ set(BENCH_SRC bench-xseg.c peer.c bench-lfsr.c bench-timer.c bench-utils.c
 	bench-report.c bench-verify.c)
 add_executable(archip-bench ${BENCH_SRC})
 target_link_libraries(archip-bench xseg pthread m)
+
 add_executable(archip-benchfd ${BENCH_SRC})
 target_link_libraries(archip-benchfd xseg pthread m)
 set_target_properties(archip-benchfd
@@ -85,3 +86,6 @@ set_target_properties(archip-mapperd
 	PROPERTIES
 	COMPILE_DEFINITIONS "ST_THREADS"
 	)
+
+INSTALL_TARGETS(/bin archip-filed archip-radosd archip-vlmcd archip-mapperd
+	archip-bench archip-dummy archip-benchfd)
