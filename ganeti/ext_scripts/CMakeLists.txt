@@ -35,19 +35,32 @@ cmake_minimum_required(VERSION 2.8)
 
 project (archipelago_extscripts)
 
-INSTALL(FILES vlmc_wrapper.py parameters.list DESTINATION /usr/share/ganeti/extstorage/archipelago)
+SET(EXTDIR /usr/share/ganeti/extstorage/archipelago)
 
-SET(OUT ${CMAKE_INSTALL_PREFIX}/remove)
-ADD_CUSTOM_COMMAND( OUTPUT ${OUT}
-		     COMMAND ln -s ${CMAKE_INSTALL_PREFIX}/vlmc_wrapper.py ${CMAKE_INSTALL_PREFIX}/attach
-		     COMMAND ln -s ${CMAKE_INSTALL_PREFIX}/vlmc_wrapper.py ${CMAKE_INSTALL_PREFIX}/create
-		     COMMAND ln -s ${CMAKE_INSTALL_PREFIX}/vlmc_wrapper.py ${CMAKE_INSTALL_PREFIX}/detach
-		     COMMAND ln -s ${CMAKE_INSTALL_PREFIX}/vlmc_wrapper.py ${CMAKE_INSTALL_PREFIX}/grow
-		     COMMAND ln -s ${CMAKE_INSTALL_PREFIX}/vlmc_wrapper.py ${CMAKE_INSTALL_PREFIX}/setinfo
-		     COMMAND ln -s ${CMAKE_INSTALL_PREFIX}/vlmc_wrapper.py ${CMAKE_INSTALL_PREFIX}/snapshot
-		     COMMAND ln -s ${CMAKE_INSTALL_PREFIX}/vlmc_wrapper.py ${CMAKE_INSTALL_PREFIX}/verify
-		     COMMAND ln -s ${CMAKE_INSTALL_PREFIX}/vlmc_wrapper.py ${CMAKE_INSTALL_PREFIX}/remove
-#                     DEPENDS install ${legacy_target} 
-                     COMMENT "Generating ext storage symbolic links")
+INSTALL(FILES vlmc_wrapper.py parameters.list DESTINATION ${EXTDIR})
 
-ADD_CUSTOM_TARGET(install_symlinks DEPENDS ${OUT})
+install(CODE "EXECUTE_PROCESS(COMMAND ${CMAKE_COMMAND} -E
+	create_symlink  \$ENV{DESTDIR}/${EXTDIR}/vlmc_wrapper.py
+		 	\$ENV{DESTDIR}/${EXTDIR}/attach)")
+install(CODE "EXECUTE_PROCESS(COMMAND ${CMAKE_COMMAND} -E
+	create_symlink  \$ENV{DESTDIR}/${EXTDIR}/vlmc_wrapper.py
+		 	\$ENV{DESTDIR}/${EXTDIR}/create)")
+install(CODE "EXECUTE_PROCESS(COMMAND ${CMAKE_COMMAND} -E
+	create_symlink  \$ENV{DESTDIR}/${EXTDIR}/vlmc_wrapper.py
+		 	\$ENV{DESTDIR}/${EXTDIR}/detach)")
+install(CODE "EXECUTE_PROCESS(COMMAND ${CMAKE_COMMAND} -E
+	create_symlink  \$ENV{DESTDIR}/${EXTDIR}/vlmc_wrapper.py
+		 	\$ENV{DESTDIR}/${EXTDIR}/setinfo)")
+install(CODE "EXECUTE_PROCESS(COMMAND ${CMAKE_COMMAND} -E
+	create_symlink  \$ENV{DESTDIR}/${EXTDIR}/vlmc_wrapper.py
+		 	\$ENV{DESTDIR}/${EXTDIR}/snapshot)")
+install(CODE "EXECUTE_PROCESS(COMMAND ${CMAKE_COMMAND} -E
+	create_symlink  \$ENV{DESTDIR}/${EXTDIR}/vlmc_wrapper.py
+		 	\$ENV{DESTDIR}/${EXTDIR}/verify)")
+install(CODE "EXECUTE_PROCESS(COMMAND ${CMAKE_COMMAND} -E
+	create_symlink  \$ENV{DESTDIR}/${EXTDIR}/vlmc_wrapper.py
+		 	\$ENV{DESTDIR}/${EXTDIR}/remove)")
+install(CODE "EXECUTE_PROCESS(COMMAND ${CMAKE_COMMAND} -E
+	create_symlink  \$ENV{DESTDIR}/${EXTDIR}/vlmc_wrapper.py
+		 	\$ENV{DESTDIR}/${EXTDIR}/grow)")
+install(CODE "FILE(MAKE_DIRECTORY \$ENV{DESTDIR}/var/log/ganeti/extstorage)")
