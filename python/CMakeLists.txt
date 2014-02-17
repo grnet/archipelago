@@ -54,6 +54,9 @@ configure_file(${SETUP_PY_IN} ${SETUP_PY})
 configure_file(${DISTSETUP_PY_IN} ${DISTSETUP_PY})
 
 ADD_CUSTOM_COMMAND( OUTPUT ${SETUP_PY_BUILD_OUTPUT} ${CMAKE_CURRENT_BINARY_DIR}/archipelago ${CMAKE_CURRENT_BINARY_DIR}/archipelago.egg-info
+	            COMMAND mkdir -p ${CMAKE_CURRENT_BINARY_DIR}/archipelago
+		    COMMAND touch ${CMAKE_CURRENT_BINARY_DIR}/archipelago/__init__.py
+
 		    COMMAND python ${SETUP_PY} build
 
 		    COMMENT "Building python")
