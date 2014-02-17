@@ -65,7 +65,7 @@ PACKAGES_ROOT = '.'
 #PACKAGES = find_packages(PACKAGES_ROOT)
 #PACKAGES = {'': '${CMAKE_CURRENT_SOURCE_DIR}'}
 #DIR = os.path.relpath('${CMAKE_CURRENT_BINARY_DIR}')
-DIR = os.path.relpath(HERE)
+DIR = os.path.relpath(HERE, '${CMAKE_CURRENT_SOURCE_DIR}')
 PACKAGE_DIR = {'': DIR}
 print "HERE", HERE
 print "CWD", os.getcwd()
