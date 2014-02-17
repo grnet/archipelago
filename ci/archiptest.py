@@ -38,7 +38,7 @@ import datetime
 
 class TestCluster(Cluster):
     def execute_test(self, ci_dir, packages_dir):
-        tests = os.path.join(ci_dir, '../xseg/tools/qa')
+        tests = os.path.join(ci_dir, '../tests')
         self.inject_file(tests, '/root')
         self.execute_command('mkdir  -p /etc/ceph/')
         ceph_conf = os.path.join(ci_dir, 'ceph.conf')
@@ -60,7 +60,7 @@ class TestCluster(Cluster):
         remote_folder = os.path.normpath(packages_dir)
         remote_folder = os.path.basename(remote_folder)
         self.execute_command('cd /root/' + remote_folder + ' ; ' + cmd)
-        self.execute_command('python /root/qa/tests.py -v', verbose=True)
+        self.execute_command('python /root/tests/tests.py -v', verbose=True)
 #        self.execute_command('python /root/qa/tests.py -v FiledTest', verbose=True)
 #        self.execute_command('python /root/qa/tests.py -v MapperdTest', verbose=True)
 #        self.execute_command('python /root/qa/tests.py -v VlmcdTest', verbose=True)
