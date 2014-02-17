@@ -43,8 +43,10 @@ from fnmatch import fnmatchcase
 from setuptools import setup, find_packages
 
 #HERE = os.path.abspath(os.path.normpath(os.path.dirname(__file__)))
-TOPDIR = os.environ['TOPDIR']
-DEBIANDIR = os.path.join(TOPDIR, 'debian')
+HERE = os.path.abspath(os.path.normpath(os.path.dirname(__file__)))
+CWD = os.getcwd()
+#DEBIANDIR = os.path.join(TOPDIR, '../debian')
+DEBIANDIR = os.path.join(HERE, '../debian')
 DEBIANDIR = os.path.normpath(DEBIANDIR)
 
 from archipelago.version import __version__
@@ -60,14 +62,20 @@ else:
 SHORT_DESCRIPTION = 'Package short description'
 
 PACKAGES_ROOT = '.'
-PACKAGES = find_packages(PACKAGES_ROOT)
+#PACKAGES = find_packages(PACKAGES_ROOT)
+#PACKAGES = {'': '${CMAKE_CURRENT_SOURCE_DIR}'}
+#DIR = os.path.relpath('${CMAKE_CURRENT_BINARY_DIR}')
+DIR = os.path.relpath(HERE)
+PACKAGE_DIR = {'': DIR}
+print "HERE", HERE
+print "CWD", os.getcwd()
+print "PACKAGE_DIR", PACKAGE_DIR
 
 # Package meta
 CLASSIFIERS = []
 
 # Package requirements
-INSTALL_REQUIRES = ['xseg', 'argparse', 'psutil'
-                    ]
+INSTALL_REQUIRES = ['xseg', 'argparse', 'psutil']
 
 EXTRAS_REQUIRES = {
 }
@@ -185,8 +193,10 @@ setup(
     maintainer='Filippos Giannakos',
     maintainer_email='philipgianr@grnet.gr',
 
-    packages=PACKAGES,
-    package_dir={'': PACKAGES_ROOT},
+    packages=['archipelago'],
+#    package_dir={'': PACKAGES_ROOT},
+#    package_dir = {'': '${CMAKE_CURRENT_BINARY_DIR}'},
+    package_dir = PACKAGE_DIR,
     include_package_data=True,
     package_data=find_package_data('.'),
     zip_safe=False,

@@ -33,5 +33,37 @@
 
 cmake_minimum_required(VERSION 2.8)
 
-project (archipelago_python)
+project(archipelago_python)
+
+set(VERSIONCMD ${CMAKE_CURRENT_SOURCE_DIR}/version.sh
+	${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_BINARY_DIR})
+
+ADD_CUSTOM_COMMAND (OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/archipelago/version.py
+		    COMMAND ${VERSIONCMD}
+		    #DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/xseg/version.py"
+		   )
+ADD_CUSTOM_TARGET (pyversion DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/archipelago/version.py)
+
+SET(SETUP_PY_IN ${CMAKE_CURRENT_SOURCE_DIR}/setup.py)
+SET(SETUP_PY ${CMAKE_CURRENT_BINARY_DIR}/setup.py)
+SET(SETUP_PY_BUILD_OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/build)
+
+SET(DISTSETUP_PY_IN ${CMAKE_CURRENT_SOURCE_DIR}/distribute_setup.py)
+SET(DISTSETUP_PY ${CMAKE_CURRENT_BINARY_DIR}/distribute_setup.py)
+configure_file(${SETUP_PY_IN} ${SETUP_PY})
+configure_file(${DISTSETUP_PY_IN} ${DISTSETUP_PY})
+
+ADD_CUSTOM_COMMAND( OUTPUT ${SETUP_PY_BUILD_OUTPUT} ${CMAKE_CURRENT_BINARY_DIR}/archipelago ${CMAKE_CURRENT_BINARY_DIR}/archipelago.egg-info
+	            COMMAND mkdir -p ${CMAKE_CURRENT_BINARY_DIR}/archipelago
+		    COMMAND touch ${CMAKE_CURRENT_BINARY_DIR}/archipelago/__init__.py
+
+		    COMMAND python ${SETUP_PY} build
+
+		    COMMENT "Building python")
+
+ADD_CUSTOM_TARGET(python ALL DEPENDS ${SETUP_PY_BUILD_OUTPUT} )
+ADD_DEPENDENCIES(python pyversion)
+
+install(CODE "execute_process(COMMAND python ${SETUP_PY} install --install-layout=deb --root=$DESTDIR)")
+
 
