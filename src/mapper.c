@@ -39,7 +39,7 @@
 #include <xseg/xseg.h>
 #include <peer.h>
 #include <time.h>
-#include <xtypes/xhash.h>
+#include <xseg/xhash.h>
 #include <xseg/protocol.h>
 //#include <sys/stat.h>
 //#include <fcntl.h>
@@ -1521,11 +1521,11 @@ int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 	struct mapperd *mapper = malloc(sizeof(struct mapperd));
 	peer->priv = mapper;
 	//mapper = mapperd;
-	mapper->hashmaps = xhash_new(3, 0, STRING);
+	mapper->hashmaps = xhash_new(3, 0, XHASH_STRING);
 
 	for (i = 0; i < peer->nr_ops; i++) {
 		struct mapper_io *mio = malloc(sizeof(struct mapper_io));
-		mio->copyups_nodes = xhash_new(3, 0, INTEGER);
+		mio->copyups_nodes = xhash_new(3, 0, XHASH_INTEGER);
 		mio->pending_reqs = 0;
 		mio->err = 0;
 		mio->active = 0;

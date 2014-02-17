@@ -42,7 +42,7 @@
 #include <hash.h>
 #include <mapper.h>
 #include <mapper-versions.h>
-#include <xtypes/xhash.h>
+#include <xseg/xhash.h>
 
 static uint32_t nr_reqs = 0;
 static uint32_t waiters_for_req = 0;

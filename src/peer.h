@@ -165,7 +165,7 @@ extern struct log_ctx lc;
 extern uint32_t ta;
 #endif
 
-inline int isTerminate(void)
+static inline int isTerminate(void)
 {
 	return terminated;
 }

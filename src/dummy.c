@@ -39,7 +39,7 @@
 #include <xseg/xseg.h>
 #include <peer.h>
 #include <time.h>
-#include <sys/util.h>
+#include <xseg/util.h>
 
 struct timespec delay = {0, 4000000};
 

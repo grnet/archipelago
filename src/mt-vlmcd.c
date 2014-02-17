@@ -821,7 +821,7 @@ int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 	}
 	peer->priv = (void *) vlmc;
 
-	vlmc->volumes = xhash_new(3, 0, STRING);
+	vlmc->volumes = xhash_new(3, 0, XHASH_STRING);
 	if (!vlmc->volumes){
 		XSEGLOG2(&lc, E, "Cannot alloc vlmc");
 		return -1;

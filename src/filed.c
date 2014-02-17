@@ -52,7 +52,7 @@
 #include <syscall.h>
 #include <sys/sendfile.h>
 #include <peer.h>
-#include <xtypes/xcache.h>
+#include <xseg/xcache.h>
 #include <openssl/sha.h>
 #include <sys/resource.h>
 

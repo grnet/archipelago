@@ -42,7 +42,7 @@
 #include <xseg/xseg.h>
 #include <peer.h>
 #include <time.h>
-#include <sys/util.h>
+#include <xseg/util.h>
 #include <signal.h>
 #include <bench-xseg.h>
 
