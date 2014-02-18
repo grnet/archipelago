@@ -32,7 +32,7 @@
 # or implied, of GRNET S.A.
 
 import archipelago
-from archipelago.common import Xseg_ctx, Request, Filed, Mapperd, Vlmcd, Sosd, \
+from archipelago.common import Xseg_ctx, Request, Filed, Mapperd, Vlmcd, Radosd, \
         Error, Segment
 from archipelago.archipelago import start_peer, stop_peer
 import random as rnd
@@ -422,7 +422,7 @@ class XsegTest(unittest.TestCase):
 
         return Filed(**args)
 
-    def get_sosd(self, args, clean=False):
+    def get_radosd(self, args, clean=False):
         pool = args['pool']
         import rados
         cluster = rados.Rados(conffile='/etc/ceph/ceph.conf')
@@ -432,7 +432,7 @@ class XsegTest(unittest.TestCase):
         cluster.create_pool(pool)
 
         cluster.shutdown()
-        return Sosd(**args)
+        return Radosd(**args)
 
     def get_mapperd(self, args):
         return Mapperd(**args)
@@ -1187,32 +1187,32 @@ class FiledTest(BlockerTest, XsegTest):
         self.send_and_evaluate_release(self.blockerport, target, force=True,
                 expected=True)
 
-class SosdTest(BlockerTest, XsegTest):
+class RadosdTest(BlockerTest, XsegTest):
     filed_args = {
-            'role': 'testsosd',
+            'role': 'testradosd',
             'spec': XsegTest.spec,
             'nr_ops': 16,
             'portno_start': 0,
             'portno_end': 0,
             'daemon': True,
             'log_level': 3,
-            'pool': 'test_sosd',
+            'pool': 'test_radosd',
             'nr_threads': 3,
             }
 
     def setUp(self):
-        super(SosdTest, self).setUp()
+        super(RadosdTest, self).setUp()
         try:
-            self.blocker = self.get_sosd(self.filed_args, clean=True)
+            self.blocker = self.get_radosd(self.filed_args, clean=True)
             self.blockerport = self.blocker.portno_start
             start_peer(self.blocker)
         except Exception as e:
-            super(SosdTest, self).tearDown()
+            super(RadosdTest, self).tearDown()
             raise e
 
     def tearDown(self):
         stop_peer(self.blocker)
-        super(SosdTest, self).tearDown()
+        super(RadosdTest, self).tearDown()
 
 if __name__=='__main__':
     init()

@@ -88,7 +88,7 @@ CHARDEV_MINOR = 0
 REQS = 512
 
 FILE_BLOCKER = 'archip-filed'
-RADOS_BLOCKER = 'archip-sosd'
+RADOS_BLOCKER = 'archip-radosd'
 MAPPER = 'archip-mapperd'
 VLMC = 'archip-vlmcd'
 
@@ -287,17 +287,17 @@ class MTpeer(Peer):
         self.cli_opts.append(str(self.nr_threads))
 
 
-class Sosd(MTpeer):
+class Radosd(MTpeer):
     def __init__(self, pool=None, **kwargs):
         self.executable = RADOS_BLOCKER
         self.pool = pool
-        super(Sosd, self).__init__(**kwargs)
+        super(Radosd, self).__init__(**kwargs)
 
         if self.cli_opts is None:
             self.cli_opts = []
-        self.set_sosd_cli_options()
+        self.set_radosd_cli_options()
 
-    def set_sosd_cli_options(self):
+    def set_radosd_cli_options(self):
         if self.pool:
             self.cli_opts.append("--pool")
             self.cli_opts.append(self.pool)
@@ -567,7 +567,7 @@ def check_conf():
             peers[role] = Filed(role=role, spec=segment.get_spec(),
                                  prefix=ARCHIP_PREFIX, **role_config)
         elif role_type == 'rados_blocker':
-            peers[role] = Sosd(role=role, spec=segment.get_spec(),
+            peers[role] = Radosd(role=role, spec=segment.get_spec(),
                                **role_config)
         elif role_type == 'mapperd':
             peers[role] = Mapperd(role=role, spec=segment.get_spec(),
