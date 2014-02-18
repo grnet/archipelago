@@ -35,4 +35,5 @@ cmake_minimum_required(VERSION 2.8)
 
 project (ganeti-hooks)
 
-INSTALL(DIRECTORY instance-migrate-pre.d DESTINATION /etc/ganeti/hooks)
+INSTALL(DIRECTORY instance-migrate-pre.d DESTINATION /etc/ganeti/hooks
+	USE_SOURCE_PERMISSIONS)
