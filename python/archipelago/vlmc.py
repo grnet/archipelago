@@ -80,6 +80,7 @@ def is_mapped(volume):
             return d_id
     return None
 
+
 def is_device_mapped(device):
     mapped = get_mapped()
     if not mapped:
@@ -138,6 +139,7 @@ def snapshot(name, snap_name=None, cli=False, **kwargs):
     if cli:
         sys.stdout.write("Snapshot name: %s\n" % snap_name)
 
+
 def hash(name, cli=False, **kwargs):
     if len(name) < 6:
         raise Error("Name should have at least len 6")
@@ -159,6 +161,7 @@ def hash(name, cli=False, **kwargs):
     if cli:
         sys.stdout.write("Hash name: %s\n" % hash_name)
         return hash_name
+
 
 def list_volumes(**kwargs):
     if isinstance(peers['blockerm'], Sosd):
@@ -346,7 +349,7 @@ def mapinfo(name, verbose=False, **kwargs):
         cluster = rados.Rados(conffile=config['CEPH_CONF_FILE'])
         cluster.connect()
         ioctx = cluster.open_ioctx(config['RADOS_POOL_MAPS'])
-        BLOCKSIZE = 4*1024*1024
+        BLOCKSIZE = 4 * 1024 * 1024
         try:
             mapdata = ioctx.read(ARCHIP_PREFIX + name, length=BLOCKSIZE)
         except Exception:
@@ -355,10 +358,10 @@ def mapinfo(name, verbose=False, **kwargs):
             raise Error("Cannot read map data")
         pos = 0
         size_uint32t = sizeof(c_uint32)
-        version = unpack("<L", mapdata[pos:pos+size_uint32t])[0]
+        version = unpack("<L", mapdata[pos:pos + size_uint32t])[0]
         pos += size_uint32t
         size_uint64t = sizeof(c_uint64)
-        size = unpack("Q", mapdata[pos:pos+size_uint64t])[0]
+        size = unpack("Q", mapdata[pos:pos + size_uint64t])[0]
         pos += size_uint64t
         blocks = size / BLOCKSIZE
         nr_exists = 0

@@ -42,17 +42,20 @@ def cmd_open(cmd, bufsize=-1, env=None):
                             stderr=subprocess.PIPE, close_fds=True)
     return inst
 
+
 def doexec(args, inputtext=None):
     proc = cmd_open(" ".join(args))
-    if inputtext != None:
+    if inputtext is not None:
         proc.stdin.write(inputtext)
     stdout = proc.stdout
     stderr = proc.stderr
     rc = proc.wait()
     return (rc, stdout, stderr)
 
+
 class VlmcTapdiskException(Exception):
     pass
+
 
 class VlmcTapdisk(object):
     '''Tapdisk operations'''
@@ -70,7 +73,8 @@ class VlmcTapdisk(object):
 
         def __str__(self):
             return 'volume=%s pid=%s minor=%s state=%s device=%s' \
-                    % (self.volume, self.pid, self.minor, self.state, self.device)
+                    % (self.volume, self.pid, self.minor, self.state,
+                       self.device)
 
     @staticmethod
     def exc(*args):
