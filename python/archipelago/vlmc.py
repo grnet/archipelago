@@ -42,30 +42,12 @@ from binascii import hexlify
 from ctypes import c_uint32, c_uint64
 
 from .common import *
+from blktap import VlmcTapdisk
 
 
 @exclusive()
 def get_mapped():
-    try:
-        devices = os.listdir(os.path.join(XSEGBD_SYSFS, "devices/"))
-    except:
-        if loaded_module(xsegbd):
-            raise Error("Cannot list %s/devices/" % XSEGBD_SYSFS)
-        else:
-            return None
-    try:
-        mapped = []
-        for f in devices:
-            d_id = open(XSEGBD_SYSFS + "devices/" + f + "/id")
-            d_id = d_id.read().strip()
-            target = open(XSEGBD_SYSFS + "devices/" + f + "/target")
-            target = target.read().strip()
-            mapped.append((d_id, target))
-
-    except Exception, reason:
-        raise Error(reason)
-
-    return mapped
+    return VlmcTapdisk.list()
 
 
 def showmapped():
@@ -77,7 +59,7 @@ def showmapped():
 
     print "id\timage\t\tdevice"
     for m in mapped:
-        print "%s\t%s\t%s" % (m[0], m[1], DEVICE_PREFIX + m[0])
+        print "%s\t%s\t%s" % (m.minor, m.volume, m.device)
 
     return len(mapped)
 
@@ -92,9 +74,21 @@ def is_mapped(volume):
         return None
 
     for m in mapped:
-        d_id = m[0]
-        target = m[1]
+        d_id = m.minor
+        target = m.volume
         if target == volume:
+            return d_id
+    return None
+
+def is_device_mapped(device):
+    mapped = get_mapped()
+    if not mapped:
+        return None
+
+    for m in mapped:
+        d_id = m.minor
+        target = m.device
+        if target == device:
             return d_id
     return None
 
@@ -204,83 +198,49 @@ def remove(name, **kwargs):
 
 @exclusive()
 def map_volume(name, **kwargs):
-    vport = peers['vlmcd'].portno_start
-    if not loaded_module(xsegbd):
-        raise Error("Xsegbd module not loaded")
+    if not loaded_module("blktap"):
+        raise Error("blktap module not loaded")
 
     device = is_mapped(name)
     if device is not None:
         raise Error("Volume %s already mapped on device %s%s" % (name,
-            DEVICE_PREFIX, device))
+                    '/dev/xen/blktap-2/tapdev', device))
 
-    prev = config['XSEGBD_START']
     try:
-        result = [int(open(XSEGBD_SYSFS + "devices/" + f + "/srcport").read().
-                  strip()) for f in os.listdir(XSEGBD_SYSFS + "devices/")]
-        result.sort()
-
-        for p in result:
-            if p - prev > 1:
-                break
-            else:
-                prev = p
-
-        port = prev + 1
-        if port > config['XSEGBD_END']:
-            raise Error("Max xsegbd devices reached")
-        fd = os.open(XSEGBD_SYSFS + "add", os.O_WRONLY)
-        print >> sys.stderr, "write to %s : %s %d:%d:%d" % (XSEGBD_SYSFS +
-                             "add", name, port, port - config['XSEGBD_START'] +
-                             vport, REQS)
-        os.write(fd, "%s %d:%d:%d" % (name, port, port - config['XSEGBD_START']
-                                      + vport, REQS))
-        os.close(fd)
-        return port
+        device = VlmcTapdisk.create(name)
+        if device:
+            sys.stderr.write(device + '\n')
+            return
+        raise Error("Cannot map volume '%s'.\n" % name)
     except Exception, reason:
         raise Error(name + ': ' + str(reason))
 
 
 @exclusive()
 def unmap_volume(name, **kwargs):
-    if not loaded_module(xsegbd):
-        raise Error("Xsegbd module not loaded")
+    if not loaded_module("blktap"):
+        raise Error("blktap module not loaded")
     device = name
     try:
-        for f in os.listdir(XSEGBD_SYSFS + "devices/"):
-            d_id = open(XSEGBD_SYSFS + "devices/" + f + "/id")
-            d_id = d_id.read().strip()
-            target = open(XSEGBD_SYSFS + "devices/" + f + "/target")
-            target = target.read().strip()
-            if device == DEVICE_PREFIX + d_id:
-                fd = os.open(XSEGBD_SYSFS + "remove", os.O_WRONLY)
-                os.write(fd, d_id)
-                os.close(fd)
-                return
-        raise Error("Device %s doesn't exist" % device)
+        if is_device_mapped(device) is not None:
+            busy = VlmcTapdisk.busy_pid(device)
+            mounted = VlmcTapdisk.is_mounted(device)
+            if not busy and not mounted:
+                VlmcTapdisk.destroy(device)
+            else:
+                if busy:
+                    raise Error("Device is busy (PID: %s)." % busy)
+                elif mounted:
+                    raise Error("Device is mounted. Cannot unmap device.")
+            return
+        raise Error("Device doesn't exist")
     except Exception, reason:
         raise Error(device + ': ' + str(reason))
 
 
 # FIXME:
 def resize(name, size, **kwargs):
-    if not loaded_module(xsegbd):
-        raise Error("Xsegbd module not loaded")
-
-    try:
-
-        for f in os.listdir(XSEGBD_SYSFS + "devices/"):
-            d_id = open(XSEGBD_SYSFS + "devices/" + f + "/id")
-            d_id = d_id.read().strip()
-            target = open(XSEGBD_SYSFS + "devices/" + f + "/target")
-            target = target.read().strip()
-            if name == target:
-                fd = os.open(XSEGBD_SYSFS + "devices/" + d_id + "/refresh",
-                             os.O_WRONLY)
-                os.write(fd, "1")
-                os.close(fd)
-
-    except Exception, reason:
-        raise Error(name + ': ' + str(reason))
+    raise NotImplementedError()
 
 
 def lock(name, cli=False, **kwargs):
@@ -407,11 +367,11 @@ def mapinfo(name, verbose=False, **kwargs):
         print "Version: " + str(version)
         print "Size: " + str(size)
         for i in range(blocks):
-            exists = bool(unpack("B", mapdata[pos:pos+1])[0])
+            exists = bool(unpack("B", mapdata[pos:pos + 1])[0])
             if exists:
                 nr_exists += 1
             pos += 1
-            block = hexlify(mapdata[pos:pos+32])
+            block = hexlify(mapdata[pos:pos + 32])
             pos += 32
             if verbose:
                 print block, exists
