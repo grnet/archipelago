@@ -124,37 +124,6 @@ def peer_running(peer, cli):
         return False
 
 
-def make_segdev(cli=False):
-    try:
-        os.stat(str(CHARDEV_NAME))
-        raise Error("Segdev already exists")
-    except Error as e:
-        raise e
-    except:
-        pass
-    cmd = ["mknod", str(CHARDEV_NAME), "c", str(CHARDEV_MAJOR),
-           str(CHARDEV_MINOR)]
-    if cli:
-        print ' '.join(cmd)
-    try:
-        check_call(cmd, shell=False)
-    except Exception:
-        raise Error("Segdev device creation failed.")
-
-
-def remove_segdev():
-    try:
-        os.stat(str(CHARDEV_NAME))
-    except OSError, (err, reason):
-        if err == errno.ENOENT:
-            return
-        raise OSError(str(CHARDEV_NAME) + ' ' + reason)
-    try:
-        os.unlink(str(CHARDEV_NAME))
-    except:
-        raise Error("Segdev device removal failed.")
-
-
 def start_peers(peers, cli=False):
     for m in modules:
         if not loaded_module(m):
@@ -191,15 +160,10 @@ def start(user=False, role=None, cli=False, **kwargs):
         print "===================="
         print ""
     try:
-        for m in modules:
-            load_module(m, None)
-        time.sleep(0.5)
-        make_segdev(cli)
-        time.sleep(0.5)
         get_segment().create()
         time.sleep(0.5)
         start_peers(peers, cli)
-        load_module(xsegbd, xsegbd_args)
+        load_module("blktap", None)
     except Exception as e:
         if cli:
             print red(e)
@@ -228,12 +192,7 @@ def stop(user=False, role=None, cli=False, **kwargs):
         mapped = vlmc_get_mapped()
         if mapped and len(mapped) > 0:
             raise Error("Cannot stop archipelago. Mapped volumes exist")
-    unload_module(xsegbd)
     stop_peers(peers, cli)
-    remove_segdev()
-    for m in reversed(modules):
-        unload_module(m)
-        time.sleep(0.3)
 
 
 def status(cli=False, **kwargs):
@@ -245,21 +204,13 @@ def status(cli=False, **kwargs):
         mapped = vlmc_get_mapped()
         if mapped and len(mapped) > 0:
             r += 1
-    if loaded_module(xsegbd):
+    if loaded_module("blktap"):
         if cli:
-            pretty_print(xsegbd, green('Loaded'))
+            pretty_print("blktap", green('Loaded'))
         r += 1
     else:
         if cli:
-            pretty_print(xsegbd, red('Not loaded'))
-    for m in reversed(modules):
-        if loaded_module(m):
-            if cli:
-                pretty_print(m, green('Loaded'))
-            r += 1
-        else:
-            if cli:
-                pretty_print(m, red('Not loaded'))
+            pretty_print("blktap", red('Not loaded'))
     for role, _ in reversed(config['roles']):
         p = peers[role]
         if peer_running(p, cli):
