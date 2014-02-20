@@ -196,7 +196,6 @@ def stop(user=False, role=None, cli=False, **kwargs):
             raise Error("Cannot stop archipelago. Mapped volumes exist")
     stop_peers(peers, cli)
     time.sleep(0.5)
-    unload_module("blktap")
     get_segment().destroy()
 
 
