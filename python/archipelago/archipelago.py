@@ -193,10 +193,22 @@ def stop(user=False, role=None, cli=False, **kwargs):
         if mapped and len(mapped) > 0:
             raise Error("Cannot stop archipelago. Mapped volumes exist")
     stop_peers(peers, cli)
+    time.sleep(0.5)
+    unload_module("blktap")
+    get_segment().destroy()
 
 
 def status(cli=False, **kwargs):
     r = 0
+    if not loaded_module("blktap"):
+        for role, _ in reversed(config['roles']):
+            p = peers[role]
+            if peer_running(p, cli):
+                r += 1
+        if cli:
+            pretty_print("blktap", red('Not loaded'))
+        return r
+
     if cli:
         if vlmc_showmapped() > 0:
             r += 1
@@ -207,7 +219,7 @@ def status(cli=False, **kwargs):
     if loaded_module("blktap"):
         if cli:
             pretty_print("blktap", green('Loaded'))
-        r += 1
+        #r += 1
     else:
         if cli:
             pretty_print("blktap", red('Not loaded'))
