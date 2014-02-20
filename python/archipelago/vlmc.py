@@ -213,7 +213,7 @@ def map_volume(name, **kwargs):
         device = VlmcTapdisk.create(name)
         if device:
             sys.stderr.write(device + '\n')
-            return
+            return device.split(DEVICE_PREFIX)[1]
         raise Error("Cannot map volume '%s'.\n" % name)
     except Exception, reason:
         raise Error(name + ': ' + str(reason))

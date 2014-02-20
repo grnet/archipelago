@@ -76,8 +76,7 @@ PIDFILE_PATH = "/var/run/archipelago"
 VLMC_LOCK_FILE = 'vlmc.lock'
 LOGS_PATH = "/var/log/archipelago"
 LOCK_PATH = "/var/lock"
-DEVICE_PREFIX = "/dev/xsegbd"
-XSEGBD_SYSFS = "/sys/bus/xsegbd/"
+DEVICE_PREFIX = "/dev/xen/blktap-2/tapdev"
 
 REQS = 512
 
@@ -486,6 +485,9 @@ class Segment(object):
         #fixme blocking....
         try:
             xseg = self.join()
+        except:
+            return
+        try:
             xseg_leave(xseg)
             xseg_destroy(xseg)
         except Exception:
