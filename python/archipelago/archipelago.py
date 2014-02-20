@@ -125,10 +125,6 @@ def peer_running(peer, cli):
 
 
 def start_peers(peers, cli=False):
-    for m in modules:
-        if not loaded_module(m):
-            raise Error("Cannot start userspace peers. " + m +
-                        " module not loaded")
     for r, _ in config['roles']:
         p = peers[r]
         start_peer(p, cli)
@@ -185,6 +181,12 @@ def stop(user=False, role=None, cli=False, **kwargs):
         print "Stoping archipelago"
         print "===================="
         print ""
+    if not loaded_module("blktap"):
+        stop_peers(peers, cli)
+        time.sleep(0.5)
+        get_segment().destroy()
+        return
+
     if cli:
         if vlmc_showmapped() > 0:
             raise Error("Cannot stop archipelago. Mapped volumes exist")

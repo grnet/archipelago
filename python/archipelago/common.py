@@ -59,13 +59,11 @@ random.seed()
 hostname = socket.gethostname()
 
 valid_role_types = ['file_blocker', 'rados_blocker', 'mapperd', 'vlmcd']
-valid_segment_types = ['segdev', 'posix']
+valid_segment_types = ['posix']
 
 peers = dict()
 xsegbd_args = []
 segment = None
-modules = ['xseg', 'segdev', 'xseg_posix', 'xseg_pthread', 'xseg_segdev']
-xsegbd = 'xsegbd'
 
 BIN_DIR = '/usr/bin/'
 DEFAULTS = '/etc/archipelago/archipelago.conf'
@@ -80,10 +78,6 @@ LOGS_PATH = "/var/log/archipelago"
 LOCK_PATH = "/var/lock"
 DEVICE_PREFIX = "/dev/xsegbd"
 XSEGBD_SYSFS = "/sys/bus/xsegbd/"
-
-CHARDEV_NAME = "/dev/segdev"
-CHARDEV_MAJOR = 60
-CHARDEV_MINOR = 0
 
 REQS = 512
 
@@ -400,9 +394,9 @@ class Vlmcd(Peer):
 
 config = {
     'CEPH_CONF_FILE': '/etc/ceph/ceph.conf',
-#    'SPEC': "segdev:xsegbd:1024:5120:12",
-    'SEGMENT_TYPE': 'segdev',
-    'SEGMENT_NAME': 'xsegbd',
+#    'SPEC': "posix:archipelago:1024:5120:12",
+    'SEGMENT_TYPE': 'posix',
+    'SEGMENT_NAME': 'archipelago',
     'SEGMENT_DYNPORTS': 1024,
     'SEGMENT_PORTS': 2048,
     'SEGMENT_SIZE': 5120,
@@ -445,8 +439,8 @@ class Error(Exception):
         return self.msg
 
 class Segment(object):
-    type = 'segdev'
-    name = 'xsegbd'
+    type = 'posix'
+    name = 'archipelago'
     dyports = 1024
     ports = 2048
     size = 5120
