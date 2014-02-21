@@ -44,7 +44,7 @@ from subprocess import check_call
 from .common import *
 from .vlmc import showmapped as vlmc_showmapped
 from .vlmc import get_mapped as vlmc_get_mapped
-
+from blktap import VlmcTapdisk
 
 def start_peer(peer, cli=False):
     if peer.is_running():
@@ -145,7 +145,14 @@ def start(user=False, role=None, cli=False, **kwargs):
         return start_peer(p, cli)
 
     if user:
-        return start_peers(peers, cli)
+        get_segment().create()
+        start_peers(peers, cli)
+        mapped = vlmc_get_mapped()
+        if mapped:
+            for m in mapped:
+                if VlmcTapdisk.is_paused(m.device):
+                    VlmcTapdisk.unpause(m.device)
+        return
 
     if status() > 0:
         raise Error("Cannot start. Try stopping first")
@@ -174,7 +181,13 @@ def stop(user=False, role=None, cli=False, **kwargs):
             raise Error("Invalid peer %s" % role)
         return stop_peer(p, cli)
     if user:
-        return stop_peers(peers, cli)
+        mapped = vlmc_get_mapped()
+        if mapped:
+            for m in mapped:
+                if not VlmcTapdisk.is_paused(m.device):
+                    VlmcTapdisk.pause(m.device)
+        stop_peers(peers, cli)
+        return get_segment().destroy()
     #check devices
     if cli:
         print "===================="
