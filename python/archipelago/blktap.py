@@ -160,7 +160,7 @@ class VlmcTapdisk(object):
     def unpause(device):
         tapdisk = VlmcTapdisk.fromDevice(device)
         if tapdisk and tapdisk.pid:
-            VlmcTapdisk.exc('pause',
+            VlmcTapdisk.exc('unpause',
                             '-p%s' % tapdisk.pid,
                             '-m%s' % tapdisk.minor)
 
@@ -180,3 +180,13 @@ class VlmcTapdisk(object):
                 return True
         fd.close()
         return False
+
+    @staticmethod
+    def is_paused(device):
+        tapdisk = VlmcTapdisk.fromDevice(device)
+        if tapdisk:
+            if tapdisk.state == '0x2a':
+                return True
+            else:
+                return False
+        return None
