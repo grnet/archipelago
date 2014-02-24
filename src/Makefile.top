@@ -1,0 +1,4 @@
+install: $(XSEG_INSTALL_TARGETS)
+	install -d $(DESTDIR)$(confdir)
+	install -o 0 -g 0 -m 644 -t $(DESTDIR)$(confdir) conf/archipelago.conf
+	install -o 0 -g 0 -m 644 -t $(DESTDIR)$(confdir) conf/archipelago.conf.rados_example
