@@ -66,9 +66,9 @@ class TestCluster(Cluster):
 #        self.execute_command('python /root/qa/tests.py -v MapperdTest', verbose=True)
 #        self.execute_command('python /root/qa/tests.py -v VlmcdTest', verbose=True)
 
-#        self.execute_command('mkdir  -p /srv/archip/blocks')
-#        self.execute_command('mkdir  -p /srv/archip/maps')
-#        self.execute_command('mkdir  -p /mnt/mountpoint')
+        self.execute_command('mkdir  -p /srv/archip/blocks')
+        self.execute_command('mkdir  -p /srv/archip/maps')
+        self.execute_command('mkdir  -p /mnt/mountpoint')
         self.execute_command('archipelago start')
         self.execute_command('python /root/tests/basictest.py', verbose=True)
 
