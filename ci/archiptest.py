@@ -57,10 +57,10 @@ class TestCluster(Cluster):
         archipelago-rados_*_amd64.deb           \
         archipelago-rados-dbg_*_amd64.deb       \
         archipelago-ganeti_*_amd64.deb"""
-        self.install_packages(['blktap-utils'])
         remote_folder = os.path.normpath(packages_dir)
         remote_folder = os.path.basename(remote_folder)
         self.execute_command('cd /root/' + remote_folder + ' ; ' + cmd)
+        self.install_packages(['blktap-utils'])
         self.execute_command('python /root/tests/tests.py -v', verbose=True)
 #        self.execute_command('python /root/qa/tests.py -v FiledTest', verbose=True)
 #        self.execute_command('python /root/qa/tests.py -v MapperdTest', verbose=True)
