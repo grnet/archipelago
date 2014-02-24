@@ -60,16 +60,17 @@ class TestCluster(Cluster):
         remote_folder = os.path.normpath(packages_dir)
         remote_folder = os.path.basename(remote_folder)
         self.execute_command('cd /root/' + remote_folder + ' ; ' + cmd)
+        self.install_packages(['blktap-utils'])
         self.execute_command('python /root/tests/tests.py -v', verbose=True)
 #        self.execute_command('python /root/qa/tests.py -v FiledTest', verbose=True)
 #        self.execute_command('python /root/qa/tests.py -v MapperdTest', verbose=True)
 #        self.execute_command('python /root/qa/tests.py -v VlmcdTest', verbose=True)
 
-#        self.execute_command('mkdir  -p /srv/archip/blocks')
-#        self.execute_command('mkdir  -p /srv/archip/maps')
-#        self.execute_command('mkdir  -p /mnt/mountpoint')
-#        self.execute_command('archipelago start')
-#        self.execute_command('python /root/qa/basictest.py', verbose=True)
+        self.execute_command('mkdir  -p /srv/archip/blocks')
+        self.execute_command('mkdir  -p /srv/archip/maps')
+        self.execute_command('mkdir  -p /mnt/mountpoint')
+        self.execute_command('archipelago start')
+        self.execute_command('python /root/tests/basictest.py', verbose=True)
 
 if __name__ == '__main__':
     now = datetime.datetime.now().strftime('%b-%d-%I%M%p-%G')
