@@ -1,7 +1,6 @@
 Archipelago
 ^^^^^^^^^^^
 
-
 Overview
 ========
 
@@ -37,3 +36,4 @@ install, configure and use Archipelago:
 
    archipelago
    archipelago_deploy
+   design/index
