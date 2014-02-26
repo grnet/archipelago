@@ -28,6 +28,7 @@ We present on the list below the design docs so far:
    :numbered:
    :glob:
 
+   design_entities
    design_cached_namespaces
    design_cached_flows
    design_xseg_signals
