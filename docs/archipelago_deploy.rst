@@ -213,10 +213,6 @@ Available commands:
   for usage. The actual blocks are removed later, when a garbage collection is
   invoked.
 
-.. * **list**: Provides a list of archipelago volume currently found on storage
-..
-..   Usage: ``$ vlmc list``
-
 * **info**: shows volume information. Currently returns only the volume size.
 
   Usage: ``$ vlmc info <volumename>``
@@ -254,28 +250,3 @@ Available commands:
   in the first place. To unlock a volume from another blocker, ``-f`` option
   must be used to break the lock.
 
-Archipelago volume locking system
-*********************************
-
-Archipelago uses volume storage based locks, to get exclusive access to volumes.
-Since a volume can be active in only one VM, locks are used to ensure that
-restriction. But since locks are storage based, they are permanent and
-independent from the process or subsystem that acquired them. So, if a process, 
-an archipelago deployment on a node misbehaves or crashes, or even a hypervisor
-management software (e.g. ganeti) fails to perform a migration, there might be an
-inconsistency. Knowledge of locking behavior in archipelago is necessary in
-order to surpass these problems.
-
-#TODO FILL ME
-
-locking is cached on mapper
-
-Persistent locks. held if a process/blocker stops/fails/crashes
-
-lock is acquired with best effort mode:
-
-* reads: try to get it, but do not fail if not able to. just don't cache anything
-* writes: try to get it, and wait until the owner free it.
-* snapshot/remove/create etc: Try to get it. Fail if not able to.
-
-during migrations: blah blah
