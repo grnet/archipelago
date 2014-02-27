@@ -258,6 +258,7 @@ def lock(name, cli=False, **kwargs):
     req.submit()
     req.wait()
     ret = req.success()
+    req.put()
     xseg_ctx.shutdown()
     if not ret:
         raise Error("vlmc lock failed")
@@ -277,6 +278,7 @@ def unlock(name, force=False, cli=False, **kwargs):
     req.submit()
     req.wait()
     ret = req.success()
+    req.put()
     xseg_ctx.shutdown()
     if not ret:
         raise Error("vlmc unlock failed")
@@ -295,6 +297,7 @@ def open_volume(name, cli=False, **kwargs):
     req.submit()
     req.wait()
     ret = req.success()
+    req.put()
     xseg_ctx.shutdown()
     if not ret:
         raise Error("vlmc open failed")
@@ -313,6 +316,7 @@ def close_volume(name, cli=False, **kwargs):
     req.submit()
     req.wait()
     ret = req.success()
+    req.put()
     xseg_ctx.shutdown()
     if not ret:
         raise Error("vlmc close failed")
@@ -333,6 +337,7 @@ def info(name, cli=False, **kwargs):
     ret = req.success()
     if ret:
         size = req.get_data(xseg_reply_info).contents.size
+    req.put()
     xseg_ctx.shutdown()
     if not ret:
         raise Error("vlmc info failed")
