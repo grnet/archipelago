@@ -37,7 +37,8 @@ project (archipelago_extscripts)
 
 SET(EXTDIR /usr/share/ganeti/extstorage/archipelago)
 
-INSTALL(FILES vlmc_wrapper.py parameters.list DESTINATION ${EXTDIR})
+INSTALL(FILES parameters.list DESTINATION ${EXTDIR})
+INSTALL(PROGRAMS vlmc_wrapper.py DESTINATION ${EXTDIR})
 
 install(CODE "EXECUTE_PROCESS(COMMAND ${CMAKE_COMMAND} -E
 	create_symlink  vlmc_wrapper.py
