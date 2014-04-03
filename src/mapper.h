@@ -95,6 +95,7 @@ typedef void (*cb_t)(struct peer_req *pr, struct xseg_request *req);
 #define MF_OBJECT_WRITABLE	(1 << 0)
 #define MF_OBJECT_ARCHIP	(1 << 1)
 #define MF_OBJECT_ZERO		(1 << 2)
+#define MF_OBJECT_DELETED	(1 << 3)
 
 /* run time map object state flags */
 #define MF_OBJECT_COPYING	(1 << 0)
