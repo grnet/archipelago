@@ -104,6 +104,7 @@ int read_object_v2(struct map_node *mn, unsigned char *buf)
 	mn->flags |= MF_OBJECT_WRITABLE & c;
 	mn->flags |= MF_OBJECT_ARCHIP & c;
 	mn->flags |= MF_OBJECT_ZERO & c;
+	mn->flags |= MF_OBJECT_DELETED & c;
 	objectlen = *(typeof(objectlen) *)(buf + 1);
 	mn->objectlen = objectlen;
 	if (mn->objectlen > v2_max_objectlen) {
@@ -130,6 +131,7 @@ void object_to_map_v2(unsigned char* buf, struct map_node *mn)
 	buf[0] |= mn->flags & MF_OBJECT_WRITABLE;
 	buf[0] |= mn->flags & MF_OBJECT_ARCHIP;
 	buf[0] |= mn->flags & MF_OBJECT_ZERO;
+	buf[0] |= mn->flags & MF_OBJECT_DELETED;
 
 	if (!__builtin_types_compatible_p(typeof(mn->objectlen), typeof(*objectlen))) {
 		XSEGLOG2(&lc, W, "Mapnode objectlen incompatible with map "
