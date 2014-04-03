@@ -33,6 +33,8 @@
  */
 
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 #include <unistd.h>
 #include <sys/types.h>
 #include <xseg/xseg.h>
@@ -899,54 +901,162 @@ out_err:
 	return NULL;
 }
 
-#if 0
-struct xseg_request * __delete_object(struct peer_req *pr, struct map_node *mn)
+static int __object_delete_delete_cb(struct peer_req *pr, struct xseg_request *req,
+		struct map_node *mn)
 {
-	void *dummy;
+	struct peerd *peer = pr->peer;
+	struct map *map;
+	struct xseg_request *xreq;
+	struct map_node newmn;
+	int r;
+	struct mapper_io *mio = __get_mapper_io(pr);
+
+	mn->state &= ~MF_OBJECT_DELETING;
+
+	map = mn->map;
+	if (!map){
+		XSEGLOG2(&lc, E, "Object %s has no map back pointer", mn->object);
+		return -1;
+	}
+
+	/* construct a tmp map_node for writing purposes */
+	newmn = *mn;
+	newmn.flags |= MF_OBJECT_DELETED;
+	xreq = __object_write(peer, pr, map, &newmn);
+	if (!xreq){
+		XSEGLOG2(&lc, E, "Object write returned error for object %s"
+				"\n\t of map %s [%llu]",
+				mn->object, map->volume, (unsigned long long) mn->objectidx);
+		return -1;
+	}
+	r = __set_node(mio, xreq, mn);
+	if (r < 0) {
+		XSEGLOG2(&lc, E, "Cannot set map node for object %s", mn->object);
+	}
+	mn->state |= MF_OBJECT_WRITING;
+	return 0;
+}
+
+static int __object_delete_write_cb(struct peer_req *pr, struct xseg_request *req,
+		struct map_node *mn)
+{
+	struct peerd *peer = pr->peer;
+	struct map_node tmp;
+	char *data;
+
+	//assert mn->state & MF_OBJECT_WRITING
+	mn->state &= ~MF_OBJECT_WRITING;
+
+	/* update object on cache */
+	mn->flags |= MF_OBJECT_DELETED;
+	return 0;
+}
+
+void object_delete_cb(struct peer_req *pr, struct xseg_request *req)
+{
+	struct mapper_io *mio = __get_mapper_io(pr);
+	struct peerd *peer = pr->peer;
+	struct map_node *mn = __get_node(mio, req);
+	struct xseg_reply_hash *xreply;
+
+	__set_node(mio, req, NULL);
+
+	if (!mn) {
+		XSEGLOG2(&lc, E, "Cannot get mapnode");
+		mio->err = 1;
+		goto out_err;
+	}
+
+	if (req->state & XS_FAILED){
+		XSEGLOG2(&lc, E, "Req failed");
+		mn->state &= ~MF_OBJECT_DELETING;
+		mn->state &= ~MF_OBJECT_WRITING;
+		goto out_err;
+	}
+	if (req->op == X_WRITE) {
+		if (__object_delete_write_cb(pr, req, mn) < 0) {
+			goto out_err;
+		}
+		XSEGLOG2(&lc, I, "Object write of %s completed successfully",
+				mn->object);
+		mio->pending_reqs--;
+		signal_mapnode(mn);
+		//put mapnode here to match get on do_destroy()
+		put_mapnode(mn);
+		signal_pr(pr);
+	} else if (req->op == X_DELETE) {
+	//	issue write_object;
+		if (__object_delete_delete_cb(pr, req, mn) < 0) {
+			goto out_err;
+		}
+		XSEGLOG2(&lc, I, "Object deletion of %s completed. "
+				 "Pending writing.", mn->object);
+	} else {
+		//wtf??
+		;
+	}
+
+out:
+	put_request(pr, req);
+	return;
+
+out_err:
+	mio->pending_reqs--;
+	XSEGLOG2(&lc, D, "Mio->pending_reqs: %u", mio->pending_reqs);
+	mio->err = 1;
+	signal_pr(pr);
+	goto out;
+}
+
+
+struct xseg_request * __object_delete(struct peer_req *pr, struct map_node *mn)
+{
 	struct peerd *peer = pr->peer;
 	struct mapperd *mapper = __get_mapperd(peer);
 	struct mapper_io *mio = __get_mapper_io(pr);
-	struct xseg_request *req = xseg_get_request(peer->xseg, pr->portno, 
-							mapper->bportno, X_ALLOC);
+	struct xseg_request *req;
+	int r;
+
 	XSEGLOG2(&lc, I, "Deleting mapnode %s", mn->object);
+
+	req = get_request(pr, mapper->bportno, mn->object, mn->objectlen, 0);
 	if (!req){
 		XSEGLOG2(&lc, E, "Cannot get request for object %s", mn->object);
 		goto out_err;
 	}
-	int r = xseg_prep_request(peer->xseg, req, mn->objectlen, 0);
-	if (r < 0){
-		XSEGLOG2(&lc, E, "Cannot prep request for object %s", mn->object);
-		goto out_put;
-	}
-	char *target = xseg_get_target(peer->xseg, req);
-	strncpy(target, mn->object, req->targetlen);
+
 	req->op = X_DELETE;
 	req->size = req->datalen;
 	req->offset = 0;
-	r = xseg_set_req_data(peer->xseg, req, pr);
-	if (r < 0){
-		XSEGLOG2(&lc, E, "Cannot set req data for object %s", mn->object);
+
+	r = __set_node(mio, req, mn);
+	if (r < 0) {
+		XSEGLOG2(&lc, E, "Cannot set map node for object %s", mn->object);
 		goto out_put;
 	}
-	xport p = xseg_submit(peer->xseg, req, pr->portno, X_ALLOC);
-	if (p == NoPort){
-		XSEGLOG2(&lc, E, "Cannot submit request for object %s", mn->object);
-		goto out_unset;
+	r = send_request(pr, req);
+	if (r < 0) {
+		XSEGLOG2(&lc, E, "Cannot send request %p, pr: %p, object: %s",
+				req, pr, mn->object);
+		goto out_unset_node;
 	}
-	r = xseg_signal(peer->xseg, p);
 	mn->flags |= MF_OBJECT_DELETING;
 	XSEGLOG2(&lc, I, "Object %s deletion pending", mn->object);
+
+	mio->pending_reqs++;
+
 	return req;
 
-out_unset:
-	xseg_get_req_data(peer->xseg, req, &dummy);
+out_unset_node:
+	__set_node(mio, req, NULL);
 out_put:
-	xseg_put_request(peer->xseg, req, pr->portno);
+	put_request(pr, req);
 out_err:
 	XSEGLOG2(&lc, I, "Object %s deletion failed", mn->object);
 	return NULL;
 }
 
+#if 0
 struct xseg_request * __delete_map(struct peer_req *pr, struct map *map)
 {
 	void *dummy;

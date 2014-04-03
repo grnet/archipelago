@@ -257,8 +257,8 @@ static inline void put_map(struct map *map)
 					wait_on_mapnode(mn, mn->state & MF_OBJECT_NOT_READY);
 				}
 //				mn->state |= MF_OBJECT_DESTROYED;
-				put_mapnode(mn); //matchin mn->ref = 1 on mn init
-				put_mapnode(mn); //matcing get_mapnode;
+				put_mapnode(mn); //matching mn->ref = 1 on mn init
+				put_mapnode(mn); //matching get_mapnode;
 				//assert mn->ref == 0;
 				if (mn->ref) {
 					XSEGLOG2(&lc, E, "BUG: map node ref != 0 after final put");

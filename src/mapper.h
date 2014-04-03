@@ -326,4 +326,6 @@ int initialize_map_objects(struct map *map);
 int hash_map(struct peer_req *pr, struct map *map, struct map *hashed_map);
 struct map_node * get_mapnode(struct map *map, uint64_t objindex);
 void put_mapnode(struct map_node *mn);
+struct xseg_request * __object_delete(struct peer_req *pr, struct map_node *mn);
+void object_delete_cb(struct peer_req *pr, struct xseg_request *req);
 #endif /* end MAPPER_H */
