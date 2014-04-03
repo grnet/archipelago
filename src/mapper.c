@@ -33,6 +33,8 @@
  */
 
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 #include <unistd.h>
 #include <sys/types.h>
 #include <pthread.h>
@@ -385,10 +387,10 @@ static int do_copyups(struct peer_req *pr, struct r2o *mns, int n)
 					XSEGLOG2(&lc, E, "BUG: Map node has wrong state");
 				}
 				wait_on_mapnode(mn, mn->state & MF_OBJECT_NOT_READY);
-//				if (mn->state & MF_OBJECT_DESTROYED){
-//					mio->err = 1;
-//					continue;
-//				}
+				if (mn->state & MF_OBJECT_DELETED){
+					mio->err = 1;
+					continue;
+				}
 			}
 
 			if (!(mn->flags & MF_OBJECT_WRITABLE)) {
@@ -476,6 +478,12 @@ static int req2objs(struct peer_req *pr, struct map *map, int write)
 			r = -1;
 			goto out;
 		}
+		if (mn->flags & MF_OBJECT_DELETED) {
+			XSEGLOG2(&lc, E, "Trying to perform I/O on deleted object %s",
+					mn->object);
+			r = -1;
+			goto out;
+		};
 		mns[idx].mn = mn;
 		mns[idx].offset = obj_offset;
 		mns[idx].size = obj_size;
@@ -872,11 +880,11 @@ out_err:
 /* This should probably me a map function */
 static int do_destroy(struct peer_req *pr, struct map *map)
 {
-	//uint64_t i, nr_obj;
-	//struct peerd *peer = pr->peer;
-	//struct mapper_io *mio = __get_mapper_io(pr);
-	//struct map_node *mn;
-	//struct xseg_request *req;
+	uint64_t i, nr_objs;
+	struct peerd *peer = pr->peer;
+	struct mapper_io *mio = __get_mapper_io(pr);
+	struct map_node *mn;
+	struct xseg_request *req;
 	int r;
 
 	if (!(map->state & MF_MAP_EXCLUSIVE))
@@ -890,19 +898,69 @@ static int do_destroy(struct peer_req *pr, struct map *map)
 
 	XSEGLOG2(&lc, I, "Destroying map %s", map->volume);
 	map->state |= MF_MAP_DELETING;
+
+	wait_all_map_objects_ready(map);
+
+	mio->cb = object_delete_cb;
+	nr_objs = map->nr_objs;
+	mio->pending_reqs = 0;
+	for (i = 0; i < nr_objs; i++) {
+		//throttle generated requests
+		if (mio->pending_reqs >= peer->nr_ops)
+			wait_on_pr(pr, mio->pending_reqs >= peer->nr_ops);
+
+		mn = get_mapnode(map, i);
+		if (!mn) {
+			XSEGLOG2(&lc, E, "Could not get map node %llu for map %s",
+					i, map->volume);
+			mio->err = 1;
+			break;
+		}
+
+		if (mn->state & MF_OBJECT_NOT_READY) {
+			XSEGLOG2(&lc, E, "BUG: object not ready");
+			wait_on_mapnode(mn, mn->state & MF_OBJECT_NOT_READY);
+		}
+
+		if (mn->flags & MF_OBJECT_ZERO
+			|| mn->flags & MF_OBJECT_DELETED
+			|| !(mn->flags & MF_OBJECT_ARCHIP && mn->flags & MF_OBJECT_WRITABLE)) {
+			//only remove writable archipelago objects.
+			//skip already deleted
+			XSEGLOG2(&lc, D, "Skipping object %s", mn->object);
+			put_mapnode(mn);
+			continue;
+		}
+		XSEGLOG2(&lc, D, "%s flags:\n  Writable: %s\n  Zero: %s\n"
+				"  Deleted: %s\n  Archip: %s", mn->object,
+				(mn->flags & MF_OBJECT_WRITABLE ? "yes" : "no"),
+				(mn->flags & MF_OBJECT_ZERO? "yes" : "no"),
+				(mn->flags & MF_OBJECT_DELETED? "yes" : "no"),
+				(mn->flags & MF_OBJECT_ARCHIP? "yes" : "no"));
+
+		req = __object_delete(pr, mn);
+		if (!req) {
+			put_mapnode(mn);
+			XSEGLOG2(&lc, E, "Error removing object %s", mn->object);
+			mio->err = 1;
+		}
+		//mapnode will be put by delete_object on completion
+	}
+
+	if (mio->pending_reqs > 0)
+		wait_on_pr(pr, mio->pending_reqs > 0);
+
+	if (mio->err) {
+		XSEGLOG2(&lc, E, "Error while removing objects of %s", map->volume);
+		map->state &= ~MF_MAP_DELETING;
+		return -1;
+	}
+
 	map->flags |= MF_MAP_DELETED;
-	/* Just write map here. Only thing that matters are the map flags, which
-	 * will not be overwritten by any other concurrent map write which can
-	 * be caused by a copy up. Also if by any chance, the volume is
-	 * recreated and there are pending copy ups from the old node, they will
-	 * not mess with the new one. So let's just be fast.
-	 */
-	/* we could write only metadata here to speed things up*/
-	/* Also, we could delete/truncate the unnecessary map blocks, aka all but
-	 * metadata, but that would require to make sure there are no pending
-	 * operations on any block, aka wait_all_map_objects_ready(). Or we can do
-	 * it later, with garbage collection.
-	 */
+
+	mio->cb = NULL;
+	mio->pending_reqs = 0;
+	/* Also, we could delete/truncate the unnecessary map blocks */
 	r = write_map_metadata(pr, map);
 	if (r < 0){
 		map->state &= ~MF_MAP_DELETING;
