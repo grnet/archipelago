@@ -220,7 +220,7 @@ def remove(name, assume_v0=False, v0_size=-1, **kwargs):
 
     ret = False
     xseg_ctx = Xseg_ctx(get_segment())
-    mport = peers['mapperd'].portno_start
+    mport = peers['vlmcd'].portno_start
     req = Request.get_delete_request(xseg_ctx, mport, name)
     parse_assume_v0(req, assume_v0, v0_size)
     req.submit()
