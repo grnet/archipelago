@@ -188,7 +188,7 @@ def remove(name, **kwargs):
 
     ret = False
     xseg_ctx = Xseg_ctx(get_segment())
-    mport = peers['mapperd'].portno_start
+    mport = peers['vlmcd'].portno_start
     req = Request.get_delete_request(xseg_ctx, mport, name)
     req.submit()
     req.wait()
