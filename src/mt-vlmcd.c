@@ -257,7 +257,7 @@ static int conclude_pr(struct peerd *peer, struct peer_req *pr)
 
 static int should_freeze_volume(struct xseg_request *req)
 {
-	if (req->op == X_CLOSE || req->op == X_SNAPSHOT ||
+	if (req->op == X_CLOSE || req->op == X_SNAPSHOT || req->op == X_DELETE || 
 		(req->op == X_WRITE && !req->size && (req->flags & XF_FLUSH)))
 		return 1;
 	return 0;
@@ -360,6 +360,7 @@ static int do_accepted_pr(struct peerd *peer, struct peer_req *pr)
 		case X_INFO: vio->mreq->op = X_INFO; break;
 		case X_CLOSE: vio->mreq->op = X_CLOSE; break;
 		case X_OPEN: vio->mreq->op = X_OPEN; break;
+		case X_DELETE: vio->mreq->op = X_DELETE; break;
 		case X_SNAPSHOT:
 			     //FIXME hack
 			     vio->mreq->op = X_SNAPSHOT;
@@ -607,6 +608,40 @@ static int mapping_snapshot(struct peerd *peer, struct peer_req *pr)
 	return 0;
 }
 
+static int mapping_delete(struct peerd *peer, struct peer_req *pr)
+{
+	struct vlmcd *vlmc = __get_vlmcd(peer);
+	struct vlmc_io *vio = __get_vlmcio(pr);
+	char *target = xseg_get_target(peer->xseg, pr->req);
+	struct volume_info *vi = find_volume_len(vlmc, target, pr->req->targetlen);
+	if (vio->mreq->state & XS_FAILED){
+		XSEGLOG2(&lc, E, "req %lx (op: %d) failed",
+				(unsigned long)vio->mreq, vio->mreq->op);
+		vio->err = 1;
+	}
+
+	xseg_put_request(peer->xseg, vio->mreq, pr->portno);
+	vio->mreq = NULL;
+	conclude_pr(peer, pr);
+
+	//assert volume freezed
+	//unfreeze
+	if (!vi){
+		XSEGLOG2(&lc, E, "Volume has no volume info");
+		return 0;
+	}
+	XSEGLOG2(&lc, D, "Unfreezing volume %s", vi->name);
+	vi->flags &= ~ VF_VOLUME_FREEZED;
+
+	xqindex xqi;
+	while (vi->pending_reqs && !(vi->flags & VF_VOLUME_FREEZED) &&
+			(xqi = __xq_pop_head(vi->pending_reqs)) != Noneidx) {
+		struct peer_req *ppr = (struct peer_req *) xqi;
+		do_accepted_pr(peer, ppr);
+	}
+	return 0;
+}
+
 static int mapping_readwrite(struct peerd *peer, struct peer_req *pr)
 {
 	struct vlmcd *vlmc = __get_vlmcd(peer);
@@ -732,6 +767,9 @@ static int handle_mapping(struct peerd *peer, struct peer_req *pr,
 			break;
 		case X_CLOSE:
 			mapping_close(peer, pr);
+			break;
+		case X_DELETE:
+			mapping_delete(peer, pr);
 			break;
 		case X_OPEN:
 			mapping_open(peer, pr);
