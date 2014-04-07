@@ -34,5 +34,6 @@ install, configure and use Archipelago:
    :glob:
 
    archipelago
-   archipelago_deploy
+   installation_guide
+   administration_guide
    design/index
