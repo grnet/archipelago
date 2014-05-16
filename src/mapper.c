@@ -33,6 +33,7 @@
  */
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <unistd.h>
 #include <sys/types.h>
 #include <pthread.h>
@@ -112,16 +113,16 @@ static struct map * find_map_len(struct mapperd *mapper, char *target,
 		return NULL;
 	}
 
-	if (flags & MF_ARCHIP){
-		strncpy(buf, MAPPER_PREFIX, MAPPER_PREFIX_LEN);
-		strncpy(buf + MAPPER_PREFIX_LEN, target, targetlen);
-		buf[MAPPER_PREFIX_LEN + targetlen] = 0;
-		targetlen += MAPPER_PREFIX_LEN;
-	}
-	else {
+//	if (flags & MF_ARCHIP){
+//		strncpy(buf, MAPPER_PREFIX, MAPPER_PREFIX_LEN);
+//		strncpy(buf + MAPPER_PREFIX_LEN, target, targetlen);
+//		buf[MAPPER_PREFIX_LEN + targetlen] = 0;
+//		targetlen += MAPPER_PREFIX_LEN;
+//	}
+//	else {
 		strncpy(buf, target, targetlen);
 		buf[targetlen] = 0;
-	}
+//	}
 
 	XSEGLOG2(&lc, D, "looking up map %s, len %u",
 			buf, targetlen);
@@ -285,25 +286,17 @@ static struct map * create_map(char *name, uint32_t namelen, uint32_t flags)
 		return NULL;
 	}
 	m->size = -1;
-	if (flags & MF_ARCHIP){
-		strncpy(m->volume, MAPPER_PREFIX, MAPPER_PREFIX_LEN);
-		strncpy(m->volume + MAPPER_PREFIX_LEN, name, namelen);
-		m->volume[MAPPER_PREFIX_LEN + namelen] = 0;
-		m->volumelen = MAPPER_PREFIX_LEN + namelen;
-		/* Use the latest map version here, when creating a new map. If
-		 * the map is read from storage, this version will be rewritten
-		 * with the right value.
-		 */
-		m->version = MAP_LATEST_VERSION;
-		m->flags = 0;
-	}
-	else {
-		strncpy(m->volume, name, namelen);
-		m->volume[namelen] = 0;
-		m->volumelen = namelen;
-		m->version = 0; /* version 0 should be pithos maps */
-		m->flags = MF_MAP_READONLY;
-	}
+	strncpy(m->volume, name, namelen);
+	m->volume[namelen] = 0;
+	m->volumelen = namelen;
+	/* Use the latest map version here, when creating a new map. If
+	 * the map is read from storage, this version will be rewritten
+	 * with the right value.
+	 */
+	m->version = MAP_LATEST_VERSION;
+	m->flags = 0;
+
+	m->signature = MAP_SIGNATURE;
 	m->epoch = 0;
 	m->state = 0;
 	m->nr_objs = 0;
@@ -1223,14 +1216,9 @@ void * handle_clone(struct peer_req *pr)
 		goto out;
 	}
 
-	if (xclone->targetlen){
-		/* if snap was defined */
-		if (pr->req->flags & XF_CONTADDR)
-			r = map_action(do_clone, pr, xclone->target,
-					xclone->targetlen, MF_LOAD);
-		else
-			r = map_action(do_clone, pr, xclone->target,
-					xclone->targetlen, MF_LOAD|MF_ARCHIP);
+	if (xclone->targetlen) {
+		r = map_action(do_clone, pr, xclone->target,
+				xclone->targetlen, MF_LOAD|MF_ARCHIP);
 	} else {
 		/* else try to create a new volume */
 		XSEGLOG2(&lc, I, "Creating volume");
@@ -1374,7 +1362,6 @@ void * handle_open(struct peer_req *pr)
 {
 	struct peerd *peer = pr->peer;
 	char *target = xseg_get_target(peer->xseg, pr->req);
-	//here we do not want to load
 	int r = map_action(do_open, pr, target, pr->req->targetlen,
 				MF_ARCHIP|MF_LOAD|MF_EXCLUSIVE);
 	if (r < 0)

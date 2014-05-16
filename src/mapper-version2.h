@@ -58,13 +58,15 @@
 #define v2_read_chunk_size (v2_nr_objs_per_chunk * v2_objectsize_in_map)
 
 /* Map header contains:
- * 	map version - uint32_t
- * 	volume size - uint64_t
- * 	block size  - uint32_t
- * 	map flags   - uint32_t
- * 	map epoch   - uint64_t
+ * 	map version   - uint32_t
+ * 	map signature - uint32_t
+ * 	volume size   - uint64_t
+ * 	block size    - uint32_t
+ * 	map flags     - uint32_t
+ * 	map epoch     - uint64_t
  */
 #define v2_mapheader_size (sizeof(uint32_t) + \
+			   sizeof(uint32_t) + \
 			   sizeof(uint64_t) + \
 			   sizeof(uint32_t) + \
 			   sizeof(uint32_t) + \

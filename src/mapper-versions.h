@@ -47,12 +47,14 @@
  * permament storage.
  *
  * version
+ * signature
  * size
  * blocksize
  * epoch
  * flags
  */
 #define MAX_MAPHEADER_SIZE (sizeof(uint32_t) \
+			  + sizeof(uint64_t) \
 			  + sizeof(uint64_t) \
 			  + sizeof(uint32_t) \
 			  + sizeof(uint64_t) \

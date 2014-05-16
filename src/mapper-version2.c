@@ -112,10 +112,10 @@ int read_object_v2(struct map_node *mn, unsigned char *buf)
 		return -1;
 	}
 
-	if (mn->flags & MF_OBJECT_ARCHIP){
-		strcpy(mn->object, MAPPER_PREFIX);
-		len += MAPPER_PREFIX_LEN;
-	}
+//	if (mn->flags & MF_OBJECT_ARCHIP){
+//		strcpy(mn->object, MAPPER_PREFIX);
+//		len += MAPPER_PREFIX_LEN;
+//	}
 	memcpy(mn->object + len, buf + sizeof(objectlen) + 1, mn->objectlen);
 	mn->object[mn->objectlen] = 0;
 
@@ -143,10 +143,10 @@ void object_to_map_v2(unsigned char* buf, struct map_node *mn)
 	}
 
 	len = 0;
-	if (mn->flags & MF_OBJECT_ARCHIP){
-		/* strip common prefix */
-		len += MAPPER_PREFIX_LEN;
-	}
+//	if (mn->flags & MF_OBJECT_ARCHIP){
+//		/* strip common prefix */
+//		len += MAPPER_PREFIX_LEN;
+//	}
 	memcpy((buf + 1 + sizeof(uint32_t)), mn->object + len, mn->objectlen);
 }
 
@@ -616,6 +616,8 @@ int read_map_metadata_v2(struct map *map, unsigned char *metadata,
 	/* read header */
 	map->version = *(uint32_t *)(metadata + pos);
 	pos += sizeof(uint32_t);
+	map->signature = *(uint32_t *)(metadata + pos);
+	pos += sizeof(uint32_t);
 	map->size = *(uint64_t *)(metadata + pos);
 	pos += sizeof(uint64_t);
 	map->blocksize = *(uint32_t *)(metadata + pos);
@@ -658,6 +660,8 @@ struct xseg_request * __write_map_metadata_v2(struct peer_req *pr, struct map *m
 	pos = 0;
 	memcpy(data + pos, &map->version, sizeof(map->version));
 	pos += sizeof(map->version);
+	memcpy(data + pos, &map->signature, sizeof(map->signature));
+	pos += sizeof(map->signature);
 	memcpy(data + pos, &map->size, sizeof(map->size));
 	pos += sizeof(map->size);
 	memcpy(data + pos, &map->blocksize, sizeof(map->blocksize));

@@ -140,8 +140,14 @@ struct map_node {
 				MF_MAP_SNAPSHOTTING|MF_MAP_SERIALIZING|        \
 				MF_MAP_HASHING)
 
+
+/* hex value of "AMF." 
+ * Stands for Archipelago Map Format */
+#define MAP_SIGNATURE (uint32_t)(0x414d462e)
+
 struct map {
 	uint32_t version;
+	uint32_t signature;
 	uint64_t epoch;
 	uint32_t flags;
 	volatile uint32_t state;

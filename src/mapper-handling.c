@@ -44,6 +44,9 @@
 #include <mapper-versions.h>
 #include <xseg/xhash.h>
 
+
+#define NO_V0SIZE ((uint64_t)-1)
+
 static uint32_t nr_reqs = 0;
 static uint32_t waiters_for_req = 0;
 st_cond_t req_cond;
@@ -416,15 +419,10 @@ int load_map_metadata(struct peer_req *pr, struct map *map)
 	char nulls[sizeof(map->version)];
 	char *data;
 	uint32_t version;
+	uint32_t signature;
+	uint32_t assume_v0 = pr->req->flags & XF_ASSUMEV0;
+	uint32_t assume_v1 = 0;
 
-	/* Catch pithos map here */
-	type = map->version > 0 ? 1 : 0;
-	XSEGLOG2(&lc, I, "Type %d detected for map %s", type, map->volume);
-	if (!type) {
-		map_functions[0].read_map_metadata(map, (unsigned char *)map->size,
-				sizeof(map->size));
-		return 0;
-	}
 
 	req = __load_map_metadata(pr, map);
 	if (!req) {
@@ -453,16 +451,34 @@ int load_map_metadata(struct peer_req *pr, struct map *map)
 	}
 
 	version = *(uint32_t *)data;
+	signature = *(uint32_t *)(data + sizeof(uint32_t));
+
+	if (signature != MAP_SIGNATURE) {
+		if (assume_v0) {
+			/* assume v0 */
+			version = 0;
+		}
+		/* Version 1 does not have a signature */
+		else if (version == 1 || assume_v1) {
+			version = 1;
+		} else {
+			XSEGLOG2(&lc, E, "No signature found");
+			goto out_put;
+		}
+	}
+
+
 	if (version > MAP_LATEST_VERSION) {
 		XSEGLOG2(&lc, E, "Loaded invalid version %u > "
 				"latest version %u",
-				map->version, MAP_LATEST_VERSION);
+				version, MAP_LATEST_VERSION);
 		goto out_put;
 	}
 
 	map->version = version;
 	r = map_functions[version].read_map_metadata(map, (unsigned char *)data,
-							req->serviced);
+			req->serviced);
+
 	if (r < 0) {
 		goto out_put;
 	}
@@ -482,6 +498,8 @@ int load_map(struct peer_req *pr, struct map *map)
 	//struct xseg_request *req;
 	int r;
 	uint32_t prev_version;
+	uint64_t v0_size = NO_V0SIZE;
+	uint64_t nr_objs = 0;
 
 	XSEGLOG2(&lc, I, "Loading map %s", map->volume);
 
@@ -496,8 +514,21 @@ int load_map(struct peer_req *pr, struct map *map)
 	if (r < 0)
 		goto out_err;
 
-	if (map->version > 0 && map->version != MAP_LATEST_VERSION &&
-			map->state & MF_MAP_EXCLUSIVE) {
+	v0_size = pr->req->v0_size;
+	if (map->version == 0 && v0_size != NO_V0SIZE) {
+		nr_objs =__calc_map_obj(v0_size, MAPPER_DEFAULT_BLOCKSIZE);
+		if (map->nr_objs != nr_objs) {
+			XSEGLOG2(&lc, E, "Size of v0 map invalid. "
+					"Read %llu objs vs %llu expected",
+					map->nr_objs, nr_objs);
+			goto out_err;
+		} else {
+			map->size = v0_size;
+		}
+	}
+
+	if (map->version != MAP_LATEST_VERSION &&
+			(map->state & MF_MAP_EXCLUSIVE)) {
 		/* update map to the latest version */
 		/* FIXME assert that all old map data are overwritten */
 		prev_version = map->version;
@@ -603,7 +634,7 @@ struct xseg_request * __copyup_object(struct peer_req *pr, struct map_node *mn)
 	char hexlified_epoch[HEXLIFIED_EPOCH];
 	char hexlified_index[HEXLIFIED_INDEX];
 
-	strncpy(new_target, MAPPER_PREFIX, MAPPER_PREFIX_LEN);
+//	strncpy(new_target, MAPPER_PREFIX, MAPPER_PREFIX_LEN);
 
 	hexlify((unsigned char *)&map->epoch, sizeof(map->epoch), hexlified_epoch);
 	hexlify((unsigned char *)&mn->objectidx, sizeof(mn->objectidx), hexlified_index);
