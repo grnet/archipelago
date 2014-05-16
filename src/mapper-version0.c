@@ -258,7 +258,7 @@ retry:
 }
 
 int read_map_metadata_v0(struct map *map, unsigned char *metadata,
-		uint32_t metadata_len)
+		uint64_t metadata_len)
 {
 	/* No header. Just set defaults */
 	map->version = 0;

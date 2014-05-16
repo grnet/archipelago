@@ -311,7 +311,7 @@ int load_map_data_v1(struct peer_req *pr, struct map *map)
 }
 
 int read_map_metadata_v1(struct map *map, unsigned char *metadata,
-		uint32_t metadata_len)
+		uint64_t metadata_len)
 {
 	uint64_t pos;
 	if (metadata_len < v1_mapheader_size) {

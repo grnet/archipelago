@@ -76,7 +76,7 @@ struct xseg_request * prepare_write_object_v2(struct peer_req *pr,
 				struct map *map, struct map_node *mn);
 //int read_map_v2(struct map *m, unsigned char * data);
 int read_map_metadata_v2(struct map *map, unsigned char *metadata,
-		uint32_t metadata_len);
+		uint64_t metadata_len);
 int load_map_data_v2(struct peer_req *pr, struct map *map);
 //int write_map_v2(struct peer_req *pr, struct map *map);
 int write_map_metadata_v2(struct peer_req *pr, struct map *map);
