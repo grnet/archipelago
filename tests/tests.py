@@ -412,6 +412,15 @@ class XsegTest(unittest.TestCase):
 
     send_and_evaluate_hash = evaluate(send_hash)
 
+    def send_create(self, dst, target, mapflags=0, size=0, objects=None,
+            blocksize=None):
+        req = Request.get_create_request(self.xseg, dst, target, size=size,
+                mapflags=mapflags, blocksize=blocksize, objects=objects)
+        req.submit()
+        return req
+
+    send_and_evaluate_create = evaluate(send_create)
+
     def get_filed(self, args, clean=False):
         path = args['archip_dir']
         if not os.path.exists(path):
@@ -451,6 +460,7 @@ class VlmcdTest(XsegTest):
             'portno_end': 0,
             'daemon': True,
             'log_level': 3,
+            'direct': False,
             }
     mfiled_args = {
             'role': 'vlmctest-blockerm',
@@ -462,6 +472,7 @@ class VlmcdTest(XsegTest):
             'portno_end': 1,
             'daemon': True,
             'log_level': 3,
+            'direct': False,
             }
     mapperd_args = {
             'role': 'vlmctest-mapper',
@@ -735,8 +746,8 @@ class VlmcdTest(XsegTest):
         mh = hexlify(merkle_hash(h))
         self.assertEqual(hash_map, mh)
 
-        self.send_and_evaluate_clone(self.mapperdport, hash_map, clone=volume2,
-                clone_size=volsize * 2, expected=False)
+#        self.send_and_evaluate_clone(self.mapperdport, hash_map, clone=volume2,
+#                clone_size=volsize * 2, expected=False)
         self.send_and_evaluate_clone(self.mapperdport, hash_map, clone=volume2,
                 clone_size=volsize * 2, cont_addr=True)
         self.send_and_evaluate_read(self.vlmcdport, volume2, size=size,
@@ -756,6 +767,7 @@ class MapperdTest(XsegTest):
             'portno_end': 0,
             'daemon': True,
             'log_level': 3,
+            'direct': False,
             }
     mfiled_args = {
             'role': 'mappertest-blockerm',
@@ -767,6 +779,7 @@ class MapperdTest(XsegTest):
             'portno_end': 1,
             'daemon': True,
             'log_level': 3,
+            'direct': False,
             }
     mapperd_args = {
             'role': 'mappertest-mapper',
@@ -983,6 +996,37 @@ class MapperdTest(XsegTest):
             reqs.remove(req)
             self.assertTrue(req.put())
 
+    def test_mapr3(self):
+        volume = "myvolume"
+        volsize = 10*1024*1024
+        offset = 0
+        size = volsize
+
+
+        self.send_and_evaluate_clone(self.mapperdport, "", clone=volume,
+                clone_size=volsize)
+        stop_peer(self.mapperd)
+        start_peer(self.mapperd)
+
+        self.send_and_evaluate_acquire(self.blockerm.portno_start, volume, expected=True)
+        stop_peer(self.blockerm)
+        new_filed_args = copy(self.mfiled_args)
+        new_filed_args['unique_str'] = 'ThisisSparta'
+        self.blockerm = Filed(**new_filed_args)
+        start_peer(self.blockerm)
+
+        reqs = Set([])
+        reqs.add(self.send_map_read(self.mapperdport, volume, offset=offset,
+            size=size))
+        reqs.add(self.send_map_read(self.mapperdport, volume, offset=offset,
+            size=size))
+        ret = MapperdTest.get_zero_map_reply(offset, size)
+        while len(reqs) > 0:
+            req = self.xseg.wait_requests(reqs)
+            self.evaluate_req(req, data=ret)
+            reqs.remove(req)
+            self.assertTrue(req.put())
+
     def test_mapw(self):
         blocksize = self.blocksize
         volume = "myvolume"
@@ -1046,6 +1090,69 @@ class MapperdTest(XsegTest):
             self.evaluate_req(req, data=ret)
             reqs.remove(req)
             self.assertTrue(req.put())
+
+    def test_create(self):
+        blocksize = self.blocksize
+        volume = "myvolume"
+        volume2 = "myvolume2"
+        volume3 = "myvolume3"
+        volume4 = "myvolume4"
+        volsize = 100*1024*1024
+        offset = 0
+        epoch = 1
+
+        ret = self.get_copy_map_reply(volume, offset, volsize, epoch)
+
+        #create a new volume
+        self.send_and_evaluate_clone(self.mapperdport, "", clone=volume,
+                clone_size=volsize)
+        #write it and get objects
+        self.send_and_evaluate_map_write(self.mapperdport, volume,
+                expected_data=ret, offset=offset, size=volsize)
+
+
+        object_flags = XF_MAPFLAG_READONLY
+        objects = []
+        for i in range(0, ret.cnt):
+            objects.append({'name': ret.segs[i].target, 'flags': object_flags})
+
+        #try to create a new volume with the same name from these objects
+        self.send_and_evaluate_create(self.mapperdport, volume, size=volsize,
+                objects=objects, mapflags=0, blocksize=blocksize, expected=False)
+        #try to create a volume with less objects
+        self.send_and_evaluate_create(self.mapperdport, volume, size=2*volsize,
+                objects=objects, mapflags=0, blocksize=blocksize, expected=False)
+
+        #try to create a new volume with another name from these objects
+        self.send_and_evaluate_create(self.mapperdport, volume2, size=volsize,
+                objects=objects, mapflags=0, blocksize=blocksize)
+        #read it. Assert same objects.
+        self.send_and_evaluate_map_read(self.mapperdport, volume,
+                expected_data=ret, offset=offset, size=volsize)
+
+        ret2 = self.get_copy_map_reply(volume2, offset, volsize, epoch)
+        #write it and assert new objects.
+        self.send_and_evaluate_map_write(self.mapperdport, volume2,
+                expected_data=ret2, offset=offset, size=volsize)
+
+        #create a new map from the same objects but without the readonly flag
+        #on the objects
+        for i in range(0, len(objects)):
+            objects[i]['flags'] = 0
+        self.send_and_evaluate_create(self.mapperdport, volume3, size=volsize,
+                objects=objects, mapflags=0, blocksize=blocksize)
+        #write it and assert same objects.
+        self.send_and_evaluate_map_write(self.mapperdport, volume3,
+                expected_data=ret, offset=offset, size=volsize)
+
+        for i in range(0, len(objects)):
+            objects[i]['flags'] = XF_MAPFLAG_READONLY
+        #create a new volume with read only flag
+        self.send_and_evaluate_create(self.mapperdport, volume4, size=volsize,
+                objects=objects, mapflags=XF_MAPFLAG_READONLY, blocksize=blocksize)
+        #write it. Assert failed
+        self.send_and_evaluate_map_write(self.mapperdport, volume4,
+                offset=offset, size=volsize, expected=False)
 
 class BlockerTest(object):
     def test_write_read(self):
@@ -1154,6 +1261,7 @@ class FiledTest(BlockerTest, XsegTest):
             'portno_end': 0,
             'daemon': True,
             'log_level': 3,
+            'direct': False,
             }
 
     def setUp(self):
