@@ -1312,6 +1312,139 @@ out:
 	return NULL;
 }
 
+void * handle_create(struct peer_req *pr)
+{
+	int r;
+	struct peerd *peer = pr->peer;
+	struct xseg_request *req = pr->req;
+	//struct mapperd *mapper = __get_mapperd(peer);
+	XSEGLOG2(&lc, I, "Creating volume");
+	if (!req->size){
+		XSEGLOG2(&lc, E, "Cannot create volume. Size not specified");
+		r = -1;
+		goto out;
+	}
+	struct map *map;
+	char *target = xseg_get_target(peer->xseg, pr->req);
+
+	//create a new empty map of size
+	//ARCHIP or PITHOS
+	map = create_map(target, pr->req->targetlen, MF_ARCHIP);
+	if (!map) {
+		r = -1;
+		goto out;
+	}
+	/* open map to get exclusive access to map */
+	r = open_map(pr, map, 0);
+	if (r < 0) {
+		XSEGLOG2(&lc, E, "Cannot open map %s", map->volume);
+		XSEGLOG2(&lc, E, "Target volume %s exists", map->volume);
+		put_map(map);
+		r = -1;
+		goto out;
+	}
+	r = load_map_metadata(pr, map);
+	if (r >= 0 && !(map->flags & MF_MAP_DELETED)) {
+		XSEGLOG2(&lc, E, "Map exists %s", map->volume);
+		close_map(pr, map);
+		put_map(map);
+		r = -1;
+		goto out;
+	}
+	if (map->epoch >= UINT64_MAX - 2) {
+		XSEGLOG2(&lc, E, "Max epoch reached for %s", map->volume);
+		close_map(pr, map);
+		put_map(map);
+		r = -1;
+		goto out;
+	}
+
+
+	uint64_t nr_objs;
+	struct xseg_request_create *mapdata;
+	mapdata = (struct xseg_request_create *) xseg_get_data(peer->xseg, pr->req);
+
+	map->epoch++;
+	map->flags &= ~MF_MAP_DELETED;
+	if (mapdata->create_flags & XF_MAPFLAG_READONLY) {
+		map->flags |= MF_MAP_READONLY;
+	} else {
+		map->flags &= ~MF_MAP_READONLY;
+	}
+	map->size = req->size;
+	map->blocksize = mapdata->blocksize;
+	map->nr_objs = calc_map_obj(map);
+	map->objects = NULL;
+
+
+	nr_objs = map->nr_objs;
+	if (nr_objs != mapdata->cnt) {
+		XSEGLOG2(&lc, E, "Map size does not match supplied objects");
+		close_map(pr, map);
+		put_map(map);
+		r = -1;
+		goto out;
+	}
+
+	struct map_node *map_nodes = calloc(nr_objs, sizeof(struct map_node));
+	if (!map_nodes){
+		XSEGLOG2(&lc, E, "Cannot allocate %llu nr_objs", nr_objs);
+		close_map(pr, map);
+		put_map(map);
+		r = -1;
+		goto out;
+	}
+	map->objects = map_nodes;
+
+	uint64_t i;
+	for (i = 0; i < nr_objs; i++) {
+		map_nodes[i].objectlen = mapdata->segs[i].targetlen;
+		strncpy(map_nodes[i].object, mapdata->segs[i].target,
+				mapdata->segs[i].targetlen);
+		map_nodes[i].object[mapdata->segs[i].targetlen] = 0;
+		XSEGLOG2(&lc, D, "%d: %s (%u)", i, map_nodes[i].object,
+				mapdata->segs[i].targetlen);
+		map_nodes[i].state = 0;
+		map_nodes[i].flags = 0;
+		if (!(mapdata->segs[i].flags & XF_MAPFLAG_READONLY)) {
+			map_nodes[i].flags |= MF_OBJECT_WRITABLE;
+		}
+		if (!strncmp(map_nodes[i].object, zero_block, ZERO_BLOCK_LEN)) {
+			map_nodes[i].flags |= MF_OBJECT_ZERO;
+			//assert READONLY
+			if (map_nodes[i].flags & MF_OBJECT_WRITABLE) {
+				XSEGLOG2(&lc, W, "Zero objects must always be READONLY");
+				map_nodes[i].flags &= ~MF_OBJECT_WRITABLE;
+			}
+		}
+		map_nodes[i].objectidx = i;
+		map_nodes[i].map = map;
+		map_nodes[i].ref = 1;
+		map_nodes[i].waiters = 0;
+		map_nodes[i].cond = st_cond_new(); //FIXME errcheck;
+	}
+
+
+	r = write_map(pr, map);
+	if (r < 0){
+		XSEGLOG2(&lc, E, "Cannot write map %s", map->volume);
+		close_map(pr, map);
+		put_map(map);
+		goto out;
+	}
+	XSEGLOG2(&lc, I, "Volume %s created", map->volume);
+	r = 0;
+	close_map(pr, map);
+	put_map(map);
+out:
+	if (r < 0)
+		fail(peer, pr);
+	else
+		complete(peer, pr);
+	ta--;
+	return NULL;
+}
+
 void * handle_mapr(struct peer_req *pr)
 {
 	struct peerd *peer = pr->peer;
@@ -1444,6 +1577,7 @@ int dispatch_accepted(struct peerd *peer, struct peer_req *pr,
 		case X_OPEN: action = handle_open; break;
 		case X_CLOSE: action = handle_close; break;
 		case X_HASH: action = handle_hash; break;
+		case X_CREATE: action = handle_create; break;
 		default: fprintf(stderr, "mydispatch: unknown op\n"); break;
 	}
 	if (action){
