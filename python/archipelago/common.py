@@ -889,7 +889,7 @@ class Request(object):
     req = None
 
     def __init__(self, xseg_ctx, dst_portno, target, datalen=0, size=0, op=None,
-                 data=None, flags=0, offset=0):
+                 data=None, flags=0, offset=0, v0_size=-1):
         if not target:
             raise Error("No target")
         targetlen = len(target)
@@ -925,6 +925,7 @@ class Request(object):
         self.set_op(op)
         self.set_flags(flags)
         self.set_offset(offset)
+        self.set_v0_size(v0_size)
 
         return
 
@@ -1127,20 +1128,14 @@ class Request(object):
         return cls(xseg, dst, target, op=X_DELETE)
 
     @classmethod
-    def get_clone_request(cls, xseg, dst, target, clone=None, clone_size=0,
-            cont_addr=False):
+    def get_clone_request(cls, xseg, dst, target, clone=None, clone_size=0):
         datalen = sizeof(xseg_request_clone)
         xclone = xseg_request_clone()
         xclone.target = target
         xclone.targetlen= len(target)
         xclone.size = clone_size
 
-        flags = 0
-        if cont_addr:
-            flags = XF_CONTADDR
-
-        return cls(xseg, dst, clone, op=X_CLONE, data=xclone, datalen=datalen,
-                flags=flags)
+        return cls(xseg, dst, clone, op=X_CLONE, data=xclone, datalen=datalen)
 
     @classmethod
     def get_open_request(cls, xseg, dst, target):

@@ -111,7 +111,7 @@ def create(name, size=None, snap=None, cont_addr=False, **kwargs):
     xseg_ctx = Xseg_ctx(get_segment())
     mport = peers['mapperd'].portno_start
     req = Request.get_clone_request(xseg_ctx, mport, snap, clone=name,
-            clone_size=size, cont_addr=cont_addr)
+            clone_size=size)
     req.submit()
     req.wait()
     ret = req.success()
