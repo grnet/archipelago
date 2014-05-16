@@ -43,7 +43,11 @@ int read_object_v0(struct map_node *mn, unsigned char *buf)
 	hexlify(buf, SHA256_DIGEST_SIZE, mn->object);
 	mn->object[HEXLIFIED_SHA256_DIGEST_SIZE] = 0;
 	mn->objectlen = HEXLIFIED_SHA256_DIGEST_SIZE;
-	mn->flags = 0; //MF_OBJECT_WRITABLE;
+	mn->flags = 0; //not MF_OBJECT_WRITABLE;
+	//check if zero
+	if (!strncmp(mn->object, zero_block, ZERO_BLOCK_LEN)) {
+		mn->flags |= MF_OBJECT_ZERO;
+	}
 
 	return 0;
 }
