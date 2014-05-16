@@ -272,15 +272,20 @@ static inline struct mapper_io * __get_mapper_io(struct peer_req *pr)
 	return (struct mapper_io *) pr->priv;
 }
 
-static inline uint64_t calc_map_obj(struct map *map)
+static inline uint64_t __calc_map_obj(uint64_t size, uint32_t blocksize)
 {
 	uint64_t nr_objs;
 
-	nr_objs = map->size / map->blocksize;
-	if (map->size % map->blocksize)
+	nr_objs = size / blocksize;
+	if (size % blocksize)
 		nr_objs++;
 
 	return nr_objs;
+}
+
+static inline uint64_t calc_map_obj(struct map *map)
+{
+	return __calc_map_obj(map->size, map->blocksize);
 }
 
 /* map handling functions */
