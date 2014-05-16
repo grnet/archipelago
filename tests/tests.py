@@ -86,7 +86,7 @@ def merkle_hash(hashes):
 
 def init():
     rnd.seed()
-#    archipelago.common.BIN_DIR=os.path.join(os.getcwd(), '../../peers/user/')
+#    archipelago.common.BIN_DIR=os.path.join(os.getcwd(), '/tmp/build/src')
     archipelago.common.LOGS_PATH=os.path.join(os.getcwd(), 'logs')
     archipelago.common.PIDFILE_PATH=os.path.join(os.getcwd(), 'pids')
     if not os.path.isdir(archipelago.common.LOGS_PATH):
@@ -139,7 +139,7 @@ class XsegTest(unittest.TestCase):
         index_64_str = ctypes.string_at(index_64_char, ctypes.sizeof(ctypes.c_uint64))
         epoch_hex = hexlify(epoch_64_str)
         index_hex = hexlify(index_64_str)
-        return "archip_" + volume + "_" + epoch_hex + "_" + index_hex
+        return volume + "_" + epoch_hex + "_" + index_hex
 
     @staticmethod
     def get_map_reply(offset, size):
