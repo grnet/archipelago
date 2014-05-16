@@ -38,6 +38,7 @@
 
 #include <stddef.h>
 #include <xseg/xseg.h>
+#include <string.h>
 
 #ifdef ST_THREADS
 #include <st.h>
