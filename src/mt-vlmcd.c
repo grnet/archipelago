@@ -351,6 +351,9 @@ static int do_accepted_pr(struct peerd *peer, struct peer_req *pr)
 	vio->mreq->size = pr->req->size;
 	vio->mreq->offset = pr->req->offset;
 	vio->mreq->flags = 0;
+	/* propagate v0 info */
+	vio->mreq->flags |= pr->req->flags & XF_ASSUMEV0;
+	vio->mreq->v0_size= pr->req->v0_size;
 	switch (pr->req->op) {
 		case X_READ: vio->mreq->op = X_MAPR; break;
 		case X_WRITE: vio->mreq->op = X_MAPW; break;
