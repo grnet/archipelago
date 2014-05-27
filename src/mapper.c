@@ -920,6 +920,106 @@ static int do_destroy(struct peer_req *pr, struct map *map)
 	return 0;
 }
 
+static int do_rename(struct peer_req *pr, struct map *map)
+{
+	uint64_t i;
+	struct peerd *peer = pr->peer;
+	//struct mapper_io *mio = __get_mapper_io(pr);
+	struct map_node *mn;
+	uint64_t nr_objs;
+	struct map *new_map;
+	struct xseg_request_rename *xrename;
+	char *newname;
+	uint32_t newnamelen;
+	int r;
+
+	xrename = (struct xseg_request_rename *)xseg_get_data(peer->xseg, pr->req);
+	if (!xrename) {
+		return -1;
+	}
+	newname = xrename->target;
+	newnamelen = xrename->targetlen;
+
+	if (!newnamelen) {
+		XSEGLOG2(&lc, E, "A new name must be provided");
+		return -1;
+	}
+
+	if (!(map->state & MF_MAP_EXCLUSIVE)) {
+		XSEGLOG2(&lc, E, "Map was not opened exclusively");
+		return -1;
+	}
+	XSEGLOG2(&lc, I, "Starting rename for map %s", map->volume);
+	map->state |= MF_MAP_RENAMING;
+
+	//create new map struct with name newname.
+	new_map = create_map(newname, newnamelen, MF_ARCHIP);
+	if (!new_map) {
+		goto out_err;
+	}
+
+	//open/load map to check if snap exists
+	r = open_map(pr, new_map, 0);
+	if (r < 0) {
+		XSEGLOG2(&lc, E, "Could not open new map");
+		XSEGLOG2(&lc, E, "Rename destination exists");
+		goto out_put;
+	}
+	r = load_map_metadata(pr, new_map);
+	if (r >= 0 && !(map->flags & MF_MAP_DELETED)) {
+		XSEGLOG2(&lc, E, "Rename destination exists");
+		goto out_close;
+	}
+	if (new_map->epoch == UINT64_MAX) {
+		XSEGLOG2(&lc, E, "Max epoch reached for %s", new_map->volume);
+		goto out_close;
+	}
+
+	/* Populate new map fields */
+	new_map->epoch++;
+	new_map->objects = map->objects;
+	new_map->size = map->size;
+	new_map->blocksize = map->blocksize;
+	new_map->nr_objs = map->nr_objs;
+	new_map->flags = map->flags;
+
+	nr_objs = map->nr_objs;
+
+	//TODO, maybe skip that check and add an epoch number on each object.
+	//Then we can check if object is writable iff object epoch == map epoch
+	wait_all_map_objects_ready(map);
+
+	//write new map
+	r = write_map(pr, new_map);
+	if (r < 0) {
+		XSEGLOG2(&lc, E, "Cannot write map %s", new_map->volume);
+		goto out_unset;
+	}
+	XSEGLOG2(&lc, I, "New map %s created", new_map->volume);
+	new_map->objects = NULL;
+	close_map(pr, new_map);
+	put_map(new_map);
+	map->state &= ~MF_MAP_RENAMING;
+	XSEGLOG2(&lc, I, "Will now proceed to remove old map %s", map->volume);
+	r = do_destroy(pr, map);
+	/* Always return 0 here, since rename was a success. Log warning if
+	 * deletion failed.
+	 */
+	return 0;
+
+out_unset:
+	new_map->objects = NULL;
+out_close:
+	close_map(pr, new_map);
+out_put:
+	put_map(new_map);
+out_err:
+	map->state &= ~MF_MAP_RENAMING;
+	XSEGLOG2(&lc, E, "Rename for map %s failed", map->volume);
+	return -1;
+}
+
+
 static int do_mapr(struct peer_req *pr, struct map *map)
 {
 	struct peerd *peer = pr->peer;
@@ -1543,6 +1643,23 @@ void * handle_snapshot(struct peer_req *pr)
 	return NULL;
 }
 
+void * handle_rename(struct peer_req *pr)
+{
+	struct peerd *peer = pr->peer;
+	char *target = xseg_get_target(peer->xseg, pr->req);
+	/* request EXCLUSIVE access, but do not force it.
+	 * check if succeeded on do_snapshot
+	 */
+	int r = map_action(do_rename, pr, target, pr->req->targetlen,
+				MF_ARCHIP|MF_LOAD|MF_EXCLUSIVE);
+	if (r < 0)
+		fail(peer, pr);
+	else
+		complete(peer, pr);
+	ta--;
+	return NULL;
+}
+
 void * handle_hash(struct peer_req *pr)
 {
 	struct peerd *peer = pr->peer;
@@ -1584,6 +1701,7 @@ int dispatch_accepted(struct peerd *peer, struct peer_req *pr,
 		case X_CLOSE: action = handle_close; break;
 		case X_HASH: action = handle_hash; break;
 		case X_CREATE: action = handle_create; break;
+		case X_RENAME: action = handle_rename; break;
 		default: fprintf(stderr, "mydispatch: unknown op\n"); break;
 	}
 	if (action){
