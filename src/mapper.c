@@ -1132,7 +1132,7 @@ static int do_clone(struct peer_req *pr, struct map *map)
 		XSEGLOG2(&lc, E, "Max epoch reached for %s", clonemap->volume);
 		goto out_close;
 	}
-	clonemap->flags &= ~MF_MAP_DELETED;
+	clonemap->flags = 0;
 	clonemap->epoch++;
 
 	if (!(xclone->size))
@@ -1367,7 +1367,7 @@ void * handle_clone(struct peer_req *pr)
 			goto out;
 		}
 		map->epoch++;
-		map->flags &= ~MF_MAP_DELETED;
+		map->flags = 0;
 		map->size = xclone->size;
 		map->blocksize = MAPPER_DEFAULT_BLOCKSIZE;
 		map->nr_objs = calc_map_obj(map);
@@ -1471,7 +1471,7 @@ void * handle_create(struct peer_req *pr)
 	mapdata = (struct xseg_request_create *) xseg_get_data(peer->xseg, pr->req);
 
 	map->epoch++;
-	map->flags &= ~MF_MAP_DELETED;
+	map->flags = 0;
 	if (mapdata->create_flags & XF_MAPFLAG_READONLY) {
 		map->flags |= MF_MAP_READONLY;
 	} else {
