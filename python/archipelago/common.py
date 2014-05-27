@@ -1170,6 +1170,19 @@ class Request(object):
         return cls(xseg, dst, target, op=X_HASH, size=size, offset=offset)
 
     @classmethod
+    def get_rename_request(cls, xseg, dst, target, newname=None):
+        """
+        Return a new request, formatted as a rename request with the given
+        arguments
+        """
+        datalen = sizeof(xseg_request_rename)
+        xrename = xseg_request_rename()
+        xrename.target = newname
+        xrename.targetlen= len(newname)
+
+        return cls(xseg, dst, target, op=X_RENAME, data=xrename, datalen=datalen)
+
+    @classmethod
     def get_create_request(cls, xseg, dst, target, size=0, mapflags=None,
             objects=None, blocksize=None):
         """
