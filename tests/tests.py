@@ -349,7 +349,7 @@ class XsegTest(unittest.TestCase):
         #req = self.get_req(X_CLONE, dst, clone, data=xclone,
                 #datalen=ctypes.sizeof(xclone))
         req = Request.get_clone_request(self.xseg, dst, src_target,
-                clone=clone, clone_size=clone_size, cont_addr=cont_addr)
+                clone=clone, clone_size=clone_size)
         req.submit()
         return req
 
@@ -420,6 +420,14 @@ class XsegTest(unittest.TestCase):
         return req
 
     send_and_evaluate_create = evaluate(send_create)
+
+    def send_rename(self, dst, target, newname=None):
+        req = Request.get_rename_request(self.xseg, dst, target,
+                newname=newname)
+        req.submit()
+        return req
+
+    send_and_evaluate_rename = evaluate(send_rename)
 
     def get_filed(self, args, clean=False):
         path = args['archip_dir']
@@ -1056,6 +1064,57 @@ class MapperdTest(XsegTest):
         offset = 100*1024*1024*1024 - 1
         self.send_and_evaluate_map_write(self.mapperdport, volume,
                 offset=offset, size=size, expected=False)
+
+    def test_rename(self):
+        blocksize = self.blocksize
+        volume = "myvolume"
+        newvolume = "newvolume"
+        volsize = 100*1024*1024*1024
+        offset = 90*1024*1024*1024 - 2
+        size = 512*1024
+        epoch = 1
+        snap = "snapshot"
+
+        ret = self.get_copy_map_reply(volume, offset, size, epoch)
+        self.send_and_evaluate_rename(self.mapperdport, volume,
+                newname=newvolume, expected=False)
+        self.send_and_evaluate_clone(self.mapperdport, "", clone=volume,
+                clone_size=volsize)
+        self.send_and_evaluate_map_write(self.mapperdport, volume,
+                expected_data=ret, offset=offset, size=size)
+        self.send_and_evaluate_map_read(self.mapperdport, volume,
+                expected_data = ret, offset=offset, size=size)
+        self.send_and_evaluate_rename(self.mapperdport, volume,
+                newname=newvolume)
+
+        self.send_and_evaluate_map_write(self.mapperdport, volume,
+                offset=offset, size=size, expected=False)
+        self.send_and_evaluate_map_read(self.mapperdport, volume,
+                offset=offset, size=size, expected=False)
+
+        self.send_and_evaluate_map_read(self.mapperdport, newvolume,
+                expected_data = ret, offset=offset, size=size)
+        self.send_and_evaluate_map_write(self.mapperdport, newvolume,
+                expected_data=ret, offset=offset, size=size)
+
+        self.send_and_evaluate_clone(self.mapperdport, "", clone=newvolume,
+                clone_size=volsize, expected=False)
+
+        self.send_and_evaluate_snapshot(self.mapperdport, newvolume, snap=snap)
+
+        stop_peer(self.mapperd)
+        start_peer(self.mapperd)
+
+        self.send_and_evaluate_map_read(self.mapperdport, newvolume,
+                expected_data = ret, offset=offset, size=size)
+        self.send_and_evaluate_map_read(self.mapperdport, snap,
+                expected_data = ret, offset=offset, size=size)
+
+        ret = self.get_copy_map_reply(newvolume, offset, size, epoch+1)
+        self.send_and_evaluate_map_write(self.mapperdport, newvolume,
+                expected_data=ret, offset=offset, size=size)
+
+
 
     def test_mapw2(self):
         blocksize = self.blocksize
