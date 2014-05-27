@@ -105,6 +105,12 @@ def vlmc_parser():
     snapshot_parser.add_argument('snap_name', type=str,  help='Snapshot name')
     snapshot_parser.set_defaults(func=vlmc.snapshot)
 
+    rename_parser = subparsers.add_parser('rename', help='rename volume')
+    #group = rename_parser.add_mutually_exclusive_group(required=True)
+    rename_parser.add_argument('name', type=str,  help='volume name')
+    rename_parser.add_argument('new_name', type=str,  help='new name')
+    rename_parser.set_defaults(func=vlmc.rename)
+
 #    ls_parser = subparsers.add_parser('ls', help='List volumes')
 #    ls_parser.set_defaults(func=vlmc.list_volumes)
 #    ls_parser.add_argument('-p', '--pool', type=str, nargs='?',

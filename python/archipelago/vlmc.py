@@ -139,6 +139,28 @@ def snapshot(name, snap_name=None, cli=False, **kwargs):
     if cli:
         sys.stdout.write("Snapshot name: %s\n" % snap_name)
 
+def rename(name, newname=None, cli=False, **kwargs):
+    if len(name) < 6:
+        raise Error("Name should have at least len 6")
+
+    if len(newname) < 6:
+        raise Error("New name should have at least len 6")
+
+    xseg_ctx = Xseg_ctx(get_segment())
+    mport = peers['mapperd'].portno_start
+    req = Request.get_rename_request(xseg_ctx, mport, name, newname=newname)
+    req.submit()
+    req.wait()
+    ret = req.success()
+    req.put()
+    xseg_ctx.shutdown()
+
+    if not ret:
+        raise Error("vlmc rename failed")
+    if cli:
+        sys.stdout.write("Renamed %s to %s\n" % (name, newname))
+
+
 
 def hash(name, cli=False, **kwargs):
     if len(name) < 6:
