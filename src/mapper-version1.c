@@ -132,6 +132,13 @@ int read_map_v1(struct map *m, unsigned char *data)
 	return 0;
 }
 
+int delete_map_data_v1(struct peer_req *pr, struct map *map)
+{
+	return -1;
+	//Perhaps use X_TRUNCATE ?
+}
+
+
 struct xseg_request * __write_map_data_v1(struct peer_req *pr, struct map *map)
 {
 	int r;

@@ -279,6 +279,98 @@ int read_map_v2(struct map *m, unsigned char *data)
 	return read_map_objects_v2(m, data, 0, m->nr_objs);
 }
 
+void delete_map_data_v2_cb(struct peer_req *pr, struct xseg_request *req)
+{
+	struct mapper_io *mio = __get_mapper_io(pr);
+
+	if (req->state & XS_FAILED) {
+		mio->err = 1;
+		XSEGLOG2(&lc, E, "Request failed");
+	}
+
+	put_request(pr, req);
+	mio->pending_reqs--;
+	signal_pr(pr);
+	return;
+}
+
+
+int __delete_map_data_v2(struct peer_req *pr, struct map *map)
+{
+	int r;
+	struct peerd *peer = pr->peer;
+	struct mapperd *mapper = __get_mapperd(peer);
+	struct mapper_io *mio = __get_mapper_io(pr);
+	struct xseg_request *req;
+	char target[XSEG_MAX_TARGETLEN];
+	uint32_t targetlen;
+	uint64_t nr_objs_per_block, nr_objs_per_chunk, nr_chunks_per_block;
+	uint64_t nr_map_blocks, i;
+	char buf[sizeof(i)*2 + 1];
+
+	nr_objs_per_chunk = v2_read_chunk_size/v2_objectsize_in_map;
+	nr_chunks_per_block = map->blocksize/v2_read_chunk_size;
+	nr_objs_per_block = nr_chunks_per_block * nr_objs_per_chunk;
+	nr_map_blocks = map->nr_objs / nr_objs_per_block;
+	if (map->nr_objs % nr_objs_per_block) {
+		nr_map_blocks++;
+	}
+
+	XSEGLOG2(&lc, D, "nr_objs_per_chunk: %llu, nr_chunks_per_block: %llu, "
+			"nr_objs_per_block: %llu, nr_map_blocks: %llu",
+			nr_objs_per_chunk, nr_chunks_per_block, nr_objs_per_block,
+			nr_map_blocks);
+	for (i = 0; i < nr_map_blocks; i++) {
+		hexlify((unsigned char *)&i, sizeof(i), buf);
+		buf[2*sizeof(i)] = 0;
+		sprintf(target, "%s_%s", map->volume, buf);
+		targetlen = map->volumelen + 1 + (sizeof(i) << 1);
+
+		req = get_request(pr, mapper->mbportno, target, targetlen, 0);
+		if (!req) {
+			XSEGLOG2(&lc, E, "Cannot get request");
+			goto out_err;
+		}
+		req->op = X_DELETE;
+		req->offset = 0;
+		req->size = 0;
+		XSEGLOG2(&lc, D, "Deleting chunk %s(%u)", target,  targetlen);
+		r = send_request(pr, req);
+		if (r < 0) {
+			XSEGLOG2(&lc, E, "Cannot send request");
+			goto out_put;
+		}
+		mio->pending_reqs++;
+	}
+	return 0;
+
+out_put:
+	put_request(pr, req);
+out_err:
+	mio->err = 1;
+	return -1;
+}
+
+int delete_map_data_v2(struct peer_req *pr, struct map *map)
+{
+	int r;
+	struct mapper_io *mio = __get_mapper_io(pr);
+	mio->cb = delete_map_data_v2_cb;
+
+	r = __delete_map_data_v2(pr, map);
+	if (r < 0) {
+		mio->err = 1;
+	}
+
+	if (mio->pending_reqs > 0) {
+		wait_on_pr(pr, mio->pending_reqs > 0);
+	}
+
+	mio->priv = NULL;
+	mio->cb = NULL;
+	return (mio->err ? -1 : 0);
+}
+
 void write_map_data_v2_cb(struct peer_req *pr, struct xseg_request *req)
 {
 	struct mapper_io *mio = __get_mapper_io(pr);

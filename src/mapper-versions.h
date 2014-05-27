@@ -109,6 +109,7 @@ struct map_functions {
 	int (*load_map_data)(struct peer_req *pr, struct map *map);
 	int (*write_map_metadata)(struct peer_req *pr, struct map *map);
 	int (*write_map_data)(struct peer_req *pr, struct map *map);
+	int (*delete_map_data)(struct peer_req *pr, struct map *map);
 };
 
 extern struct map_functions map_functions[];

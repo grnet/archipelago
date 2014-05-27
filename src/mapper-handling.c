@@ -371,6 +371,22 @@ out:
 	return r;
 }
 
+
+int delete_map_data(struct peer_req* pr, struct map *map)
+{
+	int r;
+	map->state |= MF_MAP_DELETING;
+	struct mapper_io *mio = __get_mapper_io(pr);
+
+	mio->cb = NULL;
+	mio->err = 0;
+
+	r = map_functions[map->version].delete_map_data(pr, map);
+
+	map->state &= ~MF_MAP_DELETING;
+	return r;
+}
+
 struct xseg_request * __load_map_metadata(struct peer_req *pr, struct map *map)
 {
 	int r;

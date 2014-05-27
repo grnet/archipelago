@@ -65,6 +65,7 @@ int read_map_metadata_v0(struct map *map, unsigned char *metadata,
 int load_map_data_v0(struct peer_req *pr, struct map *map);
 int write_map_metadata_v0(struct peer_req *pr, struct map *map);
 int write_map_data_v0(struct peer_req *pr, struct map *map);
+int delete_map_data_v0(struct peer_req *pr, struct map *map);
 
 /*.read_map = read_map_v0,	\*/
 #define map_functions_v0 {				\
@@ -74,6 +75,7 @@ int write_map_data_v0(struct peer_req *pr, struct map *map);
 			.load_map_data = load_map_data_v0, \
 			.write_map_metadata = write_map_metadata_v0, \
 			.write_map_data = write_map_data_v0, \
+			.delete_map_data = delete_map_data_v0, \
 			.read_map_metadata = read_map_metadata_v0 \
 			}
 

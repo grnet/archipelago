@@ -903,6 +903,12 @@ static int do_destroy(struct peer_req *pr, struct map *map)
 		return -1;
 	}
 
+	r = delete_map_data(pr, map);
+	if (r < 0) {
+		//not fatal. Just log warning
+		XSEGLOG2(&lc, E, "Delete map data failed for %s", map->volume);
+	}
+
 	map->state &= ~MF_MAP_DELETING;
 	XSEGLOG2(&lc, I, "Deleted map %s", map->volume);
 	/* do close will drop the map from cache  */

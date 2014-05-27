@@ -123,6 +123,11 @@ int read_map_v0(struct map *m, unsigned char * data)
 	return (limit - m->nr_objs);
 }
 
+int delete_map_data_v0(struct peer_req *pr, struct map *map)
+{
+	return -1;
+	//perhaps use an X_DELETE ?
+}
 
 struct xseg_request * __write_map_data_v0(struct peer_req *pr, struct map *map)
 {
