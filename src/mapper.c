@@ -959,13 +959,13 @@ static int do_destroy(struct peer_req *pr, struct map *map)
 		XSEGLOG2(&lc, E, "Failed to destroy map %s", map->volume);
 		return -1;
 	}
-
+/*
 	r = delete_map_data(pr, map);
 	if (r < 0) {
 		//not fatal. Just log warning
 		XSEGLOG2(&lc, E, "Delete map data failed for %s", map->volume);
 	}
-
+*/
 	map->state &= ~MF_MAP_DELETING;
 	XSEGLOG2(&lc, I, "Deleted map %s", map->volume);
 	/* do close will drop the map from cache  */
@@ -981,7 +981,7 @@ static int do_rename(struct peer_req *pr, struct map *map)
 {
 	uint64_t i;
 	struct peerd *peer = pr->peer;
-	//struct mapper_io *mio = __get_mapper_io(pr);
+	struct mapper_io *mio = __get_mapper_io(pr);
 	struct map_node *mn;
 	uint64_t nr_objs;
 	struct map *new_map;
@@ -1056,12 +1056,34 @@ static int do_rename(struct peer_req *pr, struct map *map)
 	new_map->objects = NULL;
 	close_map(pr, new_map);
 	put_map(new_map);
-	map->state &= ~MF_MAP_RENAMING;
 	XSEGLOG2(&lc, I, "Will now proceed to remove old map %s", map->volume);
-	r = do_destroy(pr, map);
-	/* Always return 0 here, since rename was a success. Log warning if
-	 * deletion failed.
+
+	mio->cb = NULL;
+	mio->pending_reqs = 0;
+
+	map->flags |= MF_MAP_DELETED;
+	r = write_map_metadata(pr, map);
+	if (r < 0){
+		map->state &= ~MF_MAP_RENAMING;
+		XSEGLOG2(&lc, E, "Failed to destroy map %s", map->volume);
+		return -1;
+	}
+
+	r = delete_map_data(pr, map);
+	if (r < 0) {
+		//not fatal. Just log warning
+		XSEGLOG2(&lc, E, "Delete map data failed for %s", map->volume);
+	}
+
+	map->state &= ~MF_MAP_RENAMING;
+	XSEGLOG2(&lc, I, "Deleted map %s", map->volume);
+	/* do close will drop the map from cache  */
+
+	/* if do_close fails, an error message will be logged, but the deletion
+	 * was successfull, and there isn't much to do about the error.
 	 */
+	do_close(pr, map);
+	XSEGLOG2(&lc, I, "Renamed %s completed ", map->volume);
 	return 0;
 
 out_unset:
