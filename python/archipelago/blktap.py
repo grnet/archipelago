@@ -151,7 +151,8 @@ class VlmcTapdisk(object):
         return None
 
     @staticmethod
-    def create(volume, mport=None, vport=None, assume_v0=False, v0_size=-1):
+    def create(volume, mport=None, vport=None, assume_v0=False, v0_size=-1,
+               readonly=False):
         uri = "%s:%s" % ('archipelago', volume)
         if mport is not None:
             uri = "%s:mport=%s" % (uri, str(mport))
@@ -162,7 +163,10 @@ class VlmcTapdisk(object):
             if v0_size != -1:
                 uri = "%s:v0_size=%s" % (uri, str(v0_size))
 
-        return VlmcTapdisk.exc('create', "-a%s" % uri)
+        if readonly:
+            return VlmcTapdisk.exc('create', "-a%s" % uri, '-R')
+        else:
+            return VlmcTapdisk.exc('create', "-a%s" % uri)
 
     @staticmethod
     def destroy(device):

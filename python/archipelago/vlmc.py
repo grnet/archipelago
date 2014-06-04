@@ -233,7 +233,7 @@ def remove(name, assume_v0=False, v0_size=-1, **kwargs):
 
 
 @exclusive()
-def map_volume(name, assume_v0=False, v0_size=-1, **kwargs):
+def map_volume(name, assume_v0=False, v0_size=-1, readonly=False, **kwargs):
     if not loaded_module("blktap"):
         raise Error("blktap module not loaded")
 
@@ -245,7 +245,8 @@ def map_volume(name, assume_v0=False, v0_size=-1, **kwargs):
     try:
         device = VlmcTapdisk.create(name, vport=peers['vlmcd'].portno_start,
                                     mport=peers['mapperd'].portno_start,
-                                    assume_v0=assume_v0, v0_size=v0_size)
+                                    assume_v0=assume_v0, v0_size=v0_size,
+                                    readonly=readonly)
         if device:
             sys.stderr.write(device + '\n')
             return device.split(DEVICE_PREFIX)[1]

@@ -91,6 +91,8 @@ def vlmc_parser():
                                help='Assume target volume as version 0 if necessary')
     map_parser.add_argument('--v0_size', type=int, nargs='?',
                                help='Size of target volume to be assumed, if found as version 0.')
+    map_parser.add_argument('-ro', '--readonly',  action='store_true',
+                               default=False, help='Map target as readonly')
     map_parser.set_defaults(func=vlmc.map_volume)
     map_parser.add_argument('-p', '--pool', type=str, nargs='?',
                             help='for backwards compatiblity with rbd')
