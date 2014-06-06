@@ -7,3 +7,5 @@ usr/bin/archip-mapperd
 usr/bin/archip-vlmcd
 
 etc/archipelago/archipelago.conf
+bash_completion/vlmc etc/bash_completion.d/
+bash_completion/archipelago etc/bash_completion.d/
