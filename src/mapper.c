@@ -295,6 +295,7 @@ static struct map * create_map(char *name, uint32_t namelen, uint32_t flags)
 	 * with the right value.
 	 */
 	m->version = MAP_LATEST_VERSION;
+	m->mops = MAP_LATEST_MOPS;
 	m->flags = 0;
 
 	m->signature = MAP_SIGNATURE;
@@ -622,6 +623,7 @@ static int do_close(struct peer_req *pr, struct map *map)
 
 static int do_hash(struct peer_req *pr, struct map *map)
 {
+#if 0
 	int r;
 	struct peerd *peer = pr->peer;
 	uint64_t i, bufsize;
@@ -736,6 +738,8 @@ out:
 	} else {
 		return 0;
 	}
+#endif
+	return 0;
 }
 
 static int do_snapshot(struct peer_req *pr, struct map *map)

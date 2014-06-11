@@ -33,7 +33,9 @@
  */
 
 #include <xseg/xseg.h>
+#include <mapper.h>
 #include <mapper-version0.h>
+#include <stdlib.h>
 
 /* version 0 functions */
 #define v0_chunked_read_size (512*1024)
@@ -185,12 +187,6 @@ int write_map_data_v0(struct peer_req *pr, struct map *map)
 }
 
 
-int write_map_metadata_v0(struct peer_req *pr, struct map *map)
-{
-	/* No metadata */
-	return 0;
-}
-
 struct xseg_request * __load_map_data_v0(struct peer_req *pr, struct map *map)
 {
 	int r;
@@ -259,17 +255,31 @@ retry:
 	return 0;
 }
 
-int read_map_metadata_v0(struct map *map, unsigned char *metadata,
-		uint64_t metadata_len)
+struct map_ops v0_ops = {
+	.object_to_map = object_to_map_v0,
+	.read_object = read_object_v0,
+	.prepare_write_object = prepare_write_object_v0,
+	.load_map_data = load_map_data_v0,
+	.write_map_data = write_map_data_v0,
+	.delete_map_data = delete_map_data_v0
+};
+
+int read_map_header_v0(struct map *map, struct v0_header_struct *v0_hdr)
 {
 	/* No header. Just set defaults */
-	map->version = 0;
+	map->version = MAP_V0;
 	map->size = 0;
 	map->blocksize = MAPPER_DEFAULT_BLOCKSIZE;
 	map->nr_objs = 0;
 	map->flags = MF_MAP_READONLY;
 	map->epoch = 0;
 	map->objects = NULL;
+	map->mops = &v0_ops;
 
 	return 0;
+}
+
+void write_map_header_v0(struct map *map, struct v0_header_struct *v0_hdr)
+{
+	return;
 }

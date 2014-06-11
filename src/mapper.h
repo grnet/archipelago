@@ -41,6 +41,88 @@
 #include <hash.h>
 #include <peer.h>
 #include <xseg/protocol.h>
+#include <mapper-version0.h>
+#include <mapper-version1.h>
+#include <mapper-version2.h>
+
+/* Alternative, each header file could define an appropriate MAP_V# */
+enum {MAP_V0, MAP_V1, MAP_V2};
+#define MAP_LATEST_VERSION MAP_V2
+#define MAP_LATEST_MOPS &v2_ops
+
+struct header_struct {
+	uint32_t signature;
+	uint32_t version;
+	unsigned char pad[504];
+} __attribute__((packed));
+
+#define MAX_MAPHEADER_SIZE (sizeof(struct header_struct))
+
+/* should always be the maximum objectlen of all versions */
+#define MAX_OBJECT_LEN 128
+
+/* since object names are cacluclated from the volume names, the limit of the
+ * maximum volume len is calculated from the maximum object len, statically for
+ * all map versions.
+ *
+ * How the object name is calculated is reflected in this formula:
+ *
+ * volume-index-epoch
+ */
+#define MAX_VOLUME_LEN (MAX_OBJECT_LEN - HEXLIFIED_INDEX - HEXLIFIED_EPOCH - 2)
+
+
+/* Some compile time checks */
+#if MAX_OBJECT_LEN > XSEG_MAX_TARGETLEN
+#error 	"XSEG_MAX_TARGETLEN should be at least MAX_OBJECT_LEN"
+#endif
+
+#if MAX_OBJECT_LEN < v2_max_objectlen
+#error "MAX_OBJECT_LEN is smaller than v2_max_objectlen"
+#endif
+
+#if MAX_OBJECT_LEN < v1_max_objectlen
+#error "MAX_OBJECT_LEN is smaller than v1_max_objectlen"
+#endif
+
+#if MAX_OBJECT_LEN < v0_max_objectlen
+#error "MAX_OBJECT_LEN is smaller than v0_max_objectlen"
+#endif
+
+/* TODO Use some form of static assert for the following. Comment out for now.
+
+#if MAX_MAPHEADER_SIZE < v2_mapheader_size
+#error "MAX_MAPHEADER_SIZE is smaller than v2_mapheader_size"
+#endif
+
+#if MAX_MAPHEADER_SIZE < v1_mapheader_size
+#error "MAX_MAPHEADER_SIZE is smaller than v1_mapheader_size"
+#endif
+
+#if MAX_MAPHEADER_SIZE < v0_mapheader_size
+#error "MAX_MAPHEADER_SIZE is smaller than v0_mapheader_size"
+#endif
+
+*/
+
+/*
+#if MAX_VOLUME_LEN > XSEG_MAX_TARGETLEN
+#error 	"XSEG_MAX_TARGETLEN should be at least MAX_VOLUME_LEN"
+#endif
+*/
+
+struct map;
+struct map_node;
+/* Map I/O ops */
+struct map_ops {
+	void (*object_to_map)(unsigned char *buf, struct map_node *mn);
+	int (*read_object)(struct map_node *mn, unsigned char *buf);
+	struct xseg_request * (*prepare_write_object)(struct peer_req *pr,
+			struct map *map, struct map_node *mn);
+	int (*load_map_data)(struct peer_req *pr, struct map *map);
+	int (*write_map_data)(struct peer_req *pr, struct map *map);
+	int (*delete_map_data)(struct peer_req *pr, struct map *map);
+};
 
 /* general mapper flags */
 #define MF_LOAD 	(1 << 0)
@@ -59,29 +141,6 @@
 #define HEXLIFIED_EPOCH (sizeof(uint64_t) << 1)
 #define HEXLIFIED_INDEX (sizeof(uint64_t) << 1)
 
-/* should always be the maximum objectlen of all versions */
-#define MAX_OBJECT_LEN 128
-
-/* since object names are cacluclated from the volume names, the limit of the
- * maximum volume len is calculated from the maximum object len, statically for
- * all map versions.
- *
- * How the object name is calculated is reflected in this formula:
- *
- * volume-index-epoch
- */
-#define MAX_VOLUME_LEN (MAX_OBJECT_LEN - HEXLIFIED_INDEX - HEXLIFIED_EPOCH - 2)
-
-/* Compile time limits */
-#if MAX_OBJECT_LEN > XSEG_MAX_TARGETLEN
-#error 	"XSEG_MAX_TARGETLEN should be at least MAX_OBJECT_LEN"
-#endif
-
-/*
-#if MAX_VOLUME_LEN > XSEG_MAX_TARGETLEN
-#error 	"XSEG_MAX_TARGETLEN should be at least MAX_VOLUME_LEN"
-#endif
-*/
 
 
 extern char *zero_block;
@@ -164,6 +223,7 @@ struct map {
 	volatile uint32_t waiters;
 	st_cond_t cond;
 	uint64_t opened_count;
+	struct map_ops *mops;
 
 	volatile uint32_t users;
 	volatile uint32_t waiters_users;

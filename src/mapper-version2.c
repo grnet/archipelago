@@ -35,6 +35,8 @@
 #include <mapper.h>
 #include <mapper-version2.h>
 #include <xseg/xseg.h>
+#include <stdlib.h>
+#include <asm/byteorder.h>
 
 /* v2 functions */
 
@@ -681,109 +683,43 @@ int load_map_data_v2(struct peer_req *pr, struct map *map)
 	return load_map_objects_v2(pr, map, 0, map->nr_objs);
 }
 
-int read_map_metadata_v2(struct map *map, unsigned char *metadata,
-		uint64_t metadata_len)
+struct map_ops v2_ops = {
+	.object_to_map = object_to_map_v2,
+	.read_object = read_object_v2,
+	.prepare_write_object = prepare_write_object_v2,
+	.load_map_data = load_map_data_v2,
+	.write_map_data = write_map_data_v2,
+	.delete_map_data = delete_map_data_v2
+};
+
+void write_map_header_v2(struct map *map, struct v2_header_struct *v2_hdr)
+{
+	v2_hdr->signature = __cpu_to_be32(MAP_SIGNATURE);
+	v2_hdr->version = __cpu_to_be32(MAP_V2);
+	v2_hdr->size = __cpu_to_be64(map->size);
+	v2_hdr->blocksize = __cpu_to_be32(map->blocksize);
+	v2_hdr->flags = __cpu_to_be32(map->flags);
+	v2_hdr->epoch = __cpu_to_be64(map->epoch);
+}
+
+int read_map_header_v2(struct map *map, struct v2_header_struct *v2_hdr)
 {
 	int r;
-	uint64_t pos;
-	if (metadata_len < v2_mapheader_size) {
-		XSEGLOG2(&lc, E, "Metadata len < v2_mapheader_size");
+	uint32_t version = __be32_to_cpu(v2_hdr->version);
+	if(version != MAP_V2) {
 		return -1;
 	}
-
-	pos = 0;
-	/* read header */
-	map->version = *(uint32_t *)(metadata + pos);
-	pos += sizeof(uint32_t);
-	map->signature = *(uint32_t *)(metadata + pos);
-	pos += sizeof(uint32_t);
-	map->size = *(uint64_t *)(metadata + pos);
-	pos += sizeof(uint64_t);
-	map->blocksize = *(uint32_t *)(metadata + pos);
-	pos += sizeof(uint32_t);
+	map->version = version;
+	map->signature = __be32_to_cpu(v2_hdr->signature);
+	map->size = __be64_to_cpu(v2_hdr->size);
+	map->blocksize = __be32_to_cpu(v2_hdr->blocksize);
 	//FIXME check each flag seperately
-	map->flags = *(uint32_t *)(metadata + pos);
-	pos += sizeof(uint32_t);
-	map->epoch = *(uint64_t *)(metadata + pos);
-	pos += sizeof(uint64_t);
+	map->flags = __be32_to_cpu(v2_hdr->flags);
+	map->epoch = __be64_to_cpu(v2_hdr->epoch);
 	/* sanitize flags */
 	//map->flags &= MF_MAP_SANITIZE;
-
 	map->nr_objs = calc_map_obj(map);
+	map->mops = &v2_ops;
 
 	return 0;
 }
-
-struct xseg_request * __write_map_metadata_v2(struct peer_req *pr, struct map *map)
-{
-	struct peerd *peer = pr->peer;
-	struct mapperd *mapper = __get_mapperd(peer);
-	uint64_t datalen;
-	struct xseg_request *req;
-	char *data;
-	uint64_t pos;
-	int r;
-
-	datalen = v2_mapheader_size;
-
-	req = get_request(pr, mapper->mbportno, map->volume, map->volumelen,
-			datalen);
-	if (!req){
-		XSEGLOG2(&lc, E, "Cannot get request for map %s",
-				map->volume);
-		goto out_err;
-	}
-
-
-	data = xseg_get_data(peer->xseg, req);
-	pos = 0;
-	memcpy(data + pos, &map->version, sizeof(map->version));
-	pos += sizeof(map->version);
-	memcpy(data + pos, &map->signature, sizeof(map->signature));
-	pos += sizeof(map->signature);
-	memcpy(data + pos, &map->size, sizeof(map->size));
-	pos += sizeof(map->size);
-	memcpy(data + pos, &map->blocksize, sizeof(map->blocksize));
-	pos += sizeof(map->blocksize);
-	//FIXME check each flag seperately
-	memcpy(data + pos, &map->flags, sizeof(map->flags));
-	pos += sizeof(map->flags);
-	memcpy(data + pos, &map->epoch, sizeof(map->epoch));
-	pos += sizeof(map->epoch);
-
-	req->op = X_WRITE;
-	req->size = datalen;
-	req->offset = 0;
-
-	r = send_request(pr, req);
-	if (r < 0) {
-		XSEGLOG2(&lc, E, "Cannot send request %p, pr: %p, map: %s",
-				req, pr, map->volume);
-		goto out_put;
-	}
-	return req;
-
-out_put:
-	put_request(pr, req);
-out_err:
-	return NULL;
-}
-
-int write_map_metadata_v2(struct peer_req *pr, struct map *map)
-{
-	struct xseg_request *req;
-
-	req = __write_map_metadata_v2(pr, map);
-	if (!req)
-		return -1;
-	wait_on_pr(pr, (!(req->state & XS_FAILED || req->state & XS_SERVED)));
-
-	if (req->state & XS_FAILED){
-		XSEGLOG2(&lc, E, "Write map metadata failed for map %s", map->volume);
-		put_request(pr, req);
-		return -1;
-	}
-	put_request(pr, req);
-	return 0;
-}
-
