@@ -62,14 +62,9 @@ def create(env):
     name = env.get("name")
     size = env.get("size")
     origin = env.get("origin")
-    cont_addr = False
-    if origin and origin.startswith('pithos:'):
-        cont_addr = True
-        origin = origin[7:]
-
     sys.stderr.write("Creating volume '%s' of size '%s' from '%s'\n"
                      % (name, size, origin))
-    vlmc.create(name=name, size=int(size), snap=origin, cont_addr=cont_addr)
+    vlmc.create(name=name, size=int(size), snap=origin)
     return 0
 
 
