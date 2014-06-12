@@ -76,7 +76,7 @@ def umount(device):
         raise Error("Cannot umount %s" % device)
 
 
-def test_create(volume, volumesize=None, snap=None, cont_addr=False):
+def test_create(volume, volumesize=None, snap=None):
     vlmc.create(name=volume, size=volumesize, snap=snap)
     #should we catch Error here and do a vlmc.remove(name=volume)
 #    d_id = vlmc.map_volume(name=volume)

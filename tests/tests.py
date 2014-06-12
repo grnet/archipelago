@@ -339,8 +339,7 @@ class XsegTest(unittest.TestCase):
 
     send_and_evaluate_delete = evaluate(send_delete)
 
-    def send_clone(self, dst, src_target, clone=None, clone_size=0,
-            cont_addr=False):
+    def send_clone(self, dst, src_target, clone=None, clone_size=0):
         #xclone = xseg_request_clone()
         #xclone.target = src_target
         #xclone.targetlen = len(src_target)
@@ -757,7 +756,7 @@ class VlmcdTest(XsegTest):
 #        self.send_and_evaluate_clone(self.mapperdport, hash_map, clone=volume2,
 #                clone_size=volsize * 2, expected=False)
         self.send_and_evaluate_clone(self.mapperdport, hash_map, clone=volume2,
-                clone_size=volsize * 2, cont_addr=True)
+                clone_size=volsize * 2)
         self.send_and_evaluate_read(self.vlmcdport, volume2, size=size,
                 offset=offset, expected_data=data)
         self.send_and_evaluate_read(self.vlmcdport, volume2, size=volsize - size,
