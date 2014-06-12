@@ -56,9 +56,6 @@ def vlmc_parser():
                                help='create from snapshot')
     create_parser.add_argument('-p', '--pool', type=str, nargs='?',
                                help='for backwards compatiblity with rbd')
-    create_parser.add_argument('-ca', '--contaddr',  action='store_true',
-                               default=False,
-                               help='specify the snapshot as content addressable')
     create_parser.add_argument('-v0', '--assume_v0',  action='store_true',
                                default=False,
                                help='Assume snapshot as version 0 if necessary')
