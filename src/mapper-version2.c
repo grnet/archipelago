@@ -225,14 +225,6 @@ int read_map_objects_v2(struct map *map, unsigned char *data, uint64_t start, ui
 	struct map_node *map_node;
 	uint64_t i;
 	uint64_t pos = 0;
-	char nulls[SHA256_DIGEST_SIZE];
-	memset(nulls, 0, SHA256_DIGEST_SIZE);
-
-	r = !memcmp(data, nulls, SHA256_DIGEST_SIZE);
-	if (r) {
-		XSEGLOG2(&lc, E, "Data are zeros");
-		return -1;
-	}
 
 	if (start + nr > map->nr_objs) {
 		return -1;
@@ -693,16 +685,9 @@ int read_map_metadata_v2(struct map *map, unsigned char *metadata,
 		uint64_t metadata_len)
 {
 	int r;
-	char nulls[v2_mapheader_size];
 	uint64_t pos;
 	if (metadata_len < v2_mapheader_size) {
 		XSEGLOG2(&lc, E, "Metadata len < v2_mapheader_size");
-		return -1;
-	}
-	memset(nulls, 0, v2_mapheader_size);
-	r = !memcmp(metadata, nulls, v2_mapheader_size);
-	if (r) {
-		XSEGLOG2(&lc, E, "Read zeros");
 		return -1;
 	}
 

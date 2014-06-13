@@ -434,7 +434,6 @@ int load_map_metadata(struct peer_req *pr, struct map *map)
 	int type, r = 0;
 	struct xseg_request *req;
 	struct peerd *peer = pr->peer;
-	char nulls[sizeof(map->version)];
 	char *data;
 	uint32_t version;
 	uint32_t signature;
@@ -454,17 +453,8 @@ int load_map_metadata(struct peer_req *pr, struct map *map)
 		goto out_err;
 	}
 
-	memset(nulls, 0, sizeof(map->version));
 	data = xseg_get_data(peer->xseg, req);
 	if (!data) {
-		goto out_put;
-	}
-
-	/* version 0 is not valid in this context. So use it to catch a
-	 * successfull read of a non-existing map */
-	r = !memcmp((unsigned char *)data, nulls, sizeof(map->version));
-	if (r) {
-		XSEGLOG2(&lc, E, "Read zeros");
 		goto out_put;
 	}
 

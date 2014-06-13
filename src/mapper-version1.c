@@ -105,14 +105,6 @@ int read_map_v1(struct map *m, unsigned char *data)
 	uint64_t i;
 	uint64_t pos = 0;
 	uint64_t nr_objs = m->nr_objs;
-	char nulls[SHA256_DIGEST_SIZE];
-	memset(nulls, 0, SHA256_DIGEST_SIZE);
-
-	r = !memcmp(data, nulls, SHA256_DIGEST_SIZE);
-	if (r) {
-		XSEGLOG2(&lc, E, "Read zeros");
-		return -1;
-	}
 
 	map_node = calloc(nr_objs, sizeof(struct map_node));
 	if (!map_node)

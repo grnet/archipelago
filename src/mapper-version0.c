@@ -92,13 +92,6 @@ int read_map_v0(struct map *m, unsigned char * data)
 	char nulls[SHA256_DIGEST_SIZE];
 	memset(nulls, 0, SHA256_DIGEST_SIZE);
 
-	r = !memcmp(data, nulls, SHA256_DIGEST_SIZE);
-	if (r) {
-		XSEGLOG2(&lc, E, "Read zeros");
-		return -1;
-	}
-
-
 	map_node = realloc(m->objects,
 			(m->nr_objs + max_read_obj) * sizeof(struct map_node));
 	if (!map_node)
