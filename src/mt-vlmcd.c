@@ -650,7 +650,7 @@ static int mapping_readwrite(struct peerd *peer, struct peer_req *pr)
 	uint64_t pos, datalen, offset;
 	uint32_t targetlen;
 	struct xseg_request *breq;
-	char *target;
+	char *target, *data;
 	int i,r;
 	xport p;
 	if (vio->mreq->state & XS_FAILED){
@@ -683,8 +683,24 @@ static int mapping_readwrite(struct peerd *peer, struct peer_req *pr)
 
 	pos = 0;
 	__set_vio_state(vio, SERVING);
+	vio->breq_cnt = 0;
 	for (i = 0; i < vio->breq_len; i++) {
 		datalen = mreply->segs[i].size;
+		if (mreply->segs[i].flags & XF_MAPFLAG_ZERO) {
+			vio->breqs[i] = NULL;
+			if (pr->req->op != X_READ) {
+				XSEGLOG2(&lc, E, "Mapper returned zero object "
+						"for a write I/O operation");
+				vio->err = 1;
+				break;
+			}
+			data = xseg_get_data(peer->xseg, pr->req);
+			data += pos;
+			memset(data, 0, datalen);
+			pos += datalen;
+			pr->req->serviced += datalen;
+			continue;
+		}
 		offset = mreply->segs[i].offset;
 		targetlen = mreply->segs[i].targetlen;
 		breq = xseg_get_request(peer->xseg, pr->portno, vlmc->bportno, X_ALLOC);
@@ -731,16 +747,17 @@ static int mapping_readwrite(struct peerd *peer, struct peer_req *pr)
 			XSEGLOG2(&lc, W, "Couldnt signal port %u", p);
 		}
 		vio->breqs[i] = breq;
+		vio->breq_cnt++;
 	}
-	vio->breq_cnt = i;
 	xseg_put_request(peer->xseg, vio->mreq, pr->portno);
 	vio->mreq = NULL;
-	if (i == 0) {
+	if (vio->breq_cnt == 0) {
 		free(vio->breqs);
 		vio->breqs = NULL;
-		vio->err = 1;
 		conclude_pr(peer, pr);
-		return -1;
+		if (vio->err) {
+			return -1;
+		}
 	}
 	return 0;
 }

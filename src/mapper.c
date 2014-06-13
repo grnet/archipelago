@@ -506,6 +506,10 @@ static int req2objs(struct peer_req *pr, struct map *map, int write)
 		reply->segs[i].targetlen = mns[i].mn->objectlen;
 		reply->segs[i].offset = mns[i].offset;
 		reply->segs[i].size = mns[i].size;
+		reply->segs[i].flags = 0;
+		if (mns[i].mn->flags & MF_OBJECT_ZERO) {
+			reply->segs[i].flags |= XF_MAPFLAG_ZERO;
+		}
 	}
 out:
 	for (i = 0; i < (idx+1); i++) {
