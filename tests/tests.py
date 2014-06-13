@@ -1267,7 +1267,8 @@ class BlockerTest(object):
                 expected_data=data)
         self.send_and_evaluate_delete(self.blockerport, target, True)
         data = '\x00' * datalen
-        self.send_and_evaluate_read(self.blockerport, target, size=datalen, expected_data=data)
+        self.send_and_evaluate_read(self.blockerport, target, size=datalen,
+                expected=False)
 
     def test_hash(self):
         datalen = 1024
