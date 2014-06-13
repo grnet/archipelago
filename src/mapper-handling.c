@@ -720,11 +720,13 @@ struct xseg_request * __copyup_object(struct peer_req *pr, struct map_node *mn)
 	char *tmp = new_target;
 	char hexlified_epoch[HEXLIFIED_EPOCH];
 	char hexlified_index[HEXLIFIED_INDEX];
+	uint64_t be_epoch = __cpu_to_be64(map->epoch);
+	uint64_t be_objectidx = __cpu_to_be64(mn->objectidx);
 
 //	strncpy(new_target, MAPPER_PREFIX, MAPPER_PREFIX_LEN);
 
-	hexlify((unsigned char *)&map->epoch, sizeof(map->epoch), hexlified_epoch);
-	hexlify((unsigned char *)&mn->objectidx, sizeof(mn->objectidx), hexlified_index);
+	hexlify((unsigned char *)&be_epoch, sizeof(be_epoch), hexlified_epoch);
+	hexlify((unsigned char *)&be_objectidx, sizeof(be_objectidx), hexlified_index);
 	strncpy(tmp, map->volume, map->volumelen);
 	tmp += map->volumelen;
 	strncpy(tmp, "_", 1);

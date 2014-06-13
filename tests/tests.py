@@ -45,6 +45,7 @@ from copy import copy
 from sets import Set
 from binascii import hexlify, unhexlify
 from hashlib import sha256
+from struct import pack
 
 def get_random_string(length=64, repeat=16):
     nr_repeats = length//repeat
@@ -86,7 +87,7 @@ def merkle_hash(hashes):
 
 def init():
     rnd.seed()
-#    archipelago.common.BIN_DIR=os.path.join(os.getcwd(), '/tmp/build/src')
+    archipelago.common.BIN_DIR=os.path.join(os.getcwd(), '/tmp/build/src')
     archipelago.common.LOGS_PATH=os.path.join(os.getcwd(), 'logs')
     archipelago.common.PIDFILE_PATH=os.path.join(os.getcwd(), 'pids')
     if not os.path.isdir(archipelago.common.LOGS_PATH):
@@ -131,12 +132,8 @@ class XsegTest(unittest.TestCase):
 
     @staticmethod
     def get_object_name(volume, epoch, index):
-        epoch_64 = ctypes.c_uint64(epoch)
-        index_64 = ctypes.c_uint64(index)
-        epoch_64_char = ctypes.cast(ctypes.addressof(epoch_64), ctypes.c_char_p)
-        index_64_char = ctypes.cast(ctypes.addressof(index_64), ctypes.c_char_p)
-        epoch_64_str = ctypes.string_at(epoch_64_char, ctypes.sizeof(ctypes.c_uint64))
-        index_64_str = ctypes.string_at(index_64_char, ctypes.sizeof(ctypes.c_uint64))
+        epoch_64_str = pack(">Q", epoch)
+        index_64_str = pack(">Q", index)
         epoch_hex = hexlify(epoch_64_str)
         index_hex = hexlify(index_64_str)
         return volume + "_" + epoch_hex + "_" + index_hex
