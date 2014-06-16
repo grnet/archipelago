@@ -73,15 +73,15 @@ void custom_peer_usage()
  * Helper functions
  */
 
-static uint32_t calc_nr_obj(struct xseg_request *req)
+static uint32_t calc_nr_obj(struct map *map, struct xseg_request *req)
 {
 	unsigned int r = 1;
 	uint64_t rem_size = req->size;
-	uint64_t obj_offset = req->offset & (MAPPER_DEFAULT_BLOCKSIZE -1); //modulo
-	uint64_t obj_size =  (rem_size + obj_offset > MAPPER_DEFAULT_BLOCKSIZE) ? MAPPER_DEFAULT_BLOCKSIZE - obj_offset : rem_size;
+	uint64_t obj_offset = req->offset & (map->blocksize - 1); //modulo
+	uint64_t obj_size =  (rem_size + obj_offset > map->blocksize) ? map->blocksize - obj_offset : rem_size;
 	rem_size -= obj_size;
 	while (rem_size > 0) {
-		obj_size = (rem_size > MAPPER_DEFAULT_BLOCKSIZE) ? MAPPER_DEFAULT_BLOCKSIZE : rem_size;
+		obj_size = (rem_size > map->blocksize) ? map->blocksize : rem_size;
 		rem_size -= obj_size;
 		r++;
 	}
@@ -416,7 +416,7 @@ static int req2objs(struct peer_req *pr, struct map *map, int write)
 	struct peerd *peer = pr->peer;
 	struct mapper_io *mio = __get_mapper_io(pr);
 	char *target = xseg_get_target(peer->xseg, pr->req);
-	uint32_t nr_objs = calc_nr_obj(pr->req);
+	uint32_t nr_objs = calc_nr_obj(map, pr->req);
 	uint64_t size = sizeof(struct xseg_reply_map) +
 			nr_objs * sizeof(struct xseg_reply_map_scatterlist);
 	uint32_t idx, i;
@@ -445,9 +445,9 @@ static int req2objs(struct peer_req *pr, struct map *map, int write)
 
 	idx = 0;
 	rem_size = pr->req->size;
-	obj_index = pr->req->offset / MAPPER_DEFAULT_BLOCKSIZE;
-	obj_offset = pr->req->offset & (MAPPER_DEFAULT_BLOCKSIZE -1); //modulo
-	obj_size =  (obj_offset + rem_size > MAPPER_DEFAULT_BLOCKSIZE) ? MAPPER_DEFAULT_BLOCKSIZE - obj_offset : rem_size;
+	obj_index = pr->req->offset / map->blocksize;
+	obj_offset = pr->req->offset & (map->blocksize -1); //modulo
+	obj_size =  (obj_offset + rem_size > map->blocksize) ? map->blocksize - obj_offset : rem_size;
 	mn = get_mapnode(map, obj_index);
 	if (!mn) {
 		XSEGLOG2(&lc, E, "Cannot find obj_index %llu\n",
@@ -463,7 +463,7 @@ static int req2objs(struct peer_req *pr, struct map *map, int write)
 		idx++;
 		obj_index++;
 		obj_offset = 0;
-		obj_size = (rem_size >  MAPPER_DEFAULT_BLOCKSIZE) ? MAPPER_DEFAULT_BLOCKSIZE : rem_size;
+		obj_size = (rem_size > map->blocksize) ? map->blocksize : rem_size;
 		rem_size -= obj_size;
 		mn = get_mapnode(map, obj_index);
 		if (!mn) {
@@ -1581,7 +1581,16 @@ void * handle_create(struct peer_req *pr)
 		map->flags &= ~MF_MAP_READONLY;
 	}
 	map->size = req->size;
-	map->blocksize = mapdata->blocksize;
+	if (!mapdata->blocksize) {
+		map->blocksize = MAPPER_DEFAULT_BLOCKSIZE;
+	} else if (!is_valid_blocksize(mapdata->blocksize)) {
+		close_map(pr, map);
+		put_map(map);
+		r = -1;
+		goto out;
+	} else {
+		map->blocksize = mapdata->blocksize;
+	}
 	map->nr_objs = calc_map_obj(map);
 	map->objects = NULL;
 

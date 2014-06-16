@@ -571,6 +571,13 @@ int load_map_metadata(struct peer_req *pr, struct map *map)
 	}
 
 	put_request(pr, req);
+
+	if (!is_valid_blocksize(map->blocksize)) {
+		XSEGLOG2(&lc, E, "%s has Invalid blocksize %llu", map->volume,
+				map->blocksize);
+		goto out_err;
+	}
+
 	return 0;
 
 out_put:

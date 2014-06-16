@@ -357,6 +357,10 @@ static inline uint64_t calc_map_obj(struct map *map)
 	return __calc_map_obj(map->size, map->blocksize);
 }
 
+static inline int is_valid_blocksize(uint64_t x) {
+	   return x && !(x & (x - 1));
+}
+
 /* map handling functions */
 struct xseg_request * __open_map(struct peer_req *pr, struct map *m,
 						uint32_t flags);
