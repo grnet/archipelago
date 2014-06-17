@@ -34,7 +34,6 @@
 import os
 import subprocess
 
-
 def cmd_open(cmd, bufsize=-1, env=None):
     inst = subprocess.Popen(cmd, shell=True, bufsize=bufsize,
                             stdin=subprocess.PIPE,
@@ -64,17 +63,24 @@ class VlmcTapdisk(object):
 
     class Tapdisk(object):
         def __init__(self, pid=None, minor=-1, state=None, volume=None,
-                     device=None):
+                     device=None, mport=None, vport=None, assume_v0=False,
+                     v0_size=-1):
             self.pid = pid
             self.minor = minor
             self.state = state
             self.volume = volume
             self.device = device
+            self.mport = mport
+            self.vport = vport
+            self.assume_v0 = assume_v0
+            self.v0_size = v0_size
 
         def __str__(self):
-            return 'volume=%s pid=%s minor=%s state=%s device=%s' \
+            return 'volume=%s pid=%s minor=%s state=%s device=%s mport=%s ' \
+                   'vport=%s, assume_v0=%s v0_size=%s' \
                     % (self.volume, self.pid, self.minor, self.state,
-                       self.device)
+                       self.device, self.mport, self.vport, self.assume_v0,
+                       self.v0_size)
 
     @staticmethod
     def exc(*args):
@@ -107,7 +113,7 @@ class VlmcTapdisk(object):
             tapdisk = VlmcTapdisk.Tapdisk()
 
             for pair in line.split():
-                key, value = pair.split('=')
+                key, value = pair.split('=', 1)
                 if key == 'pid':
                     tapdisk.pid = value
                 elif key == 'minor':
@@ -118,7 +124,18 @@ class VlmcTapdisk(object):
                 elif key == 'state':
                     tapdisk.state = value
                 elif key == 'args' and value.find(':') != -1:
-                    _, tapdisk.volume = value.split(':')
+                    args = value.split(':')
+                    tapdisk.volume = args[1]
+                    args = args[1:]
+                    for arg in args:
+                        if arg.startswith('mport='):
+                            tapdisk.mport = int(arg[len('mport='):])
+                        if arg.startswith('vport='):
+                            tapdisk.vport = int(arg[len('vport='):])
+                        if arg.startswith('v0_size='):
+                            tapdisk.v0_size= int(arg[len('v0_size='):])
+                        if arg.startswith('assume_v0'):
+                            tapdisk.assume_v0 = True
 
             tapdisks.append(tapdisk)
 
@@ -134,8 +151,22 @@ class VlmcTapdisk(object):
         return None
 
     @staticmethod
-    def create(volume):
-        return VlmcTapdisk.exc('create', '-a%s:%s' % ('archipelago', volume))
+    def create(volume, mport=None, vport=None, assume_v0=False, v0_size=-1,
+               readonly=False):
+        uri = "%s:%s" % ('archipelago', volume)
+        if mport is not None:
+            uri = "%s:mport=%s" % (uri, str(mport))
+        if vport is not None:
+            uri = "%s:vport=%s" % (uri, str(vport))
+        if assume_v0:
+            uri = "%s:%s" % (uri, 'assume_v0')
+            if v0_size != -1:
+                uri = "%s:v0_size=%s" % (uri, str(v0_size))
+
+        if readonly:
+            return VlmcTapdisk.exc('create', "-a%s" % uri, '-R')
+        else:
+            return VlmcTapdisk.exc('create', "-a%s" % uri)
 
     @staticmethod
     def destroy(device):

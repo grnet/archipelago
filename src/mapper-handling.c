@@ -33,6 +33,8 @@
  */
 
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 #include <unistd.h>
 #include <sys/types.h>
 #include <xseg/xseg.h>
@@ -43,6 +45,10 @@
 #include <mapper.h>
 #include <mapper-versions.h>
 #include <xseg/xhash.h>
+#include <asm/byteorder.h>
+
+
+#define NO_V0SIZE ((uint64_t)-1)
 
 static uint32_t nr_reqs = 0;
 static uint32_t waiters_for_req = 0;
@@ -334,13 +340,86 @@ int open_map(struct peer_req *pr, struct map *map, uint32_t flags)
 	return 0;
 }
 
+struct xseg_request * __write_map_metadata(struct peer_req *pr, struct map *map)
+{
+	struct peerd *peer = pr->peer;
+	struct mapperd *mapper = __get_mapperd(peer);
+	struct xseg_request *req;
+	char *data;
+	uint64_t pos;
+	int r;
+	struct header_struct hdr;
+	uint32_t header_size = 0;
+
+
+	switch (map->version) {
+		case MAP_V0:
+			write_map_header_v0(map, (struct v0_header_struct *)&hdr);
+			header_size = v0_mapheader_size;
+			break;
+		case MAP_V1:
+			write_map_header_v1(map, (struct v1_header_struct *)&hdr);
+			header_size = v1_mapheader_size;
+			break;
+		case MAP_V2:
+			write_map_header_v2(map, (struct v2_header_struct *)&hdr);
+			header_size = v2_mapheader_size;
+			break;
+		default:
+			XSEGLOG2(&lc, E, "Invalid version %u found", map->version);
+			goto out_err;
+	}
+	if (!header_size) {
+		goto out;
+	}
+
+	req = get_request(pr, mapper->mbportno, map->volume, map->volumelen,
+			header_size);
+	if (!req){
+		XSEGLOG2(&lc, E, "Cannot get request for map %s", map->volume);
+		goto out_err;
+	}
+
+
+	req->op = X_WRITE;
+	req->size = header_size;
+	req->offset = 0;
+	data = xseg_get_data(peer->xseg, req);
+	memcpy(data, &hdr, header_size);
+
+	r = send_request(pr, req);
+	if (r < 0) {
+		XSEGLOG2(&lc, E, "Cannot send request %p, pr: %p, map: %s",
+				req, pr, map->volume);
+		goto out_put;
+	}
+out:
+	return req;
+
+out_put:
+	put_request(pr, req);
+out_err:
+	return NULL;
+}
+
 int write_map_metadata(struct peer_req *pr, struct map *map)
 {
-	int r;
+	int err;
+	struct xseg_request *req;
+
 	map->state |= MF_MAP_WRITING;
-	r = map_functions[map->version].write_map_metadata(pr, map);
+	req = __write_map_metadata(pr, map);
+	if (!req) {
+		map->state &= ~MF_MAP_WRITING;
+		return -1;
+	}
+	wait_on_pr(pr, (!((req->state & XS_FAILED)||(req->state & XS_SERVED))));
 	map->state &= ~MF_MAP_WRITING;
-	return r;
+	err = req->state & XS_FAILED;
+	put_request(pr, req);
+	if (err)
+		return -1;
+	return 0;
 }
 
 /*
@@ -358,13 +437,29 @@ int write_map(struct peer_req* pr, struct map *map)
 	mio->cb = NULL;
 	mio->err = 0;
 
-	r = map_functions[map->version].write_map_data(pr, map);
-	if (r < 0)
-		goto out;
-
-	r = map_functions[map->version].write_map_metadata(pr, map);
-out:
+	r = map->mops->write_map_data(pr, map);
+	if (r < 0) {
+		map->state &= ~MF_MAP_WRITING;
+		return r;
+	}
 	map->state &= ~MF_MAP_WRITING;
+
+	return write_map_metadata(pr, map);
+}
+
+
+int delete_map_data(struct peer_req* pr, struct map *map)
+{
+	int r;
+	map->state |= MF_MAP_DELETING;
+	struct mapper_io *mio = __get_mapper_io(pr);
+
+	mio->cb = NULL;
+	mio->err = 0;
+
+	r = map->mops->delete_map_data(pr, map);
+
+	map->state &= ~MF_MAP_DELETING;
 	return r;
 }
 
@@ -413,18 +508,13 @@ int load_map_metadata(struct peer_req *pr, struct map *map)
 	int type, r = 0;
 	struct xseg_request *req;
 	struct peerd *peer = pr->peer;
-	char nulls[sizeof(map->version)];
 	char *data;
 	uint32_t version;
+	uint32_t signature;
+	uint32_t assume_v0 = pr->req->flags & XF_ASSUMEV0;
+	uint32_t signature_on_disk;
+	uint32_t version1_on_disk;
 
-	/* Catch pithos map here */
-	type = map->version > 0 ? 1 : 0;
-	XSEGLOG2(&lc, I, "Type %d detected for map %s", type, map->volume);
-	if (!type) {
-		map_functions[0].read_map_metadata(map, (unsigned char *)map->size,
-				sizeof(map->size));
-		return 0;
-	}
 
 	req = __load_map_metadata(pr, map);
 	if (!req) {
@@ -438,36 +528,56 @@ int load_map_metadata(struct peer_req *pr, struct map *map)
 		goto out_err;
 	}
 
-	memset(nulls, 0, sizeof(map->version));
 	data = xseg_get_data(peer->xseg, req);
 	if (!data) {
 		goto out_put;
 	}
 
-	/* version 0 is not valid in this context. So use it to catch a
-	 * successfull read of a non-existing map */
-	r = !memcmp((unsigned char *)data, nulls, sizeof(map->version));
-	if (r) {
-		XSEGLOG2(&lc, E, "Read zeros");
-		goto out_put;
+	signature_on_disk = __cpu_to_be32(MAP_SIGNATURE);
+	version1_on_disk = __cpu_to_le32(MAP_V1);
+	if (memcmp(data, &signature_on_disk, sizeof(MAP_SIGNATURE))) {
+		if (assume_v0) {
+			/* assume v0 */
+			version = MAP_V0;
+		} else if (!memcmp(data, &version1_on_disk, sizeof(uint32_t))) {
+			version = MAP_V1;
+		} else {
+			XSEGLOG2(&lc, E, "No signature found");
+			goto out_put;
+		}
+	} else {
+		struct header_struct *hdr = (struct header_struct *)data;
+		version = __be32_to_cpu(hdr->version);
 	}
 
-	version = *(uint32_t *)data;
-	if (version > MAP_LATEST_VERSION) {
-		XSEGLOG2(&lc, E, "Loaded invalid version %u > "
-				"latest version %u",
-				map->version, MAP_LATEST_VERSION);
-		goto out_put;
+	switch (version) {
+		case MAP_V0:
+			r = read_map_header_v0(map, (struct v0_header_struct *)data);
+			break;
+		case MAP_V1:
+			r = read_map_header_v1(map, (struct v1_header_struct *)data);
+			break;
+		case MAP_V2:
+			r = read_map_header_v2(map, (struct v2_header_struct *)data);
+			break;
+		default:
+			XSEGLOG2(&lc, E, "Loaded invalid version %u > "
+					"latest version %u",
+					version, MAP_LATEST_VERSION);
+			goto out_put;
 	}
-
-	map->version = version;
-	r = map_functions[version].read_map_metadata(map, (unsigned char *)data,
-							req->serviced);
 	if (r < 0) {
 		goto out_put;
 	}
 
 	put_request(pr, req);
+
+	if (!is_valid_blocksize(map->blocksize)) {
+		XSEGLOG2(&lc, E, "%s has Invalid blocksize %llu", map->volume,
+				map->blocksize);
+		goto out_err;
+	}
+
 	return 0;
 
 out_put:
@@ -482,6 +592,8 @@ int load_map(struct peer_req *pr, struct map *map)
 	//struct xseg_request *req;
 	int r;
 	uint32_t prev_version;
+	uint64_t v0_size = NO_V0SIZE;
+	uint64_t nr_objs = 0;
 
 	XSEGLOG2(&lc, I, "Loading map %s", map->volume);
 
@@ -492,12 +604,25 @@ int load_map(struct peer_req *pr, struct map *map)
 		goto out_err;
 	}
 	XSEGLOG2(&lc, D, "Loaded map metadata. Found map version %u", map->version);
-	r = map_functions[map->version].load_map_data(pr, map);
+	r = map->mops->load_map_data(pr, map);
 	if (r < 0)
 		goto out_err;
 
-	if (map->version > 0 && map->version != MAP_LATEST_VERSION &&
-			map->state & MF_MAP_EXCLUSIVE) {
+	v0_size = pr->req->v0_size;
+	if (map->version == MAP_V0 && v0_size != NO_V0SIZE) {
+		nr_objs =__calc_map_obj(v0_size, MAPPER_DEFAULT_BLOCKSIZE);
+		if (map->nr_objs != nr_objs) {
+			XSEGLOG2(&lc, E, "Size of v0 map invalid. "
+					"Read %llu objs vs %llu expected",
+					map->nr_objs, nr_objs);
+			goto out_err;
+		} else {
+			map->size = v0_size;
+		}
+	}
+
+	if (map->version != MAP_LATEST_VERSION &&
+			(map->state & MF_MAP_EXCLUSIVE)) {
 		/* update map to the latest version */
 		/* FIXME assert that all old map data are overwritten */
 		prev_version = map->version;
@@ -602,11 +727,13 @@ struct xseg_request * __copyup_object(struct peer_req *pr, struct map_node *mn)
 	char *tmp = new_target;
 	char hexlified_epoch[HEXLIFIED_EPOCH];
 	char hexlified_index[HEXLIFIED_INDEX];
+	uint64_t be_epoch = __cpu_to_be64(map->epoch);
+	uint64_t be_objectidx = __cpu_to_be64(mn->objectidx);
 
-	strncpy(new_target, MAPPER_PREFIX, MAPPER_PREFIX_LEN);
+//	strncpy(new_target, MAPPER_PREFIX, MAPPER_PREFIX_LEN);
 
-	hexlify((unsigned char *)&map->epoch, sizeof(map->epoch), hexlified_epoch);
-	hexlify((unsigned char *)&mn->objectidx, sizeof(mn->objectidx), hexlified_index);
+	hexlify((unsigned char *)&be_epoch, sizeof(be_epoch), hexlified_epoch);
+	hexlify((unsigned char *)&be_objectidx, sizeof(be_objectidx), hexlified_index);
 	strncpy(tmp, map->volume, map->volumelen);
 	tmp += map->volumelen;
 	strncpy(tmp, "_", 1);
@@ -737,12 +864,13 @@ static int __copyup_write_cb(struct peer_req *pr, struct xseg_request *req,
 	struct peerd *peer = pr->peer;
 	struct map_node tmp;
 	char *data;
+	struct map *map = mn->map;
 
 	//assert mn->state & MF_OBJECT_WRITING
 	mn->state &= ~MF_OBJECT_WRITING;
 
 	data = xseg_get_data(peer->xseg, req);
-	map_functions[mn->map->version].read_object(&tmp, (unsigned char *)data);
+	map->mops->read_object(&tmp, (unsigned char *)data);
 	/* old object should not be writable */
 	if (mn->flags & MF_OBJECT_WRITABLE) {
 		XSEGLOG2(&lc, E, "map node %s has wrong flags", mn->object);
@@ -818,7 +946,7 @@ struct xseg_request * __object_write(struct peerd *peer, struct peer_req *pr,
 	struct mapper_io *mio = __get_mapper_io(pr);
 	struct xseg_request *req;
 
-	req = map_functions[map->version].prepare_write_object(pr, map, mn);
+	req = map->mops->prepare_write_object(pr, map, mn);
 	if (!req){
 		XSEGLOG2(&lc, E, "Cannot prepare write object");
 		goto out_err;
@@ -852,54 +980,162 @@ out_err:
 	return NULL;
 }
 
-#if 0
-struct xseg_request * __delete_object(struct peer_req *pr, struct map_node *mn)
+static int __object_delete_delete_cb(struct peer_req *pr, struct xseg_request *req,
+		struct map_node *mn)
 {
-	void *dummy;
+	struct peerd *peer = pr->peer;
+	struct map *map;
+	struct xseg_request *xreq;
+	struct map_node newmn;
+	int r;
+	struct mapper_io *mio = __get_mapper_io(pr);
+
+	mn->state &= ~MF_OBJECT_DELETING;
+
+	map = mn->map;
+	if (!map){
+		XSEGLOG2(&lc, E, "Object %s has no map back pointer", mn->object);
+		return -1;
+	}
+
+	/* construct a tmp map_node for writing purposes */
+	newmn = *mn;
+	newmn.flags |= MF_OBJECT_DELETED;
+	xreq = __object_write(peer, pr, map, &newmn);
+	if (!xreq){
+		XSEGLOG2(&lc, E, "Object write returned error for object %s"
+				"\n\t of map %s [%llu]",
+				mn->object, map->volume, (unsigned long long) mn->objectidx);
+		return -1;
+	}
+	r = __set_node(mio, xreq, mn);
+	if (r < 0) {
+		XSEGLOG2(&lc, E, "Cannot set map node for object %s", mn->object);
+	}
+	mn->state |= MF_OBJECT_WRITING;
+	return 0;
+}
+
+static int __object_delete_write_cb(struct peer_req *pr, struct xseg_request *req,
+		struct map_node *mn)
+{
+	struct peerd *peer = pr->peer;
+	struct map_node tmp;
+	char *data;
+
+	//assert mn->state & MF_OBJECT_WRITING
+	mn->state &= ~MF_OBJECT_WRITING;
+
+	/* update object on cache */
+	mn->flags |= MF_OBJECT_DELETED;
+	return 0;
+}
+
+void object_delete_cb(struct peer_req *pr, struct xseg_request *req)
+{
+	struct mapper_io *mio = __get_mapper_io(pr);
+	struct peerd *peer = pr->peer;
+	struct map_node *mn = __get_node(mio, req);
+	struct xseg_reply_hash *xreply;
+
+	__set_node(mio, req, NULL);
+
+	if (!mn) {
+		XSEGLOG2(&lc, E, "Cannot get mapnode");
+		mio->err = 1;
+		goto out_err;
+	}
+
+	if (req->state & XS_FAILED){
+		XSEGLOG2(&lc, E, "Req failed");
+		mn->state &= ~MF_OBJECT_DELETING;
+		mn->state &= ~MF_OBJECT_WRITING;
+		goto out_err;
+	}
+	if (req->op == X_WRITE) {
+		if (__object_delete_write_cb(pr, req, mn) < 0) {
+			goto out_err;
+		}
+		XSEGLOG2(&lc, I, "Object write of %s completed successfully",
+				mn->object);
+		mio->pending_reqs--;
+		signal_mapnode(mn);
+		//put mapnode here to match get on do_destroy()
+		put_mapnode(mn);
+		signal_pr(pr);
+	} else if (req->op == X_DELETE) {
+	//	issue write_object;
+		if (__object_delete_delete_cb(pr, req, mn) < 0) {
+			goto out_err;
+		}
+		XSEGLOG2(&lc, I, "Object deletion of %s completed. "
+				 "Pending writing.", mn->object);
+	} else {
+		//wtf??
+		;
+	}
+
+out:
+	put_request(pr, req);
+	return;
+
+out_err:
+	mio->pending_reqs--;
+	XSEGLOG2(&lc, D, "Mio->pending_reqs: %u", mio->pending_reqs);
+	mio->err = 1;
+	signal_pr(pr);
+	goto out;
+}
+
+
+struct xseg_request * __object_delete(struct peer_req *pr, struct map_node *mn)
+{
 	struct peerd *peer = pr->peer;
 	struct mapperd *mapper = __get_mapperd(peer);
 	struct mapper_io *mio = __get_mapper_io(pr);
-	struct xseg_request *req = xseg_get_request(peer->xseg, pr->portno, 
-							mapper->bportno, X_ALLOC);
+	struct xseg_request *req;
+	int r;
+
 	XSEGLOG2(&lc, I, "Deleting mapnode %s", mn->object);
+
+	req = get_request(pr, mapper->bportno, mn->object, mn->objectlen, 0);
 	if (!req){
 		XSEGLOG2(&lc, E, "Cannot get request for object %s", mn->object);
 		goto out_err;
 	}
-	int r = xseg_prep_request(peer->xseg, req, mn->objectlen, 0);
-	if (r < 0){
-		XSEGLOG2(&lc, E, "Cannot prep request for object %s", mn->object);
-		goto out_put;
-	}
-	char *target = xseg_get_target(peer->xseg, req);
-	strncpy(target, mn->object, req->targetlen);
+
 	req->op = X_DELETE;
 	req->size = req->datalen;
 	req->offset = 0;
-	r = xseg_set_req_data(peer->xseg, req, pr);
-	if (r < 0){
-		XSEGLOG2(&lc, E, "Cannot set req data for object %s", mn->object);
+
+	r = __set_node(mio, req, mn);
+	if (r < 0) {
+		XSEGLOG2(&lc, E, "Cannot set map node for object %s", mn->object);
 		goto out_put;
 	}
-	xport p = xseg_submit(peer->xseg, req, pr->portno, X_ALLOC);
-	if (p == NoPort){
-		XSEGLOG2(&lc, E, "Cannot submit request for object %s", mn->object);
-		goto out_unset;
+	r = send_request(pr, req);
+	if (r < 0) {
+		XSEGLOG2(&lc, E, "Cannot send request %p, pr: %p, object: %s",
+				req, pr, mn->object);
+		goto out_unset_node;
 	}
-	r = xseg_signal(peer->xseg, p);
 	mn->flags |= MF_OBJECT_DELETING;
 	XSEGLOG2(&lc, I, "Object %s deletion pending", mn->object);
+
+	mio->pending_reqs++;
+
 	return req;
 
-out_unset:
-	xseg_get_req_data(peer->xseg, req, &dummy);
+out_unset_node:
+	__set_node(mio, req, NULL);
 out_put:
-	xseg_put_request(peer->xseg, req, pr->portno);
+	put_request(pr, req);
 out_err:
 	XSEGLOG2(&lc, I, "Object %s deletion failed", mn->object);
 	return NULL;
 }
 
+#if 0
 struct xseg_request * __delete_map(struct peer_req *pr, struct map *map)
 {
 	void *dummy;

@@ -39,12 +39,8 @@
 #include <unistd.h>
 #include <hash.h>
 #include <peer.h>
-#include <mapper.h>
 
-/* version 0 functions */
-
-/* no header */
-#define v0_mapheader_size 0
+struct map;
 
 /* Maximum length of an object name in memory */
 #define v0_max_objectlen (HEXLIFIED_SHA256_DIGEST_SIZE)
@@ -53,29 +49,21 @@
  *
  * max object len in disk. just the unhexlified name.
  */
-#define v0_objectsize_in_map (SHA256_DIGEST_SIZE)
+struct v0_object_on_disk {
+	unsigned char name[SHA256_DIGEST_SIZE];
+};
 
-int read_object_v0(struct map_node *mn, unsigned char *buf);
-void object_to_map_v0(unsigned char* buf, struct map_node *mn);
-struct xseg_request * prepare_write_object_v0(struct peer_req *pr,
-				struct map *map, struct map_node *mn);
-//int read_map_v0(struct map *m, unsigned char * data);
-int read_map_metadata_v0(struct map *map, unsigned char *metadata,
-		uint32_t metadata_len);
-int load_map_data_v0(struct peer_req *pr, struct map *map);
-int write_map_metadata_v0(struct peer_req *pr, struct map *map);
-int write_map_data_v0(struct peer_req *pr, struct map *map);
+#define v0_objectsize_in_map (sizeof(struct v0_object_on_disk))
 
-/*.read_map = read_map_v0,	\*/
-#define map_functions_v0 {				\
-			.object_to_map = object_to_map_v0, \
-			.read_object = read_object_v0,	\
-			.prepare_write_object = prepare_write_object_v0,\
-			.load_map_data = load_map_data_v0, \
-			.write_map_metadata = write_map_metadata_v0, \
-			.write_map_data = write_map_data_v0, \
-			.read_map_metadata = read_map_metadata_v0 \
-			}
+struct v0_header_struct {
+	/* Empty */
+} __attribute__((packed));
+#define v0_mapheader_size (sizeof(struct v0_header_struct))
+
+extern struct map_ops v0_ops;
+
+int read_map_header_v0(struct map *map, struct v0_header_struct *v0_hdr);
+void write_map_header_v0(struct map *map, struct v0_header_struct *v0_hdr);
 
 
 #endif /* end MAPPERVERSION0_H */

@@ -93,8 +93,15 @@ def is_device_mapped(device):
             return d_id
     return None
 
+def parse_assume_v0(req, assume_v0, v0_size):
+    if assume_v0:
+        flags = req.get_flags()
+        flags |= XF_ASSUMEV0
+        req.set_flags(flags)
+        if v0_size != -1:
+            req.set_v0_size= v0_size
 
-def create(name, size=None, snap=None, cont_addr=False, **kwargs):
+def create(name, size=None, snap=None, assume_v0=False, v0_size=-1, **kwargs):
     if len(name) < 6:
         raise Error("Name should have at least len 6")
     if size is None and snap is None:
@@ -111,7 +118,8 @@ def create(name, size=None, snap=None, cont_addr=False, **kwargs):
     xseg_ctx = Xseg_ctx(get_segment())
     mport = peers['mapperd'].portno_start
     req = Request.get_clone_request(xseg_ctx, mport, snap, clone=name,
-            clone_size=size, cont_addr=cont_addr)
+            clone_size=size)
+    parse_assume_v0(req, assume_v0, v0_size)
     req.submit()
     req.wait()
     ret = req.success()
@@ -121,13 +129,14 @@ def create(name, size=None, snap=None, cont_addr=False, **kwargs):
         raise Error("vlmc creation failed")
 
 
-def snapshot(name, snap_name=None, cli=False, **kwargs):
+def snapshot(name, snap_name=None, cli=False, assume_v0=False, v0_size=-1, **kwargs):
     if len(name) < 6:
         raise Error("Name should have at least len 6")
 
     xseg_ctx = Xseg_ctx(get_segment())
     vport = peers['vlmcd'].portno_start
     req = Request.get_snapshot_request(xseg_ctx, vport, name, snap=snap_name)
+    parse_assume_v0(req, assume_v0, v0_size)
     req.submit()
     req.wait()
     ret = req.success()
@@ -139,14 +148,37 @@ def snapshot(name, snap_name=None, cli=False, **kwargs):
     if cli:
         sys.stdout.write("Snapshot name: %s\n" % snap_name)
 
+def rename(name, newname=None, cli=False, assume_v0=False, v0_size=-1, **kwargs):
+    if len(name) < 6:
+        raise Error("Name should have at least len 6")
 
-def hash(name, cli=False, **kwargs):
+    if len(newname) < 6:
+        raise Error("New name should have at least len 6")
+
+    xseg_ctx = Xseg_ctx(get_segment())
+    mport = peers['mapperd'].portno_start
+    req = Request.get_rename_request(xseg_ctx, mport, name, newname=newname)
+    parse_assume_v0(req, assume_v0, v0_size)
+    req.submit()
+    req.wait()
+    ret = req.success()
+    req.put()
+    xseg_ctx.shutdown()
+
+    if not ret:
+        raise Error("vlmc rename failed")
+    if cli:
+        sys.stdout.write("Renamed %s to %s\n" % (name, newname))
+
+
+def hash(name, cli=False, assume_v0=False, v0_size=-1, **kwargs):
     if len(name) < 6:
         raise Error("Name should have at least len 6")
 
     xseg_ctx = Xseg_ctx(get_segment())
     mport = peers['mapperd'].portno_start
     req = Request.get_hash_request(xseg_ctx, mport, name)
+    parse_assume_v0(req, assume_v0, v0_size)
     req.submit()
     req.wait()
     ret = req.success()
@@ -180,7 +212,7 @@ def list_volumes(**kwargs):
         raise Error("Invalid storage")
 
 
-def remove(name, **kwargs):
+def remove(name, assume_v0=False, v0_size=-1, **kwargs):
     device = is_mapped(name)
     if device is not None:
         raise Error("Volume %s mapped on device %s%s" % (name, DEVICE_PREFIX,
@@ -188,8 +220,9 @@ def remove(name, **kwargs):
 
     ret = False
     xseg_ctx = Xseg_ctx(get_segment())
-    mport = peers['mapperd'].portno_start
+    mport = peers['vlmcd'].portno_start
     req = Request.get_delete_request(xseg_ctx, mport, name)
+    parse_assume_v0(req, assume_v0, v0_size)
     req.submit()
     req.wait()
     ret = req.success()
@@ -200,7 +233,7 @@ def remove(name, **kwargs):
 
 
 @exclusive()
-def map_volume(name, **kwargs):
+def map_volume(name, assume_v0=False, v0_size=-1, readonly=False, **kwargs):
     if not loaded_module("blktap"):
         raise Error("blktap module not loaded")
 
@@ -210,7 +243,10 @@ def map_volume(name, **kwargs):
                     '/dev/xen/blktap-2/tapdev', device))
 
     try:
-        device = VlmcTapdisk.create(name)
+        device = VlmcTapdisk.create(name, vport=peers['vlmcd'].portno_start,
+                                    mport=peers['mapperd'].portno_start,
+                                    assume_v0=assume_v0, v0_size=v0_size,
+                                    readonly=readonly)
         if device:
             sys.stderr.write(device + '\n')
             return device.split(DEVICE_PREFIX)[1]
@@ -286,7 +322,7 @@ def unlock(name, force=False, cli=False, **kwargs):
         sys.stdout.write("Volume unlocked\n")
 
 
-def open_volume(name, cli=False, **kwargs):
+def open_volume(name, cli=False, assume_v0=False, v0_size=-1, **kwargs):
     if len(name) < 6:
         raise Error("Name should have at least len 6")
 
@@ -294,6 +330,7 @@ def open_volume(name, cli=False, **kwargs):
     xseg_ctx = Xseg_ctx(get_segment())
     vport = peers['vlmcd'].portno_start
     req = Request.get_open_request(xseg_ctx, vport, name)
+    parse_assume_v0(req, assume_v0, v0_size)
     req.submit()
     req.wait()
     ret = req.success()
@@ -305,7 +342,7 @@ def open_volume(name, cli=False, **kwargs):
         sys.stdout.write("Volume opened\n")
 
 
-def close_volume(name, cli=False, **kwargs):
+def close_volume(name, cli=False, assume_v0=False, v0_size=-1, **kwargs):
     if len(name) < 6:
         raise Error("Name should have at least len 6")
 
@@ -313,6 +350,7 @@ def close_volume(name, cli=False, **kwargs):
     xseg_ctx = Xseg_ctx(get_segment())
     vport = peers['vlmcd'].portno_start
     req = Request.get_close_request(xseg_ctx, vport, name)
+    parse_assume_v0(req, assume_v0, v0_size)
     req.submit()
     req.wait()
     ret = req.success()
@@ -324,7 +362,7 @@ def close_volume(name, cli=False, **kwargs):
         sys.stdout.write("Volume closed\n")
 
 
-def info(name, cli=False, **kwargs):
+def info(name, cli=False, assume_v0=False, v0_size=-1, **kwargs):
     if len(name) < 6:
         raise Error("Name should have at least len 6")
 
@@ -332,6 +370,7 @@ def info(name, cli=False, **kwargs):
     xseg_ctx = Xseg_ctx(get_segment())
     mport = peers['mapperd'].portno_start
     req = Request.get_info_request(xseg_ctx, mport, name)
+    parse_assume_v0(req, assume_v0, v0_size)
     req.submit()
     req.wait()
     ret = req.success()

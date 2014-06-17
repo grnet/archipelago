@@ -39,10 +39,8 @@
 #include <unistd.h>
 #include <hash.h>
 #include <peer.h>
-#include <mapper.h>
 
-/* v2 functions */
-
+struct map;
 
 /* Maximum length of an object name in memory */
 #define v2_max_objectlen 128
@@ -51,46 +49,40 @@
  *
  * byte for flags + map_node->objectlen + max object len in disk
  */
-#define v2_objectsize_in_map (1 + sizeof(uint32_t) + v2_max_objectlen)
+struct v2_object_on_disk {
+	unsigned char flags;
+	uint32_t objectlen;
+	unsigned char object[v2_max_objectlen];
+}__attribute__((packed));
+
+#define v2_objectsize_in_map (sizeof(struct v2_object_on_disk))
 
 //#define v2_read_chunk_size (512*1024)
 #define v2_nr_objs_per_chunk ((512*1024)/v2_objectsize_in_map)
 #define v2_read_chunk_size (v2_nr_objs_per_chunk * v2_objectsize_in_map)
 
 /* Map header contains:
- * 	map version - uint32_t
- * 	volume size - uint64_t
- * 	block size  - uint32_t
- * 	map flags   - uint32_t
- * 	map epoch   - uint64_t
+ * 	map signature - uint32_t
+ * 	map version   - uint32_t
+ * 	volume size   - uint64_t
+ * 	block size    - uint32_t
+ * 	map flags     - uint32_t
+ * 	map epoch     - uint64_t
  */
-#define v2_mapheader_size (sizeof(uint32_t) + \
-			   sizeof(uint64_t) + \
-			   sizeof(uint32_t) + \
-			   sizeof(uint32_t) + \
-			   sizeof(uint64_t))
+struct v2_header_struct {
+	uint32_t signature;
+	uint32_t version;
+	uint64_t size;
+	uint32_t blocksize;
+	uint32_t flags;
+	uint64_t epoch;
+} __attribute__((packed));
 
-int read_object_v2(struct map_node *mn, unsigned char *buf);
-void object_to_map_v2(unsigned char* buf, struct map_node *mn);
-struct xseg_request * prepare_write_object_v2(struct peer_req *pr,
-				struct map *map, struct map_node *mn);
-//int read_map_v2(struct map *m, unsigned char * data);
-int read_map_metadata_v2(struct map *map, unsigned char *metadata,
-		uint32_t metadata_len);
-int load_map_data_v2(struct peer_req *pr, struct map *map);
-//int write_map_v2(struct peer_req *pr, struct map *map);
-int write_map_metadata_v2(struct peer_req *pr, struct map *map);
-int write_map_data_v2(struct peer_req *pr, struct map *map);
+#define v2_mapheader_size (sizeof(struct v2_header_struct))
 
-/*.read_map = read_map_v2,	\*/
-#define map_functions_v2 {				\
-			.read_object = read_object_v2,	\
-			.object_to_map = object_to_map_v2, \
-			.prepare_write_object = prepare_write_object_v2,\
-			.load_map_data = load_map_data_v2, \
-			.write_map_metadata = write_map_metadata_v2, \
-			.write_map_data = write_map_data_v2, \
-			.read_map_metadata = read_map_metadata_v2 \
-			}
+extern struct map_ops v2_ops;
+
+int read_map_header_v2(struct map *map, struct v2_header_struct *v2_hdr);
+void write_map_header_v2(struct map *map, struct v2_header_struct *v2_hdr);
 
 #endif /* end MAPPERVERSION2_H */

@@ -788,15 +788,9 @@ static void handle_read(struct peerd *peer, struct peer_req *pr)
 
 	fd = dir_open(pfiled, fio, target, req->targetlen, READ);
 	if (fd < 0){
-		if (errno != ENOENT) {
-			XSEGLOG2(&lc, E, "Open failed");
-			pfiled_fail(peer, pr);
-			return;
-		} else {
-			memset(data, 0, req->size);
-			req->serviced = req->size;
-			goto out;
-		}
+		XSEGLOG2(&lc, E, "Open failed");
+		pfiled_fail(peer, pr);
+		return;
 	}
 
 

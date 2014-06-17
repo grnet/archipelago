@@ -289,9 +289,9 @@ int handle_read(struct peerd *peer, struct peer_req *pr)
 	else if (rio->state == READING) {
 		XSEGLOG2(&lc, I, "Reading of %s callback", rio->obj_name);
 		data = xseg_get_data(peer->xseg, pr->req);
-		if (pr->retval > 0)
+		if (pr->retval > 0) {
 			req->serviced += pr->retval;
-		else if (pr->retval == 0) {
+		} else if (pr->retval == 0) {
 			XSEGLOG2(&lc, I, "Reading of %s reached end of file at "
 				"%llu bytes. Zeroing out rest", rio->obj_name,
 				(unsigned long long) req->serviced);
@@ -300,15 +300,7 @@ int handle_read(struct peerd *peer, struct peer_req *pr)
 			 */
 			memset(data + req->serviced, 0, req->size - req->serviced);
 			req->serviced = req->size;
-		}
-		else if (pr->retval == -2) {
-			XSEGLOG2(&lc, I, "Reading of %s return -2. "
-					"Zeroing out data", rio->obj_name);
-			/* object not found. return zeros instead */
-			memset(data, 0, req->size);
-			req->serviced = req->size;
-		}
-		else {
+		} else {
 			XSEGLOG2(&lc, E, "Reading of %s failed", rio->obj_name);
 			/* pr->retval < 0 && pr->retval != -2 */
 			fail(peer, pr);

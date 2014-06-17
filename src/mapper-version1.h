@@ -37,46 +37,35 @@
 #define MAPPERVERSION1_H
 
 #include <xseg/xseg.h>
-#include <hash.h>
 #include <peer.h>
-#include <mapper.h>
+#include <hash.h>
 
-/* v1 functions */
+struct map;
 
 /* Maximum length of an object name in memory */
-#define v1_max_objectlen (MAPPER_PREFIX_LEN + HEXLIFIED_SHA256_DIGEST_SIZE)
+// 7 is the deprecated MAPPER_PREFIX_LEN, held here for backwards compatibility
+#define v1_max_objectlen (7 + HEXLIFIED_SHA256_DIGEST_SIZE)
 
 /* Required size in storage to store object information.
  *
  * transparency byte + max object len in disk
  */
-#define v1_objectsize_in_map (1 + SHA256_DIGEST_SIZE)
+struct v1_object_on_disk {
+	unsigned char flags;
+	unsigned char name[SHA256_DIGEST_SIZE];
+};
+#define v1_objectsize_in_map (sizeof(struct v1_object_on_disk))
 
-/* Map header contains:
- * 	map version
- * 	volume size
- */
-#define v1_mapheader_size (sizeof (uint32_t) + sizeof(uint64_t))
+struct v1_header_struct {
+	uint32_t version;
+	uint64_t size;
+} __attribute__((packed));
 
-int read_object_v1(struct map_node *mn, unsigned char *buf);
-void object_to_map_v1(unsigned char* buf, struct map_node *mn);
-struct xseg_request * prepare_write_object_v1(struct peer_req *pr,
-				struct map *map, struct map_node *mn);
-//int read_map_v1(struct map *m, unsigned char * data);
-int read_map_metadata_v1(struct map *map, unsigned char *metadata,
-		uint32_t metadata_len);
-int load_map_data_v1(struct peer_req *pr, struct map *map);
-int write_map_metadata_v1(struct peer_req *pr, struct map *map);
-int write_map_data_v1(struct peer_req *pr, struct map *map);
+#define v1_mapheader_size (sizeof(struct v1_header_struct))
 
-/*.read_map = read_map_v1,	\*/
-#define map_functions_v1 {				\
-			.object_to_map = object_to_map_v1, \
-			.read_object = read_object_v1,	\
-			.prepare_write_object = prepare_write_object_v1,\
-			.load_map_data = load_map_data_v1, \
-			.write_map_metadata = write_map_metadata_v1, \
-			.write_map_data = write_map_data_v1, \
-			.read_map_metadata = read_map_metadata_v1 \
-			}
+extern struct map_ops v1_ops;
+
+int read_map_header_v1(struct map *map, struct v1_header_struct *v1_hdr);
+void write_map_header_v1(struct map *map, struct v1_header_struct *v1_hdr);
+
 #endif /* end MAPPERVERSION1_H */

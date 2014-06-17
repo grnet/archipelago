@@ -257,7 +257,7 @@ static int conclude_pr(struct peerd *peer, struct peer_req *pr)
 
 static int should_freeze_volume(struct xseg_request *req)
 {
-	if (req->op == X_CLOSE || req->op == X_SNAPSHOT ||
+	if (req->op == X_CLOSE || req->op == X_SNAPSHOT || req->op == X_DELETE || 
 		(req->op == X_WRITE && !req->size && (req->flags & XF_FLUSH)))
 		return 1;
 	return 0;
@@ -351,12 +351,16 @@ static int do_accepted_pr(struct peerd *peer, struct peer_req *pr)
 	vio->mreq->size = pr->req->size;
 	vio->mreq->offset = pr->req->offset;
 	vio->mreq->flags = 0;
+	/* propagate v0 info */
+	vio->mreq->flags |= pr->req->flags & XF_ASSUMEV0;
+	vio->mreq->v0_size= pr->req->v0_size;
 	switch (pr->req->op) {
 		case X_READ: vio->mreq->op = X_MAPR; break;
 		case X_WRITE: vio->mreq->op = X_MAPW; break;
 		case X_INFO: vio->mreq->op = X_INFO; break;
 		case X_CLOSE: vio->mreq->op = X_CLOSE; break;
 		case X_OPEN: vio->mreq->op = X_OPEN; break;
+		case X_DELETE: vio->mreq->op = X_DELETE; break;
 		case X_SNAPSHOT:
 			     //FIXME hack
 			     vio->mreq->op = X_SNAPSHOT;
@@ -604,6 +608,40 @@ static int mapping_snapshot(struct peerd *peer, struct peer_req *pr)
 	return 0;
 }
 
+static int mapping_delete(struct peerd *peer, struct peer_req *pr)
+{
+	struct vlmcd *vlmc = __get_vlmcd(peer);
+	struct vlmc_io *vio = __get_vlmcio(pr);
+	char *target = xseg_get_target(peer->xseg, pr->req);
+	struct volume_info *vi = find_volume_len(vlmc, target, pr->req->targetlen);
+	if (vio->mreq->state & XS_FAILED){
+		XSEGLOG2(&lc, E, "req %lx (op: %d) failed",
+				(unsigned long)vio->mreq, vio->mreq->op);
+		vio->err = 1;
+	}
+
+	xseg_put_request(peer->xseg, vio->mreq, pr->portno);
+	vio->mreq = NULL;
+	conclude_pr(peer, pr);
+
+	//assert volume freezed
+	//unfreeze
+	if (!vi){
+		XSEGLOG2(&lc, E, "Volume has no volume info");
+		return 0;
+	}
+	XSEGLOG2(&lc, D, "Unfreezing volume %s", vi->name);
+	vi->flags &= ~ VF_VOLUME_FREEZED;
+
+	xqindex xqi;
+	while (vi->pending_reqs && !(vi->flags & VF_VOLUME_FREEZED) &&
+			(xqi = __xq_pop_head(vi->pending_reqs)) != Noneidx) {
+		struct peer_req *ppr = (struct peer_req *) xqi;
+		do_accepted_pr(peer, ppr);
+	}
+	return 0;
+}
+
 static int mapping_readwrite(struct peerd *peer, struct peer_req *pr)
 {
 	struct vlmcd *vlmc = __get_vlmcd(peer);
@@ -612,7 +650,7 @@ static int mapping_readwrite(struct peerd *peer, struct peer_req *pr)
 	uint64_t pos, datalen, offset;
 	uint32_t targetlen;
 	struct xseg_request *breq;
-	char *target;
+	char *target, *data;
 	int i,r;
 	xport p;
 	if (vio->mreq->state & XS_FAILED){
@@ -645,8 +683,24 @@ static int mapping_readwrite(struct peerd *peer, struct peer_req *pr)
 
 	pos = 0;
 	__set_vio_state(vio, SERVING);
+	vio->breq_cnt = 0;
 	for (i = 0; i < vio->breq_len; i++) {
 		datalen = mreply->segs[i].size;
+		if (mreply->segs[i].flags & XF_MAPFLAG_ZERO) {
+			vio->breqs[i] = NULL;
+			if (pr->req->op != X_READ) {
+				XSEGLOG2(&lc, E, "Mapper returned zero object "
+						"for a write I/O operation");
+				vio->err = 1;
+				break;
+			}
+			data = xseg_get_data(peer->xseg, pr->req);
+			data += pos;
+			memset(data, 0, datalen);
+			pos += datalen;
+			pr->req->serviced += datalen;
+			continue;
+		}
 		offset = mreply->segs[i].offset;
 		targetlen = mreply->segs[i].targetlen;
 		breq = xseg_get_request(peer->xseg, pr->portno, vlmc->bportno, X_ALLOC);
@@ -693,16 +747,17 @@ static int mapping_readwrite(struct peerd *peer, struct peer_req *pr)
 			XSEGLOG2(&lc, W, "Couldnt signal port %u", p);
 		}
 		vio->breqs[i] = breq;
+		vio->breq_cnt++;
 	}
-	vio->breq_cnt = i;
 	xseg_put_request(peer->xseg, vio->mreq, pr->portno);
 	vio->mreq = NULL;
-	if (i == 0) {
+	if (vio->breq_cnt == 0) {
 		free(vio->breqs);
 		vio->breqs = NULL;
-		vio->err = 1;
 		conclude_pr(peer, pr);
-		return -1;
+		if (vio->err) {
+			return -1;
+		}
 	}
 	return 0;
 }
@@ -729,6 +784,9 @@ static int handle_mapping(struct peerd *peer, struct peer_req *pr,
 			break;
 		case X_CLOSE:
 			mapping_close(peer, pr);
+			break;
+		case X_DELETE:
+			mapping_delete(peer, pr);
 			break;
 		case X_OPEN:
 			mapping_open(peer, pr);

@@ -33,7 +33,9 @@
  */
 
 #include <xseg/xseg.h>
+#include <mapper.h>
 #include <mapper-version0.h>
+#include <stdlib.h>
 
 /* version 0 functions */
 #define v0_chunked_read_size (512*1024)
@@ -43,7 +45,11 @@ int read_object_v0(struct map_node *mn, unsigned char *buf)
 	hexlify(buf, SHA256_DIGEST_SIZE, mn->object);
 	mn->object[HEXLIFIED_SHA256_DIGEST_SIZE] = 0;
 	mn->objectlen = HEXLIFIED_SHA256_DIGEST_SIZE;
-	mn->flags = 0; //MF_OBJECT_WRITABLE;
+	mn->flags = 0; //not MF_OBJECT_WRITABLE;
+	//check if zero
+	if (!strncmp(mn->object, zero_block, ZERO_BLOCK_LEN)) {
+		mn->flags |= MF_OBJECT_ZERO;
+	}
 
 	return 0;
 }
@@ -88,13 +94,6 @@ int read_map_v0(struct map *m, unsigned char * data)
 	char nulls[SHA256_DIGEST_SIZE];
 	memset(nulls, 0, SHA256_DIGEST_SIZE);
 
-	r = !memcmp(data, nulls, SHA256_DIGEST_SIZE);
-	if (r) {
-		XSEGLOG2(&lc, E, "Read zeros");
-		return -1;
-	}
-
-
 	map_node = realloc(m->objects,
 			(m->nr_objs + max_read_obj) * sizeof(struct map_node));
 	if (!map_node)
@@ -119,6 +118,11 @@ int read_map_v0(struct map *m, unsigned char * data)
 	return (limit - m->nr_objs);
 }
 
+int delete_map_data_v0(struct peer_req *pr, struct map *map)
+{
+	return -1;
+	//perhaps use an X_DELETE ?
+}
 
 struct xseg_request * __write_map_data_v0(struct peer_req *pr, struct map *map)
 {
@@ -182,12 +186,6 @@ int write_map_data_v0(struct peer_req *pr, struct map *map)
 	return r;
 }
 
-
-int write_map_metadata_v0(struct peer_req *pr, struct map *map)
-{
-	/* No metadata */
-	return 0;
-}
 
 struct xseg_request * __load_map_data_v0(struct peer_req *pr, struct map *map)
 {
@@ -257,17 +255,31 @@ retry:
 	return 0;
 }
 
-int read_map_metadata_v0(struct map *map, unsigned char *metadata,
-		uint32_t metadata_len)
+struct map_ops v0_ops = {
+	.object_to_map = object_to_map_v0,
+	.read_object = read_object_v0,
+	.prepare_write_object = prepare_write_object_v0,
+	.load_map_data = load_map_data_v0,
+	.write_map_data = write_map_data_v0,
+	.delete_map_data = delete_map_data_v0
+};
+
+int read_map_header_v0(struct map *map, struct v0_header_struct *v0_hdr)
 {
 	/* No header. Just set defaults */
-	map->version = 0;
+	map->version = MAP_V0;
 	map->size = 0;
 	map->blocksize = MAPPER_DEFAULT_BLOCKSIZE;
 	map->nr_objs = 0;
 	map->flags = MF_MAP_READONLY;
 	map->epoch = 0;
 	map->objects = NULL;
+	map->mops = &v0_ops;
 
 	return 0;
+}
+
+void write_map_header_v0(struct map *map, struct v0_header_struct *v0_hdr)
+{
+	return;
 }
