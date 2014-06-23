@@ -592,6 +592,7 @@ int load_map(struct peer_req *pr, struct map *map)
 	//struct xseg_request *req;
 	int r;
 	uint32_t prev_version;
+	struct map_ops *prev_mops;
 	uint64_t v0_size = NO_V0SIZE;
 	uint64_t nr_objs = 0;
 
@@ -626,11 +627,14 @@ int load_map(struct peer_req *pr, struct map *map)
 		/* update map to the latest version */
 		/* FIXME assert that all old map data are overwritten */
 		prev_version = map->version;
+		prev_mops = map->mops;
 		map->version = MAP_LATEST_VERSION;
+		map->mops = MAP_LATEST_MOPS;
 		if (write_map(pr, map) < 0) {
 			XSEGLOG2(&lc, E, "Could not update map %s to latest version",
 					map->volume);
 			map->version = prev_version;
+			map->mops = prev_mops;
 			goto out_err;
 		}
 	}
