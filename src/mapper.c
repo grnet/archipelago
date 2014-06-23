@@ -1361,7 +1361,8 @@ struct map * get_map(struct peer_req *pr, char *name, uint32_t namelen,
 					close_map(pr, map);
 				}
 				map->state |= MF_MAP_CANCACHE;
-			} else if (map->flags & MF_MAP_READONLY) {
+			} else if (map->flags & MF_MAP_READONLY &&
+					map->version == MAP_LATEST_VERSION) {
 				/* always cache read only maps */
 				map->state |= MF_MAP_CANCACHE;
 			}
