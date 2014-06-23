@@ -216,11 +216,6 @@ static void get_dirs(char buf[6], struct pfiled *pfiled, char *target, uint32_t 
 	char *prefix = pfiled->prefix;
 	uint32_t prefixlen = pfiled->prefix_len;
 
-	if (strncmp(target, prefix, prefixlen)) {
-		strncpy(buf, target, 6);
-		return;
-	}
-
 	SHA256((unsigned char *)target, targetlen, sha);
 	hexlify(sha, 3, hex);
 	strncpy(buf, hex, 6);
