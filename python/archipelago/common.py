@@ -855,7 +855,7 @@ class Xseg_ctx(object):
         if self.port is not None and self.dynalloc:
                 xseg_leave_dynport(self.ctx, self.port)
         if self.ctx:
-        #    xseg_quit_local_signal(self.ctx, self.portno)
+            xseg_quit_local_signal(self.ctx, self.portno)
             xseg_leave(self.ctx)
         self.ctx = None
 
