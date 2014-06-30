@@ -151,7 +151,12 @@ can integrate with Pithos, and use Pithos images to provision a volume with
 Copy-On-Write semantics (i.e. a clone). Since Pithos images are already hashed,
 we can store Archipelago hashed volumes, which are indistinguishable from a Pithos
 image, along with the Pithos images, to enable further deduplication, or even
-registering an archipelago hashed snapshot as Pithos image file.
+registering an archipelago hashed snapshot as Pithos image file. The above
+process is illustrated on the following figure.
+
+.. image:: images/archipelago-composition.png
+    :target: _images/archipelago-composition.png
+    :scale: 50
 
 Archipelago is used by Cyclades and Ganeti for fast VM provisioning based on CoW
 volumes. Moreover, it enables live migration of thinly-provisioned VMs with no
