@@ -270,10 +270,8 @@ def main():
         args = parser.parse_args()
         loadrc(args.config)
         kwargs = vars(args)
-        if parser_func == archipelago_parser:
-            #peers = construct_peers()
-            xsegbd_args = [('start_portno', str(config['XSEGBD_START'])),
-                           ('end_portno', str(config['XSEGBD_END']))]
+        # if parser_func == archipelago_parser:
+            # peers = construct_peers()
         args.func(cli=True, **kwargs)
         return 0
     except Error as e:

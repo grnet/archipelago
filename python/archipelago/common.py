@@ -37,8 +37,22 @@
 
 from xseg.xseg_api import *
 from xseg.xprotocol import *
-from ctypes import CFUNCTYPE, cast, c_void_p, addressof, string_at, memmove, \
-    create_string_buffer, pointer, sizeof, POINTER, byref, c_int, c_char, Structure
+from ctypes import (
+    CFUNCTYPE,
+    cast,
+    c_void_p,
+    addressof,
+    string_at,
+    memmove,
+    create_string_buffer,
+    pointer,
+    sizeof,
+    POINTER,
+    byref,
+    c_int,
+    c_char,
+    Structure
+)
 import ctypes
 cb_null_ptrtype = CFUNCTYPE(None, uint32_t)
 
@@ -54,6 +68,8 @@ import socket
 import random
 from select import select
 import ConfigParser
+from grp import getgrnam
+from pwd import getpwnam
 
 random.seed()
 hostname = socket.gethostname()
@@ -62,7 +78,6 @@ valid_role_types = ['file_blocker', 'rados_blocker', 'mapperd', 'vlmcd']
 valid_segment_types = ['posix']
 
 peers = dict()
-xsegbd_args = []
 segment = None
 
 BIN_DIR = '/usr/bin/'
@@ -104,7 +119,7 @@ def xseg_wait_signal_green(ctx, sd, timeout):
     while True:
         try:
             os.read(fd, 512)
-        except OSError as (e,msg):
+        except OSError as (e, msg):
             if e == 11:
                 break
             else:
@@ -116,10 +131,22 @@ class Peer(object):
 
     def __init__(self, role=None, daemon=True, nr_ops=16,
                  logfile=None, pidfile=None, portno_start=None,
-                 portno_end=None, log_level=0, spec=None, threshold=None):
+                 portno_end=None, log_level=0, spec=None, threshold=None,
+                 user=None, group=None):
         if not role:
             raise Error("Role was not provided")
         self.role = role
+
+        if not user:
+            raise Error("User was not provided")
+
+        self.user = user
+        if not group:
+            raise Error("Group was not provided")
+
+        self.group = group
+        self.user_uid = getpwnam(self.user).pw_uid
+        self.group_gid = getgrnam(self.group).gr_gid
 
         self.nr_ops = nr_ops
         if not self.nr_ops > 0:
@@ -264,6 +291,12 @@ class Peer(object):
         if self.threshold:
             self.cli_opts.append("--threshold")
             self.cli_opts.append(str(self.threshold))
+        if self.user:
+            self.cli_opts.append("-uid")
+            self.cli_opts.append(str(self.user_uid))
+        if self.group:
+            self.cli_opts.append("-gid")
+            self.cli_opts.append(str(self.group_gid))
 
 
 class MTpeer(Peer):
@@ -298,7 +331,8 @@ class Radosd(MTpeer):
 
 class Filed(MTpeer):
     def __init__(self, archip_dir=None, prefix=None, fdcache=None,
-                 unique_str=None, nr_threads=1, nr_ops=16, direct=True, **kwargs):
+                 unique_str=None, nr_threads=1, nr_ops=16, direct=True,
+                 **kwargs):
         self.executable = FILE_BLOCKER
         self.archip_dir = archip_dir
         self.prefix = prefix
@@ -393,15 +427,13 @@ class Vlmcd(Peer):
 
 config = {
     'CEPH_CONF_FILE': '/etc/ceph/ceph.conf',
-#    'SPEC': "posix:archipelago:1024:5120:12",
+    # 'SPEC': "posix:archipelago:1024:5120:12",
     'SEGMENT_TYPE': 'posix',
     'SEGMENT_NAME': 'archipelago',
     'SEGMENT_DYNPORTS': 1024,
     'SEGMENT_PORTS': 2048,
     'SEGMENT_SIZE': 5120,
     'SEGMENT_ALIGNMENT': 12,
-    'XSEGBD_START': 0,
-    'XSEGBD_END': 499,
     'VTOOL_START': 1003,
     'VTOOL_END': 1003,
     #RESERVED 1023
@@ -551,11 +583,23 @@ def check_conf():
     except KeyError:
         raise Error("Roles setup must be provided")
 
+    try:
+        getpwnam(config['USER'])
+    except KeyError:
+        raise Error("User '%s' does not exist" % config['USER'])
+
+    try:
+        getgrnam(config['GROUP'])
+    except KeyError:
+        raise Error("Group '%s' does not exist" % config['GROUP'])
+
     for role, role_type in config['roles']:
         if role_type not in valid_role_types:
             raise Error("%s is not a valid role" % role_type)
         try:
             role_config = config[role]
+            role_config['user'] = config['USER']
+            role_config['group'] = config['GROUP']
         except:
             raise Error("No config found for %s" % role)
 
@@ -577,13 +621,6 @@ def check_conf():
                           xseg_ports)
 
     validatePortRange(config['VTOOL_START'], config['VTOOL_END'], xseg_ports)
-    validatePortRange(config['XSEGBD_START'], config['XSEGBD_END'],
-                      xseg_ports)
-
-    xsegbd_range = config['XSEGBD_END'] - config['XSEGBD_START']
-    vlmcd_range = peers['vlmcd'].portno_end - peers['vlmcd'].portno_start
-    if xsegbd_range > vlmcd_range:
-        raise Error("Xsegbd port range must be smaller that vlmcd port range")
     return True
 
 def get_segment():
@@ -706,10 +743,10 @@ def loadrc(rc):
     config['SEGMENT_PORTS'] = cfg.getint('XSEG','SEGMENT_PORTS')
     config['SEGMENT_DYNPORTS'] = cfg.getint('XSEG', 'SEGMENT_DYNPORTS')
     config['SEGMENT_SIZE'] = cfg.getint('XSEG','SEGMENT_SIZE')
-    config['XSEGBD_START'] = cfg.getint('XSEG','XSEGBD_START')
-    config['XSEGBD_END'] = cfg.getint('XSEG','XSEGBD_END')
     config['VTOOL_START'] = cfg.getint('XSEG','VTOOL_START')
     config['VTOOL_END'] = cfg.getint('XSEG','VTOOL_END')
+    config['USER'] = cfg.get('ARCHIPELAGO','USER')
+    config['GROUP'] = cfg.get('ARCHIPELAGO','GROUP')
     roles = cfg.get('PEERS', 'ROLES')
     roles = str(roles)
     roles = roles.split(' ')
