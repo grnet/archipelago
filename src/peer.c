@@ -442,7 +442,7 @@ int check_ports(struct peerd *peer)
 		received = NULL;
 		if (!isTerminate()) {
 #ifdef MT
-			pr = alloc_peer_req(peer, t); 
+			pr = alloc_peer_req(peer, t);
 #else
 			pr = alloc_peer_req(peer);
 #endif
@@ -891,6 +891,8 @@ void usage(char *argv0)
 		"    -l        | None    | Logfile \n"
 		"    -d        | No      | Daemonize \n"
 		"    --pidfile | None    | Pidfile \n"
+		"    -uid      | None    | Set real EUID \n"
+		"    -gid      | None    | Set real EGID \n"
 #ifdef MT
 		"    -t        | No      | Number of threads \n"
 #endif
@@ -917,6 +919,8 @@ int main(int argc, char *argv[])
 	xport defer_portno = NoPort;
 	pid_t old_pid;
 	int pid_fd = -1;
+	uid_t uid = -1;
+	gid_t gid = -1;
 
 	char spec[MAX_SPEC_LEN + 1];
 	char logfile[MAX_LOGFILE_LEN + 1];
@@ -939,6 +943,8 @@ int main(int argc, char *argv[])
 	READ_ARG_ULONG("-p", portno);
 	READ_ARG_ULONG("-n", nr_ops);
 	READ_ARG_ULONG("-v", debug_level);
+	READ_ARG_ULONG("-uid", uid);
+	READ_ARG_ULONG("-gid", gid);
 #ifdef MT
 	READ_ARG_ULONG("-t", nr_threads);
 #endif
@@ -956,6 +962,18 @@ int main(int argc, char *argv[])
 		usage(argv[0]);
 		return 0;
 	}
+
+	if (uid == -1) {
+		uid = geteuid();
+	}
+
+	if (gid == -1) {
+		gid = getegid();
+	}
+
+	/* Drop privileges, change user & group */
+	(void) setregid(gid, gid);
+	(void) setreuid(uid, uid);
 
 	r = init_logctx(&lc, argv[0], debug_level, logfile,
 			REDIRECT_STDOUT|REDIRECT_STDERR);
@@ -986,6 +1004,8 @@ int main(int argc, char *argv[])
 			r = -1;
 			goto out;
 		}
+		/* Break away from process group */
+		(void) setpgrp();
 	}
 
 	pidfile_write(pid_fd);
