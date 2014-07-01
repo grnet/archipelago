@@ -215,12 +215,12 @@ These components are described below.
 Volume composer (vlmcd)
 ~~~~~~~~~~~~~~~~~~~~~~~
 
-Volume composer is responsible for the volume composition. Xsegbd devices direct
+Volume composer is responsible for the volume composition. Blktap devices direct
 I/O requests on the volume, to the volume composer. Volume composer then
 consults the mapper, to get the actual objects on which it will perform the
 appropriate I/O. It then directs I/O requests for each individual object to the
 blocker and wait for their completion. In the end, it composes the individual
-responses, to respond to the original volume request from the xsegbd.
+responses, to respond to the original volume request from blktap.
 
 Mapper (mapperd)
 ~~~~~~~~~~~~~~~~
@@ -247,15 +247,15 @@ Rados blocker is another form of blocker which stores each objects as a single
 object in a RADOS pool. It can be used instead of the file blocker, to create
 and use disks over RADOS storage.
 
-Block devices (xsegbd)
+Block devices (blktap)
 ~~~~~~~~~~~~~~~~~~~~~~
 
-Each volume on Archipelago is exposed as a block device in the system /dev
-directory. These special devices are nothing more than just another peer, which
-forwards the requests through the shared memory segment, to the volume composer
-for completion.
+Each volume on Archipelago is exposed as a block device in the system
+/dev/xen/blktap-2/ directory. These special devices are nothing more than just
+another peer, which forwards the requests through the shared memory segment,
+to the volume composer for completion.
 
-In a nutshell, in archipelago, each xsegbd device communicates through the
+In a nutshell, in archipelago, each blktap device communicates through the
 shared memory segment with the volume composer. Then the volume composer
 requests the objects on which it should perform the I/O from the mapper. The
 mapper takes into account all the necessary logic (taking locks etc) and

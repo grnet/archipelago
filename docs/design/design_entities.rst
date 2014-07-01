@@ -51,7 +51,7 @@ Currently, these are:
 
 Each type of endpoint is served by the corresponding `endpoint driver`:
 
-* block driver (the ``xsegbd`` peer)
+* block driver (the ``blktap`` peer)
 * qemu driver (resides inside the ``vlmc`` tool)
 * http driver (the ``pithos`` peer)
 

@@ -83,11 +83,11 @@ Below is a list of all configuration settings:
 ``SEGMENT_SIZE``
     **Description** : Shared memory size, used for IPC.
 
-``XSEGBD_START``
-    **Description** : Start port of xsegbd peers
+``USER``
+    **Description** : Switch peer processes to run as this user.
 
-``XSEGBD_END``
-    **Description** : End port of xsegbd peers
+``GROUP``
+    **Description** : Switch peer processes to run as this group.
 
 ``VTOOL_START``
     **Description** : Start port of vlmc tool.
@@ -179,13 +179,13 @@ Available commands:
 
   Usage: ``$ vlmc showmapped``
 
-* **map**: maps the volume to a xsegbd device
+* **map**: maps the volume to a blktap device
 
   Usage: ``$ vlmc map <volumename>``
 
 * **unmap**: unmaps the specified device from the system.
 
-  Usage: ``$ vlmc unmap </dev/xsegbd[1-..]>``
+  Usage: ``$ vlmc unmap </dev/xen/blktap-2/tapdev[0-..]>``
 
 * **create**: creates a new volume with an optional specified size from an optional
   specified snapshot
