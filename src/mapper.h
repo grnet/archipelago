@@ -41,8 +41,10 @@ struct header_struct {
 
 #define MAX_MAPHEADER_SIZE (sizeof(struct header_struct))
 
+/* should always be the minimum blocksize required by all versions */
+#define MIN_BLOCKSIZE (v2_objectsize_in_map)
 /* should always be the maximum objectlen of all versions */
-#define MAX_OBJECT_LEN 128
+#define MAX_OBJECT_LEN 123
 
 /* since object names are cacluclated from the volume names, the limit of the
  * maximum volume len is calculated from the maximum object len, statically for
@@ -341,7 +343,7 @@ static inline uint64_t calc_map_obj(struct map *map)
 }
 
 static inline int is_valid_blocksize(uint64_t x) {
-	   return x && !(x & (x - 1));
+	   return (x && !(x & (x - 1)) && x > MIN_BLOCKSIZE);
 }
 
 /* map handling functions */

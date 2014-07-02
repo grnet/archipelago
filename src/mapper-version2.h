@@ -26,7 +26,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 struct map;
 
 /* Maximum length of an object name in memory */
-#define v2_max_objectlen 128
+#define v2_max_objectlen 123
 
 /* Required size in storage to store object information.
  *
@@ -38,11 +38,8 @@ struct v2_object_on_disk {
 	unsigned char object[v2_max_objectlen];
 }__attribute__((packed));
 
+//This must be a power of 2. Currently set to 128.
 #define v2_objectsize_in_map (sizeof(struct v2_object_on_disk))
-
-//#define v2_read_chunk_size (512*1024)
-#define v2_nr_objs_per_chunk ((512*1024)/v2_objectsize_in_map)
-#define v2_read_chunk_size (v2_nr_objs_per_chunk * v2_objectsize_in_map)
 
 /* Map header contains:
  * 	map signature - uint32_t
