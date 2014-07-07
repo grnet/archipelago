@@ -109,7 +109,7 @@ def vlmc_parser():
     rename_parser = subparsers.add_parser('rename', help='rename volume')
     #group = rename_parser.add_mutually_exclusive_group(required=True)
     rename_parser.add_argument('name', type=str,  help='volume name')
-    rename_parser.add_argument('new_name', type=str,  help='new name')
+    rename_parser.add_argument('newname', type=str,  help='new name')
     rename_parser.add_argument('-v0', '--assume_v0',  action='store_true',
                                default=False,
                                help='Assume target volume as version 0 if necessary')
