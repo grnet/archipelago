@@ -392,12 +392,15 @@ static int __delete_map_data_v2(struct peer_req *pr, struct map *map)
 	struct mapperd *mapper = __get_mapperd(peer);
 	struct mapper_io *mio = __get_mapper_io(pr);
 	struct xseg_request *req;
-    struct chunk *chunks;
-	int nr_chunks;
+	char target[v2_max_objectlen];
+	uint32_t targetlen, blockid;
+	uint64_t objects_in_block, obj;
 
-	nr_chunks = split_to_chunks(map, 0, map->nr_objs, &chunks);
-	for (i = 0; i < nr_chunks; i++) {
-        req = get_request(pr, mapper->mbportno, chunks[i].target, chunks[i].targetlen, 0);
+	objects_in_block = map->blocksize / v2_objectsize_in_map;
+	for (obj = 0; obj < map->nr_objs; obj+=objects_in_block) {
+		blockid = get_block_id(map, obj);
+		targetlen = get_map_block_name(target, map, blockid);
+		req = get_request(pr, mapper->mbportno, target, targetlen, 0);
 		if (!req) {
 			XSEGLOG2(&lc, E, "Cannot get request");
 			goto out_err;
@@ -405,14 +408,14 @@ static int __delete_map_data_v2(struct peer_req *pr, struct map *map)
 		req->op = X_DELETE;
 		req->offset = 0;
 		req->size = 0;
-		XSEGLOG2(&lc, D, "Deleting chunk %s(%u)", chunks[i].target,  chunks[i].targetlen);
+		XSEGLOG2(&lc, D, "Deleting %s(%u)", target,  targetlen);
 		r = send_request(pr, req);
 		if (r < 0) {
 			XSEGLOG2(&lc, E, "Cannot send request");
 			goto out_put;
 		}
 		mio->pending_reqs++;
-    }
+	}
 	return 0;
 
 out_put:
