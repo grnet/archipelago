@@ -137,6 +137,9 @@ def rename(name, newname=None, cli=False, assume_v0=False, v0_size=-1, **kwargs)
     if len(newname) < 6:
         raise Error("New name should have at least len 6")
 
+    if is_mapped(name) is not None:
+        raise Error("Cannot rename a mapped resource")
+
     xseg_ctx = Xseg_ctx(get_segment())
     mport = peers['mapperd'].portno_start
     req = Request.get_rename_request(xseg_ctx, mport, name, newname=newname)
