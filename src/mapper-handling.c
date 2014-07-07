@@ -505,10 +505,10 @@ int load_map_metadata(struct peer_req *pr, struct map *map)
 	}
 	wait_on_pr(pr, (!(req->state & XS_FAILED || req->state & XS_SERVED)));
 	if (req->state & XS_FAILED) {
-		goto out_err;
+		goto out_put;
 	}
 	if (req->serviced < req->size) {
-		goto out_err;
+		goto out_put;
 	}
 
 	data = xseg_get_data(peer->xseg, req);
