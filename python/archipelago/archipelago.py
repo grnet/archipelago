@@ -26,7 +26,7 @@ from subprocess import check_call
 from .common import *
 from .vlmc import showmapped as vlmc_showmapped
 from .vlmc import get_mapped as vlmc_get_mapped
-from blktap import VlmcTapdisk
+from blktap import VlmcTapdisk, VlmcTapdiskException
 
 def start_peer(peer, cli=False):
     if peer.is_running():
@@ -129,11 +129,12 @@ def start(user=False, role=None, cli=False, **kwargs):
     if user:
         #get_segment().create()
         start_peers(peers, cli)
-        mapped = vlmc_get_mapped()
-        if mapped:
-            for m in mapped:
-                if VlmcTapdisk.is_paused(m.device):
-                    VlmcTapdisk.unpause(m.device)
+        if config["BLKTAP_ENABLED"]:
+            mapped = vlmc_get_mapped()
+            if mapped:
+                for m in mapped:
+                    if VlmcTapdisk.is_paused(m.device):
+                        VlmcTapdisk.unpause(m.device)
         return
 
     if status() > 0:
@@ -148,7 +149,8 @@ def start(user=False, role=None, cli=False, **kwargs):
         #get_segment().create()
         #time.sleep(0.5)
         start_peers(peers, cli)
-        load_module("blktap", None)
+        if config["BLKTAP_ENABLED"]:
+            load_module("blktap", None)
     except Exception as e:
         if cli:
             print red(e)
@@ -156,6 +158,12 @@ def start(user=False, role=None, cli=False, **kwargs):
 
 
 def stop(user=False, role=None, cli=False, **kwargs):
+    try:
+        if config['BLKTAP_ENABLED'] is False and vlmc_get_mapped():
+            vlmc_showmapped()
+            raise Error("Cannot stop archipelago. Mapped volumes exist")
+    except VlmcTapdiskException:
+        pass
     if role:
         try:
             p = peers[role]
@@ -163,11 +171,12 @@ def stop(user=False, role=None, cli=False, **kwargs):
             raise Error("Invalid peer %s" % role)
         return stop_peer(p, cli)
     if user:
-        mapped = vlmc_get_mapped()
-        if mapped:
-            for m in mapped:
-                if not VlmcTapdisk.is_paused(m.device):
-                    VlmcTapdisk.pause(m.device)
+        if config["BLKTAP_ENABLED"]:
+            mapped = vlmc_get_mapped()
+            if mapped:
+                for m in mapped:
+                    if not VlmcTapdisk.is_paused(m.device):
+                        VlmcTapdisk.pause(m.device)
         stop_peers(peers, cli)
         return get_segment().destroy()
     #check devices
@@ -176,19 +185,20 @@ def stop(user=False, role=None, cli=False, **kwargs):
         print "Stoping archipelago"
         print "===================="
         print ""
-    if not loaded_module("blktap"):
-        stop_peers(peers, cli)
-        time.sleep(0.5)
-        get_segment().destroy()
-        return
+    if config["BLKTAP_ENABLED"]:
+        if not loaded_module("blktap"):
+            stop_peers(peers, cli)
+            time.sleep(0.5)
+            get_segment().destroy()
+            return
 
-    if cli:
-        if vlmc_showmapped() > 0:
-            raise Error("Cannot stop archipelago. Mapped volumes exist")
-    else:
-        mapped = vlmc_get_mapped()
-        if mapped and len(mapped) > 0:
-            raise Error("Cannot stop archipelago. Mapped volumes exist")
+        if cli:
+            if vlmc_showmapped() > 0:
+                raise Error("Cannot stop archipelago. Mapped volumes exist")
+        else:
+            mapped = vlmc_get_mapped()
+            if mapped and len(mapped) > 0:
+                raise Error("Cannot stop archipelago. Mapped volumes exist")
     stop_peers(peers, cli)
     time.sleep(0.5)
     get_segment().destroy()
@@ -196,33 +206,42 @@ def stop(user=False, role=None, cli=False, **kwargs):
 
 def status(cli=False, **kwargs):
     r = 0
-    if not loaded_module("blktap"):
-        for role, _ in reversed(config['roles']):
-            p = peers[role]
-            if peer_running(p, cli):
-                r += 1
-        if cli:
-            pretty_print("blktap", red('Not loaded'))
-        return r
+    if config["BLKTAP_ENABLED"]:
+        if not loaded_module("blktap"):
+            for role, _ in reversed(config['roles']):
+                p = peers[role]
+                if peer_running(p, cli):
+                    r += 1
+            if cli:
+                pretty_print("blktap", red('Not loaded'))
+            return r
 
-    if cli:
-        if vlmc_showmapped() > 0:
-            r += 1
-    else:
-        mapped = vlmc_get_mapped()
-        if mapped and len(mapped) > 0:
-            r += 1
-    if loaded_module("blktap"):
         if cli:
-            pretty_print("blktap", green('Loaded'))
-        #r += 1
-    else:
-        if cli:
-            pretty_print("blktap", red('Not loaded'))
+            if vlmc_showmapped() > 0:
+                r += 1
+        else:
+            mapped = vlmc_get_mapped()
+            if mapped and len(mapped) > 0:
+                r += 1
+        if loaded_module("blktap"):
+            if cli:
+                pretty_print("blktap", green('Loaded'))
+            #r += 1
+        else:
+            if cli:
+                pretty_print("blktap", red('Not loaded'))
+
     for role, _ in reversed(config['roles']):
         p = peers[role]
         if peer_running(p, cli):
             r += 1
+    try:
+        if config['BLKTAP_ENABLED'] is False and vlmc_get_mapped():
+            print red("Mapped volumes exist while blktap module is disabled.")
+            vlmc_showmapped()
+            r += 1
+    except VlmcTapdiskException:
+        pass
     return r
 
 

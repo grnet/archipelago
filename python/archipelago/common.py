@@ -729,6 +729,7 @@ def loadrc(rc):
     config['VTOOL_END'] = cfg.getint('XSEG','VTOOL_END')
     config['USER'] = cfg.get('ARCHIPELAGO','USER')
     config['GROUP'] = cfg.get('ARCHIPELAGO','GROUP')
+    config['BLKTAP_ENABLED'] = cfg.getboolean('ARCHIPELAGO','BLKTAP_ENABLED')
     roles = cfg.get('PEERS', 'ROLES')
     roles = str(roles)
     roles = roles.split(' ')

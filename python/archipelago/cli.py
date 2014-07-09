@@ -254,6 +254,9 @@ def main():
         kwargs = vars(args)
         # if parser_func == archipelago_parser:
             # peers = construct_peers()
+        if parser_func == vlmc_parser and config['BLKTAP_ENABLED'] is False:
+            print red("Blktap module is disabled.")
+            return -1
         args.func(cli=True, **kwargs)
         return 0
     except Error as e:
