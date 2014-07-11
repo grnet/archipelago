@@ -290,7 +290,6 @@ struct xseg_request * __open_map(struct peer_req *pr, struct map *map,
 		goto out_put;
 	}
 
-	map->state |= MF_MAP_OPENING;
 	XSEGLOG2(&lc, I, "Map %s opening", map->volume);
 	return req;
 
@@ -306,8 +305,10 @@ int open_map(struct peer_req *pr, struct map *map, uint32_t flags)
 	struct xseg_request *req;
 	struct mapper_io *mio = __get_mapper_io(pr);
 
+	map->state |= MF_MAP_OPENING;
 	req = __open_map(pr, map, flags);
 	if (!req){
+		map->state &= ~MF_MAP_OPENING;
 		return -1;
 	}
 	wait_on_pr(pr, (!((req->state & XS_FAILED)||(req->state & XS_SERVED))));
