@@ -442,8 +442,8 @@ static int req2objs(struct peer_req *pr, struct map *map, int write)
 	mns[idx].offset = obj_offset;
 	mns[idx].size = obj_size;
 	rem_size -= obj_size;
+	idx++;
 	while (rem_size > 0) {
-		idx++;
 		obj_index++;
 		obj_offset = 0;
 		obj_size = (rem_size > map->blocksize) ? map->blocksize : rem_size;
@@ -463,9 +463,10 @@ static int req2objs(struct peer_req *pr, struct map *map, int write)
 		mns[idx].mn = mn;
 		mns[idx].offset = obj_offset;
 		mns[idx].size = obj_size;
+		idx++;
 	}
 	if (write) {
-		if (do_copyups(pr, mns, idx+1) < 0) {
+		if (do_copyups(pr, mns, idx) < 0) {
 			r = -1;
 			XSEGLOG2(&lc, E, "do_copyups failed");
 			goto out;
@@ -485,7 +486,7 @@ static int req2objs(struct peer_req *pr, struct map *map, int write)
 	/* structure reply */
 	reply = (struct xseg_reply_map *) xseg_get_data(peer->xseg, pr->req);
 	reply->cnt = nr_objs;
-	for (i = 0; i < (idx+1); i++) {
+	for (i = 0; i < idx; i++) {
 		strncpy(reply->segs[i].target, mns[i].mn->object, mns[i].mn->objectlen);
 		reply->segs[i].targetlen = mns[i].mn->objectlen;
 		reply->segs[i].offset = mns[i].offset;
@@ -496,7 +497,7 @@ static int req2objs(struct peer_req *pr, struct map *map, int write)
 		}
 	}
 out:
-	for (i = 0; i < (idx+1); i++) {
+	for (i = 0; i < idx; i++) {
 		put_mapnode(mns[i].mn);
 	}
 	free(mns);
