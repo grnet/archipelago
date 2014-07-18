@@ -95,6 +95,8 @@ def create(name, size=None, snap=None, assume_v0=False, v0_size=-1, **kwargs):
         size = 0
     else:
         size = size << 20
+    if name.startswith(ARCHIP_PREFIX):
+        raise Error("Volume cannot start with %s" % ARCHIP_PREFIX)
 
     ret = False
     xseg_ctx = Xseg_ctx(get_segment())
@@ -114,6 +116,9 @@ def create(name, size=None, snap=None, assume_v0=False, v0_size=-1, **kwargs):
 def snapshot(name, snap_name=None, cli=False, assume_v0=False, v0_size=-1, **kwargs):
     if len(name) < 6:
         raise Error("Name should have at least len 6")
+
+    if snap_name.startswith(ARCHIP_PREFIX):
+        raise Error("Volume cannot start with %s" % ARCHIP_PREFIX)
 
     xseg_ctx = Xseg_ctx(get_segment())
     vport = peers['vlmcd'].portno_start
@@ -139,6 +144,9 @@ def rename(name, newname=None, cli=False, assume_v0=False, v0_size=-1, **kwargs)
 
     if is_mapped(name) is not None:
         raise Error("Cannot rename a mapped resource")
+
+    if newname.startswith(ARCHIP_PREFIX):
+        raise Error("Volume cannot start with %s" % ARCHIP_PREFIX)
 
     xseg_ctx = Xseg_ctx(get_segment())
     mport = peers['mapperd'].portno_start
