@@ -521,7 +521,37 @@ out_err:
 	XSEGLOG2(&lc, E, "Failed to purge map %s", map->volume);
 	map->state &= ~MF_MAP_PURGING;
 	return -1;
+}
 
+int delete_map(struct peer_req* pr, struct map *map, int delete_data)
+{
+	int r;
+	struct mapper_io *mio = __get_mapper_io(pr);
+
+	map->state |= MF_MAP_DELETING;
+
+	mio->cb = NULL;
+	mio->pending_reqs = 0;
+
+	map->flags |= MF_MAP_DELETED;
+	r = write_map_metadata(pr, map);
+	if (r < 0){
+		map->flags &= ~MF_MAP_DELETED;
+		map->state &= ~MF_MAP_DELETING;
+		XSEGLOG2(&lc, E, "Failed to delete map %s", map->volume);
+		return -1;
+	}
+	XSEGLOG2(&lc, I, "Deleted map %s", map->volume);
+
+	if (delete_data) {
+		r = delete_map_data(pr, map);
+		if (r < 0) {
+			//not fatal. Just log warning
+			XSEGLOG2(&lc, E, "Delete map data failed for %s", map->volume);
+		}
+	}
+	map->state &= ~MF_MAP_DELETING;
+	return 0;
 }
 
 struct xseg_request * __load_map_metadata(struct peer_req *pr, struct map *map)

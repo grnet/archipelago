@@ -375,6 +375,7 @@ void put_request(struct peer_req *pr, struct xseg_request *req);
 struct xseg_request * __load_map_metadata(struct peer_req *pr, struct map *map);
 int load_map_metadata(struct peer_req *pr, struct map *map);
 int delete_map_data(struct peer_req *pr, struct map *map);
+int delete_map(struct peer_req *pr, struct map *map, int delete_data);
 int purge_map(struct peer_req *pr, struct map *map);
 int initialize_map_objects(struct map *map);
 int hash_map(struct peer_req *pr, struct map *map, struct map *hashed_map);
