@@ -279,8 +279,6 @@ def lock(name, cli=False, **kwargs):
     if len(name) < 6:
         raise Error("Name should have at least len 6")
 
-    name = ARCHIP_PREFIX + name
-
     xseg_ctx = Xseg_ctx(get_segment())
     mbport = peers['blockerm'].portno_start
     req = Request.get_acquire_request(xseg_ctx, mbport, name)
@@ -298,8 +296,6 @@ def lock(name, cli=False, **kwargs):
 def unlock(name, force=False, cli=False, **kwargs):
     if len(name) < 6:
         raise Error("Name should have at least len 6")
-
-    name = ARCHIP_PREFIX + name
 
     xseg_ctx = Xseg_ctx(get_segment())
     mbport = peers['blockerm'].portno_start
