@@ -1359,19 +1359,28 @@ struct map * get_map(struct peer_req *pr, char *name, uint32_t namelen,
 
 }
 
+static struct map * get_ready_map(struct peer_req *pr, char *name,
+		uint32_t namelen, uint32_t flags)
+{
+	struct map *map;
+	do {
+		map = get_map(pr, name, namelen, flags);
+		if (!map || !(map->state & MF_MAP_NOT_READY)) {
+			return map;
+		}
+		wait_on_map(map, (map->state & MF_MAP_NOT_READY));
+		put_map(map);
+	} while(1);
+}
+
 static int map_action(int (action)(struct peer_req *pr, struct map *map),
 		struct peer_req *pr, char *name, uint32_t namelen, uint32_t flags)
 {
 	//struct peerd *peer = pr->peer;
 	struct map *map;
-start:
-	map = get_map(pr, name, namelen, flags);
-	if (!map)
+	map = get_ready_map(pr, name, namelen, flags);
+	if (!map) {
 		return -1;
-	if (map->state & MF_MAP_NOT_READY){
-		wait_on_map(map, (map->state & MF_MAP_NOT_READY));
-		put_map(map);
-		goto start;
 	}
 	int r = action(pr, map);
 	//always drop cache if map not read exclusively
