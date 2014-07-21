@@ -970,7 +970,9 @@ static int do_destroy(struct peer_req *pr, struct map *map)
 	return 0;
 }
 
-static int do_rename(struct peer_req *pr, struct map *map)
+//Returns a new opened map
+static int rename_map(struct peer_req *pr, struct map *map,
+				char *newname, uint32_t newnamelen)
 {
 	uint64_t i;
 	struct peerd *peer = pr->peer;
@@ -979,16 +981,7 @@ static int do_rename(struct peer_req *pr, struct map *map)
 	uint64_t nr_objs;
 	struct map *new_map;
 	struct xseg_request_rename *xrename;
-	char *newname;
-	uint32_t newnamelen;
 	int r;
-
-	xrename = (struct xseg_request_rename *)xseg_get_data(peer->xseg, pr->req);
-	if (!xrename) {
-		return -1;
-	}
-	newname = xrename->target;
-	newnamelen = xrename->targetlen;
 
 	if (!newnamelen) {
 		XSEGLOG2(&lc, E, "A new name must be provided");
@@ -1047,35 +1040,38 @@ static int do_rename(struct peer_req *pr, struct map *map)
 	}
 	XSEGLOG2(&lc, I, "New map %s created", new_map->volume);
 	new_map->objects = NULL;
-	close_map(pr, new_map);
-	put_map(new_map);
+
 	XSEGLOG2(&lc, I, "Will now proceed to remove old map %s", map->volume);
-
-	mio->cb = NULL;
-	mio->pending_reqs = 0;
-
-	map->flags |= MF_MAP_DELETED;
-	r = write_map_metadata(pr, map);
-	if (r < 0){
-		map->state &= ~MF_MAP_RENAMING;
-		XSEGLOG2(&lc, E, "Failed to destroy map %s", map->volume);
-		return -1;
-	}
-
-	r = delete_map_data(pr, map);
+	r = delete_map(pr, map, 1);
 	if (r < 0) {
-		//not fatal. Just log warning
-		XSEGLOG2(&lc, E, "Delete map data failed for %s", map->volume);
+		XSEGLOG2(&lc, W, "Could not remove old prefixed volume %s. "
+				 "Continuing anyway.", map->volume);
 	}
+	//close old map here to leave the lock
+	close_map(pr, map);
 
+	change_map_volume(map, newname, newnamelen);
+	//set state to exclusive here, since we hold the lock for the new map
+	map->state |= MF_MAP_EXCLUSIVE;
+	//adjust state of the map to the one of the new_map
+	map->state = new_map->state | MF_MAP_RENAMING;
+	//Adjust the deleted flag set by delete map
+	//map->flags &= ~MF_MAP_DELETED;
+	map->flags = new_map->flags;
+	//adjust cached epoch
+	map->epoch = new_map->epoch;
+	//these do not need updating
+	//map->objects = new_map->objects;
+	//map->size = new_map->size;
+	//map->blocksize = new_map->blocksize;
+	//map->nr_objs = new_map->nr_objs;
+	//This should be the same, on implicit rename, since it must be opened
+	//by the same pr.
+	//On explicit rename, this might need adjustment
+	//map->opened_count = new_map->opened_count;
+
+	put_map(new_map);
 	map->state &= ~MF_MAP_RENAMING;
-	XSEGLOG2(&lc, I, "Deleted map %s", map->volume);
-	/* do close will drop the map from cache  */
-
-	/* if do_close fails, an error message will be logged, but the deletion
-	 * was successfull, and there isn't much to do about the error.
-	 */
-	do_close(pr, map);
 	XSEGLOG2(&lc, I, "Renamed %s completed ", map->volume);
 	return 0;
 
@@ -1089,6 +1085,43 @@ out_err:
 	map->state &= ~MF_MAP_RENAMING;
 	XSEGLOG2(&lc, E, "Rename for map %s failed", map->volume);
 	return -1;
+}
+
+static int do_rename(struct peer_req *pr, struct map *map)
+{
+	struct peerd *peer = pr->peer;
+	struct mapper_io *mio = __get_mapper_io(pr);
+	struct xseg_request_rename *xrename;
+	char *newname;
+	uint32_t newnamelen;
+	int r;
+
+	xrename = (struct xseg_request_rename *)xseg_get_data(peer->xseg, pr->req);
+	if (!xrename) {
+		return -1;
+	}
+	newname = xrename->target;
+	newnamelen = xrename->targetlen;
+
+	if (!newnamelen) {
+		XSEGLOG2(&lc, E, "A new name must be provided");
+		return -1;
+	}
+
+	r = rename_map(pr, map, newname, newnamelen);
+	if (r < 0) {
+		XSEGLOG2(&lc, E, "Rename for map %s failed", map->volume);
+		return -1;
+	}
+
+	/* do close will drop the map from cache  */
+
+	/* if do_close fails, an error message will be logged, but the deletion
+	 * was successfull, and there isn't much to do about the error.
+	 */
+	do_close(pr, map);
+	XSEGLOG2(&lc, I, "Renamed %s completed ", map->volume);
+	return 0;
 }
 
 
