@@ -206,6 +206,7 @@ struct map {
 	uint64_t nr_objs;
 	uint32_t volumelen;
 	char volume[MAX_VOLUME_LEN + 1]; /* NULL terminated string */
+	char key[MAX_VOLUME_LEN + 1]; /* NULL terminated string, for cache */
 	struct map_node *objects;
 	volatile uint32_t ref;
 	volatile uint32_t waiters;
