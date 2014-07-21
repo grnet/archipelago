@@ -1328,7 +1328,7 @@ static int open_load_map(struct peer_req *pr, struct map *map, uint32_t flags)
 struct map * get_map(struct peer_req *pr, char *name, uint32_t namelen,
 			uint32_t flags)
 {
-	int r;
+	int r, archip_map = 0;
 	struct peerd *peer = pr->peer;
 	struct mapperd *mapper = __get_mapperd(peer);
 	struct map *map = find_map_len(mapper, name, namelen, flags);
@@ -1343,31 +1343,36 @@ struct map * get_map(struct peer_req *pr, char *name, uint32_t namelen,
 				put_map(map);
 			}
 			__get_map(map);
+retry:
 			r = open_load_map(pr, map, flags);
 			if (r < 0){
-				dropcache(pr, map);
-				/* signal map here, so any other threads that
-				 * tried to get the map, but couldn't because
-				 * of the opening or loading operation that
-				 * failed, can continue.
-				 */
-				signal_map(map);
-				put_map(map);
-				return NULL;
-			}
-			/* If the map is deleted, drop everything and return
-			 * NULL.
-			 */
-			if (map->flags & MF_MAP_DELETED){
-				XSEGLOG2(&lc, E, "Loaded deleted map %s. Failing...",
-						map->volume);
-				do_close(pr, map);
-				dropcache(pr, map);
-				signal_map(map);
-				put_map(map);
-				return NULL;
+				if (map->volumelen > MAPPER_PREFIX_LEN &&
+					!strncmp(map->volume, MAPPER_PREFIX, MAPPER_PREFIX_LEN)) {
+					dropcache(pr, map);
+					/* signal map here, so any other threads that
+					 * tried to get the map, but couldn't because
+					 * of the opening or loading operation that
+					 * failed, can continue.
+					 */
+					signal_map(map);
+					put_map(map);
+					return NULL;
+				}
+				char archip_name[MAX_VOLUME_LEN + 1];
+				sprintf(archip_name, "%.*s%.*s", MAPPER_PREFIX_LEN, MAPPER_PREFIX, namelen, name);
+				change_map_volume(map, archip_name, MAPPER_PREFIX_LEN + namelen);
+				archip_map = 1;
+				goto retry;
 			}
 
+			if (archip_map && map->state & MF_MAP_EXCLUSIVE) {
+				r = rename_map(pr, map, name, namelen);
+				if (r < 0) {
+					XSEGLOG2(&lc, E, "Could not rename map, continuing with the old map");
+				}
+			}
+
+			/* old archip maps are not read only */
 			if (map->state & MF_MAP_EXCLUSIVE) {
 				/* cache map files opened exlusively,
 				 * but drop the lock if map is readonly.
@@ -1381,6 +1386,20 @@ struct map * get_map(struct peer_req *pr, char *name, uint32_t namelen,
 				/* always cache read only maps */
 				map->state |= MF_MAP_CANCACHE;
 			}
+
+			/* If the map is deleted, drop everything and return
+			 * NULL.
+			 */
+			if (map->flags & MF_MAP_DELETED){
+				XSEGLOG2(&lc, E, "Loaded deleted map %s. Failing...",
+						map->volume);
+				do_close(pr, map);
+				dropcache(pr, map);
+				signal_map(map);
+				put_map(map);
+				return NULL;
+			}
+
 			return map;
 		} else {
 			return NULL;
