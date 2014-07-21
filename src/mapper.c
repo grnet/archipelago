@@ -177,14 +177,14 @@ inline struct map_node * get_mapnode(struct map *map, uint64_t index)
 	}
 	mn = &map->objects[index];
 	mn->ref++;
-	XSEGLOG2(&lc, D,  "mapnode %p: ref: %u", mn, mn->ref);
+	//XSEGLOG2(&lc, D,  "mapnode %p: ref: %u", mn, mn->ref);
 	return mn;
 }
 
 inline void put_mapnode(struct map_node *mn)
 {
 	mn->ref--;
-	XSEGLOG2(&lc, D, "mapnode %p: ref: %u", mn, mn->ref);
+	//XSEGLOG2(&lc, D, "mapnode %p: ref: %u", mn, mn->ref);
 	if (!mn->ref){
 		//clean up mn
 		st_cond_destroy(mn->cond);
