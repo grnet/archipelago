@@ -972,7 +972,7 @@ static int do_destroy(struct peer_req *pr, struct map *map)
 
 //Returns a new opened map
 static int rename_map(struct peer_req *pr, struct map *map,
-				char *newname, uint32_t newnamelen)
+				char *newname, uint32_t newnamelen, int purge)
 {
 	uint64_t i;
 	struct peerd *peer = pr->peer;
@@ -1042,7 +1042,13 @@ static int rename_map(struct peer_req *pr, struct map *map,
 	new_map->objects = NULL;
 
 	XSEGLOG2(&lc, I, "Will now proceed to remove old map %s", map->volume);
-	r = delete_map(pr, map, 1);
+
+	if (purge) {
+		r = purge_map(pr, map);
+	} else {
+		r = delete_map(pr, map, 1);
+	}
+
 	if (r < 0) {
 		XSEGLOG2(&lc, W, "Could not remove old prefixed volume %s. "
 				 "Continuing anyway.", map->volume);
@@ -1108,7 +1114,7 @@ static int do_rename(struct peer_req *pr, struct map *map)
 		return -1;
 	}
 
-	r = rename_map(pr, map, newname, newnamelen);
+	r = rename_map(pr, map, newname, newnamelen, 0);
 	if (r < 0) {
 		XSEGLOG2(&lc, E, "Rename for map %s failed", map->volume);
 		return -1;
@@ -1338,14 +1344,14 @@ struct map * get_map(struct peer_req *pr, char *name, uint32_t namelen,
 			if (!map)
 				return NULL;
 			r = insert_map(mapper, map);
-			if (r < 0){
+			if (r < 0) {
 				XSEGLOG2(&lc, E, "Cannot insert map %s", map->volume);
 				put_map(map);
 			}
 			__get_map(map);
 retry:
 			r = open_load_map(pr, map, flags);
-			if (r < 0){
+			if (r < 0) {
 				if (map->volumelen > MAPPER_PREFIX_LEN &&
 					!strncmp(map->volume, MAPPER_PREFIX, MAPPER_PREFIX_LEN)) {
 					dropcache(pr, map);
@@ -1366,9 +1372,11 @@ retry:
 			}
 
 			if (archip_map && map->state & MF_MAP_EXCLUSIVE) {
-				r = rename_map(pr, map, name, namelen);
+				r = rename_map(pr, map, name, namelen, 1);
 				if (r < 0) {
 					XSEGLOG2(&lc, E, "Could not rename map, continuing with the old map");
+				} else {
+
 				}
 			}
 
