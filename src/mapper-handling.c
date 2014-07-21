@@ -447,6 +447,81 @@ int delete_map_data(struct peer_req* pr, struct map *map)
 	return r;
 }
 
+struct xseg_request * __purge_map(struct peer_req *pr, struct map *map)
+{
+	int r;
+	struct xseg_request *req;
+	struct peerd *peer = pr->peer;
+	struct mapperd *mapper = __get_mapperd(peer);
+	uint64_t datalen;
+
+	XSEGLOG2(&lc, I, "Purging map %s", map->volume);
+
+	req = get_request(pr, mapper->mbportno, map->volume, map->volumelen, 0);
+	if (!req){
+		XSEGLOG2(&lc, E, "Cannot get request for map %s", map->volume);
+		goto out_err;
+	}
+
+
+	req->op = X_DELETE;
+	req->size = 0;
+	req->offset = 0;
+
+	r = send_request(pr, req);
+	if (r < 0) {
+		XSEGLOG2(&lc, E, "Cannot send request %p, pr: %p, map: %s",
+				req, pr, map->volume);
+		goto out_put;
+	}
+
+	XSEGLOG2(&lc, I, "Map %s purging ", map->volume);
+	return req;
+
+out_put:
+	put_request(pr, req);
+out_err:
+	return NULL;
+}
+
+int purge_map(struct peer_req* pr, struct map *map)
+{
+	int r;
+	struct mapper_io *mio = __get_mapper_io(pr);
+	struct xseg_request *req;
+
+	map->state |= MF_MAP_PURGING;
+
+	r = delete_map(pr, map, 1);
+	if (r < 0){
+		XSEGLOG2(&lc, E, "Failed to purge map %s", map->volume);
+		map->state &= ~MF_MAP_PURGING;
+		return -1;
+	}
+
+	req = __purge_map(pr, map);
+	if (!req) {
+		goto out_err;
+	}
+	wait_on_pr(pr, (!(req->state & XS_FAILED || req->state & XS_SERVED)));
+	if (req->state & XS_FAILED) {
+		goto out_put;
+	}
+
+	map->state &= ~MF_MAP_PURGING;
+	put_request(pr, req);
+	XSEGLOG2(&lc, I, "Purged map %s", map->volume);
+	return 0;
+
+out_put:
+	put_request(pr, req);
+out_err:
+	XSEGLOG2(&lc, E, "Failed to purge map %s", map->volume);
+	map->state &= ~MF_MAP_PURGING;
+	return -1;
+
+}
+
 struct xseg_request * __load_map_metadata(struct peer_req *pr, struct map *map)
 {
 	int r;

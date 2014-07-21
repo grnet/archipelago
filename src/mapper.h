@@ -182,10 +182,11 @@ struct map_node {
 #define MF_MAP_HASHING		(1 << 11)
 #define MF_MAP_RENAMING		(1 << 12)
 #define MF_MAP_CANCACHE		(1 << 13)
+#define MF_MAP_PURGING		(1 << 14)
 #define MF_MAP_NOT_READY	(MF_MAP_LOADING|MF_MAP_WRITING|MF_MAP_DELETING|\
 				MF_MAP_DROPPING_CACHE|MF_MAP_OPENING|	       \
 				MF_MAP_SNAPSHOTTING|MF_MAP_SERIALIZING|        \
-				MF_MAP_HASHING|MF_MAP_RENAMING)
+				MF_MAP_HASHING|MF_MAP_RENAMING|MF_MAP_PURGING)
 
 
 /* hex value of "AMF." 
@@ -372,6 +373,7 @@ void put_request(struct peer_req *pr, struct xseg_request *req);
 struct xseg_request * __load_map_metadata(struct peer_req *pr, struct map *map);
 int load_map_metadata(struct peer_req *pr, struct map *map);
 int delete_map_data(struct peer_req *pr, struct map *map);
+int purge_map(struct peer_req *pr, struct map *map);
 int initialize_map_objects(struct map *map);
 int hash_map(struct peer_req *pr, struct map *map, struct map *hashed_map);
 struct map_node * get_mapnode(struct map *map, uint64_t objindex);
