@@ -1526,10 +1526,11 @@ void * handle_clone(struct peer_req *pr)
 		map->flags = 0;
 		map->size = xclone->size;
 		map->blocksize = MAPPER_DEFAULT_BLOCKSIZE;
-		map->nr_objs = calc_map_obj(map);
-		uint64_t nr_objs = map->nr_objs;
-		//populate_map with zero objects;
+		map->nr_objs = 0;
+		map->objects = NULL;
 
+		//populate_map with zero objects;
+		uint64_t nr_objs = calc_map_obj(map);
 		struct map_node *map_nodes = calloc(nr_objs, sizeof(struct map_node));
 		if (!map_nodes){
 			XSEGLOG2(&lc, E, "Cannot allocate %llu nr_objs", nr_objs);
@@ -1539,6 +1540,7 @@ void * handle_clone(struct peer_req *pr)
 			goto out;
 		}
 		map->objects = map_nodes;
+		map->nr_objs = nr_objs;
 
 		uint64_t i;
 		for (i = 0; i < nr_objs; i++) {
@@ -1644,11 +1646,11 @@ void * handle_create(struct peer_req *pr)
 	} else {
 		map->blocksize = mapdata->blocksize;
 	}
-	map->nr_objs = calc_map_obj(map);
+	map->nr_objs = 0;
 	map->objects = NULL;
 
 
-	nr_objs = map->nr_objs;
+	nr_objs = calc_map_obj(map);
 	if (nr_objs != mapdata->cnt) {
 		XSEGLOG2(&lc, E, "Map size does not match supplied objects");
 		close_map(pr, map);
@@ -1666,6 +1668,7 @@ void * handle_create(struct peer_req *pr)
 		goto out;
 	}
 	map->objects = map_nodes;
+	map->nr_objs = nr_objs;
 
 	uint64_t i;
 	for (i = 0; i < nr_objs; i++) {
