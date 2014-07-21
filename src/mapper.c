@@ -1347,6 +1347,7 @@ struct map * get_map(struct peer_req *pr, char *name, uint32_t namelen,
 			if (r < 0) {
 				XSEGLOG2(&lc, E, "Cannot insert map %s", map->volume);
 				put_map(map);
+				return NULL;
 			}
 			__get_map(map);
 retry:
