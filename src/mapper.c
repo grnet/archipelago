@@ -884,7 +884,7 @@ static int do_destroy(struct peer_req *pr, struct map *map)
 	}
 
 	XSEGLOG2(&lc, I, "Destroying map %s", map->volume);
-	map->state |= MF_MAP_DELETING;
+	map->state |= MF_MAP_DESTROYING;
 
 	wait_all_map_objects_ready(map);
 
@@ -943,26 +943,14 @@ static int do_destroy(struct peer_req *pr, struct map *map)
 		return -1;
 	}
 
-	map->flags |= MF_MAP_DELETED;
-
-	mio->cb = NULL;
-	mio->pending_reqs = 0;
-	/* Also, we could delete/truncate the unnecessary map blocks */
-	r = write_map_metadata(pr, map);
+	r = delete_map(pr, map, 0);
 	if (r < 0){
-		map->state &= ~MF_MAP_DELETING;
+		map->state &= ~MF_MAP_DESTROYING;
 		XSEGLOG2(&lc, E, "Failed to destroy map %s", map->volume);
 		return -1;
 	}
-/*
-	r = delete_map_data(pr, map);
-	if (r < 0) {
-		//not fatal. Just log warning
-		XSEGLOG2(&lc, E, "Delete map data failed for %s", map->volume);
-	}
-*/
-	map->state &= ~MF_MAP_DELETING;
-	XSEGLOG2(&lc, I, "Deleted map %s", map->volume);
+	map->state &= ~MF_MAP_DESTROYING;
+	XSEGLOG2(&lc, I, "Destroyed map %s", map->volume);
 	/* do close will drop the map from cache  */
 
 	do_close(pr, map);
