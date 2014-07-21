@@ -118,14 +118,14 @@ static int insert_map(struct mapperd *mapper, struct map *map)
 {
 	int r = -1;
 
-	if (find_map(mapper, map->volume)){
-		XSEGLOG2(&lc, W, "Map %s found in hash maps", map->volume);
+	if (find_map(mapper, map->key)){
+		XSEGLOG2(&lc, W, "Map %s found in hash maps", map->key);
 		goto out;
 	}
 
 	XSEGLOG2(&lc, D, "Inserting map %s, len: %d (map: %lx)", 
-			map->volume, strlen(map->volume), (unsigned long) map);
-	r = xhash_insert(mapper->hashmaps, (xhashidx) map->volume, (xhashidx) map);
+			map->key, strlen(map->key), (unsigned long) map);
+	r = xhash_insert(mapper->hashmaps, (xhashidx) map->key, (xhashidx) map);
 	while (r == -XHASH_ERESIZE) {
 		xhashidx shift = xhash_grow_size_shift(mapper->hashmaps);
 		xhash_t *new_hashmap = xhash_resize(mapper->hashmaps, shift, 0, NULL);
@@ -135,7 +135,7 @@ static int insert_map(struct mapperd *mapper, struct map *map)
 			goto out;
 		}
 		mapper->hashmaps = new_hashmap;
-		r = xhash_insert(mapper->hashmaps, (xhashidx) map->volume, (xhashidx) map);
+		r = xhash_insert(mapper->hashmaps, (xhashidx) map->key, (xhashidx) map);
 	}
 out:
 	return r;
@@ -147,7 +147,7 @@ static int remove_map(struct mapperd *mapper, struct map *map)
 
 	//assert no pending pr on map
 
-	r = xhash_delete(mapper->hashmaps, (xhashidx) map->volume);
+	r = xhash_delete(mapper->hashmaps, (xhashidx) map->key);
 	while (r == -XHASH_ERESIZE) {
 		xhashidx shift = xhash_shrink_size_shift(mapper->hashmaps);
 		xhash_t *new_hashmap = xhash_resize(mapper->hashmaps, shift, 0, NULL);
@@ -273,6 +273,9 @@ static struct map * create_map(char *name, uint32_t namelen, uint32_t flags)
 	strncpy(m->volume, name, namelen);
 	m->volume[namelen] = 0;
 	m->volumelen = namelen;
+	//initialize key to volume name
+	strncpy(m->key, name, namelen);
+	m->key[namelen] = 0;
 	/* Use the latest map version here, when creating a new map. If
 	 * the map is read from storage, this version will be rewritten
 	 * with the right value.
