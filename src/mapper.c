@@ -257,6 +257,13 @@ static inline void put_map(struct map *map)
 	}
 }
 
+static void change_map_volume(struct map *map, char *name, uint32_t namelen)
+{
+	strncpy(map->volume, name, namelen);
+	map->volume[namelen] = 0;
+	map->volumelen = namelen;
+}
+
 static struct map * create_map(char *name, uint32_t namelen, uint32_t flags)
 {
 	if (namelen + MAPPER_PREFIX_LEN > MAX_VOLUME_LEN){
