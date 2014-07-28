@@ -31,7 +31,6 @@ install, configure and use Archipelago:
 
 .. toctree::
    :maxdepth: 2
-   :numbered:
    :glob:
 
    archipelago
