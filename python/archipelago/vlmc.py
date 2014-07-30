@@ -117,6 +117,9 @@ def snapshot(name, snap_name=None, cli=False, assume_v0=False, v0_size=-1, **kwa
     if len(name) < 6:
         raise Error("Name should have at least len 6")
 
+    if name.startswith(ARCHIP_PREFIX):
+        raise Error("Volume cannot start with %s" % ARCHIP_PREFIX)
+
     if snap_name.startswith(ARCHIP_PREFIX):
         raise Error("Volume cannot start with %s" % ARCHIP_PREFIX)
 
@@ -145,6 +148,9 @@ def rename(name, newname=None, cli=False, assume_v0=False, v0_size=-1, **kwargs)
     if is_mapped(name) is not None:
         raise Error("Cannot rename a mapped resource")
 
+    if name.startswith(ARCHIP_PREFIX):
+        raise Error("Volume cannot start with %s" % ARCHIP_PREFIX)
+
     if newname.startswith(ARCHIP_PREFIX):
         raise Error("Volume cannot start with %s" % ARCHIP_PREFIX)
 
@@ -167,6 +173,9 @@ def rename(name, newname=None, cli=False, assume_v0=False, v0_size=-1, **kwargs)
 def hash(name, cli=False, assume_v0=False, v0_size=-1, **kwargs):
     if len(name) < 6:
         raise Error("Name should have at least len 6")
+
+    if name.startswith(ARCHIP_PREFIX):
+        raise Error("Volume cannot start with %s" % ARCHIP_PREFIX)
 
     xseg_ctx = Xseg_ctx(get_segment())
     mport = peers['mapperd'].portno_start
@@ -206,6 +215,10 @@ def list_volumes(**kwargs):
 
 
 def remove(name, assume_v0=False, v0_size=-1, **kwargs):
+
+    if name.startswith(ARCHIP_PREFIX):
+        raise Error("Volume cannot start with %s" % ARCHIP_PREFIX)
+
     device = is_mapped(name)
     if device is not None:
         raise Error("Volume %s mapped on device %s%s" % (name, DEVICE_PREFIX,
@@ -229,6 +242,9 @@ def remove(name, assume_v0=False, v0_size=-1, **kwargs):
 def map_volume(name, assume_v0=False, v0_size=-1, readonly=False, **kwargs):
     if not loaded_module("blktap"):
         raise Error("blktap module not loaded")
+
+    if name.startswith(ARCHIP_PREFIX):
+        raise Error("Volume cannot start with %s" % ARCHIP_PREFIX)
 
     device = is_mapped(name)
     if device is not None:
@@ -315,6 +331,9 @@ def open_volume(name, cli=False, assume_v0=False, v0_size=-1, **kwargs):
     if len(name) < 6:
         raise Error("Name should have at least len 6")
 
+    if name.startswith(ARCHIP_PREFIX):
+        raise Error("Volume cannot start with %s" % ARCHIP_PREFIX)
+
     ret = False
     xseg_ctx = Xseg_ctx(get_segment())
     vport = peers['vlmcd'].portno_start
@@ -335,6 +354,9 @@ def close_volume(name, cli=False, assume_v0=False, v0_size=-1, **kwargs):
     if len(name) < 6:
         raise Error("Name should have at least len 6")
 
+    if name.startswith(ARCHIP_PREFIX):
+        raise Error("Volume cannot start with %s" % ARCHIP_PREFIX)
+
     ret = False
     xseg_ctx = Xseg_ctx(get_segment())
     vport = peers['vlmcd'].portno_start
@@ -354,6 +376,9 @@ def close_volume(name, cli=False, assume_v0=False, v0_size=-1, **kwargs):
 def info(name, cli=False, assume_v0=False, v0_size=-1, **kwargs):
     if len(name) < 6:
         raise Error("Name should have at least len 6")
+
+    if name.startswith(ARCHIP_PREFIX):
+        raise Error("Volume cannot start with %s" % ARCHIP_PREFIX)
 
     ret = False
     xseg_ctx = Xseg_ctx(get_segment())
@@ -376,6 +401,9 @@ def info(name, cli=False, assume_v0=False, v0_size=-1, **kwargs):
 def mapinfo(name, verbose=False, **kwargs):
     if len(name) < 6:
         raise Error("Name should have at least len 6")
+
+    if name.startswith(ARCHIP_PREFIX):
+        raise Error("Volume cannot start with %s" % ARCHIP_PREFIX)
 
     if config['STORAGE'] == "rados":
         import rados
