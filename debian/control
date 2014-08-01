@@ -23,6 +23,14 @@ Architecture: amd64
 Depends: ${misc:Depends},  ${shlibs:Depends}, ${python:Depends},
  libxseg0(>=0.3), libxseg0(<<0.4), python-archipelago(=${binary:Version})
 Provides: archipelago-protocol1
+Replaces: archipelago-modules-dkms, archipelago-modules-0.3.5,
+ archipelago-modules-0.3.4, archipelago-modules-0.3.3,
+ archipelago-modules-0.3.2, archipelago-modules-0.3.1,
+ archipelago-modules-0.3
+Conflicts: archipelago-modules-dkms, archipelago-modules-0.3.5,
+ archipelago-modules-0.3.4, archipelago-modules-0.3.3,
+ archipelago-modules-0.3.2, archipelago-modules-0.3.1,
+ archipelago-modules-0.3
 Recommends: blktap-utils(>=2.0.90next)
 Description:  Provides archipelago infrastructure
  Extended Description here
