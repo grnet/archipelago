@@ -118,24 +118,13 @@ def stop_peers(peers, cli=False):
         stop_peer(p, cli)
 
 
-def start(user=False, role=None, cli=False, **kwargs):
+def start(role=None, cli=False, **kwargs):
     if role:
         try:
             p = peers[role]
         except KeyError:
             raise Error("Invalid peer %s" % role)
         return start_peer(p, cli)
-
-    if user:
-        #get_segment().create()
-        start_peers(peers, cli)
-        if config["BLKTAP_ENABLED"]:
-            mapped = vlmc_get_mapped()
-            if mapped:
-                for m in mapped:
-                    if VlmcTapdisk.is_paused(m.device):
-                        VlmcTapdisk.unpause(m.device)
-        return
 
     if status() > 0:
         raise Error("Cannot start. Try stopping first")
@@ -145,60 +134,55 @@ def start(user=False, role=None, cli=False, **kwargs):
         print "Starting archipelago"
         print "===================="
         print ""
+
     try:
         #get_segment().create()
         #time.sleep(0.5)
         start_peers(peers, cli)
         if config["BLKTAP_ENABLED"]:
             load_module("blktap", None)
+            mapped = vlmc_get_mapped()
+            if mapped and len(mapped) > 0:
+                for m in mapped:
+                    if VlmcTapdisk.is_paused(m.device):
+                        VlmcTapdisk.unpause(m.device)
     except Exception as e:
         if cli:
             print red(e)
-        stop(user, role, cli)
+        stop(role, cli, force=True)
 
-
-def stop(user=False, role=None, cli=False, **kwargs):
+def stop(role=None, cli=False, force=False, **kwargs):
     try:
         if config['BLKTAP_ENABLED'] is False and vlmc_get_mapped():
             vlmc_showmapped()
             raise Error("Cannot stop archipelago. Mapped volumes exist")
     except VlmcTapdiskException:
         pass
+
     if role:
         try:
             p = peers[role]
         except KeyError:
             raise Error("Invalid peer %s" % role)
         return stop_peer(p, cli)
-    if user:
-        if config["BLKTAP_ENABLED"]:
-            mapped = vlmc_get_mapped()
-            if mapped:
-                for m in mapped:
-                    if not VlmcTapdisk.is_paused(m.device):
-                        VlmcTapdisk.pause(m.device)
-        stop_peers(peers, cli)
-        return get_segment().destroy()
+
     #check devices
     if cli:
         print "===================="
         print "Stoping archipelago"
         print "===================="
         print ""
-    if config["BLKTAP_ENABLED"]:
-        if not loaded_module("blktap"):
-            stop_peers(peers, cli)
-            time.sleep(0.5)
-            get_segment().destroy()
-            return
 
-        if cli:
-            if vlmc_showmapped() > 0:
+    if config["BLKTAP_ENABLED"] and loaded_module('blktap'):
+        mapped = vlmc_get_mapped()
+        if mapped and len(mapped) > 0:
+            if not force:
+                vlmc_showmapped()
                 raise Error("Cannot stop archipelago. Mapped volumes exist")
-        else:
-            mapped = vlmc_get_mapped()
-            if mapped and len(mapped) > 0:
-                raise Error("Cannot stop archipelago. Mapped volumes exist")
+            for m in mapped:
+                if not VlmcTapdisk.is_paused(m.device):
+                    VlmcTapdisk.pause(m.device)
+
     stop_peers(peers, cli)
     time.sleep(0.5)
     get_segment().destroy()
@@ -222,7 +206,9 @@ def status(cli=False, **kwargs):
         else:
             mapped = vlmc_get_mapped()
             if mapped and len(mapped) > 0:
-                r += 1
+                for m in mapped:
+                    if not VlmcTapdisk.is_paused(m.device):
+                        r += 1
         if loaded_module("blktap"):
             if cli:
                 pretty_print("blktap", green('Loaded'))
@@ -246,5 +232,5 @@ def status(cli=False, **kwargs):
 
 
 def restart(**kwargs):
-    stop(**kwargs)
+    stop(force=True **kwargs)
     start(**kwargs)
