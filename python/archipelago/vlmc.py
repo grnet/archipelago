@@ -84,6 +84,14 @@ def parse_assume_v0(req, assume_v0, v0_size):
         if v0_size != -1:
             req.set_v0_size= v0_size
 
+def is_valid_name(name):
+    """Validates a resource name"""
+    if name.startswith(ARCHIP_PREFIX) or name.endswith('_lock') or \
+       re.match('.*_(\d|[a-f]){16}', name):
+        return False
+
+    return True
+
 def create(name, size=None, snap=None, assume_v0=False, v0_size=-1, **kwargs):
     if len(name) < 6:
         raise Error("Name should have at least len 6")
@@ -96,8 +104,9 @@ def create(name, size=None, snap=None, assume_v0=False, v0_size=-1, **kwargs):
         size = 0
     else:
         size = size << 20
-    if name.startswith(ARCHIP_PREFIX):
-        raise Error("Volume cannot start with %s" % ARCHIP_PREFIX)
+
+    if not is_valid_name(name):
+        raise Error("Invalid volume name")
 
     ret = False
     xseg_ctx = Xseg_ctx(get_segment())
@@ -118,11 +127,11 @@ def snapshot(name, snap_name=None, cli=False, assume_v0=False, v0_size=-1, **kwa
     if len(name) < 6:
         raise Error("Name should have at least len 6")
 
-    if name.startswith(ARCHIP_PREFIX):
-        raise Error("Volume cannot start with %s" % ARCHIP_PREFIX)
+    if not is_valid_name(name):
+        raise Error("Invalid volume name")
 
-    if snap_name.startswith(ARCHIP_PREFIX):
-        raise Error("Volume cannot start with %s" % ARCHIP_PREFIX)
+    if not is_valid_name(snap_name):
+        raise Error("Invalid snapshot name")
 
     xseg_ctx = Xseg_ctx(get_segment())
     vport = peers['vlmcd'].portno_start
@@ -149,11 +158,11 @@ def rename(name, newname=None, cli=False, assume_v0=False, v0_size=-1, **kwargs)
     if is_mapped(name) is not None:
         raise Error("Cannot rename a mapped resource")
 
-    if name.startswith(ARCHIP_PREFIX):
-        raise Error("Volume cannot start with %s" % ARCHIP_PREFIX)
+    if not is_valid_name(name):
+        raise Error("Invalid volume name")
 
-    if newname.startswith(ARCHIP_PREFIX):
-        raise Error("Volume cannot start with %s" % ARCHIP_PREFIX)
+    if not is_valid_name(newname):
+        raise Error("Invalid new name")
 
     xseg_ctx = Xseg_ctx(get_segment())
     mport = peers['mapperd'].portno_start
@@ -175,8 +184,8 @@ def hash(name, cli=False, assume_v0=False, v0_size=-1, **kwargs):
     if len(name) < 6:
         raise Error("Name should have at least len 6")
 
-    if name.startswith(ARCHIP_PREFIX):
-        raise Error("Volume cannot start with %s" % ARCHIP_PREFIX)
+    if not is_valid_name(name):
+        raise Error("Invalid volume name")
 
     xseg_ctx = Xseg_ctx(get_segment())
     mport = peers['mapperd'].portno_start
@@ -293,8 +302,8 @@ def list_volumes(cli=False, **kwargs):
 
 def remove(name, assume_v0=False, v0_size=-1, **kwargs):
 
-    if name.startswith(ARCHIP_PREFIX):
-        raise Error("Volume cannot start with %s" % ARCHIP_PREFIX)
+    if not is_valid_name(name):
+        raise Error("Invalid volume name")
 
     device = is_mapped(name)
     if device is not None:
@@ -320,8 +329,8 @@ def map_volume(name, assume_v0=False, v0_size=-1, readonly=False, **kwargs):
     if not loaded_module("blktap"):
         raise Error("blktap module not loaded")
 
-    if name.startswith(ARCHIP_PREFIX):
-        raise Error("Volume cannot start with %s" % ARCHIP_PREFIX)
+    if not is_valid_name(name):
+        raise Error("Invalid volume name")
 
     device = is_mapped(name)
     if device is not None:
@@ -372,6 +381,9 @@ def lock(name, cli=False, **kwargs):
     if len(name) < 6:
         raise Error("Name should have at least len 6")
 
+    if not is_valid_name(name):
+        raise Error("Invalid volume name")
+
     xseg_ctx = Xseg_ctx(get_segment())
     mbport = peers['blockerm'].portno_start
     req = Request.get_acquire_request(xseg_ctx, mbport, name)
@@ -389,6 +401,9 @@ def lock(name, cli=False, **kwargs):
 def unlock(name, force=False, cli=False, **kwargs):
     if len(name) < 6:
         raise Error("Name should have at least len 6")
+
+    if not is_valid_name(name):
+        raise Error("Invalid volume name")
 
     xseg_ctx = Xseg_ctx(get_segment())
     mbport = peers['blockerm'].portno_start
@@ -408,8 +423,8 @@ def open_volume(name, cli=False, assume_v0=False, v0_size=-1, **kwargs):
     if len(name) < 6:
         raise Error("Name should have at least len 6")
 
-    if name.startswith(ARCHIP_PREFIX):
-        raise Error("Volume cannot start with %s" % ARCHIP_PREFIX)
+    if not is_valid_name(name):
+        raise Error("Invalid volume name")
 
     ret = False
     xseg_ctx = Xseg_ctx(get_segment())
@@ -431,8 +446,8 @@ def close_volume(name, cli=False, assume_v0=False, v0_size=-1, **kwargs):
     if len(name) < 6:
         raise Error("Name should have at least len 6")
 
-    if name.startswith(ARCHIP_PREFIX):
-        raise Error("Volume cannot start with %s" % ARCHIP_PREFIX)
+    if not is_valid_name(name):
+        raise Error("Invalid volume name")
 
     ret = False
     xseg_ctx = Xseg_ctx(get_segment())
@@ -454,8 +469,8 @@ def info(name, cli=False, assume_v0=False, v0_size=-1, **kwargs):
     if len(name) < 6:
         raise Error("Name should have at least len 6")
 
-    if name.startswith(ARCHIP_PREFIX):
-        raise Error("Volume cannot start with %s" % ARCHIP_PREFIX)
+    if not is_valid_name(name):
+        raise Error("Invalid volume name")
 
     ret = False
     xseg_ctx = Xseg_ctx(get_segment())
