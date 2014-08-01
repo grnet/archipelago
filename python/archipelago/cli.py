@@ -36,8 +36,6 @@ def vlmc_parser():
                                help='requested size in MB for create')
     create_parser.add_argument('--snap', type=str, nargs='?',
                                help='create from snapshot')
-    create_parser.add_argument('-p', '--pool', type=str, nargs='?',
-                               help='for backwards compatiblity with rbd')
     create_parser.add_argument('-v0', '--assume_v0',  action='store_true',
                                default=False,
                                help='Assume snapshot as version 0 if necessary')
@@ -54,14 +52,10 @@ def vlmc_parser():
     remove_parser.add_argument('--v0_size', type=int, nargs='?',
                                help='Size of target volume to be assumed, if found as version 0.')
     remove_parser.set_defaults(func=vlmc.remove)
-    remove_parser.add_argument('-p', '--pool', type=str, nargs='?',
-                               help='for backwards compatiblity with rbd')
 
     rm_parser = subparsers.add_parser('rm', help='Delete volume')
     rm_parser.add_argument('name', type=str,  help='volume/device name')
     rm_parser.set_defaults(func=vlmc.remove)
-    rm_parser.add_argument('-p', '--pool', type=str, nargs='?',
-                           help='for backwards compatiblity with rbd')
 
     map_parser = subparsers.add_parser('map', help='Map volume')
     map_parser.add_argument('name', type=str,  help='volume/device name')
@@ -73,30 +67,20 @@ def vlmc_parser():
     map_parser.add_argument('-ro', '--readonly',  action='store_true',
                                default=False, help='Map target as readonly')
     map_parser.set_defaults(func=vlmc.map_volume)
-    map_parser.add_argument('-p', '--pool', type=str, nargs='?',
-                            help='for backwards compatiblity with rbd')
 
     unmap_parser = subparsers.add_parser('unmap', help='Unmap volume')
     unmap_parser.add_argument('name', type=str,  help='volume/device name')
     unmap_parser.set_defaults(func=vlmc.unmap_volume)
-    unmap_parser.add_argument('-p', '--pool', type=str, nargs='?',
-                              help='for backwards compatiblity with rbd')
 
     showmapped_parser = subparsers.add_parser('showmapped',
                                               help='Show mapped volumes')
     showmapped_parser.set_defaults(func=vlmc.showmapped_wrapper)
-    showmapped_parser.add_argument('-p', '--pool', type=str, nargs='?',
-                                   help='for backwards compatiblity with rbd')
 
     list_parser = subparsers.add_parser('list', help='List volumes')
     list_parser.set_defaults(func=vlmc.list_volumes)
-    list_parser.add_argument('-p', '--pool', type=str, nargs='?',
-                             help='for backwards compatiblity with rbd')
 
     snapshot_parser = subparsers.add_parser('snapshot', help='snapshot volume')
     #group = snapshot_parser.add_mutually_exclusive_group(required=True)
-    snapshot_parser.add_argument('-p', '--pool', type=str, nargs='?',
-                                 help='for backwards compatiblity with rbd')
     snapshot_parser.add_argument('name', type=str,  help='volume name')
     snapshot_parser.add_argument('snap_name', type=str,  help='Snapshot name')
     snapshot_parser.add_argument('-v0', '--assume_v0',  action='store_true',
@@ -119,8 +103,6 @@ def vlmc_parser():
 
     ls_parser = subparsers.add_parser('ls', help='List volumes')
     ls_parser.set_defaults(func=vlmc.list_volumes)
-    ls_parser.add_argument('-p', '--pool', type=str, nargs='?',
-                           help='for backwards compatiblity with rbd')
 
     resize_parser = subparsers.add_parser('resize', help='Resize volume')
     resize_parser.add_argument('-s', '--size', type=int,
@@ -132,8 +114,6 @@ def vlmc_parser():
     resize_parser.add_argument('--v0_size', type=int, nargs='?',
                                help='Size of target volume to be assumed, if found as version 0.')
     resize_parser.set_defaults(func=vlmc.resize)
-    resize_parser.add_argument('-p', '--pool', type=str, nargs='?',
-                               help='for backwards compatiblity with rbd')
 
     open_parser = subparsers.add_parser('open', help='open volume')
     open_parser.add_argument('name', type=str,  help='volume/device name')
@@ -143,8 +123,6 @@ def vlmc_parser():
     open_parser.add_argument('--v0_size', type=int, nargs='?',
                                help='Size of target volume to be assumed, if found as version 0.')
     open_parser.set_defaults(func=vlmc.open_volume)
-    open_parser.add_argument('-p', '--pool', type=str, nargs='?',
-                             help='for backwards compatiblity with rbd')
 
     close_parser = subparsers.add_parser('close', help='close volume')
     close_parser.add_argument('name', type=str,  help='volume/device name')
@@ -154,22 +132,16 @@ def vlmc_parser():
     close_parser.add_argument('--v0_size', type=int, nargs='?',
                                help='Size of target volume to be assumed, if found as version 0.')
     close_parser.set_defaults(func=vlmc.close_volume)
-    close_parser.add_argument('-p', '--pool', type=str, nargs='?',
-                              help='for backwards compatiblity with rbd')
 
     lock_parser = subparsers.add_parser('lock', help='lock volume')
     lock_parser.add_argument('name', type=str,  help='volume/device name')
     lock_parser.set_defaults(func=vlmc.lock)
-    lock_parser.add_argument('-p', '--pool', type=str, nargs='?',
-                             help='for backwards compatiblity with rbd')
 
     unlock_parser = subparsers.add_parser('unlock', help='unlock volume')
     unlock_parser.add_argument('name', type=str,  help='volume/device name')
     unlock_parser.add_argument('-f', '--force',  action='store_true',
                                default=False, help='break lock')
     unlock_parser.set_defaults(func=vlmc.unlock)
-    unlock_parser.add_argument('-p', '--pool', type=str, nargs='?',
-                               help='for backwards compatiblity with rbd')
 
     info_parser = subparsers.add_parser('info', help='Show volume info')
     info_parser.add_argument('name', type=str,  help='volume name')
@@ -179,22 +151,16 @@ def vlmc_parser():
     info_parser.add_argument('--v0_size', type=int, nargs='?',
                                help='Size of target volume to be assumed, if found as version 0.')
     info_parser.set_defaults(func=vlmc.info)
-    info_parser.add_argument('-p', '--pool', type=str, nargs='?',
-                             help='for backwards compatiblity with rbd')
 
 #    map_info_parser = subparsers.add_parser('mapinfo',
 #                                            help='Show volume map_info')
 #    map_info_parser.add_argument('name', type=str,  help='volume name')
 #    map_info_parser.set_defaults(func=vlmc.mapinfo)
-#    map_info_parser.add_argument('-p', '--pool', type=str, nargs='?',
-#                                 help='for backwards compatiblity with rbd')
 #    map_info_parser.add_argument('-v', '--verbose',  action='store_true',
 #                                 default=False, help='')
 
     hash_parser = subparsers.add_parser('hash', help='Hash snapshot')
     #group = hash_parser.add_mutually_exclusive_group(required=True)
-    hash_parser.add_argument('-p', '--pool', type=str, nargs='?',
-                                 help='for backwards compatiblity with rbd')
     hash_parser.add_argument('name', type=str,  help='Snapshot name')
     hash_parser.add_argument('-v0', '--assume_v0',  action='store_true',
                                default=False,
