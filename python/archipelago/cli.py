@@ -88,10 +88,10 @@ def vlmc_parser():
     showmapped_parser.add_argument('-p', '--pool', type=str, nargs='?',
                                    help='for backwards compatiblity with rbd')
 
-#    list_parser = subparsers.add_parser('list', help='List volumes')
-#    list_parser.set_defaults(func=vlmc.list_volumes)
-#    list_parser.add_argument('-p', '--pool', type=str, nargs='?',
-#                             help='for backwards compatiblity with rbd')
+    list_parser = subparsers.add_parser('list', help='List volumes')
+    list_parser.set_defaults(func=vlmc.list_volumes)
+    list_parser.add_argument('-p', '--pool', type=str, nargs='?',
+                             help='for backwards compatiblity with rbd')
 
     snapshot_parser = subparsers.add_parser('snapshot', help='snapshot volume')
     #group = snapshot_parser.add_mutually_exclusive_group(required=True)
@@ -117,10 +117,10 @@ def vlmc_parser():
                                help='Size of target volume to be assumed, if found as version 0.')
     rename_parser.set_defaults(func=vlmc.rename)
 
-#    ls_parser = subparsers.add_parser('ls', help='List volumes')
-#    ls_parser.set_defaults(func=vlmc.list_volumes)
-#    ls_parser.add_argument('-p', '--pool', type=str, nargs='?',
-#                           help='for backwards compatiblity with rbd')
+    ls_parser = subparsers.add_parser('ls', help='List volumes')
+    ls_parser.set_defaults(func=vlmc.list_volumes)
+    ls_parser.add_argument('-p', '--pool', type=str, nargs='?',
+                           help='for backwards compatiblity with rbd')
 
     resize_parser = subparsers.add_parser('resize', help='Resize volume')
     resize_parser.add_argument('-s', '--size', type=int,

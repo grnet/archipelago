@@ -19,7 +19,8 @@
 
 import os
 import sys
-from struct import unpack
+import re
+from struct import pack, unpack
 from binascii import hexlify
 from ctypes import c_uint32, c_uint64
 
@@ -197,8 +198,97 @@ def hash(name, cli=False, assume_v0=False, v0_size=-1, **kwargs):
         return hash_name
 
 
-def list_volumes(**kwargs):
-    raise Error("Unimplemented")
+def list_volumes(cli=False, **kwargs):
+    """
+    Quick 'n dirty way to list volumes. This bypasses the archipelago
+    infrastructure and goes directly to storage.
+    """
+
+    MAX_HEADER_SIZE = 32
+
+    def parse_header(name, header):
+        size_uint32t = sizeof(c_uint32)
+        size_uint64t = sizeof(c_uint64)
+
+        readonly = False
+        deleted = False
+        version1_on_disk = pack("<L", 1)
+        signature_on_disk = pack(">L", int(hexlify(b'AMF.'), base=16))
+
+        if (header[0:size_uint32t] != signature_on_disk):
+            if header[0:size_uint32t] == version1_on_disk:
+                version = 1
+            elif len(name) == 64 and re.match('(\d|[abcdef])+', name):
+                version = 0
+                readonly = True
+            else:
+                return None
+        else:
+            _, version, _, _, flags = unpack(">LLQLL",
+                                        header[:4*size_uint32t + size_uint64t])
+            if flags & 1:
+                readonly = True
+            if flags & 2:
+                deleted = True
+
+        return (version, readonly, deleted)
+
+
+    def get_volumes():
+        Volume = namedtuple('Volume', ['name', 'version', 'header_object',
+                                       'readonly', 'deleted'])
+        if isinstance(peers['blockerm'], Radosd):
+            import rados
+            cluster = rados.Rados(conffile=config['CEPH_CONF_FILE'])
+            cluster.connect()
+            ioctx = cluster.open_ioctx(peers['blockerm'].pool)
+            oi = rados.ObjectIterator(ioctx)
+            for o in oi:
+                name = o.key
+                try:
+                    header = ioctx.read(name, length=MAX_HEADER_SIZE)
+                    ph = parse_header(name, header)
+                    if ph is None:
+                        continue
+                    (version, readonly, deleted) = ph
+                    volume = name
+                    if volume.startswith(ARCHIP_PREFIX):
+                        volume = volume[len(ARCHIP_PREFIX):]
+                    yield Volume(name=volume, version=version,
+                            header_object=name, deleted=deleted,
+                            readonly=readonly)
+                except:
+                    pass
+        elif isinstance(peers['blockerm'], Filed):
+            path = peers['blockerm'].archip_dir
+            for root, dirs, files in os.walk(path):
+                for f in files:
+                    try:
+                        f = open(os.path.join(root, f), 'r')
+                        header = f.read(MAX_HEADER_SIZE)
+                        f.close()
+                        ph = parse_header(name, header)
+                        if ph is None:
+                            continue
+                        (version, readonly, deleted) = ph
+                        volume = name
+                        if volume.startswith(ARCHIP_PREFIX):
+                            volume = volume[len(ARCHIP_PREFIX):]
+                        yield Volume(name=volume, version=version,
+                            header_object=name, deleted=deleted,
+                            readonly=readonly)
+                    except:
+                        pass
+        else:
+            raise Error("Invalid storage")
+
+    if not cli:
+        return get_volumes()
+
+    for v in get_volumes():
+        if v.deleted:
+            continue
+        print v.name
 
 
 def remove(name, assume_v0=False, v0_size=-1, **kwargs):
