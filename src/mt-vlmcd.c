@@ -241,7 +241,8 @@ static int conclude_pr(struct peerd *peer, struct peer_req *pr)
 static int should_freeze_volume(struct xseg_request *req)
 {
 	if (req->op == X_CLOSE || req->op == X_SNAPSHOT || req->op == X_DELETE || 
-		(req->op == X_WRITE && !req->size && (req->flags & XF_FLUSH)))
+		(req->op == X_WRITE && !req->size && (req->flags & XF_FLUSH)) ||
+               req->op == X_FLUSH)
 		return 1;
 	return 0;
 }
@@ -297,8 +298,26 @@ static int do_accepted_pr(struct peerd *peer, struct peer_req *pr)
 
 	vio->err = 0; //reset error state
 
+	if (pr->req->op == X_FLUSH) {
+               /* We have no active requests here.
+                * Unfreeze volume and start serving waiting/pending requests.
+                */
+		vi->flags &= ~VF_VOLUME_FROZEN;
+		XSEGLOG2(&lc, I, "Completing flush request");
+		pr->req->serviced = 0;
+		conclude_pr(peer, pr);
+		xqindex xqi;
+		while (vi->pending_reqs && !(vi->flags & VF_VOLUME_FROZEN) &&
+				(xqi = __xq_pop_head(vi->pending_reqs)) != Noneidx) {
+			struct peer_req *ppr = (struct peer_req *) xqi;
+			do_accepted_pr(peer, ppr);
+		}
+		return 0;
+	}
+
+       //FIXME Remove this suboperation of X_WRITE. Support only X_FLUSH.
 	if (pr->req->op == X_WRITE && !pr->req->size &&
-			(pr->req->flags & (XF_FLUSH|XF_FUA))){
+			(pr->req->flags & (XF_FLUSH|XF_FUA))) {
 		//handle flush requests here, so we don't mess with mapper
 		//because of the -1 offset
 		vi->flags &= ~VF_VOLUME_FROZEN;
