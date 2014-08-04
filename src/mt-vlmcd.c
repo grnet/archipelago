@@ -31,7 +31,7 @@ enum io_state_enum {
 	CONCLUDED = 3
 };
 
-#define VF_VOLUME_FREEZED (1 << 0)
+#define VF_VOLUME_FROZEN (1 << 0)
 
 struct volume_info{
 	char name[XSEG_MAX_TARGETLEN + 1];
@@ -276,7 +276,7 @@ static int do_accepted_pr(struct peerd *peer, struct peer_req *pr)
 
 	if (should_freeze_volume(pr->req)){
 		XSEGLOG2(&lc, I, "Freezing volume %s", vi->name);
-		vi->flags |= VF_VOLUME_FREEZED;
+		vi->flags |= VF_VOLUME_FROZEN;
 		if (vi->active_reqs){
 			//assert vi->pending_pr == NULL;
 			XSEGLOG2(&lc, I, "Active reqs of %s: %lu. Pending pr is set to %lx",
@@ -299,14 +299,14 @@ static int do_accepted_pr(struct peerd *peer, struct peer_req *pr)
 
 	if (pr->req->op == X_WRITE && !pr->req->size &&
 			(pr->req->flags & (XF_FLUSH|XF_FUA))){
-		//hanlde flush requests here, so we don't mess with mapper
+		//handle flush requests here, so we don't mess with mapper
 		//because of the -1 offset
-		vi->flags &= ~VF_VOLUME_FREEZED;
+		vi->flags &= ~VF_VOLUME_FROZEN;
 		XSEGLOG2(&lc, I, "Completing flush request");
 		pr->req->serviced = pr->req->size;
 		conclude_pr(peer, pr);
 		xqindex xqi;
-		while (vi->pending_reqs && !(vi->flags & VF_VOLUME_FREEZED) &&
+		while (vi->pending_reqs && !(vi->flags & VF_VOLUME_FROZEN) &&
 				(xqi = __xq_pop_head(vi->pending_reqs)) != Noneidx) {
 			struct peer_req *ppr = (struct peer_req *) xqi;
 			do_accepted_pr(peer, ppr);
@@ -443,7 +443,7 @@ static int handle_accepted(struct peerd *peer, struct peer_req *pr,
 		}
 	}
 
-	if (vi->flags & VF_VOLUME_FREEZED){
+	if (vi->flags & VF_VOLUME_FROZEN){
 		XSEGLOG2(&lc, I, "Volume %s (vi %lx) frozen. Appending to pending_reqs",
 				vi->name, vi);
 		if (append_to_pending_reqs(vi, pr) < 0){
@@ -533,7 +533,7 @@ static int mapping_close(struct peerd *peer, struct peer_req *pr)
 		XSEGLOG2(&lc, E, "Volume has not volume info");
 		return 0;
 	}
-	vi->flags &= ~ VF_VOLUME_FREEZED;
+	vi->flags &= ~ VF_VOLUME_FROZEN;
 	if (!vi->pending_reqs || !xq_count(vi->pending_reqs)){
 		XSEGLOG2(&lc, I, "Volume %s (vi %lx) had no pending reqs. Removing",
 				vi->name, vi);
@@ -546,7 +546,7 @@ static int mapping_close(struct peerd *peer, struct peer_req *pr)
 		xqindex xqi;
 		XSEGLOG2(&lc, I, "Volume %s (vi %lx) had pending reqs. Handling",
 				vi->name, vi);
-		while (!(vi->flags & VF_VOLUME_FREEZED) &&
+		while (!(vi->flags & VF_VOLUME_FROZEN) &&
 				(xqi = __xq_pop_head(vi->pending_reqs)) != Noneidx) {
 			struct peer_req *ppr = (struct peer_req *) xqi;
 			do_accepted_pr(peer, ppr);
@@ -580,10 +580,10 @@ static int mapping_snapshot(struct peerd *peer, struct peer_req *pr)
 		return 0;
 	}
 	XSEGLOG2(&lc, D, "Unfreezing volume %s", vi->name);
-	vi->flags &= ~ VF_VOLUME_FREEZED;
+	vi->flags &= ~ VF_VOLUME_FROZEN;
 
 	xqindex xqi;
-	while (vi->pending_reqs && !(vi->flags & VF_VOLUME_FREEZED) &&
+	while (vi->pending_reqs && !(vi->flags & VF_VOLUME_FROZEN) &&
 			(xqi = __xq_pop_head(vi->pending_reqs)) != Noneidx) {
 		struct peer_req *ppr = (struct peer_req *) xqi;
 		do_accepted_pr(peer, ppr);
@@ -614,10 +614,10 @@ static int mapping_delete(struct peerd *peer, struct peer_req *pr)
 		return 0;
 	}
 	XSEGLOG2(&lc, D, "Unfreezing volume %s", vi->name);
-	vi->flags &= ~ VF_VOLUME_FREEZED;
+	vi->flags &= ~ VF_VOLUME_FROZEN;
 
 	xqindex xqi;
-	while (vi->pending_reqs && !(vi->flags & VF_VOLUME_FREEZED) &&
+	while (vi->pending_reqs && !(vi->flags & VF_VOLUME_FROZEN) &&
 			(xqi = __xq_pop_head(vi->pending_reqs)) != Noneidx) {
 		struct peer_req *ppr = (struct peer_req *) xqi;
 		do_accepted_pr(peer, ppr);
