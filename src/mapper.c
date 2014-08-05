@@ -1195,6 +1195,116 @@ out_put:
 	return -1;
 }
 
+static int truncate_map(struct peer_req *pr, struct map *map, uint64_t offset)
+{
+   struct peerd *peer = pr->peer;
+   struct mapper_io *mio = __get_mapper_io(pr);
+   struct map_node *mn;
+   uint64_t nr_objs, old_nr_objs;
+   int r;
+
+   if (!(map->state & MF_MAP_EXCLUSIVE)) {
+           XSEGLOG2(&lc, E, "Map was not opened exclusively");
+           return -1;
+   }
+   XSEGLOG2(&lc, I, "Starting truncation for map %s", map->volume);
+   map->state |= MF_MAP_TRUNCATING;
+
+   wait_all_map_objects_ready(map);
+
+   old_nr_objs = map->nr_objs;
+   nr_objs = __calc_map_obj(offset, map->blocksize);
+
+   /* If new volume size is larger than the old one
+    * extend mapfile with zero blocks.
+    */
+   if (nr_objs > old_nr_objs) {
+           struct map_node *map_nodes = calloc(nr_objs, sizeof(struct map_node));
+           if (!map_nodes) {
+                   XSEGLOG2(&lc, E, "Cannot allocate %llu nr_objs", nr_objs);
+                   goto out_unset;
+           }
+           uint64_t i;
+           for (i = 0; i < old_nr_objs; i++) {
+                   mn = get_mapnode(map, i);
+                   if (mn) {
+                           strncpy(map_nodes[i].object, mn->object, mn->objectlen);
+                           map_nodes[i].objectlen = mn->objectlen;
+                           map_nodes[i].flags = 0;
+                           if (mn->flags & MF_OBJECT_ARCHIP)
+                                   map_nodes[i].flags |= MF_OBJECT_ARCHIP;
+                           if (mn->flags & MF_OBJECT_ZERO)
+                                   map_nodes[i].flags |= MF_OBJECT_ZERO;
+                           put_mapnode(mn);
+                   } else {
+                           strncpy(map_nodes[i].object, zero_block, ZERO_BLOCK_LEN);
+                           map_nodes[i].objectlen = ZERO_BLOCK_LEN;
+                           map_nodes[i].flags = MF_OBJECT_ZERO;
+                   }
+                   map_nodes[i].object[map_nodes[i].objectlen] = 0;
+                   map_nodes[i].state = 0;
+                   map_nodes[i].objectidx = i;
+                   map_nodes[i].map = map;
+                   map_nodes[i].ref = 1;
+                   map_nodes[i].waiters = 0;
+                   map_nodes[i].cond = st_cond_new();
+           }
+
+           for (i = old_nr_objs; i < nr_objs; i++) {
+                   strncpy(map_nodes[i].object, zero_block, ZERO_BLOCK_LEN);
+                   map_nodes[i].objectlen = ZERO_BLOCK_LEN;
+                   map_nodes[i].flags = MF_OBJECT_ZERO;
+                   map_nodes[i].object[map_nodes[i].objectlen] = 0;
+                   map_nodes[i].state = 0;
+                   map_nodes[i].objectidx = i;
+                   map_nodes[i].map = map;
+                   map_nodes[i].ref = 1;
+                   map_nodes[i].waiters = 0;
+                   map_nodes[i].cond = st_cond_new();
+           }
+           free(map->objects);
+           map->objects = map_nodes;
+   }
+   map->size = offset;
+   map->nr_objs = nr_objs;
+
+   r = write_map(pr, map);
+   if (r < 0) {
+           XSEGLOG2(&lc, E, "Cannot write map %s", map->volume);
+           goto out_unset;
+   }
+   XSEGLOG2(&lc, I, "Map %s truncated", map->volume);
+
+   map->state &= ~MF_MAP_TRUNCATING;
+   XSEGLOG2(&lc, I, "Truncation of %s completed ", map->volume);
+   return 0;
+
+out_unset:
+   map->state &= ~MF_MAP_TRUNCATING;
+   XSEGLOG2(&lc, E, "Truncation for map %s failed ", map->volume);
+   return -1;
+}
+
+
+static int do_truncate(struct peer_req *pr, struct map *map)
+{
+       struct peerd *peer = pr->peer;
+       struct mapper_io *mio = __get_mapper_io(pr);
+       struct xseg_request *req = pr->req;
+       uint64_t offset = req->offset;
+       int r;
+
+       r = truncate_map(pr, map, offset);
+       if (r < 0) {
+               XSEGLOG2(&lc, E, "Truncation for map %s failed", map->volume);
+               return -1;
+       }
+       do_close(pr, map);
+       XSEGLOG2(&lc, I, "Truncation for map %s completed ", map->volume);
+       return 0;
+}
+
+
 static int open_load_map(struct peer_req *pr, struct map *map, uint32_t flags)
 {
 	int r, opened = 0;
@@ -1729,6 +1839,21 @@ void * handle_hash(struct peer_req *pr)
 	return NULL;
 }
 
+void * handle_truncate(struct peer_req *pr)
+{
+   struct peerd *peer = pr->peer;
+   char *target = xseg_get_target(peer->xseg, pr->req);
+   int r = map_action(do_truncate, pr, target, pr->req->targetlen,
+                   MF_ARCHIP|MF_LOAD|MF_EXCLUSIVE);
+   if (r < 0)
+           fail(peer, pr);
+   else
+           complete(peer, pr);
+   ta--;
+   return NULL;
+}
+
+
 int dispatch_accepted(struct peerd *peer, struct peer_req *pr,
 			struct xseg_request *req)
 {
@@ -1754,6 +1879,7 @@ int dispatch_accepted(struct peerd *peer, struct peer_req *pr,
 		case X_HASH: action = handle_hash; break;
 		case X_CREATE: action = handle_create; break;
 		case X_RENAME: action = handle_rename; break;
+		case X_TRUNCATE: action = handle_truncate; break;
 		default: fprintf(stderr, "mydispatch: unknown op\n"); break;
 	}
 	if (action){
