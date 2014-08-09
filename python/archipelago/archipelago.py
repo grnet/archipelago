@@ -232,5 +232,5 @@ def status(cli=False, **kwargs):
 
 
 def restart(**kwargs):
-    stop(force=True **kwargs)
+    stop(force=True, **kwargs)
     start(**kwargs)
