@@ -89,7 +89,7 @@ def is_power2(x):
 class posixfd_signal_desc(Structure):
     pass
 posixfd_signal_desc._fields_ = [
-    ('signal_file', c_char * sizeof(c_void_p)),
+    ('signal_file', 2 * c_char * sizeof(c_void_p)),
     ('fd', c_int),
     ('flag', c_int),
 ]
