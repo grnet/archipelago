@@ -631,6 +631,7 @@ def get_lock(lock_file):
         except OSError, (err, reason):
             print >> sys.stderr, lock_file, reason
             if err == errno.EEXIST:
+                print >> sys.stderr, "Retrying..."
                 time.sleep(0.2)
             else:
                 raise OSError(err, lock_file + ' ' + reason)
