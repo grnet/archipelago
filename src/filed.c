@@ -167,11 +167,30 @@ static int matches_pithos_object(char *target, uint32_t targetlen)
 	return 1;
 }
 
+static int create_dir(char *path)
+{
+	struct stat st;
+
+	if (stat(path, &st) < 0) {
+		if (mkdir(path, 0750) == 0) {
+			return 0;
+		}
+		if (errno != EEXIST || stat(path, &st) < 0) {
+			return -1;
+		}
+	}
+
+	if (!S_ISDIR(st.st_mode)) {
+		return -1;
+	}
+
+	return 0;
+}
+
 static int __create_path(char *buf, struct pfiled *pfiled, char dirs[6],
 			char *target, uint32_t targetlen, int mkdirs)
 {
-	int i;
-	struct stat st;
+	int i, r;
 	char *path = pfiled->vpath;
 	uint32_t pathlen = pfiled->vpath_len;
 
@@ -183,14 +202,10 @@ static int __create_path(char *buf, struct pfiled *pfiled, char dirs[6],
 		buf[pathlen + i + 2] = '/';
 		if (mkdirs == 1) {
 			buf[pathlen + i + 3] = '\0';
-retry:
-			if (stat(buf, &st) < 0)
-				if (mkdir(buf, 0750) < 0) {
-					if (errno == EEXIST)
-						goto retry;
-					//perror(buf);
-					return -1;
-				}
+			r = create_dir(buf);
+			if (r < 0) {
+				return -1;
+			}
 		}
 	}
 
