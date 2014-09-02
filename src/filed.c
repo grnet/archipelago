@@ -15,10 +15,6 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-/*
- * The Pithos File Blocker Peer (pfiled)
- */
-
 #define _GNU_SOURCE
 #include <stdio.h>
 #include <stdarg.h>
@@ -35,29 +31,13 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include <syscall.h>
 #include <sys/sendfile.h>
 #include <peer.h>
-#include <xseg/xcache.h>
 #include <openssl/sha.h>
 #include <sys/resource.h>
 
 #include <xseg/xseg.h>
 #include <xseg/protocol.h>
-
 #include <hash.h>
-
-#define FIO_STR_ID_LEN		3
-#define LOCK_SUFFIX		"_lock"
-#define LOCK_SUFFIX_LEN		5
-#define HASH_SUFFIX		"_hash"
-#define HASH_SUFFIX_LEN		5
-#define MAX_PATH_SIZE		1024
-#define MAX_FILENAME_SIZE 	(XSEG_MAX_TARGETLEN + LOCK_SUFFIX_LEN + MAX_UNIQUESTR_LEN + FIO_STR_ID_LEN)
-#define MAX_PREFIX_LEN		10
-#define MAX_UNIQUESTR_LEN	128
-#define SNAP_SUFFIX		"_snap"
-#define SNAP_SUFFIX_LEN		5
-
-#define WRITE 1
-#define READ 2
+#include "filed.h"
 
 #define min(_a, _b) (_a < _b ? _a : _b)
 
@@ -77,38 +57,6 @@ void custom_peer_usage(char *argv0)
                 "\n"
                );
 }
-
-/* fdcache_node flags */
-#define READY (1 << 1)
-
-/* fdcache node info */
-struct fdcache_entry {
-	volatile int fd;
-	volatile unsigned int flags;
-};
-
-/* pfiled context */
-struct pfiled {
-	uint32_t vpath_len;
-	uint32_t prefix_len;
-	uint32_t uniquestr_len;
-	long maxfds;
-	uint32_t directio;
-	char vpath[MAX_PATH_SIZE + 1];
-	char prefix[MAX_PREFIX_LEN + 1];
-	char uniquestr[MAX_UNIQUESTR_LEN + 1];
-	struct xcache cache;
-};
-
-/*
- * pfiled specific structure
- * containing information on a pending I/O operation
- */
-struct fio {
-	uint32_t state;
-	xcache_handler h;
-	char str_id[FIO_STR_ID_LEN];
-};
 
 struct pfiled * __get_pfiled(struct peerd *peer)
 {
@@ -192,17 +140,196 @@ static void handle_unknown(struct peerd *peer, struct peer_req *pr)
 	pfiled_fail(peer, pr);
 }
 
-static void get_dirs(char buf[6], struct pfiled *pfiled, char *target, uint32_t targetlen)
+static int is_hex_char(char c)
+{
+	if ((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f')) {
+		return 1;
+	}
+
+	return 0;
+}
+
+static int matches_pithos_object(char *target, uint32_t targetlen)
+{
+	int i;
+
+	if (targetlen != HEXLIFIED_SHA256_DIGEST_SIZE) {
+		return 0;
+	}
+
+	for (i = 0; i < HEXLIFIED_SHA256_DIGEST_SIZE; i++)
+	{
+		if (!is_hex_char(target[i])) {
+			return 0;
+		}
+	}
+
+	return 1;
+}
+
+static int __create_path(char *buf, struct pfiled *pfiled, char dirs[6],
+			char *target, uint32_t targetlen, int mkdirs)
+{
+	int i;
+	struct stat st;
+	char *path = pfiled->vpath;
+	uint32_t pathlen = pfiled->vpath_len;
+
+	strncpy(buf, path, pathlen);
+
+	for (i = 0; i < 9; i+= 3) {
+		buf[pathlen + i] = dirs[i - (i/3)];
+		buf[pathlen + i +1] = dirs[i + 1 - (i/3)];
+		buf[pathlen + i + 2] = '/';
+		if (mkdirs == 1) {
+			buf[pathlen + i + 3] = '\0';
+retry:
+			if (stat(buf, &st) < 0)
+				if (mkdir(buf, 0750) < 0) {
+					if (errno == EEXIST)
+						goto retry;
+					//perror(buf);
+					return -1;
+				}
+		}
+	}
+
+	strncpy(&buf[pathlen + 9], target, targetlen);
+	buf[pathlen + 9 + targetlen] = '\0';
+
+	return 0;
+}
+
+static int get_dirs_filed(char buf[6], struct pfiled *pfiled, char *target,
+				uint32_t targetlen)
 {
 	unsigned char sha[SHA256_DIGEST_SIZE];
 	char hex[HEXLIFIED_SHA256_DIGEST_SIZE];
-	char *prefix = pfiled->prefix;
-	uint32_t prefixlen = pfiled->prefix_len;
 
 	SHA256((unsigned char *)target, targetlen, sha);
 	hexlify(sha, 3, hex);
 	strncpy(buf, hex, 6);
-	return;
+
+	return 0;
+}
+
+//make sure to return -ENOENT iff pithos file does not exist.
+//Any other error on any other case.
+//Migrations only work with caching, since old pithos files are guaranteed read
+//only.
+static int get_dirs_pithos(char buf[6], struct pfiled *pfiled, char *target,
+				uint32_t targetlen)
+{
+	int ret, r, pithos_fd;
+	char *pithos_path=NULL, *filed_path=NULL;
+	struct stat pithos_st, filed_st;
+
+	pithos_path = malloc(MAX_PATH_SIZE + MAX_FILENAME_SIZE + 1);
+	filed_path= malloc(MAX_PATH_SIZE + MAX_FILENAME_SIZE + 1);
+	if (!pithos_path || !filed_path) {
+		ret = -ENOMEM;
+		goto out;
+	}
+
+	strncpy(buf, target, 6);
+	__create_path(pithos_path, pfiled, buf, target, targetlen, 0);
+
+	pithos_fd = open_file_read_path(pfiled, pithos_path);
+	if (pithos_fd < 0) {
+		ret = -errno;
+		goto out_free;
+	}
+	XSEGLOG2(&lc, I, "Found pithos file %s to on old path", pithos_path);
+/*
+	if (should not migrate) {
+		ret = 0;
+		goto out_close_pithos;
+	}
+*/
+
+	r = fstat(pithos_fd, &pithos_st);
+	if (r < 0) {
+		XSEGLOG2(&lc, E, "Fail in stat for pithos_file %s", pithos_path);
+		ret = -EIO;
+		goto out_close_pithos;
+	}
+
+	get_dirs_filed(buf, pfiled, target, targetlen);
+	r = __create_path(filed_path, pfiled, buf, target, targetlen, 1);
+	if (r < 0) {
+		r = -EIO;
+		goto out_close_pithos;
+	}
+
+	r = link(pithos_path, filed_path);
+	if (r < 0) {
+		if (errno != EEXIST) {
+			XSEGLOG2(&lc, E, "Could not link %s to %s (errno: %d)",
+					pithos_path, filed_path, errno);
+			ret = -EIO;
+			goto out_close_pithos;
+		}
+		XSEGLOG2(&lc, I, "Could not link %s to %s. Link already exists",
+				pithos_path, filed_path);
+
+		r = stat(filed_path, &filed_st);
+		if (r < 0) {
+			XSEGLOG2(&lc, E, "Could not stat %s (errno: %d)",
+					filed_path, errno);
+			ret = -EIO;
+			goto out_close_pithos;
+		}
+		if (filed_st.st_ino != pithos_st.st_ino) {
+			//not the same file.
+			//should we hash the contents ?
+			XSEGLOG2(&lc, E, "Old pithos file %s has different "
+					"inode from filed file %s",
+					pithos_path, filed_path);
+			ret = -EIO;
+			goto out_close_pithos;
+		}
+	}
+
+	XSEGLOG2(&lc, I, "Successfully linked pithos_file %s to %s",
+			pithos_path, filed_path);
+
+	//unlink pithos_path
+	r = unlink(pithos_path);
+	if (r < 0) {
+		/* This is not fatal. It can also be a race with another filed
+		 * process. In either case, the move was successfull and the new
+		 * file exists. Just log a warning, and if no other filed
+		 * process takes care of it, let the external migration tool
+		 * that will finilize the migration handle it.
+		 */
+		XSEGLOG2(&lc, W, "Could not remove old pithos file");
+	}
+
+	/* buf is already fixed */
+	ret = 0;
+
+out_close_pithos:
+	close(pithos_fd);
+out_free:
+	free(pithos_path);
+	free(filed_path);
+out:
+	return ret;
+}
+
+static int get_dirs(char buf[6], struct pfiled *pfiled, char *target, uint32_t targetlen)
+{
+	uint32_t prefixlen = pfiled->prefix_len;
+	int r;
+
+	if (matches_pithos_object(target, targetlen)) {
+		r = get_dirs_pithos(buf, pfiled, target, targetlen);
+		if (r != -ENOENT) {
+			return r;
+		}
+	}
+
+	return get_dirs_filed(buf, pfiled, target, targetlen);
 }
 
 static int strnjoin(char *dest, int n, ...)
@@ -243,37 +370,16 @@ static int strjoin(char *dest, char *f, int f_len, char *s, int s_len)
 static int create_path(char *buf, struct pfiled *pfiled, char *target,
 			uint32_t targetlen, int mkdirs)
 {
-	int i;
-	struct stat st;
 	char dirs[6];
-	char *path = pfiled->vpath;
-	uint32_t pathlen = pfiled->vpath_len;
-
-	get_dirs(dirs, pfiled, target, targetlen);
-
-	strncpy(buf, path, pathlen);
-
-	for (i = 0; i < 9; i+= 3) {
-		buf[pathlen + i] = dirs[i - (i/3)];
-		buf[pathlen + i +1] = dirs[i + 1 - (i/3)];
-		buf[pathlen + i + 2] = '/';
-		if (mkdirs == 1) {
-			buf[pathlen + i + 3] = '\0';
-retry:
-			if (stat(buf, &st) < 0) 
-				if (mkdir(buf, 0750) < 0) {
-					if (errno == EEXIST)
-						goto retry;
-					//perror(buf);
-					return -1;
-				}
-		}
+	int r;
+	//propagate mkdirs here, to signal a write and filter them out or signal
+	//error when do_not_migrate flag enabled ?
+	r = get_dirs(dirs, pfiled, target, targetlen);
+	if (r < 0) {
+		return r;
 	}
 
-	strncpy(&buf[pathlen + 9], target, targetlen);
-	buf[pathlen + 9 + targetlen] = '\0';
-
-	return 0;
+	return __create_path(buf, pfiled, dirs, target, targetlen, mkdirs);
 }
 
 
@@ -597,50 +703,67 @@ static int is_target_valid(struct pfiled *pfiled, char *target, int mode)
 }
 */
 
+static int open_file_path(struct pfiled *pfiled, char *path, int create)
+{
+	int fd, flags;
+	char error_str[1024];
+
+	flags = O_RDWR;
+	if (create) {
+		flags |= O_CREAT;
+		XSEGLOG2(&lc, D, "Opening file %s with O_RDWR|O_CREAT", path);
+	} else {
+		XSEGLOG2(&lc, D, "Opening file %s with O_RDWR", path);
+	}
+
+	if (pfiled->directio)
+		flags |= O_DIRECT;
+
+	fd = open(path, flags, S_IRUSR|S_IWUSR|S_IRGRP|S_IWGRP);
+	if (fd < 0){
+		XSEGLOG2(&lc, E, "Could not open file %s. Error: %s", path, strerror_r(errno, error_str, 1023));
+		return -errno;
+	}
+
+	return fd;
+}
+
+static int open_file_write_path(struct pfiled *pfiled, char *path)
+{
+	return open_file_path(pfiled, path, 1);
+}
+
+static int open_file_read_path(struct pfiled *pfiled, char *path)
+{
+	return open_file_path(pfiled, path, 0);
+}
+
 static int open_file_write(struct pfiled *pfiled, char *target, uint32_t targetlen)
 {
-	int r, fd, flags;
+	int r;
 	char tmp[XSEG_MAX_TARGETLEN + MAX_PATH_SIZE + 1];
-	char error_str[1024];
 
 	r = create_path(tmp, pfiled, target, targetlen, 1);
 	if (r < 0) {
 		XSEGLOG2(&lc, E, "Could not create path");
 		return -1;
 	}
-	flags = O_RDWR|O_CREAT;
-	if (pfiled->directio)
-		flags |= O_DIRECT;
-	XSEGLOG2(&lc, D, "Opening file %s with O_RDWR|O_CREAT", tmp);
-	fd = open(tmp, flags, S_IRUSR|S_IWUSR|S_IRGRP|S_IWGRP);
-	if (fd < 0){
-		XSEGLOG2(&lc, E, "Could not open file %s. Error: %s", tmp, strerror_r(errno, error_str, 1023));
-		return -1;
-	}
-	return fd;
+
+	return open_file_write_path(pfiled, tmp);
 }
 
 static int open_file_read(struct pfiled *pfiled, char *target, uint32_t targetlen)
 {
-	int r, fd, flags;
+	int r;
 	char tmp[XSEG_MAX_TARGETLEN + MAX_PATH_SIZE + 1];
-	char error_str[1024];
 
 	r = create_path(tmp, pfiled, target, targetlen, 0);
 	if (r < 0) {
 		XSEGLOG2(&lc, E, "Could not create path");
 		return -1;
 	}
-	XSEGLOG2(&lc, D, "Opening file %s with O_RDWR", tmp);
-	flags = O_RDWR;
-	if (pfiled->directio)
-		flags |= O_DIRECT;
-	fd = open(tmp, flags, S_IRUSR|S_IWUSR|S_IRGRP|S_IWGRP);
-	if (fd < 0){
-		XSEGLOG2(&lc, E, "Could not open file %s. Error: %s", tmp, strerror_r(errno, error_str, 1023));
-		return -1;
-	}
-	return fd;
+
+	return open_file_read_path(pfiled, tmp);
 }
 
 static int open_file(struct pfiled *pfiled, char *target, uint32_t targetlen, int mode)
