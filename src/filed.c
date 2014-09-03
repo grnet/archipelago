@@ -647,7 +647,7 @@ static ssize_t pfiled_read_name(struct pfiled *pfiled, char *name, uint32_t name
 {
 	char path[XSEG_MAX_TARGETLEN + MAX_PATH_SIZE + 1];
 	int r;
-	r = create_path(path, pfiled, name, namelen, 1);
+	r = create_path(path, pfiled, name, namelen, 0);
 	if (r < 0) {
 		XSEGLOG2(&lc, E, "Could not create path");
 		return -1;
