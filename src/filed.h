@@ -56,6 +56,7 @@ struct pfiled {
 	char prefix[MAX_PREFIX_LEN + 1];
 	char uniquestr[MAX_UNIQUESTR_LEN + 1];
 	struct xcache cache;
+	uint32_t migrate;
 };
 
 /*

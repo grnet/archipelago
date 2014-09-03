@@ -255,12 +255,11 @@ static int get_dirs_pithos(char buf[6], struct pfiled *pfiled, char *target,
 		goto out_free;
 	}
 	XSEGLOG2(&lc, I, "Found pithos file %s to on old path", pithos_path);
-/*
-	if (should not migrate) {
+
+	if (!pfiled->migrate) {
 		ret = 0;
 		goto out_close_pithos;
 	}
-*/
 
 	r = fstat(pithos_fd, &pithos_st);
 	if (r < 0) {
@@ -1774,6 +1773,7 @@ int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 	peer->priv = pfiled;
 
 	pfiled->maxfds = 2 * peer->nr_ops;
+	pfiled->migrate = 0; /* false by default */
 
 	for (i = 0; i < peer->nr_ops; i++) {
 		peer->peer_reqs[i].priv = malloc(sizeof(struct fio));
@@ -1798,6 +1798,7 @@ int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 	READ_ARG_STRING("--prefix", pfiled->prefix, MAX_PREFIX_LEN);
 	READ_ARG_STRING("--uniquestr", pfiled->uniquestr, MAX_UNIQUESTR_LEN);
 	READ_ARG_BOOL("--directio", pfiled->directio);
+	READ_ARG_BOOL("--migrate", pfiled->migrate);
 	END_READ_ARGS();
 
 	pfiled->uniquestr_len = strlen(pfiled->uniquestr);
