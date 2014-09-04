@@ -272,6 +272,7 @@ def list_volumes(cli=False, **kwargs):
             path = peers['blockerm'].archip_dir
             for root, dirs, files in os.walk(path):
                 for f in files:
+                    name = f
                     try:
                         f = open(os.path.join(root, f), 'r')
                         header = f.read(MAX_HEADER_SIZE)
