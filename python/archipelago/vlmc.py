@@ -82,7 +82,7 @@ def parse_assume_v0(req, assume_v0, v0_size):
         flags |= XF_ASSUMEV0
         req.set_flags(flags)
         if v0_size != -1:
-            req.set_v0_size= v0_size
+            req.set_v0_size(v0_size)
 
 def is_valid_name(name):
     """Validates a resource name"""
