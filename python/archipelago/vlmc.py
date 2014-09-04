@@ -82,7 +82,7 @@ def parse_assume_v0(req, assume_v0, v0_size):
         flags |= XF_ASSUMEV0
         req.set_flags(flags)
         if v0_size != -1:
-            req.set_v0_size= v0_size
+            req.set_v0_size(v0_size)
 
 def is_valid_name(name):
     """Validates a resource name"""
@@ -272,6 +272,7 @@ def list_volumes(cli=False, **kwargs):
             path = peers['blockerm'].archip_dir
             for root, dirs, files in os.walk(path):
                 for f in files:
+                    name = f
                     try:
                         f = open(os.path.join(root, f), 'r')
                         header = f.read(MAX_HEADER_SIZE)
