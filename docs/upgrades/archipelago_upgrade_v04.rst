@@ -201,8 +201,8 @@ perform any disk I/O.
 2. Enable Pithos object migration
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Enable the ``pithos-migrate`` setting for all ``blockerm`` and ``blockerb``
-peers on all nodes. Add the following line ``pithos-migrate=True`` on the
+Enable the ``pithos_migrate`` setting for all ``blockerm`` and ``blockerb``
+peers on all nodes. Add the following line ``pithos_migrate=True`` on the
 ``blockerm`` and ``blockerb`` section of the configuration files.
 
 
