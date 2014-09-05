@@ -248,7 +248,8 @@ def list_volumes(cli=False, **kwargs):
                                        'readonly', 'deleted'])
         if isinstance(peers['blockerm'], Radosd):
             import rados
-            cluster = rados.Rados(conffile=config['CEPH_CONF_FILE'])
+            cluster = rados.Rados(rados_id=peers['blockerm'].cephx_id,
+                                  conffile=config['CEPH_CONF_FILE'])
             cluster.connect()
             ioctx = cluster.open_ioctx(peers['blockerm'].pool)
             oi = rados.ObjectIterator(ioctx)

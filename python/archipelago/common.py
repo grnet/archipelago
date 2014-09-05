@@ -114,7 +114,7 @@ class Peer(object):
     def __init__(self, role=None, daemon=True, nr_ops=16,
                  logfile=None, pidfile=None, portno_start=None,
                  portno_end=None, log_level=0, spec=None, threshold=None,
-                 user=None, group=None):
+                 cephx_id=None, user=None, group=None):
         if not role:
             raise Error("Role was not provided")
         self.role = role
@@ -185,6 +185,7 @@ class Peer(object):
 
         self.log_level = log_level
         self.threshold = threshold
+        self.cephx_id = cephx_id
 
         if self.log_level < 0 or self.log_level > 3:
             raise Error("%s: Invalid log level %d" %
@@ -309,6 +310,9 @@ class Radosd(MTpeer):
         if self.pool:
             self.cli_opts.append("--pool")
             self.cli_opts.append(self.pool)
+        if self.cephx_id:
+            self.cli_opts.append("--cephx-id")
+            self.cli_opts.append(self.cephx_id)
 
 
 class Filed(MTpeer):
@@ -592,8 +596,8 @@ def check_conf():
             peers[role] = Filed(role=role, spec=segment.get_spec(),
                                  prefix=ARCHIP_PREFIX, **role_config)
         elif role_type == 'rados_blocker':
-            peers[role] = Radosd(role=role, spec=segment.get_spec(),
-                               **role_config)
+            peers[role] = Radosd(role=role,
+                                 spec=segment.get_spec(), **role_config)
         elif role_type == 'mapperd':
             peers[role] = Mapperd(role=role, spec=segment.get_spec(),
                                   **role_config)
@@ -705,6 +709,8 @@ def createDict(cfg, section):
     elif t == 'rados_blocker':
         if cfg.has_option(section, 'nr_threads'):
             sec_dic['nr_threads'] = cfg.getint(section, 'nr_threads')
+        if cfg.has_option(section, 'cephx_id'):
+            sec_dic['cephx_id'] = cfg.get(section, 'cephx_id');
         sec_dic['pool'] = cfg.get(section, 'pool')
     elif t == 'mapperd':
         sec_dic['blockerb_port'] = cfg.getint(section, 'blockerb_port')

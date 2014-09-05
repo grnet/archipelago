@@ -50,6 +50,7 @@ portno_end=1000
 log_level=3
 nr_ops=512
 pool=blocks
+#cephx_id=admin
 
 [blockerm]
 type=rados_blocker
@@ -58,6 +59,7 @@ portno_end=1002
 log_level=3
 nr_ops=512
 pool=maps
+#cephx_id=admin
 
 [mapperd]
 type=mapperd
