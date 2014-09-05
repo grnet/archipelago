@@ -314,14 +314,14 @@ class Radosd(MTpeer):
 class Filed(MTpeer):
     def __init__(self, archip_dir=None, prefix=None, fdcache=None,
                  unique_str=None, nr_threads=1, nr_ops=16, direct=True,
-                 migrate=False, **kwargs):
+                 pithos_migrate=False, **kwargs):
         self.executable = FILE_BLOCKER
         self.archip_dir = archip_dir
         self.prefix = prefix
         self.fdcache = fdcache
         self.unique_str = unique_str
         self.direct = direct
-        self.migrate = migrate
+        self.pithos_migrate = pithos_migrate
         nr_threads = nr_ops
         if self.fdcache and fdcache < 2*nr_threads:
             raise Error("Fdcache should be greater than 2*nr_threads")
@@ -356,8 +356,8 @@ class Filed(MTpeer):
             self.cli_opts.append(self.prefix)
         if self.direct:
             self.cli_opts.append("--directio")
-        if self.migrate:
-            self.cli_opts.append("--migrate")
+        if self.pithos_migrate:
+            self.cli_opts.append("--pithos-migrate")
 
 
 class Mapperd(Peer):
@@ -696,8 +696,8 @@ def createDict(cfg, section):
             sec_dic['fdcache'] = cfg.getint(section, 'fdcache')
         if cfg.has_option(section, 'direct'):
             sec_dic['direct'] = cfg.getboolean(section, 'direct')
-        if cfg.has_option(section, 'migrate'):
-            sec_dic['migrate'] = cfg.getboolean(section, 'migrate')
+        if cfg.has_option(section, 'pithos_migrate'):
+            sec_dic['pithos_migrate'] = cfg.getboolean(section, 'pithos_migrate')
         if cfg.has_option(section, 'unique_str'):
             sec_dic['unique_str'] = cfg.getint(section, 'unique_str')
         if cfg.has_option(section, 'prefix'):

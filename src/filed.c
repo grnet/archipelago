@@ -1798,7 +1798,7 @@ int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 	READ_ARG_STRING("--prefix", pfiled->prefix, MAX_PREFIX_LEN);
 	READ_ARG_STRING("--uniquestr", pfiled->uniquestr, MAX_UNIQUESTR_LEN);
 	READ_ARG_BOOL("--directio", pfiled->directio);
-	READ_ARG_BOOL("--migrate", pfiled->migrate);
+	READ_ARG_BOOL("--pithos-migrate", pfiled->migrate);
 	END_READ_ARGS();
 
 	pfiled->uniquestr_len = strlen(pfiled->uniquestr);
