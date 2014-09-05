@@ -7,4 +7,4 @@ Archipelago upgrade notes:
    :maxdepth: 1
    :glob:
 
-   archipelago_upgrade_v04
+   upgrade-0.4
