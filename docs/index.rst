@@ -36,4 +36,5 @@ install, configure and use Archipelago:
    archipelago
    installation_guide
    administration_guide
+   upgrades/index
    design/index
