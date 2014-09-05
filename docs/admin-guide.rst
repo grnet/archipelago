@@ -184,6 +184,31 @@ volume composer then communicates with the blocker responsible for holding the
 objects where the actual data reside and composes the responses, to respond to
 the original request.
 
+Archipelago mapfile architecture
+--------------------------------
+
+Each Archipelago mapfile begins with a header, in big endian format, as
+follows::
+
+    struct ArchipelagoHeader {
+        uint32_t signature;
+        uint32_t version;
+        uint64_t size;
+        uint32_t blocksize;
+        uint32_t flags;
+        uint64_t epoch;
+    };
+
+* The first 4 bytes contain the characters 'A', 'M', 'F', '.'.
+* The next 4 bytes contain the format version used by the mapfile. Currently,
+  there have been two versions of the format, version 1 and version 2. Pithos
+  mapfiles weren't following any specific mapfile header format until now.
+* The next 8 bytes contain the size, in bytes, of the file represented by the
+  mapfile.
+* The blocksize field gives the block size used by the storage backend.
+* The value of the flags field is a mask of flags used to denote access
+  permissions and properties of this mapfile.
+* The epoch field is an index number used as a reference counter.
 
 Archipelago Integration with Synnefo and Ganeti
 ***********************************************

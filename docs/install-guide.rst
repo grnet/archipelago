@@ -28,10 +28,10 @@ lines in your ``/etc/apt/sources.list`` file:
 
 .. code-block:: console
 
-   deb http://apt.dev.grnet.gr unstable/
-   deb-src http://apt.dev.grnet.gr unstable/
+   deb http://apt.dev.grnet.gr wheezy/
+   deb-src http://apt.dev.grnet.gr wheezy/
 
-and import the our repository's GPG key:
+and import our repository's GPG key:
 
 .. code-block:: console
 
