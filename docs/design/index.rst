@@ -1,9 +1,6 @@
 Design docs
 ^^^^^^^^^^^
 
-Introduction
-============
-
 Design docs are used to introduce a new feature to the existing code. They are
 created during the design process and strictly before the actual
 implementation. Their significance is two-fold:
@@ -18,14 +15,10 @@ implementation. Their significance is two-fold:
   beneficiary `rubber duck effect`_ on the author and thus prevent feature
   design shortcomings that were not foreseen.
 
-Index tree
-==========
-
 We present on the list below the design docs so far:
 
 .. toctree::
-   :maxdepth: 2
-   :numbered:
+   :maxdepth: 1
    :glob:
 
    design_entities
