@@ -487,9 +487,8 @@ any node that runs Archipelago.
   # vlmc unlock -f <volumename>
 
 The administrator must make sure that the volume is locked erroneously before
-unlocking it. That means an older clientid for RADOS backend or a different node
-for a file backend.
-.. FIXME reword
+unlocking it. With a RADOS backend, that means that the volume is locked by an
+older clientid and with a file backend, by a different node.
 
 .. TODO, vlmc command ? current blockerm clientid ?
 
