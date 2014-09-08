@@ -218,10 +218,14 @@ On every node that runs Archipelago, perform the following:
 Finalizing upgrade
 ==================
 
-After all nodes are upgraded, from one node with access to archipelago run the
-provided script to make sure all old resources have been migrated to the new
-Archipelago. It is advised, in order to avoid false alarms (e.g. a mapfile that
-failed to upgrade), to be idle wrt to
-Archipelago control operations.
+Archipelago lazily upgrades the mapfiles to the latest version, when they are
+accessed. To make sure that all mapfiles have been upgraded to the latest
+version, the provided migration tool must be executed. The tool is located in
+``/usr/share/archipelago/tools/finalize_upgrade_0.4``.
+You can run it from any node with access to Archipelago. Make sure that it
+completes successfully.
+
+It is advised, in order to avoid false alarms (e.g. a mapfile that failed to
+upgrade), to be idle wrt to Archipelago control operations.
 
 
