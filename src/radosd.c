@@ -935,8 +935,6 @@ int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 		return -1;
 	}
 
-	}
-
 	if (rados_conf_read_file(rados->cluster, NULL) < 0){
 		XSEGLOG2(&lc, E, "Error reading rados conf files!");
 		return -1;
