@@ -112,12 +112,12 @@ segment
 
         # apt-get install xseg-tools
 
-On the nodes that will host VMs, blktap-utils from grnet and the distro-provided
+On the nodes that will host VMs, blktap-archipelago-utils from grnet and the distro-provided
 blktap-dkms package must also be installed.
 
 .. code-block:: console
 
-        # apt-get install blktap-utils blktap-dkms
+        # apt-get install blktap-archipelago-utils blktap-dkms
 
 5. Adjust the new config file
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
