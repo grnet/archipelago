@@ -1,43 +1,26 @@
 #!/usr/bin/env python
 
-# Copyright 2012 GRNET S.A. All rights reserved.
+# Copyright (C) 2010-2014 GRNET S.A.
 #
-# Redistribution and use in source and binary forms, with or
-# without modification, are permitted provided that the following
-# conditions are met:
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
 #
-#   1. Redistributions of source code must retain the above
-#      copyright notice, this list of conditions and the following
-#      disclaimer.
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
 #
-#   2. Redistributions in binary form must reproduce the above
-#      copyright notice, this list of conditions and the following
-#      disclaimer in the documentation and/or other materials
-#      provided with the distribution.
-#
-# THIS SOFTWARE IS PROVIDED BY GRNET S.A. ``AS IS'' AND ANY EXPRESS
-# OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
-# WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-# PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL GRNET S.A OR
-# CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
-# SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
-# LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF
-# USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED
-# AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
-# LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
-# ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
-# POSSIBILITY OF SUCH DAMAGE.
-#
-# The views and conclusions contained in the software and
-# documentation are those of the authors and should not be
-# interpreted as representing official policies, either expressed
-# or implied, of GRNET S.A.
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
 
 
 import os
 import sys
-from struct import unpack
+import re
+from struct import pack, unpack
 from binascii import hexlify
 from ctypes import c_uint32, c_uint64
 
@@ -93,8 +76,23 @@ def is_device_mapped(device):
             return d_id
     return None
 
+def parse_assume_v0(req, assume_v0, v0_size):
+    if assume_v0:
+        flags = req.get_flags()
+        flags |= XF_ASSUMEV0
+        req.set_flags(flags)
+        if v0_size != -1:
+            req.set_v0_size(v0_size)
 
-def create(name, size=None, snap=None, cont_addr=False, **kwargs):
+def is_valid_name(name):
+    """Validates a resource name"""
+    if name.startswith(ARCHIP_PREFIX) or name.endswith('_lock') or \
+       re.match('.*_(\d|[a-f]){16}', name):
+        return False
+
+    return True
+
+def create(name, size=None, snap=None, assume_v0=False, v0_size=-1, **kwargs):
     if len(name) < 6:
         raise Error("Name should have at least len 6")
     if size is None and snap is None:
@@ -107,11 +105,15 @@ def create(name, size=None, snap=None, cont_addr=False, **kwargs):
     else:
         size = size << 20
 
+    if not is_valid_name(name):
+        raise Error("Invalid volume name")
+
     ret = False
     xseg_ctx = Xseg_ctx(get_segment())
     mport = peers['mapperd'].portno_start
     req = Request.get_clone_request(xseg_ctx, mport, snap, clone=name,
-            clone_size=size, cont_addr=cont_addr)
+            clone_size=size)
+    parse_assume_v0(req, assume_v0, v0_size)
     req.submit()
     req.wait()
     ret = req.success()
@@ -121,13 +123,20 @@ def create(name, size=None, snap=None, cont_addr=False, **kwargs):
         raise Error("vlmc creation failed")
 
 
-def snapshot(name, snap_name=None, cli=False, **kwargs):
+def snapshot(name, snap_name=None, cli=False, assume_v0=False, v0_size=-1, **kwargs):
     if len(name) < 6:
         raise Error("Name should have at least len 6")
+
+    if not is_valid_name(name):
+        raise Error("Invalid volume name")
+
+    if not is_valid_name(snap_name):
+        raise Error("Invalid snapshot name")
 
     xseg_ctx = Xseg_ctx(get_segment())
     vport = peers['vlmcd'].portno_start
     req = Request.get_snapshot_request(xseg_ctx, vport, name, snap=snap_name)
+    parse_assume_v0(req, assume_v0, v0_size)
     req.submit()
     req.wait()
     ret = req.success()
@@ -139,14 +148,49 @@ def snapshot(name, snap_name=None, cli=False, **kwargs):
     if cli:
         sys.stdout.write("Snapshot name: %s\n" % snap_name)
 
-
-def hash(name, cli=False, **kwargs):
+def rename(name, newname=None, cli=False, assume_v0=False, v0_size=-1, **kwargs):
     if len(name) < 6:
         raise Error("Name should have at least len 6")
+
+    if len(newname) < 6:
+        raise Error("New name should have at least len 6")
+
+    if is_mapped(name) is not None:
+        raise Error("Cannot rename a mapped resource")
+
+    if not is_valid_name(name):
+        raise Error("Invalid volume name")
+
+    if not is_valid_name(newname):
+        raise Error("Invalid new name")
+
+    xseg_ctx = Xseg_ctx(get_segment())
+    mport = peers['mapperd'].portno_start
+    req = Request.get_rename_request(xseg_ctx, mport, name, newname=newname)
+    parse_assume_v0(req, assume_v0, v0_size)
+    req.submit()
+    req.wait()
+    ret = req.success()
+    req.put()
+    xseg_ctx.shutdown()
+
+    if not ret:
+        raise Error("vlmc rename failed")
+    if cli:
+        sys.stdout.write("Renamed %s to %s\n" % (name, newname))
+
+
+def hash(name, cli=False, assume_v0=False, v0_size=-1, **kwargs):
+    if len(name) < 6:
+        raise Error("Name should have at least len 6")
+
+    if not is_valid_name(name):
+        raise Error("Invalid volume name")
 
     xseg_ctx = Xseg_ctx(get_segment())
     mport = peers['mapperd'].portno_start
     req = Request.get_hash_request(xseg_ctx, mport, name)
+    parse_assume_v0(req, assume_v0, v0_size)
     req.submit()
     req.wait()
     ret = req.success()
@@ -163,24 +207,106 @@ def hash(name, cli=False, **kwargs):
         return hash_name
 
 
-def list_volumes(**kwargs):
-    if isinstance(peers['blockerm'], Sosd):
-        import rados
-        cluster = rados.Rados(conffile=config['CEPH_CONF_FILE'])
-        cluster.connect()
-        ioctx = cluster.open_ioctx(peers['blockerm'].pool)
-        oi = rados.ObjectIterator(ioctx)
-        for o in oi:
-            name = o.key
-            if name.startswith(ARCHIP_PREFIX) and not name.endswith('_lock'):
-                print name[len(ARCHIP_PREFIX):]
-    elif config['STORAGE'] == "files":
-        raise Error("Vlmc list not supported for files yet")
-    else:
-        raise Error("Invalid storage")
+def list_volumes(cli=False, **kwargs):
+    """
+    Quick 'n dirty way to list volumes. This bypasses the archipelago
+    infrastructure and goes directly to storage.
+    """
+
+    MAX_HEADER_SIZE = 32
+
+    def parse_header(name, header):
+        size_uint32t = sizeof(c_uint32)
+        size_uint64t = sizeof(c_uint64)
+
+        readonly = False
+        deleted = False
+        version1_on_disk = pack("<L", 1)
+        signature_on_disk = pack(">L", int(hexlify(b'AMF.'), base=16))
+
+        if (header[0:size_uint32t] != signature_on_disk):
+            if header[0:size_uint32t] == version1_on_disk:
+                version = 1
+            elif len(name) == 64 and re.match('(\d|[abcdef])+', name):
+                version = 0
+                readonly = True
+            else:
+                return None
+        else:
+            _, version, _, _, flags = unpack(">LLQLL",
+                                        header[:4*size_uint32t + size_uint64t])
+            if flags & 1:
+                readonly = True
+            if flags & 2:
+                deleted = True
+
+        return (version, readonly, deleted)
 
 
-def remove(name, **kwargs):
+    def get_volumes():
+        Volume = namedtuple('Volume', ['name', 'version', 'header_object',
+                                       'readonly', 'deleted'])
+        if isinstance(peers['blockerm'], Radosd):
+            import rados
+            cluster = rados.Rados(rados_id=peers['blockerm'].cephx_id,
+                                  conffile=config['CEPH_CONF_FILE'])
+            cluster.connect()
+            ioctx = cluster.open_ioctx(peers['blockerm'].pool)
+            oi = rados.ObjectIterator(ioctx)
+            for o in oi:
+                name = o.key
+                try:
+                    header = ioctx.read(name, length=MAX_HEADER_SIZE)
+                    ph = parse_header(name, header)
+                    if ph is None:
+                        continue
+                    (version, readonly, deleted) = ph
+                    volume = name
+                    if volume.startswith(ARCHIP_PREFIX):
+                        volume = volume[len(ARCHIP_PREFIX):]
+                    yield Volume(name=volume, version=version,
+                            header_object=name, deleted=deleted,
+                            readonly=readonly)
+                except:
+                    pass
+        elif isinstance(peers['blockerm'], Filed):
+            path = peers['blockerm'].archip_dir
+            for root, dirs, files in os.walk(path):
+                for f in files:
+                    name = f
+                    try:
+                        f = open(os.path.join(root, f), 'r')
+                        header = f.read(MAX_HEADER_SIZE)
+                        f.close()
+                        ph = parse_header(name, header)
+                        if ph is None:
+                            continue
+                        (version, readonly, deleted) = ph
+                        volume = name
+                        if volume.startswith(ARCHIP_PREFIX):
+                            volume = volume[len(ARCHIP_PREFIX):]
+                        yield Volume(name=volume, version=version,
+                            header_object=name, deleted=deleted,
+                            readonly=readonly)
+                    except:
+                        pass
+        else:
+            raise Error("Invalid storage")
+
+    if not cli:
+        return get_volumes()
+
+    for v in get_volumes():
+        if v.deleted:
+            continue
+        print v.name
+
+
+def remove(name, assume_v0=False, v0_size=-1, **kwargs):
+
+    if not is_valid_name(name):
+        raise Error("Invalid volume name")
+
     device = is_mapped(name)
     if device is not None:
         raise Error("Volume %s mapped on device %s%s" % (name, DEVICE_PREFIX,
@@ -188,8 +314,9 @@ def remove(name, **kwargs):
 
     ret = False
     xseg_ctx = Xseg_ctx(get_segment())
-    mport = peers['mapperd'].portno_start
+    mport = peers['vlmcd'].portno_start
     req = Request.get_delete_request(xseg_ctx, mport, name)
+    parse_assume_v0(req, assume_v0, v0_size)
     req.submit()
     req.wait()
     ret = req.success()
@@ -200,9 +327,12 @@ def remove(name, **kwargs):
 
 
 @exclusive()
-def map_volume(name, **kwargs):
+def map_volume(name, assume_v0=False, v0_size=-1, readonly=False, **kwargs):
     if not loaded_module("blktap"):
         raise Error("blktap module not loaded")
+
+    if not is_valid_name(name):
+        raise Error("Invalid volume name")
 
     device = is_mapped(name)
     if device is not None:
@@ -210,7 +340,10 @@ def map_volume(name, **kwargs):
                     '/dev/xen/blktap-2/tapdev', device))
 
     try:
-        device = VlmcTapdisk.create(name)
+        device = VlmcTapdisk.create(name, vport=peers['vlmcd'].portno_start,
+                                    mport=peers['mapperd'].portno_start,
+                                    assume_v0=assume_v0, v0_size=v0_size,
+                                    readonly=readonly)
         if device:
             sys.stderr.write(device + '\n')
             return device.split(DEVICE_PREFIX)[1]
@@ -250,7 +383,8 @@ def lock(name, cli=False, **kwargs):
     if len(name) < 6:
         raise Error("Name should have at least len 6")
 
-    name = ARCHIP_PREFIX + name
+    if not is_valid_name(name):
+        raise Error("Invalid volume name")
 
     xseg_ctx = Xseg_ctx(get_segment())
     mbport = peers['blockerm'].portno_start
@@ -258,6 +392,7 @@ def lock(name, cli=False, **kwargs):
     req.submit()
     req.wait()
     ret = req.success()
+    req.put()
     xseg_ctx.shutdown()
     if not ret:
         raise Error("vlmc lock failed")
@@ -269,7 +404,8 @@ def unlock(name, force=False, cli=False, **kwargs):
     if len(name) < 6:
         raise Error("Name should have at least len 6")
 
-    name = ARCHIP_PREFIX + name
+    if not is_valid_name(name):
+        raise Error("Invalid volume name")
 
     xseg_ctx = Xseg_ctx(get_segment())
     mbport = peers['blockerm'].portno_start
@@ -277,6 +413,7 @@ def unlock(name, force=False, cli=False, **kwargs):
     req.submit()
     req.wait()
     ret = req.success()
+    req.put()
     xseg_ctx.shutdown()
     if not ret:
         raise Error("vlmc unlock failed")
@@ -284,17 +421,22 @@ def unlock(name, force=False, cli=False, **kwargs):
         sys.stdout.write("Volume unlocked\n")
 
 
-def open_volume(name, cli=False, **kwargs):
+def open_volume(name, cli=False, assume_v0=False, v0_size=-1, **kwargs):
     if len(name) < 6:
         raise Error("Name should have at least len 6")
+
+    if not is_valid_name(name):
+        raise Error("Invalid volume name")
 
     ret = False
     xseg_ctx = Xseg_ctx(get_segment())
     vport = peers['vlmcd'].portno_start
     req = Request.get_open_request(xseg_ctx, vport, name)
+    parse_assume_v0(req, assume_v0, v0_size)
     req.submit()
     req.wait()
     ret = req.success()
+    req.put()
     xseg_ctx.shutdown()
     if not ret:
         raise Error("vlmc open failed")
@@ -302,17 +444,22 @@ def open_volume(name, cli=False, **kwargs):
         sys.stdout.write("Volume opened\n")
 
 
-def close_volume(name, cli=False, **kwargs):
+def close_volume(name, cli=False, assume_v0=False, v0_size=-1, **kwargs):
     if len(name) < 6:
         raise Error("Name should have at least len 6")
+
+    if not is_valid_name(name):
+        raise Error("Invalid volume name")
 
     ret = False
     xseg_ctx = Xseg_ctx(get_segment())
     vport = peers['vlmcd'].portno_start
     req = Request.get_close_request(xseg_ctx, vport, name)
+    parse_assume_v0(req, assume_v0, v0_size)
     req.submit()
     req.wait()
     ret = req.success()
+    req.put()
     xseg_ctx.shutdown()
     if not ret:
         raise Error("vlmc close failed")
@@ -320,19 +467,24 @@ def close_volume(name, cli=False, **kwargs):
         sys.stdout.write("Volume closed\n")
 
 
-def info(name, cli=False, **kwargs):
+def info(name, cli=False, assume_v0=False, v0_size=-1, **kwargs):
     if len(name) < 6:
         raise Error("Name should have at least len 6")
+
+    if not is_valid_name(name):
+        raise Error("Invalid volume name")
 
     ret = False
     xseg_ctx = Xseg_ctx(get_segment())
     mport = peers['mapperd'].portno_start
     req = Request.get_info_request(xseg_ctx, mport, name)
+    parse_assume_v0(req, assume_v0, v0_size)
     req.submit()
     req.wait()
     ret = req.success()
     if ret:
         size = req.get_data(xseg_reply_info).contents.size
+    req.put()
     xseg_ctx.shutdown()
     if not ret:
         raise Error("vlmc info failed")
@@ -341,47 +493,4 @@ def info(name, cli=False, **kwargs):
 
 
 def mapinfo(name, verbose=False, **kwargs):
-    if len(name) < 6:
-        raise Error("Name should have at least len 6")
-
-    if config['STORAGE'] == "rados":
-        import rados
-        cluster = rados.Rados(conffile=config['CEPH_CONF_FILE'])
-        cluster.connect()
-        ioctx = cluster.open_ioctx(config['RADOS_POOL_MAPS'])
-        BLOCKSIZE = 4 * 1024 * 1024
-        try:
-            mapdata = ioctx.read(ARCHIP_PREFIX + name, length=BLOCKSIZE)
-        except Exception:
-            raise Error("Cannot read map data")
-        if not mapdata:
-            raise Error("Cannot read map data")
-        pos = 0
-        size_uint32t = sizeof(c_uint32)
-        version = unpack("<L", mapdata[pos:pos + size_uint32t])[0]
-        pos += size_uint32t
-        size_uint64t = sizeof(c_uint64)
-        size = unpack("Q", mapdata[pos:pos + size_uint64t])[0]
-        pos += size_uint64t
-        blocks = size / BLOCKSIZE
-        nr_exists = 0
-        print ""
-        print "Volume: " + name
-        print "Version: " + str(version)
-        print "Size: " + str(size)
-        for i in range(blocks):
-            exists = bool(unpack("B", mapdata[pos:pos + 1])[0])
-            if exists:
-                nr_exists += 1
-            pos += 1
-            block = hexlify(mapdata[pos:pos + 32])
-            pos += 32
-            if verbose:
-                print block, exists
-        print "Actual disk usage: " + str(nr_exists * BLOCKSIZE),
-        print '(' + str(nr_exists) + '/' + str(blocks) + ' blocks)'
-
-    elif STORAGE == "files":
-        raise Error("Mapinfo for file storage not supported")
-    else:
-        raise Error("Invalid storage")
+    raise Error("Unimplemented")

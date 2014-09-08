@@ -1,35 +1,18 @@
 /*
- * Copyright 2012 GRNET S.A. All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or
- * without modification, are permitted provided that the following
- * conditions are met:
- *
- *   1. Redistributions of source code must retain the above
- *      copyright notice, this list of conditions and the following
- *      disclaimer.
- *   2. Redistributions in binary form must reproduce the above
- *      copyright notice, this list of conditions and the following
- *      disclaimer in the documentation and/or other materials
- *      provided with the distribution.
- *
- * THIS SOFTWARE IS PROVIDED BY GRNET S.A. ``AS IS'' AND ANY EXPRESS
- * OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
- * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
- * PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL GRNET S.A OR
- * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
- * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
- * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF
- * USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED
- * AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
- * ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGE.
- *
- * The views and conclusions contained in the software and
- * documentation are those of the authors and should not be
- * interpreted as representing official policies, either expressed
- * or implied, of GRNET S.A.
+Copyright (C) 2010-2014 GRNET S.A.
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
 #include <stdio.h>
@@ -52,6 +35,7 @@
 #define HASH_SUFFIX_LEN 5
 
 #define MAX_POOL_NAME 64
+#define MAX_CEPHXID_NAME 256
 #define MAX_OBJ_NAME (XSEG_MAX_TARGETLEN + LOCK_SUFFIX_LEN + 1)
 #define RADOS_LOCK_NAME "RadosLock"
 //#define RADOS_LOCK_COOKIE "Cookie"
@@ -63,6 +47,7 @@ void custom_peer_usage()
 {
 	fprintf(stderr, "Custom peer options:\n"
 		"--pool: Rados pool to connect\n"
+		"--cephx-id: Cephx id"
 		"\n");
 }
 
@@ -147,7 +132,7 @@ static int do_aio_generic(struct peerd *peer, struct peer_req *pr, uint32_t op,
 			r = rados_aio_create_completion(pr, rados_ack_cb, NULL, &rados_compl);
 			if (r < 0)
 				return -1;
-			r = rados_aio_stat(rados->ioctx, target, rados_compl, &rio->size, NULL); 
+			r = rados_aio_stat(rados->ioctx, target, rados_compl, &rio->size, NULL);
 			break;
 		default:
 			return -1;
@@ -227,7 +212,7 @@ int handle_info(struct peerd *peer, struct peer_req *pr)
 		rio->state = PENDING;
 		r = do_aio_generic(peer, pr, X_INFO, rio->obj_name, NULL, 0, 0);
 		if (r < 0) {
-			XSEGLOG2(&lc, E, "Getting info of %s failed", rio->obj_name);	
+			XSEGLOG2(&lc, E, "Getting info of %s failed", rio->obj_name);
 			fail(peer, pr);
 		}
 	}
@@ -249,13 +234,13 @@ int handle_info(struct peerd *peer, struct peer_req *pr)
 		xinfo = (struct xseg_reply_info *)req_data;
 		if (pr->retval < 0){
 			xinfo->size = 0;
-			XSEGLOG2(&lc, E, "Getting info of %s failed", rio->obj_name);	
+			XSEGLOG2(&lc, E, "Getting info of %s failed", rio->obj_name);
 			fail(peer, pr);
 		}
 		else {
 			xinfo->size = rio->size;
 			pr->retval = sizeof(uint64_t);
-			XSEGLOG2(&lc, I, "Getting info of %s completed", rio->obj_name);	
+			XSEGLOG2(&lc, I, "Getting info of %s completed", rio->obj_name);
 			complete(peer, pr);
 		}
 	}
@@ -289,9 +274,9 @@ int handle_read(struct peerd *peer, struct peer_req *pr)
 	else if (rio->state == READING) {
 		XSEGLOG2(&lc, I, "Reading of %s callback", rio->obj_name);
 		data = xseg_get_data(peer->xseg, pr->req);
-		if (pr->retval > 0)
+		if (pr->retval > 0) {
 			req->serviced += pr->retval;
-		else if (pr->retval == 0) {
+		} else if (pr->retval == 0) {
 			XSEGLOG2(&lc, I, "Reading of %s reached end of file at "
 				"%llu bytes. Zeroing out rest", rio->obj_name,
 				(unsigned long long) req->serviced);
@@ -300,15 +285,7 @@ int handle_read(struct peerd *peer, struct peer_req *pr)
 			 */
 			memset(data + req->serviced, 0, req->size - req->serviced);
 			req->serviced = req->size;
-		}
-		else if (pr->retval == -2) {
-			XSEGLOG2(&lc, I, "Reading of %s return -2. "
-					"Zeroing out data", rio->obj_name);
-			/* object not found. return zeros instead */
-			memset(data, 0, req->size);
-			req->serviced = req->size;
-		}
-		else {
+		} else {
 			XSEGLOG2(&lc, E, "Reading of %s failed", rio->obj_name);
 			/* pr->retval < 0 && pr->retval != -2 */
 			fail(peer, pr);
@@ -901,7 +878,7 @@ void * unlock_op(void *arg)
 		fail(pr->peer, pr);
 	}
 	else {
-		if (rados_notify(rados->ioctx, rio->obj_name, 
+		if (rados_notify(rados->ioctx, rio->obj_name,
 					0, NULL, 0) < 0) {
 			XSEGLOG2(&lc, E, "rados notify failed");
 		}
@@ -932,6 +909,7 @@ int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 {
 	int i, j;
 	struct radosd *rados = malloc(sizeof(struct radosd));
+	char *cephx_id = calloc(1, MAX_CEPHXID_NAME);
 	struct rados_io *rio;
 	if (!rados) {
 		perror("malloc");
@@ -941,6 +919,7 @@ int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 
 	BEGIN_READ_ARGS(argc, argv);
 	READ_ARG_STRING("--pool", rados->pool, MAX_POOL_NAME);
+	READ_ARG_STRING("--cephx-id", cephx_id, MAX_CEPHXID_NAME);
 	END_READ_ARGS();
 
 	if (!rados->pool[0]){
@@ -950,10 +929,12 @@ int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 		return -1;
 	}
 
-	if (rados_create(&rados->cluster, NULL) < 0) {
+	if (rados_create(&rados->cluster, (cephx_id[0] == '\0') ? NULL : cephx_id)< 0) {
 		XSEGLOG2(&lc, E, "Rados create failed!");
+		free(cephx_id);
 		return -1;
 	}
+
 	if (rados_conf_read_file(rados->cluster, NULL) < 0){
 		XSEGLOG2(&lc, E, "Error reading rados conf files!");
 		return -1;
@@ -962,12 +943,14 @@ int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 		XSEGLOG2(&lc, E, "Rados connect failed!");
 		rados_shutdown(rados->cluster);
 		free(rados);
-		return 0;
+		free(cephx_id);
+		return -1;
 	}
 	if (rados_pool_lookup(rados->cluster, rados->pool) < 0) {
 		XSEGLOG2(&lc, E, "Pool does not exists. Try creating it first");
 		rados_shutdown(rados->cluster);
 		free(rados);
+		free(cephx_id);
 		return -1;
 		/*
 		if (rados_pool_create(rados->cluster, rados->pool) < 0){
@@ -984,6 +967,7 @@ int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 		XSEGLOG2(&lc, E, "ioctx create problem.");
 		rados_shutdown(rados->cluster);
 		free(rados);
+		free(cephx_id);
 		return -1;
 	}
 	peer->priv = (void *) rados;
@@ -996,6 +980,7 @@ int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 				free(peer->peer_reqs[j].priv);
 			}
 			free(rados);
+			free(cephx_id);
 			perror("malloc");
 			return -1;
 		}
