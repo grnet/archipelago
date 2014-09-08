@@ -17,7 +17,7 @@ Archipelago consists of the following packages:
 * ``archipelago-rados``: user space storage driver to enable RADOS support
 * ``archipelago-ganeti``: ganeti ext storage scripts, that enable ganeti to
   provision VMs over archipelago
-* ``blktap-utils``: blktap utilities to support presenting an Archipelago
+* ``blktap-archipelago-utils``: blktap utilities to support presenting an Archipelago
   resource as a blktap block device. Currently this package is custom patched to
   support archipelago and it is provided by the Synnefo Apt repository.
 * ``xseg-tools``: xseg utility that is used to dig into the shared memory
@@ -48,15 +48,15 @@ provided repository.
 
     $ apt-get install archipelago archipelago-ganeti archipelago-rados
 
-To present Archipelago resources as block devices, the ``blktap-utils`` and
+To present Archipelago resources as block devices, the ``blktap-archipelago-utils`` and
 ``blktap-dkms`` packages are required. Please note that you need to install the
-latest version of ``blktap-utils`` from the aforementioned GRNet repo, since it
+latest version of ``blktap-archipelago-utils`` from the aforementioned GRNet repo, since it
 contains extra patches to support Archipelago. You should use your distro
 provided ``blktap-dkms`` package.
 
 .. code-block:: console
 
-    # apt-get install blktap-utils blktap-dkms
+    # apt-get install blktap-archipelago-utils blktap-dkms
 
 .. tip:: Archipelago does not start automatically after installation. Please
          review the configuration file, make any appropriate changes to the
