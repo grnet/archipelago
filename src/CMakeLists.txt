@@ -27,7 +27,7 @@ set_target_properties(archip-dummy
 	COMPILE_DEFINITIONS "MT"
 	)
 
-set(RADOS_SRC mt-sosd.c peer.c hash.c)
+set(RADOS_SRC radosd.c peer.c hash.c)
 add_executable(archip-radosd ${RADOS_SRC})
 target_link_libraries(archip-radosd xseg pthread rados crypto)
 set_target_properties(archip-radosd
