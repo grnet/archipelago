@@ -17,7 +17,7 @@ import os
 import subprocess
 
 def cmd_open(cmd, bufsize=-1, env=None):
-    inst = subprocess.Popen(cmd, shell=True, bufsize=bufsize,
+    inst = subprocess.Popen(cmd, shell=False, bufsize=bufsize,
                             stdin=subprocess.PIPE,
                             stdout=subprocess.PIPE,
                             stderr=subprocess.PIPE, close_fds=True)
@@ -25,7 +25,7 @@ def cmd_open(cmd, bufsize=-1, env=None):
 
 
 def doexec(args, inputtext=None):
-    proc = cmd_open(" ".join(args))
+    proc = cmd_open(args)
     if inputtext is not None:
         proc.stdin.write(inputtext)
     stdout = proc.stdout
