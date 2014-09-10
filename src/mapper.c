@@ -271,7 +271,7 @@ static struct map * create_map(char *name, uint32_t namelen, uint32_t flags)
 					namelen, MAX_VOLUME_LEN);
 		return NULL;
 	}
-	struct map *m = malloc(sizeof(struct map));
+	struct map *m = calloc(1, sizeof(struct map));
 	if (!m){
 		XSEGLOG2(&lc, E, "Cannot allocate map ");
 		return NULL;
@@ -428,7 +428,7 @@ static int req2objs(struct peer_req *pr, struct map *map, int write)
 	}
 
 	/* get map_nodes of request */
-	struct r2o *mns = malloc(sizeof(struct r2o)*nr_objs);
+	struct r2o *mns = calloc(nr_objs, sizeof(struct r2o));
 	if (!mns){
 		XSEGLOG2(&lc, E, "Cannot allocate mns");
 		return -1;
@@ -1919,7 +1919,7 @@ int dispatch(struct peerd *peer, struct peer_req *pr, struct xseg_request *req,
 	else {
 		if (mio->cb){
 //			mio->cb(pr, req);
-			arg = malloc(sizeof(struct cb_arg));
+			arg = calloc(1, sizeof(struct cb_arg));
 			if (!arg) {
 				XSEGLOG2(&lc, E, "Cannot allocate cb_arg");
 				return -1;
@@ -1941,13 +1941,13 @@ int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 	int i;
 
 	//FIXME error checks
-	struct mapperd *mapper = malloc(sizeof(struct mapperd));
+	struct mapperd *mapper = calloc(1, sizeof(struct mapperd));
 	peer->priv = mapper;
 	//mapper = mapperd;
 	mapper->hashmaps = xhash_new(3, 0, XHASH_STRING);
 
 	for (i = 0; i < peer->nr_ops; i++) {
-		struct mapper_io *mio = malloc(sizeof(struct mapper_io));
+		struct mapper_io *mio = calloc(1, sizeof(struct mapper_io));
 		mio->copyups_nodes = xhash_new(3, 0, XHASH_INTEGER);
 		mio->pending_reqs = 0;
 		mio->err = 0;

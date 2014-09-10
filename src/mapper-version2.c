@@ -108,7 +108,7 @@ static int split_to_chunks(struct map *map, uint64_t start, uint64_t nr,
 		}
 	} while (obj < nr);
 
-	chunk = malloc(sizeof(struct chunk) * nr_chunks);
+	chunk = calloc(nr_chunks, sizeof(struct chunk));
 	*chunks = chunk;
 	if (!chunk) {
 		return -ENOMEM;
@@ -648,7 +648,6 @@ static int load_map_objects_v2(struct peer_req *pr, struct map *map, uint64_t st
 	int r;
 	unsigned char *buf;
 	struct mapper_io *mio = __get_mapper_io(pr);
-	uint32_t buf_size = sizeof(unsigned char) * nr * v2_objectsize_in_map;
 	uint32_t rem;
 
 	if (map->flags & MF_MAP_DELETED) {
@@ -656,7 +655,7 @@ static int load_map_objects_v2(struct peer_req *pr, struct map *map, uint64_t st
 		return 0;
 	}
 
-	buf = malloc(buf_size);
+	buf = calloc(nr, sizeof(unsigned char) * v2_objectsize_in_map);
 	if (!buf) {
 		XSEGLOG2(&lc, E, "Cannot allocate memory");
 		return -1;
