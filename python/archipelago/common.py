@@ -1160,6 +1160,10 @@ class Request(object):
         return cls(xseg, dst, target, op=X_DELETE)
 
     @classmethod
+    def get_update_request(cls, xseg, dst, target):
+        return cls(xseg, dst, target, op=X_UPDATE)
+
+    @classmethod
     def get_clone_request(cls, xseg, dst, target, clone=None, clone_size=0):
         datalen = sizeof(xseg_request_clone)
         xclone = xseg_request_clone()

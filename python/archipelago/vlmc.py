@@ -325,6 +325,24 @@ def remove(name, assume_v0=False, v0_size=-1, **kwargs):
     if not ret:
         raise Error("vlmc removal failed")
 
+def update_volume(name, assume_v0=False, v0_size=-1, **kwargs):
+
+    if not is_valid_name(name):
+        raise Error("Invalid volume name")
+
+    ret = False
+    xseg_ctx = Xseg_ctx(get_segment())
+    mport = peers['mapperd'].portno_start
+    req = Request.get_update_request(xseg_ctx, mport, name)
+    parse_assume_v0(req, assume_v0, v0_size)
+    req.submit()
+    req.wait()
+    ret = req.success()
+    req.put()
+    xseg_ctx.shutdown()
+    if not ret:
+        raise Error("vlmc update failed")
+
 
 @exclusive()
 def map_volume(name, assume_v0=False, v0_size=-1, readonly=False, **kwargs):
