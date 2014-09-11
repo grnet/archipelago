@@ -174,33 +174,29 @@ static int read_object_v2(struct map_node *mn, unsigned char *buf)
 	return 0;
 }
 
+/* Fill a buffer representing an object on disk from a given map node */
 static void object_to_map_v2(unsigned char* buf, struct map_node *mn)
 {
-	uint32_t *objectlen;
-	uint32_t len;
-	buf[0] = 0;
-	buf[0] |= mn->flags & MF_OBJECT_WRITABLE;
-	buf[0] |= mn->flags & MF_OBJECT_ARCHIP;
-	buf[0] |= mn->flags & MF_OBJECT_ZERO;
-	buf[0] |= mn->flags & MF_OBJECT_DELETED;
+	struct v2_object_on_disk *object;
 
-	if (!__builtin_types_compatible_p(typeof(mn->objectlen), typeof(*objectlen))) {
-		XSEGLOG2(&lc, W, "Mapnode objectlen incompatible with map "
-				 "objectlen buffer");
-	}
-
-	objectlen = (typeof(objectlen))(buf + 1);
-	*objectlen = mn->objectlen & 0xFFFFFFFF;
-	if (*objectlen > v2_max_objectlen) {
+	//_Static_assert(typeof(mn->objectlen), typeof(object->objectlen));
+	if (mn->objectlen > v2_max_objectlen) {
 		XSEGLOG2(&lc, E, "Invalid object len %u", mn->objectlen);
+		mn->objectlen = v2_max_objectlen;
 	}
 
-	len = 0;
-//	if (mn->flags & MF_OBJECT_ARCHIP){
-//		/* strip common prefix */
-//		len += MAPPER_PREFIX_LEN;
-//	}
-	memcpy((buf + 1 + sizeof(uint32_t)), mn->object + len, mn->objectlen);
+	memset(buf, 0, v2_objectsize_in_map);
+	object = (struct v2_object_on_disk *)buf;
+
+	object->flags = 0;
+	object->flags |= mn->flags & MF_OBJECT_WRITABLE;
+	object->flags |= mn->flags & MF_OBJECT_ARCHIP;
+	object->flags |= mn->flags & MF_OBJECT_ZERO;
+	object->flags |= mn->flags & MF_OBJECT_DELETED;
+
+
+	object->objectlen = mn->objectlen;
+	memcpy(object->object, mn->object, object->objectlen);
 }
 
 static struct xseg_request * prepare_write_chunk(struct peer_req *pr,
