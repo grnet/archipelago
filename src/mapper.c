@@ -555,6 +555,15 @@ static int do_open(struct peer_req *pr, struct map *map)
 	}
 }
 
+static int do_update(struct peer_req *pr, struct map *map)
+{
+	if (map->version != MAP_LATEST_VERSION) {
+		return -1;
+	} else {
+		return 0;
+	}
+}
+
 
 static int dropcache(struct peer_req *pr, struct map *map)
 {
@@ -1853,6 +1862,20 @@ void * handle_truncate(struct peer_req *pr)
    return NULL;
 }
 
+void * handle_update(struct peer_req *pr)
+{
+   struct peerd *peer = pr->peer;
+   char *target = xseg_get_target(peer->xseg, pr->req);
+   int r = map_action(do_update, pr, target, pr->req->targetlen,
+                   MF_ARCHIP|MF_LOAD|MF_EXCLUSIVE);
+   if (r < 0)
+           fail(peer, pr);
+   else
+           complete(peer, pr);
+   ta--;
+   return NULL;
+}
+
 
 int dispatch_accepted(struct peerd *peer, struct peer_req *pr,
 			struct xseg_request *req)
@@ -1880,6 +1903,7 @@ int dispatch_accepted(struct peerd *peer, struct peer_req *pr,
 		case X_CREATE: action = handle_create; break;
 		case X_RENAME: action = handle_rename; break;
 		case X_TRUNCATE: action = handle_truncate; break;
+		case X_UPDATE: action = handle_update; break;
 		default: fprintf(stderr, "mydispatch: unknown op\n"); break;
 	}
 	if (action){
