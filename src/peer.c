@@ -900,7 +900,7 @@ int main(int argc, char *argv[])
 	uint64_t threshold = 1000;
 	unsigned int debug_level = 0;
 	xport defer_portno = NoPort;
-	pid_t old_pid;
+	pid_t old_pid = 0;
 	int pid_fd = -1;
 	uid_t uid = -1;
 	gid_t gid = -1;
