@@ -1231,7 +1231,7 @@ static int __set_precalculated_hash(struct peerd *peer, char *target,
 	hash_file_len = strjoin(hash_file, target, targetlen, HASH_SUFFIX, HASH_SUFFIX_LEN);
 
 	r = pfiled_write_name(pfiled, hash_file, hash_file_len, hash, HEXLIFIED_SHA256_DIGEST_SIZE, 0,
-			O_CREAT|O_EXCL, S_IWUSR|S_IRUSR);
+			O_CREAT|O_EXCL, S_IWUSR|S_IRUSR|S_IRGRP|S_IWGRP);
 	if (r < 0) {
 		if (errno != EEXIST){
 			XSEGLOG2(&lc, E, "Error opening %s", hash_file);
@@ -1387,7 +1387,7 @@ static void handle_hash(struct peerd *peer, struct peer_req *pr)
 				pfiled->uniquestr, pfiled->uniquestr_len,
 				fio->str_id, FIO_STR_ID_LEN);
 
-	r = pfiled_write_name(pfiled, tmpfile, len, object_data, sum, 0, O_CREAT|O_EXCL, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP);
+	r = pfiled_write_name(pfiled, tmpfile, len, object_data, sum, 0, O_CREAT|O_EXCL, S_IRUSR|S_IWUSR|S_IRGRP|S_IWGRP);
 	if (r < 0) {
 		if (errno != EEXIST){
 			char error_str[1024];
@@ -1604,7 +1604,7 @@ static void handle_acquire(struct peerd *peer, struct peer_req *pr)
 	flags = O_RDWR|O_CREAT|O_EXCL;
 	if (pfiled->directio)
 		flags |= O_DIRECT;
-	fd = open(tmpfile_pathname, flags, S_IRWXU | S_IRUSR);
+	fd = open(tmpfile_pathname, flags, S_IRUSR|S_IWUSR|S_IRGRP|S_IWGRP);
 	if (fd < 0) {
 		//actual error
 		if (errno != EEXIST){
