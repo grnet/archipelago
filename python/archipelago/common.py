@@ -107,6 +107,24 @@ def xseg_wait_signal_green(ctx, sd, timeout):
             else:
                 raise OSError(e, msg)
 
+def create_posixfd_dirs():
+    path = "/dev/shm/posixfd"
+    gid = getgrnam(config['GROUP']).gr_gid
+
+    try:
+        os.mkdir(path, stat.S_IRWXU|stat.S_IRWXG)
+    except OSError as e:
+        if e.errno == errno.EEXIST:
+            if os.path.isdir(os.path.dirname(path)):
+                    pass
+            else:
+                raise Error("%s is not a directory" % path)
+        else:
+            raise Error("Cannot create directory %s" % path)
+
+    os.chown(path, -1, gid)
+    st = os.stat(path)
+    os.chmod(path, stat.S_IRWXU|stat.S_IRWXG|stat.S_ISGID)
 
 class Peer(object):
     cli_opts = None
@@ -170,19 +188,6 @@ class Peer(object):
             raise Error("Log path %s does not exist or is not a directory" %
                         self.logfile)
 
-        try:
-            os.makedirs(os.path.dirname(self.pidfile))
-        except OSError as e:
-            if e.errno == errno.EEXIST:
-                if os.path.isdir(os.path.dirname(self.pidfile)):
-                    pass
-                else:
-                    raise Error("Pid path %s is not a directory" %
-                                os.path.dirname(self.pidfile))
-            else:
-                raise Error("Cannot create path %s" %
-                            os.path.dirname(self.pidfile))
-
         self.log_level = log_level
         self.threshold = threshold
         self.cephx_id = cephx_id
@@ -196,6 +201,25 @@ class Peer(object):
         self.set_cli_options()
 
     def start(self):
+
+        try:
+            os.makedirs(os.path.dirname(self.pidfile))
+        except OSError as e:
+            if e.errno == errno.EEXIST:
+                if os.path.isdir(os.path.dirname(self.pidfile)):
+                    pass
+                else:
+                    raise Error("Pid path %s is not a directory" %
+                                os.path.dirname(self.pidfile))
+            else:
+                raise Error("Cannot create path %s" %
+                            os.path.dirname(self.pidfile))
+
+        os.chmod(os.path.dirname(self.pidfile), stat.S_IRWXU|stat.S_IRWXG)
+        os.chown(os.path.dirname(self.pidfile), -1, self.group_gid)
+        os.chown(os.path.dirname(self.logfile), -1, self.group_gid)
+
+
         if self.get_pid():
             raise Error("Peer has valid pidfile")
         cmd = [os.path.join(BIN_DIR, self.executable)] + self.cli_opts
