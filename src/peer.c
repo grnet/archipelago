@@ -834,7 +834,8 @@ int pidfile_read(char *path, pid_t *pid)
 int pidfile_open(char *path, pid_t *old_pid)
 {
 	//nfs version > 3
-	int fd = open(path, O_CREAT|O_EXCL|O_WRONLY, S_IRUSR|S_IWUSR);
+	int fd = open(path, O_CREAT|O_EXCL|O_WRONLY,
+			S_IRUSR|S_IWUSR|S_IRGRP|S_IWGRP);
 	if (fd < 0){
 		if (errno == EEXIST)
 			pidfile_read(path, old_pid);
@@ -958,6 +959,10 @@ int main(int argc, char *argv[])
 	(void) setregid(gid, gid);
 	(void) setreuid(uid, uid);
 
+	/* make sure that every file created with group read/write permissions
+	 * stays thay way.
+	 */
+	umask(S_IWOTH);
 	r = init_logctx(&lc, argv[0], debug_level, logfile,
 			REDIRECT_STDOUT|REDIRECT_STDERR);
 	if (r < 0){
