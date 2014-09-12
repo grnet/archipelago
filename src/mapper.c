@@ -268,7 +268,7 @@ static struct map * create_map(char *name, uint32_t namelen, uint32_t flags)
 {
 	if (namelen + MAPPER_PREFIX_LEN > MAX_VOLUME_LEN){
 		XSEGLOG2(&lc, E, "Namelen %u too long. Max: %d",
-					namelen, MAX_VOLUME_LEN);
+					namelen, MAX_VOLUME_LEN-MAPPER_PREFIX_LEN);
 		return NULL;
 	}
 	struct map *m = calloc(1, sizeof(struct map));

@@ -52,6 +52,7 @@ from select import select
 import ConfigParser
 from grp import getgrnam
 from pwd import getpwnam
+import stat
 
 random.seed()
 hostname = socket.gethostname()
