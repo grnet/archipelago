@@ -234,7 +234,7 @@ void log_pr(char *msg, struct peer_req *pr)
 inline struct peer_req *alloc_peer_req(struct peerd *peer, struct thread *t)
 {
 	struct peer_req *pr;
-	xqindex idx = xq_pop_head(&t->free_thread_reqs, t->thread_no);
+	xqindex idx = xq_pop_head(&t->free_thread_reqs);
 	if (idx != Noneidx)
 		goto out;
 
@@ -246,7 +246,7 @@ inline struct peer_req *alloc_peer_req(struct peerd *peer, struct thread *t)
 		nt = &peer->thread[(t->thread_no + i) % peer->nr_threads];
 		if (!xq_count(&nt->free_thread_reqs))
 				continue;
-		idx = xq_pop_head(&nt->free_thread_reqs, t->thread_no);
+		idx = xq_pop_head(&nt->free_thread_reqs);
 		if (idx != Noneidx)
 			goto out;
 	}
@@ -265,7 +265,7 @@ out:
  */
 inline struct peer_req *alloc_peer_req(struct peerd *peer)
 {
-	xqindex idx = xq_pop_head(&peer->free_reqs, 1);
+	xqindex idx = xq_pop_head(&peer->free_reqs);
 	if (idx == Noneidx)
 		return NULL;
 	return peer->peer_reqs + idx;
@@ -278,9 +278,9 @@ inline void free_peer_req(struct peerd *peer, struct peer_req *pr)
 	pr->req = NULL;
 #ifdef MT
 	struct thread *t = &peer->thread[pr->thread_no];
-	xq_append_head(&t->free_thread_reqs, idx, 1);
+	xq_append_head(&t->free_thread_reqs, idx);
 #else
-	xq_append_head(&peer->free_reqs, idx, 1);
+	xq_append_head(&peer->free_reqs, idx);
 #endif
 }
 
