@@ -81,7 +81,7 @@ def parse_assume_v0(req, assume_v0, v0_size):
         flags = req.get_flags()
         flags |= XF_ASSUMEV0
         req.set_flags(flags)
-        if v0_size != -1:
+        if v0_size is not None and v0_size != -1:
             req.set_v0_size(v0_size)
 
 def is_valid_name(name):
