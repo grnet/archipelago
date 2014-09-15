@@ -132,7 +132,7 @@ class Peer(object):
     def __init__(self, role=None, daemon=True, nr_ops=16,
                  logfile=None, pidfile=None, portno_start=None,
                  portno_end=None, log_level=0, spec=None, threshold=None,
-                 cephx_id=None, user=None, group=None):
+                 user=None, group=None):
         if not role:
             raise Error("Role was not provided")
         self.role = role
@@ -190,7 +190,6 @@ class Peer(object):
 
         self.log_level = log_level
         self.threshold = threshold
-        self.cephx_id = cephx_id
 
         if self.log_level < 0 or self.log_level > 3:
             raise Error("%s: Invalid log level %d" %
@@ -321,9 +320,10 @@ class MTpeer(Peer):
 
 
 class Radosd(MTpeer):
-    def __init__(self, pool=None, **kwargs):
+    def __init__(self, pool=None, cephx_id=None, **kwargs):
         self.executable = RADOS_BLOCKER
         self.pool = pool
+        self.cephx_id = cephx_id
         super(Radosd, self).__init__(**kwargs)
 
         if self.cli_opts is None:
