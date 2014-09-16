@@ -33,7 +33,8 @@ from ctypes import (
     byref,
     c_int,
     c_char,
-    Structure
+    Structure,
+    CDLL
 )
 cb_null_ptrtype = CFUNCTYPE(None, uint32_t)
 
@@ -52,6 +53,12 @@ import ConfigParser
 from grp import getgrnam
 from pwd import getpwnam
 import stat
+
+libc = CDLL("libc.so.6")
+
+get_errno_loc = libc.__errno_location
+get_errno_loc.restype = POINTER(c_int)
+
 
 random.seed()
 hostname = socket.gethostname()
@@ -539,13 +546,20 @@ class Segment(object):
             raise Error("Cannot destroy segment")
 
     def join(self):
+
+        def errcheck(ret, func, args):
+            if not ret:
+                e = get_errno_loc()[0]
+                raise Error("Cannot join segment '%s': %s"
+                                % (config['SEGMENT_NAME'], os.strerror(e)))
+            return ret
+
         xconf = xseg_config()
         spec_buf = create_string_buffer(self.spec)
         xseg_parse_spec(spec_buf, xconf)
+        xseg_join.errcheck = errcheck
         ctx = xseg_join(xconf.type, xconf.name, "posixfd",
                         cast(0, cb_null_ptrtype))
-        if not ctx:
-            raise Error("Cannot join segment")
 
         return ctx
 
