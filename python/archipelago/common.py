@@ -35,7 +35,6 @@ from ctypes import (
     c_char,
     Structure
 )
-import ctypes
 cb_null_ptrtype = CFUNCTYPE(None, uint32_t)
 
 import os

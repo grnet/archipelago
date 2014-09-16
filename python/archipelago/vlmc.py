@@ -22,7 +22,7 @@ import sys
 import re
 from struct import pack, unpack
 from binascii import hexlify
-from ctypes import c_uint32, c_uint64
+from ctypes import c_uint32, c_uint64, string_at
 
 from .common import *
 from blktap import VlmcTapdisk
@@ -196,7 +196,7 @@ def hash(name, cli=False, assume_v0=False, v0_size=-1, **kwargs):
     ret = req.success()
     if ret:
         xhash = req.get_data(xseg_reply_hash).contents
-        hash_name = ctypes.string_at(xhash.target, xhash.targetlen)
+        hash_name = string_at(xhash.target, xhash.targetlen)
     req.put()
     xseg_ctx.shutdown()
 
