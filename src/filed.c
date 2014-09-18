@@ -172,7 +172,7 @@ static int create_dir(char *path)
 	struct stat st;
 
 	if (stat(path, &st) < 0) {
-		if (mkdir(path, 0750) == 0) {
+		if (mkdir(path, 0770) == 0) {
 			return 0;
 		}
 		if (errno != EEXIST || stat(path, &st) < 0) {
