@@ -41,13 +41,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #endif
 #endif
 
-#ifdef MT
-#define PEER_TYPE "pthread"
-#elif defined(FD)
 #define PEER_TYPE "posixfd"
-#else
-#define PEER_TYPE "posix"
-#endif
 
 //FIXME this should not be defined here probably
 #define MAX_SPEC_LEN 128
