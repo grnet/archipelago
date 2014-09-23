@@ -190,6 +190,17 @@ class VlmcTapdisk(object):
                             '-m%s' % tapdisk.minor)
 
     @staticmethod
+    def stats(device):
+        tapdisk = VlmcTapdisk.fromDevice(device)
+        if tapdisk and tapdisk.pid:
+            import json
+            stats = VlmcTapdisk.exc('stats',
+                            '-p%s' % tapdisk.pid,
+                            '-m%s' % tapdisk.minor)
+            return json.loads(stats)
+        return None
+
+    @staticmethod
     def busy_pid(device):
         rc, stdout, stderr = doexec(['fuser', device])
         out = stdout.read().strip()
