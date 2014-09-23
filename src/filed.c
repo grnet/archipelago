@@ -376,7 +376,7 @@ static int strjoin(char *dest, char *f, int f_len, char *s, int s_len)
 	pos += f_len;
 	strncpy(dest + pos, s, s_len);
 	pos += s_len;
-	dest[pos] = 0;
+	dest[pos] = '\0';
 
 	return f_len + s_len;
 }
@@ -1788,13 +1788,13 @@ int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 		fio->str_id[2] = 'a' + (i % 26);
 	}
 
-	pfiled->vpath[0] = 0;
-	pfiled->prefix[0] = 0;
-	pfiled->uniquestr[0] = 0;
+	pfiled->vpath[0] = '\0';
+	pfiled->prefix[0] = '\0';
+	pfiled->uniquestr[0] = '\0';
 
 	BEGIN_READ_ARGS(argc, argv);
 	READ_ARG_ULONG("--fdcache", pfiled->maxfds);
-	READ_ARG_STRING("--archip", pfiled->vpath, MAX_PATH_SIZE);
+	READ_ARG_STRING("--archip", pfiled->vpath, MAX_PATH_SIZE-1);
 	READ_ARG_STRING("--prefix", pfiled->prefix, MAX_PREFIX_LEN);
 	READ_ARG_STRING("--uniquestr", pfiled->uniquestr, MAX_UNIQUESTR_LEN);
 	READ_ARG_BOOL("--directio", pfiled->directio);
