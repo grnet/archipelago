@@ -349,7 +349,7 @@ class Radosd(MTpeer):
 class Filed(MTpeer):
     def __init__(self, archip_dir=None, prefix=None, fdcache=None,
                  unique_str=None, nr_threads=1, nr_ops=16, direct=True,
-                 pithos_migrate=False, **kwargs):
+                 pithos_migrate=False, lock_dir=None, **kwargs):
         self.executable = FILE_BLOCKER
         self.archip_dir = archip_dir
         self.prefix = prefix
@@ -357,6 +357,7 @@ class Filed(MTpeer):
         self.unique_str = unique_str
         self.direct = direct
         self.pithos_migrate = pithos_migrate
+        self.lock_dir = lock_dir
         nr_threads = nr_ops
         if self.fdcache and fdcache < 2*nr_threads:
             raise Error("Fdcache should be greater than 2*nr_threads")
@@ -367,6 +368,8 @@ class Filed(MTpeer):
             raise Error("%s: Archip dir must be set" % self.role)
         if not os.path.isdir(self.archip_dir):
             raise Error("%s: Archip dir invalid" % self.role)
+        if self.lock_dir and not os.path.isdir(self.lock_dir):
+            raise Error("%s: Lock dir invalid" % self.role)
         if not self.fdcache:
             self.fdcache = 2*self.nr_ops
         if not self.unique_str:
@@ -393,6 +396,9 @@ class Filed(MTpeer):
             self.cli_opts.append("--directio")
         if self.pithos_migrate:
             self.cli_opts.append("--pithos-migrate")
+        if self.lock_dir:
+            self.cli_opts.append("--lockdir")
+            self.cli_opts.append(self.lock_dir)
 
 
 class Mapperd(Peer):
@@ -734,6 +740,8 @@ def createDict(cfg, section):
     if t == 'file_blocker':
         sec_dic['nr_threads'] = cfg.getint(section, 'nr_threads')
         sec_dic['archip_dir'] = cfg.get(section, 'archip_dir')
+        if cfg.has_option(section, 'lock_dir'):
+            sec_dic['lock_dir'] = cfg.get(section, 'lock_dir')
         if cfg.has_option(section, 'fdcache'):
             sec_dic['fdcache'] = cfg.getint(section, 'fdcache')
         if cfg.has_option(section, 'direct'):
