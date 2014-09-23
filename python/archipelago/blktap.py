@@ -33,6 +33,18 @@ def doexec(args, inputtext=None):
     rc = proc.wait()
     return (rc, stdout, stderr)
 
+class TDFlags:
+    TD_DEAD                 = 0x0001
+    TD_CLOSED               = 0x0002
+    TD_QUIESCE_REQUESTED    = 0x0004
+    TD_QUIESCED             = 0x0008
+    TD_PAUSE_REQUESTED      = 0x0010
+    TD_PAUSED               = 0x0020
+    TD_SHUTDOWN_REQUESTED   = 0x0040
+    TD_LOCKING              = 0x0080
+    TD_LOG_DROPPED          = 0x0100
+    TD_PAUSE_MASK           = TD_PAUSE_REQUESTED|TD_PAUSED
+
 
 class VlmcTapdiskException(Exception):
     pass
@@ -104,7 +116,7 @@ class VlmcTapdisk(object):
                         tapdisk.device = '%s%s' % \
                                         (VlmcTapdisk.TAP_DEV, tapdisk.minor)
                 elif key == 'state':
-                    tapdisk.state = value
+                    tapdisk.state = int(value, 16)
                 elif key == 'args' and value.find(':') != -1:
                     args = value.split(':')
                     tapdisk.volume = args[1]
@@ -198,8 +210,22 @@ class VlmcTapdisk(object):
     def is_paused(device):
         tapdisk = VlmcTapdisk.fromDevice(device)
         if tapdisk:
-            if tapdisk.state == '0x2a':
-                return True
-            else:
-                return False
+            return not not (tapdisk.state & TDFlags.TD_PAUSED)
         return None
+
+    @staticmethod
+    def is_running(device):
+        tapdisk = VlmcTapdisk.fromDevice(device)
+        if tapdisk:
+            return not (tapdisk.state & TDFlags.TD_PAUSE_MASK)
+        return None
+
+    @staticmethod
+    def query_state(device):
+        tapdisk = VlmcTapdisk.fromDevice(device)
+        if tapdisk:
+            if tapdisk.state & TDFlags.TD_PAUSED:
+                return "paused"
+            if tapdisk.state & TDFlags.TD_PAUSE_REQUESTED:
+                return "pausing"
+            return "running"
