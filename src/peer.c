@@ -899,6 +899,7 @@ int main(int argc, char *argv[])
 	int pid_fd = -1;
 	uid_t uid = -1;
 	gid_t gid = -1;
+	mode_t peer_umask = PEER_DEFAULT_UMASK;
 
 	char spec[MAX_SPEC_LEN + 1];
 	char logfile[MAX_LOGFILE_LEN + 1];
@@ -934,6 +935,7 @@ int main(int argc, char *argv[])
 	READ_ARG_ULONG("--threshold", threshold);
 	READ_ARG_STRING("--cpus", cpus, MAX_CPUS_LEN);
 	READ_ARG_STRING("--pidfile", pidfile, MAX_PIDFILE_LEN);
+	READ_ARG_ULONG("--umask", peer_umask);
 	END_READ_ARGS();
 
 	if (help){
@@ -953,10 +955,11 @@ int main(int argc, char *argv[])
 	(void) setregid(gid, gid);
 	(void) setreuid(uid, uid);
 
-	/* make sure that every file created with group read/write permissions
-	 * stays thay way.
-	 */
-	umask(S_IWOTH);
+
+	/* set umask of the process. Only keep permission bits */
+	peer_umask &= 0777;
+	umask(peer_umask);
+
 	r = init_logctx(&lc, argv[0], debug_level, logfile,
 			REDIRECT_STDOUT|REDIRECT_STDERR);
 	if (r < 0){
