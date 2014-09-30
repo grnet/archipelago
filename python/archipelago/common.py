@@ -139,7 +139,7 @@ class Peer(object):
     def __init__(self, role=None, daemon=True, nr_ops=16,
                  logfile=None, pidfile=None, portno_start=None,
                  portno_end=None, log_level=0, spec=None, threshold=None,
-                 user=None, group=None):
+                 user=None, group=None, umask="0o007"):
         if not role:
             raise Error("Role was not provided")
         self.role = role
@@ -154,6 +154,7 @@ class Peer(object):
         self.group = group
         self.user_uid = getpwnam(self.user).pw_uid
         self.group_gid = getgrnam(self.group).gr_gid
+        self.umask = int(umask, 0)
 
         self.nr_ops = nr_ops
         if not self.nr_ops > 0:
@@ -310,6 +311,9 @@ class Peer(object):
         if self.group:
             self.cli_opts.append("-gid")
             self.cli_opts.append(str(self.group_gid))
+        if self.umask:
+            self.cli_opts.append("--umask")
+            self.cli_opts.append(str(self.umask))
 
 
 class MTpeer(Peer):
@@ -735,6 +739,8 @@ def createDict(cfg, section):
         sec_dic['threshold'] = cfg.getint(section, 'threshold')
     if cfg.has_option(section, 'log_level'):
         sec_dic['log_level'] = cfg.getint(section, 'log_level')
+    if cfg.has_option(section, 'umask'):
+        sec_dic['umask'] = cfg.get(section, 'umask')
 
     t = str(cfg.get(section, 'type'))
     if t == 'file_blocker':
@@ -788,6 +794,8 @@ def loadrc(rc):
     config['USER'] = cfg.get('ARCHIPELAGO','USER')
     config['GROUP'] = cfg.get('ARCHIPELAGO','GROUP')
     config['BLKTAP_ENABLED'] = cfg.getboolean('ARCHIPELAGO','BLKTAP_ENABLED')
+    if cfg.has_option('ARCHIPELAGO', 'UMASK'):
+        config['UMASK'] = cfg.get('ARCHIPELAGO', 'UMASK')
     roles = cfg.get('PEERS', 'ROLES')
     roles = str(roles)
     roles = roles.split(' ')
