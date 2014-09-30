@@ -74,6 +74,7 @@ log_level=2
 nr_ops=512
 pool=blocks
 #cephx_id=admin
+umask=007
 
 [blockerm]
 type=rados_blocker
@@ -83,6 +84,7 @@ log_level=2
 nr_ops=512
 pool=maps
 #cephx_id=admin
+umask=007
 
 # mapperd specific options:
 #
@@ -97,6 +99,7 @@ log_level=2
 nr_ops=512
 blockerb_port=1000
 blockerm_port=1002
+umask=007
 
 # vlmcd specific options:
 #
@@ -111,3 +114,4 @@ log_level=2
 nr_ops=512
 blocker_port=1000
 mapper_port=1001
+umask=007
