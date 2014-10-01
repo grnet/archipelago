@@ -842,7 +842,7 @@ static int do_destroy(struct peer_req *pr, struct map *map)
 
 	if (mio->err) {
 		XSEGLOG2(&lc, E, "Error while removing objects of %s", map->volume);
-		map->state &= ~MF_MAP_DELETING;
+		map->state &= ~MF_MAP_DESTROYING;
 		return -1;
 	}
 
