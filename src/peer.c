@@ -476,7 +476,6 @@ static void* thread_loop(void *arg)
 
 	XSEGLOG2(&lc, D, "thread %u\n",  (unsigned int) (t- peer->thread));
 	XSEGLOG2(&lc, I, "Thread %u has tid %u.\n", (unsigned int) (t- peer->thread), pid);
-	xseg_init_local_signal(xseg, peer->portno_start);
 	for (;!(isTerminate() && xq_count(&peer->free_reqs) == peer->nr_ops);) {
 		for(loops =  threshold; loops > 0; loops--) {
 			if (loops == 1)
@@ -612,7 +611,6 @@ static int generic_peerd_loop(void *arg)
 	uint64_t loops;
 
 	XSEGLOG2(&lc, I, "%s has tid %u.\n", id, pid);
-	xseg_init_local_signal(xseg, peer->portno_start);
 	//for (;!(isTerminate() && xq_count(&peer->free_reqs) == peer->nr_ops);) {
 	for (;!(isTerminate() && all_peer_reqs_free(peer));) {
 		//Heart of peerd_loop. This loop is common for everyone.
@@ -691,7 +689,7 @@ static struct peerd* peerd_init(uint32_t nr_ops, char* spec, long portno_start,
 			long portno_end, uint32_t nr_threads, xport defer_portno,
 			uint64_t threshold)
 {
-	int i;
+	int i, r;
 	struct peerd *peer;
 	struct xseg_port *port;
 	void *sd = NULL;
@@ -764,6 +762,12 @@ malloc_fail:
 	}
 
 	printf("Peer on ports  %u-%u\n", peer->portno_start, peer->portno_end);
+
+	r = xseg_init_local_signal(peer->xseg, peer->portno_start);
+	if (r < 0) {
+		XSEGLOG2(&lc, E, "Could not initialize local signals");
+		return NULL;
+	}
 
 	for (i = 0; i < nr_ops; i++) {
 		peer->peer_reqs[i].peer = peer;
