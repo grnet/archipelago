@@ -63,6 +63,30 @@ provided ``blktap-dkms`` package.
          default configuration (e.g. default max segment size) and start it
          manually.
 
+.. tip:: For those users who do not wish to install all the dependencies of
+         blktap-dkms package the Synnefo apt repository provides a patched
+         version of the dkms package that is able to provide a binary kernel
+         module. The patched dkms aims to facilitate the process of building
+         kernel modules from source. It uses source code from apt repositories
+         and produces binary .deb packages.
+
+         After installing the patched version of dkms from Synnefo apt repository
+         to the build machine, the process of producing a binary .deb package
+         from blktap-dkms is really simple:
+
+         .. code-block:: console
+
+             # apt-get install blktap-dkms
+             # dkms mkbmdeb blktap/2.0.91
+
+         The last command produces the final binary package under the directory
+         ``/var/lib/dkms/blktap/2.0.91/bmdeb/`` which can be
+         installed without installing the blktap-dkms dependencies.
+
+         With backports kernel a newer blktap-dkms package should be
+         fetched from unstable/SID. The version option used in dkms that denotes
+         the blktap-dkms version should change accordingly.
+
 .. warning:: Archipelago currently does not provide any garbage collection
              functionality. Make sure your storage capacity can meet your data
              needs when using Archipelago.
