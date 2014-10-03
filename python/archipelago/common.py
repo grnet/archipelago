@@ -466,6 +466,7 @@ config = {
     'SEGMENT_ALIGNMENT': 12,
     'VTOOL_START': 1003,
     'VTOOL_END': 1003,
+    'UMASK': 0o007,
     #RESERVED 1023
 }
 
@@ -801,7 +802,7 @@ def loadrc(rc):
     config['GROUP'] = cfg.get('ARCHIPELAGO','GROUP')
     config['BLKTAP_ENABLED'] = cfg.getboolean('ARCHIPELAGO','BLKTAP_ENABLED')
     if cfg.has_option('ARCHIPELAGO', 'UMASK'):
-        config['UMASK'] = cfg.get('ARCHIPELAGO', 'UMASK')
+        config['UMASK'] = int(cfg.get('ARCHIPELAGO', 'UMASK'), 0)
     roles = cfg.get('PEERS', 'ROLES')
     roles = str(roles)
     roles = roles.split(' ')
