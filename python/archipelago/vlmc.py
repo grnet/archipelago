@@ -20,6 +20,7 @@
 import os
 import sys
 import re
+import errno
 from struct import pack, unpack
 from binascii import hexlify
 from ctypes import c_uint32, c_uint64, string_at
@@ -30,7 +31,13 @@ from blktap import VlmcTapdisk
 
 @exclusive()
 def get_mapped():
-    return VlmcTapdisk.list()
+    try:
+        return VlmcTapdisk.list()
+    except OSError as e:
+        # In case blktap-utils are not installed, then we can safely assume that
+        # there are no mapped volumes.
+        if e.errno == errno.ENOENT:
+            return []
 
 
 def showmapped():
