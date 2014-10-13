@@ -57,13 +57,15 @@ class VlmcTapdisk(object):
 
     class Tapdisk(object):
         def __init__(self, pid=None, minor=-1, state=None, volume=None,
-                     device=None, mport=None, vport=None, assume_v0=False,
+                     device=None, driver=None, mport=None, vport=None,
+                     assume_v0=False,
                      v0_size=-1):
             self.pid = pid
             self.minor = minor
             self.state = state
             self.volume = volume
             self.device = device
+            self.driver = driver
             self.mport = mport
             self.vport = vport
             self.assume_v0 = assume_v0
@@ -119,6 +121,7 @@ class VlmcTapdisk(object):
                     tapdisk.state = int(value, 16)
                 elif key == 'args' and value.find(':') != -1:
                     args = value.split(':')
+                    tapdisk.driver = args[0]
                     tapdisk.volume = args[1]
                     args = args[1:]
                     for arg in args:
@@ -131,7 +134,8 @@ class VlmcTapdisk(object):
                         if arg.startswith('assume_v0'):
                             tapdisk.assume_v0 = True
 
-            tapdisks.append(tapdisk)
+            if tapdisk.driver == "archipelago":
+                tapdisks.append(tapdisk)
 
         return tapdisks
 
