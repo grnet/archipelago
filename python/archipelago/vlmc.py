@@ -20,10 +20,10 @@
 import os
 import sys
 import re
-import errno
 from struct import pack, unpack
 from binascii import hexlify
 from ctypes import c_uint32, c_uint64, string_at
+from distutils.spawn import find_executable
 
 from .common import *
 from blktap import VlmcTapdisk
@@ -31,13 +31,25 @@ from blktap import VlmcTapdisk
 
 @exclusive()
 def get_mapped():
-    try:
+    # If tap-ctl exists return mapped volumes even if blktap module is
+    # disabled. There is always the possibility we are facing a mixed
+    # situation where the blktap module is disabled but we have remaining
+    # archipelago volumes.
+    if find_executable(VlmcTapdisk.TAP_CTL):
         return VlmcTapdisk.list()
-    except OSError as e:
-        # In case blktap-utils are not installed, then we can safely assume that
-        # there are no mapped volumes.
-        if e.errno == errno.ENOENT:
+    else:
+        # If the executable does not exist and the blktap module is disabled
+        # we can assume that we can safely return an empty list.
+        if not config['BLKTAP_ENABLED']:
             return []
+        else:
+            # Assume that blktap-archipelago-utils package is not
+            # installed and that tap-ctl executable is missing.
+            # That way we provide a hint where to find tap-ctl file.
+            raise Error("%s\n%s" % ("Cannot execute tap-ctl command.",
+                                    "Maybe blktap-archipelago-utils package "
+                                    "is missing or you don't have sufficient "
+                                    "privileges"))
 
 
 def showmapped():
