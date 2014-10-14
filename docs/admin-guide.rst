@@ -288,7 +288,7 @@ Archipelago volume commands
 ***************************
 
 The ``vlmc`` tool provides a way to interact with Archipelago volumes. It is
-meant to be used by the ganeti extstorage scripts, but also directly from the
+meant to be used by the Ganeti ExtStorage scripts, but also directly from the
 administrator to take actions on volumes.
 
 Usage:
@@ -691,6 +691,13 @@ may come handy for debugging
 
     **Allowed values**: `True`, `False`
 
+  ``UMASK``
+    **Description**: Set umask for Archipelago processes and external tools
+    (e.g. Ganeti's ExtStorage scripts)
+
+    **Allowed values**: Any valid umask setting in any recognizable form by
+    Python (e.g. '0o022', '022', '18')
+
 [XSEG] section:
 
   ``SEGMENT_PORTS``
@@ -754,6 +761,12 @@ Common options among all peers are:
 
   ``nr_ops``
     **Description**: Number of ops, each peer can have flying.
+
+  ``umask``
+    **Description**: Set umask for peer.
+
+    **Allowed values**: Any valid umask setting in any recognizable form by
+    Python (e.g. '0o022', '022', '18')
 
   ``nr_threads``
     **Description**: Number of threads of each peer.
