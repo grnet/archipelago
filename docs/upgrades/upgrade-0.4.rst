@@ -139,13 +139,13 @@ Notable new config option that should be configured is:
 Archipelago v0.4 creates a new system user and group called Archipelago. By
 default the configuration file is set up to run as those users.
 
-If your are using Archipelago with ``filed`` special care is need:
+If your are using Archipelago with ``filed`` special care is needed:
 
 * You must change the corresponding ``USER`` and ``GROUP`` values of the
   configuration file to ``root``, and follow the supplementary procedure on the
   end of this upgrade guide.
 
-* You must make sure that the Archipelago user and group have the same
+* You must make sure that the ``archipelago`` user and group have the same
   permissions on the NFS share accross all nodes. This means for example that
   ``archipelago`` UID and GID are consistent across all Archipelago nodes for
   NFSv3 or there is a proper name mapping for NFSv4.
