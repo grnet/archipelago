@@ -560,6 +560,7 @@ int peerd_start_threads(struct peerd *peer)
 	for (i = 0; i < nr_threads; i++) {
 		pthread_join(peer->thread[i].tid, NULL);
 	}
+	xseg_quit_local_signal(peer->xseg, peer->portno_start);
 
 	return 0;
 }
