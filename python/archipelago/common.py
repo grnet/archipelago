@@ -677,7 +677,7 @@ def get_vtool_port():
 acquired_locks = {}
 
 def get_lock(lock_file, max_time=15):
-    time = 0
+    elapsed = 0
     while True:
         try:
             fd = os.open(lock_file, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
@@ -685,10 +685,10 @@ def get_lock(lock_file, max_time=15):
         except OSError, (err, reason):
             print >> sys.stderr, lock_file, reason
             if err == errno.EEXIST:
-                if time < max_time:
+                if elapsed < max_time:
                     print >> sys.stderr, "Retrying..."
                     time.sleep(0.2)
-                    time += 0.2
+                    elapsed += 0.2
                 else:
                     raise Error("Could not acquire %s. Tried %d seconds" %
                             (lock_file, max_time))
@@ -769,7 +769,7 @@ def createDict(cfg, section):
         if cfg.has_option(section, 'nr_threads'):
             sec_dic['nr_threads'] = cfg.getint(section, 'nr_threads')
         if cfg.has_option(section, 'cephx_id'):
-            sec_dic['cephx_id'] = cfg.get(section, 'cephx_id');
+            sec_dic['cephx_id'] = cfg.get(section, 'cephx_id')
         sec_dic['pool'] = cfg.get(section, 'pool')
     elif t == 'mapperd':
         sec_dic['blockerb_port'] = cfg.getint(section, 'blockerb_port')
@@ -1034,7 +1034,7 @@ class Request(object):
 
     def put(self, force=False):
         if not self.req:
-            return False;
+            return False
         if not force:
             if xq_count(byref(self.req.contents.path)) > 0:
                 return False
