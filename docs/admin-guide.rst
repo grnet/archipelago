@@ -156,12 +156,14 @@ File blocker is responsible for storing each object as a single file in a
 specified directory. It serves the requests for each objects as they come from
 the volume composer and the mapper components. ``Filed`` currently requires that
 all files are placed under one filesystem. The directory it operates on, must
-not contain symlinks or mountpoints to different filesystems.
+not contain symlinks or mountpoints to different filesystems. Also the
+permissions must be set to both read and write for the user Archipelago runs as
+(default to ``archipelago``).
 
-The Rados blocker (sosd)
-~~~~~~~~~~~~~~~~~~~~~~~~
+The RADOS blocker (radosd)
+~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Rados blocker is another form of blocker which stores each objects as a single
+RADOS blocker is another form of blocker which stores each objects as a single
 object in a RADOS pool. It can be used instead of the file blocker, to create
 and use disks over RADOS storage.
 
@@ -210,6 +212,26 @@ follows::
   permissions and properties of this mapfile.
 * The epoch field is an index number used as a reference counter.
 
+Archipelago's User/Group permissions
+************************************
+
+Archipelago runs by default as user ``archipelago`` and group ``archipelago``.
+These groups are automatically created during installation.
+
+Different Archipelago components use several "named" entities to communicate
+with each other (e.g. a shared memory segment, named pipes). By having all
+Archipelago components creating files (or directory entries in general) with
+read and write permissions for both the user and the group, we ensure that these
+distinct components can cooperate without permission problems. Furthermore,
+different services or components that want to integrate with Archipelago can run
+as their selective user, as long as this user belongs to the group
+``archipelago``.
+
+.. warning:: Due to a bug in gunicorn handling of supplementary groups, Pithos
+             does not fall into the above category. The relevant gunicorn
+             worker must be executed as user or group ``archipelago``. Please
+             refer to the relevant Synnefo documentation.
+
 Archipelago Integration with Synnefo and Ganeti
 ***********************************************
 
@@ -238,7 +260,7 @@ Usage:
 
 .. code-block:: console
 
-  $ archipelago command
+  # archipelago command
 
 Currently it supports the commands described below.  Each command supports an
 optional peer argument to affect only the specified peer. Available peers are
@@ -266,7 +288,7 @@ Archipelago volume commands
 ***************************
 
 The ``vlmc`` tool provides a way to interact with Archipelago volumes. It is
-meant to be used by the ganeti extstorage scripts, but also directly from the
+meant to be used by the Ganeti ExtStorage scripts, but also directly from the
 administrator to take actions on volumes.
 
 Usage:
@@ -408,7 +430,7 @@ the lock remains and needs to be broken.
 
 Archipelago's locks change with the storage backend used for ``blockerm``. When
 using a RADOS backend, ``radosd`` uses the native librados locks. These are tied
-to the rados client id which is instantiated when the ``radosd`` is launched.
+to the RADOS client id which is instantiated when the ``radosd`` is launched.
 When using a file backend, the ``filed`` uses files as locks. Each lockfile
 is tied to the hostname of the lock owner's node.
 
@@ -507,7 +529,7 @@ For a file backend:
 
 .. code-block:: console
 
-  $ find /path/to/maps -name <volumename>_lock -exec cat '{}' \;
+  # cat /path/to/lockdir/<volumename>_lock
 
 The above command should print the hostname of the lock owner.  Keep in mind,
 that since the locks are idempotent and for the file backend tied to the node
@@ -524,7 +546,7 @@ these steps:
 
    .. code-block:: console
 
-     $ rm /var/run/archipelago/<peer>.pid
+     # rm /var/run/archipelago/<peer>.pid
 
 2. Recover all the locks the peer may have left stale:
 
@@ -586,13 +608,59 @@ these steps:
 
    .. code-block:: console
 
-      $ archipelago start <peer>
+      # archipelago start <peer>
 
 6. Perform an Archipelago restart
 
    .. code-block:: console
 
-      $ archipelago restart
+      # archipelago restart
+
+Calculating ``SEGMENT_SIZE``
+****************************
+
+To calculate an appropriate value for ``SEGMENT_SIZE``, one has to take into
+account several parameters. Peers bind to segment ports, allocate requests and
+shared buffers in order to communicate and transfer data among them. These
+operations occupy memory from the shared memory segment. The segment must have
+enough size to fulfil the above needs.
+
+For example, when a VM wants to perform an I/O, the tapdisk process will
+eventually have to allocate a request describing this I/O, a buffer to hold the
+data transfered and a few extra space for bookkeeping purposes. The same goes
+for Pithos storage needs.
+
+A good rule of thumb for one to calculate an appropriate segment size would be
+the following formula:
+
+.. code-block:: console
+
+    ``256 + 128 * 0.5 * NR_VM_VOLUMES``
+
+where:
+
+* 256 is the base size.
+
+* 128 is the avergae max number of requests.
+
+* 0.5 is the max request size in MiB (512KiB)
+
+  This is enforced by the tapdisk process.
+
+* NR_VM_VOLUMES is the expected number of volumes the host will have.
+
+or for a Pithos node:
+
+    ``256 + NR_OF_GUNICORN_WORKERS * POOL_SIZE * 4``
+
+where:
+
+* 256 is the base size
+
+* 4 is the max request size in MiB
+
+  This is enforced by Pithos logic.
+
 
 .. _archip_config:
 
@@ -622,6 +690,13 @@ may come handy for debugging
     **Description**: Enable Archipelago's blktap support
 
     **Allowed values**: `True`, `False`
+
+  ``UMASK``
+    **Description**: Set umask for Archipelago processes and external tools
+    (e.g. Ganeti's ExtStorage scripts)
+
+    **Allowed values**: Any valid umask setting in any recognizable form by
+    Python (e.g. '0o022', '022', '18')
 
 [XSEG] section:
 
@@ -687,6 +762,12 @@ Common options among all peers are:
   ``nr_ops``
     **Description**: Number of ops, each peer can have flying.
 
+  ``umask``
+    **Description**: Set umask for peer.
+
+    **Allowed values**: Any valid umask setting in any recognizable form by
+    Python (e.g. '0o022', '022', '18')
+
   ``nr_threads``
     **Description**: Number of threads of each peer.
 
@@ -707,6 +788,19 @@ Common options among all peers are:
     **Description**: Directory where the files will reside. This must be one
     filesystem and must not contain symlinks or mountpoints to different
     filesystems.
+
+    The user and group that Archipelago runs as (defaults to ``archipelago``)
+    must have both read and write permissions.
+
+  ``lock_dir``
+    **Description**: Directory where the file based locks will reside.  This
+    must be one filesystem and must not contain symlinks or mountpoints to
+    different filesystems.
+
+    The user and group that Archipelago runs as (defaults to ``archipelago``)
+    must have both read and write permissions.
+
+    Unless this option is provided, lock files are placed along with data files.
 
   ``fdcache``
     **Description**: Number of file descriptors to be kept open.

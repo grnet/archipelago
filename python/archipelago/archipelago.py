@@ -138,6 +138,7 @@ def start(role=None, cli=False, **kwargs):
     try:
         #get_segment().create()
         #time.sleep(0.5)
+        create_posixfd_dirs()
         start_peers(peers, cli)
         if config["BLKTAP_ENABLED"]:
             load_module("blktap", None)

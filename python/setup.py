@@ -165,7 +165,7 @@ setup(
     name='archipelago',
     version=VERSION,
     license='GNU GPLv3',
-    url='http://code.grnet.gr/',
+    url='http://www.synnefo.org/',
     description=SHORT_DESCRIPTION,
     long_description=README + '\n\n' + CHANGES,
     classifiers=CLASSIFIERS,

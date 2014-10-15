@@ -22,7 +22,8 @@ import sys
 import re
 from struct import pack, unpack
 from binascii import hexlify
-from ctypes import c_uint32, c_uint64
+from ctypes import c_uint32, c_uint64, string_at
+from distutils.spawn import find_executable
 
 from .common import *
 from blktap import VlmcTapdisk
@@ -30,7 +31,25 @@ from blktap import VlmcTapdisk
 
 @exclusive()
 def get_mapped():
-    return VlmcTapdisk.list()
+    # If tap-ctl exists return mapped volumes even if blktap module is
+    # disabled. There is always the possibility we are facing a mixed
+    # situation where the blktap module is disabled but we have remaining
+    # archipelago volumes.
+    if find_executable(VlmcTapdisk.TAP_CTL):
+        return VlmcTapdisk.list()
+    else:
+        # If the executable does not exist and the blktap module is disabled
+        # we can assume that we can safely return an empty list.
+        if not config['BLKTAP_ENABLED']:
+            return []
+        else:
+            # Assume that blktap-archipelago-utils package is not
+            # installed and that tap-ctl executable is missing.
+            # That way we provide a hint where to find tap-ctl file.
+            raise Error("%s\n%s" % ("Cannot execute tap-ctl command.",
+                                    "Maybe blktap-archipelago-utils package "
+                                    "is missing or you don't have sufficient "
+                                    "privileges"))
 
 
 def showmapped():
@@ -81,7 +100,7 @@ def parse_assume_v0(req, assume_v0, v0_size):
         flags = req.get_flags()
         flags |= XF_ASSUMEV0
         req.set_flags(flags)
-        if v0_size != -1:
+        if v0_size is not None and v0_size != -1:
             req.set_v0_size(v0_size)
 
 def is_valid_name(name):
@@ -196,7 +215,7 @@ def hash(name, cli=False, assume_v0=False, v0_size=-1, **kwargs):
     ret = req.success()
     if ret:
         xhash = req.get_data(xseg_reply_hash).contents
-        hash_name = ctypes.string_at(xhash.target, xhash.targetlen)
+        hash_name = string_at(xhash.target, xhash.targetlen)
     req.put()
     xseg_ctx.shutdown()
 
@@ -314,8 +333,8 @@ def remove(name, assume_v0=False, v0_size=-1, **kwargs):
 
     ret = False
     xseg_ctx = Xseg_ctx(get_segment())
-    mport = peers['vlmcd'].portno_start
-    req = Request.get_delete_request(xseg_ctx, mport, name)
+    vport = peers['vlmcd'].portno_start
+    req = Request.get_delete_request(xseg_ctx, vport, name)
     parse_assume_v0(req, assume_v0, v0_size)
     req.submit()
     req.wait()
@@ -324,6 +343,24 @@ def remove(name, assume_v0=False, v0_size=-1, **kwargs):
     xseg_ctx.shutdown()
     if not ret:
         raise Error("vlmc removal failed")
+
+def update_volume(name, assume_v0=False, v0_size=-1, **kwargs):
+
+    if not is_valid_name(name):
+        raise Error("Invalid volume name")
+
+    ret = False
+    xseg_ctx = Xseg_ctx(get_segment())
+    mport = peers['mapperd'].portno_start
+    req = Request.get_update_request(xseg_ctx, mport, name)
+    parse_assume_v0(req, assume_v0, v0_size)
+    req.submit()
+    req.wait()
+    ret = req.success()
+    req.put()
+    xseg_ctx.shutdown()
+    if not ret:
+        raise Error("vlmc update failed")
 
 
 @exclusive()

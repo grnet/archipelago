@@ -268,10 +268,10 @@ static struct map * create_map(char *name, uint32_t namelen, uint32_t flags)
 {
 	if (namelen + MAPPER_PREFIX_LEN > MAX_VOLUME_LEN){
 		XSEGLOG2(&lc, E, "Namelen %u too long. Max: %d",
-					namelen, MAX_VOLUME_LEN);
+					namelen, MAX_VOLUME_LEN-MAPPER_PREFIX_LEN);
 		return NULL;
 	}
-	struct map *m = malloc(sizeof(struct map));
+	struct map *m = calloc(1, sizeof(struct map));
 	if (!m){
 		XSEGLOG2(&lc, E, "Cannot allocate map ");
 		return NULL;
@@ -428,7 +428,7 @@ static int req2objs(struct peer_req *pr, struct map *map, int write)
 	}
 
 	/* get map_nodes of request */
-	struct r2o *mns = malloc(sizeof(struct r2o)*nr_objs);
+	struct r2o *mns = calloc(nr_objs, sizeof(struct r2o));
 	if (!mns){
 		XSEGLOG2(&lc, E, "Cannot allocate mns");
 		return -1;
@@ -552,6 +552,15 @@ static int do_open(struct peer_req *pr, struct map *map)
 	}
 	else {
 		return -1;
+	}
+}
+
+static int do_update(struct peer_req *pr, struct map *map)
+{
+	if (map->version != MAP_LATEST_VERSION) {
+		return -1;
+	} else {
+		return 0;
 	}
 }
 
@@ -833,7 +842,7 @@ static int do_destroy(struct peer_req *pr, struct map *map)
 
 	if (mio->err) {
 		XSEGLOG2(&lc, E, "Error while removing objects of %s", map->volume);
-		map->state &= ~MF_MAP_DELETING;
+		map->state &= ~MF_MAP_DESTROYING;
 		return -1;
 	}
 
@@ -1853,6 +1862,20 @@ void * handle_truncate(struct peer_req *pr)
    return NULL;
 }
 
+void * handle_update(struct peer_req *pr)
+{
+   struct peerd *peer = pr->peer;
+   char *target = xseg_get_target(peer->xseg, pr->req);
+   int r = map_action(do_update, pr, target, pr->req->targetlen,
+                   MF_ARCHIP|MF_LOAD|MF_EXCLUSIVE);
+   if (r < 0)
+           fail(peer, pr);
+   else
+           complete(peer, pr);
+   ta--;
+   return NULL;
+}
+
 
 int dispatch_accepted(struct peerd *peer, struct peer_req *pr,
 			struct xseg_request *req)
@@ -1880,6 +1903,7 @@ int dispatch_accepted(struct peerd *peer, struct peer_req *pr,
 		case X_CREATE: action = handle_create; break;
 		case X_RENAME: action = handle_rename; break;
 		case X_TRUNCATE: action = handle_truncate; break;
+		case X_UPDATE: action = handle_update; break;
 		default: fprintf(stderr, "mydispatch: unknown op\n"); break;
 	}
 	if (action){
@@ -1919,7 +1943,7 @@ int dispatch(struct peerd *peer, struct peer_req *pr, struct xseg_request *req,
 	else {
 		if (mio->cb){
 //			mio->cb(pr, req);
-			arg = malloc(sizeof(struct cb_arg));
+			arg = calloc(1, sizeof(struct cb_arg));
 			if (!arg) {
 				XSEGLOG2(&lc, E, "Cannot allocate cb_arg");
 				return -1;
@@ -1941,13 +1965,13 @@ int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 	int i;
 
 	//FIXME error checks
-	struct mapperd *mapper = malloc(sizeof(struct mapperd));
+	struct mapperd *mapper = calloc(1, sizeof(struct mapperd));
 	peer->priv = mapper;
 	//mapper = mapperd;
 	mapper->hashmaps = xhash_new(3, 0, XHASH_STRING);
 
 	for (i = 0; i < peer->nr_ops; i++) {
-		struct mapper_io *mio = malloc(sizeof(struct mapper_io));
+		struct mapper_io *mio = calloc(1, sizeof(struct mapper_io));
 		mio->copyups_nodes = xhash_new(3, 0, XHASH_INTEGER);
 		mio->pending_reqs = 0;
 		mio->err = 0;

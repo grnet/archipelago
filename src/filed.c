@@ -172,7 +172,7 @@ static int create_dir(char *path)
 	struct stat st;
 
 	if (stat(path, &st) < 0) {
-		if (mkdir(path, 0750) == 0) {
+		if (mkdir(path, 0777) == 0) {
 			return 0;
 		}
 		if (errno != EEXIST || stat(path, &st) < 0) {
@@ -376,7 +376,7 @@ static int strjoin(char *dest, char *f, int f_len, char *s, int s_len)
 	pos += f_len;
 	strncpy(dest + pos, s, s_len);
 	pos += s_len;
-	dest[pos] = 0;
+	dest[pos] = '\0';
 
 	return f_len + s_len;
 }
@@ -733,7 +733,7 @@ static int open_file_path(struct pfiled *pfiled, char *path, int create)
 	if (pfiled->directio)
 		flags |= O_DIRECT;
 
-	fd = open(path, flags, S_IRUSR|S_IWUSR|S_IRGRP|S_IWGRP);
+	fd = open(path, flags, S_IRUSR|S_IWUSR|S_IRGRP|S_IWGRP|S_IROTH|S_IWOTH);
 	if (fd < 0){
 		XSEGLOG2(&lc, E, "Could not open file %s. Error: %s", path, strerror_r(errno, error_str, 1023));
 		return -errno;
@@ -1231,7 +1231,7 @@ static int __set_precalculated_hash(struct peerd *peer, char *target,
 	hash_file_len = strjoin(hash_file, target, targetlen, HASH_SUFFIX, HASH_SUFFIX_LEN);
 
 	r = pfiled_write_name(pfiled, hash_file, hash_file_len, hash, HEXLIFIED_SHA256_DIGEST_SIZE, 0,
-			O_CREAT|O_EXCL, S_IWUSR|S_IRUSR);
+			O_CREAT|O_EXCL, S_IWUSR|S_IRUSR|S_IRGRP|S_IWGRP|S_IROTH|S_IWOTH);
 	if (r < 0) {
 		if (errno != EEXIST){
 			XSEGLOG2(&lc, E, "Error opening %s", hash_file);
@@ -1387,7 +1387,8 @@ static void handle_hash(struct peerd *peer, struct peer_req *pr)
 				pfiled->uniquestr, pfiled->uniquestr_len,
 				fio->str_id, FIO_STR_ID_LEN);
 
-	r = pfiled_write_name(pfiled, tmpfile, len, object_data, sum, 0, O_CREAT|O_EXCL, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP);
+	r = pfiled_write_name(pfiled, tmpfile, len, object_data, sum, 0,
+			O_CREAT|O_EXCL, S_IRUSR|S_IWUSR|S_IRGRP|S_IWGRP|S_IROTH|S_IWOTH);
 	if (r < 0) {
 		if (errno != EEXIST){
 			char error_str[1024];
@@ -1549,13 +1550,16 @@ static void handle_acquire(struct peerd *peer, struct peer_req *pr)
 	struct xseg_request *req = pr->req;
 	char *buf = malloc(MAX_FILENAME_SIZE);
 	char *tmpfile = malloc(MAX_FILENAME_SIZE);
-	char *lockfile_pathname = malloc(MAX_PATH_SIZE + MAX_FILENAME_SIZE);
-	char *tmpfile_pathname = malloc(MAX_PATH_SIZE + MAX_FILENAME_SIZE);
+	char *lockfile_pathname;
+	char *tmpfile_pathname;
 	int fd = -1, flags;
 	char *target = xseg_get_target(peer->xseg, req);
 	uint32_t buf_len, tmpfile_len;
 
-	if (!buf || !tmpfile_pathname || !lockfile_pathname) {
+	lockfile_pathname = malloc(MAX_PATH_SIZE + MAX_FILENAME_SIZE + 1);
+	tmpfile_pathname = malloc(MAX_PATH_SIZE + MAX_FILENAME_SIZE + 1);
+
+	if (!buf || !tmpfile || !tmpfile_pathname || !lockfile_pathname) {
 		XSEGLOG2(&lc, E, "Out of memory");
 		pfiled_fail(peer, pr);
 		return;
@@ -1579,14 +1583,21 @@ static void handle_acquire(struct peerd *peer, struct peer_req *pr)
 
 	XSEGLOG2(&lc, I, "Trying to acquire lock %s", buf);
 
-	if (create_path(tmpfile_pathname, pfiled, tmpfile, tmpfile_len, 1) < 0) {
-		XSEGLOG2(&lc, E, "Create path failed for %s", buf);
-		goto out;
-	}
+	if (!pfiled->lockpath_len) {
+		if (create_path(tmpfile_pathname, pfiled, tmpfile, tmpfile_len, 1) < 0) {
+			XSEGLOG2(&lc, E, "Create path failed for %s", buf);
+			goto out;
+		}
 
-	if (create_path(lockfile_pathname, pfiled, buf, buf_len, 1) < 0) {
-		XSEGLOG2(&lc, E, "Create path failed for %s", buf);
-		goto out;
+		if (create_path(lockfile_pathname, pfiled, buf, buf_len, 1) < 0) {
+			XSEGLOG2(&lc, E, "Create path failed for %s", buf);
+			goto out;
+		}
+	} else {
+		strjoin(tmpfile_pathname, pfiled->lockpath,
+				pfiled->lockpath_len, tmpfile, tmpfile_len);
+		strjoin(lockfile_pathname, pfiled->lockpath,
+				pfiled->lockpath_len, buf, buf_len);
 	}
 
 	//create exclusive unique lockfile (block_uniqueid+target)
@@ -1604,7 +1615,8 @@ static void handle_acquire(struct peerd *peer, struct peer_req *pr)
 	flags = O_RDWR|O_CREAT|O_EXCL;
 	if (pfiled->directio)
 		flags |= O_DIRECT;
-	fd = open(tmpfile_pathname, flags, S_IRWXU | S_IRUSR);
+	fd = open(tmpfile_pathname, flags,
+			S_IRUSR|S_IWUSR|S_IRGRP|S_IWGRP|S_IROTH|S_IWOTH);
 	if (fd < 0) {
 		//actual error
 		if (errno != EEXIST){
@@ -1678,10 +1690,15 @@ static void handle_release(struct peerd *peer, struct peer_req *pr)
 
 	XSEGLOG2(&lc, I, "Started. Lockfile: %s", buf);
 
-	r = create_path(pathname, pfiled, buf, buf_len, 0);
-	if (r < 0) {
-		XSEGLOG2(&lc, E, "Create path failed for %s", buf);
-		goto out;
+	if (!pfiled->lockpath_len) {
+		r = create_path(pathname, pfiled, buf, buf_len, 0);
+		if (r < 0) {
+			XSEGLOG2(&lc, E, "Create path failed for %s", buf);
+			goto out;
+		}
+	} else {
+		strjoin(pathname, pfiled->lockpath, pfiled->lockpath_len,
+				buf, buf_len);
 	}
 
 	direct = pfiled->directio;
@@ -1788,13 +1805,15 @@ int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 		fio->str_id[2] = 'a' + (i % 26);
 	}
 
-	pfiled->vpath[0] = 0;
-	pfiled->prefix[0] = 0;
-	pfiled->uniquestr[0] = 0;
+	pfiled->vpath[0] = '\0';
+	pfiled->prefix[0] = '\0';
+	pfiled->uniquestr[0] = '\0';
+	pfiled->lockpath[0] = '\0';
 
 	BEGIN_READ_ARGS(argc, argv);
 	READ_ARG_ULONG("--fdcache", pfiled->maxfds);
-	READ_ARG_STRING("--archip", pfiled->vpath, MAX_PATH_SIZE);
+	READ_ARG_STRING("--archip", pfiled->vpath, MAX_PATH_SIZE-1);
+	READ_ARG_STRING("--lockdir", pfiled->lockpath, MAX_PATH_SIZE-1);
 	READ_ARG_STRING("--prefix", pfiled->prefix, MAX_PREFIX_LEN);
 	READ_ARG_STRING("--uniquestr", pfiled->uniquestr, MAX_UNIQUESTR_LEN);
 	READ_ARG_BOOL("--directio", pfiled->directio);
@@ -1814,6 +1833,14 @@ int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 	if (pfiled->vpath[pfiled->vpath_len -1] != '/'){
 		pfiled->vpath[pfiled->vpath_len] = '/';
 		pfiled->vpath[++pfiled->vpath_len]= 0;
+	}
+
+	pfiled->lockpath_len = strlen(pfiled->lockpath);
+
+	if (pfiled->lockpath_len &&
+			pfiled->lockpath[pfiled->lockpath_len -1] != '/') {
+		pfiled->lockpath[pfiled->lockpath_len] = '/';
+		pfiled->lockpath[++pfiled->lockpath_len]= 0;
 	}
 
 	r = getrlimit(RLIMIT_NOFILE, &rlim);
