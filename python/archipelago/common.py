@@ -116,6 +116,7 @@ def xseg_wait_signal_green(ctx, sd, timeout):
 
 def create_posixfd_dirs():
     path = "/dev/shm/posixfd"
+    uid = getpwnam(config['USER']).pw_uid
     gid = getgrnam(config['GROUP']).gr_gid
 
     try:
@@ -129,7 +130,7 @@ def create_posixfd_dirs():
         else:
             raise Error("Cannot create directory %s" % path)
 
-    os.chown(path, -1, gid)
+    os.chown(path, uid, gid)
     st = os.stat(path)
     os.chmod(path, stat.S_IRWXU|stat.S_IRWXG|stat.S_ISGID)
 
