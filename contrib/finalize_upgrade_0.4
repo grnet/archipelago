@@ -37,7 +37,7 @@ def upgrade_to_v2(name, assume_v0=False, v0_size=-1):
     except Error, msg:
         return False
 
-def vol_upgrade_to_v2(name, assume_v0=False, v0_size=-1):
+def vol_upgrade_to_v2(volume, assume_v0=False, v0_size=-1):
     return upgrade_to_v2(volume.name, assume_v0=assume_v0, v0_size=v0_size)
 
 def check_v2(volume):
