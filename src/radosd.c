@@ -328,17 +328,6 @@ int handle_write(struct peerd *peer, struct peer_req *pr)
 	struct rados_io *rio = (struct rados_io *) (pr->priv);
 	struct xseg_request *req = pr->req;
 	if (rio->state == ACCEPTED) {
-		if (!req->size) {
-			// for future use
-			if (req->flags & XF_FLUSH) {
-				complete(peer, pr);
-				return 0;
-			}
-			else {
-				complete(peer, pr);
-				return 0;
-			}
-		}
 		//should we ensure req->op = X_READ ?
 		rio->state = WRITING;
 		XSEGLOG2(&lc, I, "Writing %s", rio->obj_name);
