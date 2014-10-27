@@ -28,6 +28,8 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include <fcntl.h>
 #include <errno.h>
 #include <sched.h>
+#include <pwd.h>
+#include <grp.h>
 #ifdef MT
 #include <pthread.h>
 #endif
@@ -902,14 +904,16 @@ int main(int argc, char *argv[])
 	xport defer_portno = NoPort;
 	pid_t old_pid = 0;
 	int pid_fd = -1;
-	uid_t uid = -1;
-	gid_t gid = -1;
+	uid_t cur_uid, uid = -1;
+	gid_t cur_gid, gid = -1;
 	mode_t peer_umask = PEER_DEFAULT_UMASK;
 
 	char spec[MAX_SPEC_LEN + 1];
 	char logfile[MAX_LOGFILE_LEN + 1];
 	char pidfile[MAX_PIDFILE_LEN + 1];
 	char cpus[MAX_CPUS_LEN + 1];
+
+	char *username = NULL;
 
 	logfile[0] = 0;
 	pidfile[0] = 0;
@@ -948,18 +952,48 @@ int main(int argc, char *argv[])
 		return 0;
 	}
 
-	if (uid == -1) {
-		uid = geteuid();
+	if (gid != -1) {
+		struct group *gr;
+		gr = getgrgid(gid);
+		if (!gr) {
+			XSEGLOG2(&lc, E, "Group %d not found", gid);
+			return -1;
+		}
 	}
 
-	if (gid == -1) {
-		gid = getegid();
+	if (uid != -1) {
+		struct passwd *pw;
+		pw = getpwuid(uid);
+		if (!pw) {
+			XSEGLOG2(&lc, E, "User %d not found", uid);
+			return -1;
+		}
+		username = pw->pw_name;
+		if (gid == -1) {
+			gid = pw->pw_gid;
+		}
 	}
 
-	/* Drop privileges, change user & group */
-	(void) setregid(gid, gid);
-	(void) setreuid(uid, uid);
+	cur_uid = geteuid();
+	cur_gid = getegid();
 
+	if (gid != -1 && cur_gid != gid && setregid(gid, gid)) {
+		XSEGLOG2(&lc, E, "Could not set gid to %d", gid);
+		return -1;
+	}
+
+	if (uid != -1) {
+		if ((cur_gid != gid || cur_uid != uid)
+				&& initgroups(username, gid)) {
+			XSEGLOG2(&lc, E, "Could not initgroups for user %s, "
+					"gid %d", username, gid);
+			return -1;
+		}
+
+		if (cur_uid != uid && setreuid(uid, uid)) {
+			XSEGLOG2(&lc, E, "Failed to set uid %d", uid);
+		}
+	}
 
 	/* set umask of the process. Only keep permission bits */
 	peer_umask &= 0777;
