@@ -528,6 +528,8 @@ def info(name, cli=False, assume_v0=False, v0_size=-1, **kwargs):
     if cli:
         sys.stdout.write("Volume %s: size: %d\n" % (name, size))
 
+    return size
+
 
 def mapinfo(name, verbose=False, **kwargs):
     raise Error("Unimplemented")
