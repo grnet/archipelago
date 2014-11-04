@@ -4,7 +4,7 @@ Priority: extra
 Maintainer: Filippos Giannakos <philipgian@grnet.gr>
 Build-Depends: debhelper (>= 7.0.50~), python, libst-dev, libxseg-dev(>>0.4~rc1),
  librados-dev(=0.61.2+grnet2-1) | librados-dev(>=0.65),
- libssl-dev
+ libssl-dev, cmake(>=2.8)
 Standards-Version: 3.9.1
 X-Python-Version: >=2.6
 
