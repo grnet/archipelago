@@ -1,0 +1,3 @@
+usr/bin/archip-radosd
+
+/etc/archipelago/archipelago.conf.rados_example

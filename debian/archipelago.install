@@ -1,3 +1,13 @@
-#xseg/tools/vlmc usr/bin
-#xseg/tools/archipelago usr/bin
-usr/bin/*
+usr/bin/vlmc
+usr/bin/archipelago
+usr/bin/archip-bench
+usr/bin/archip-dummy
+usr/bin/archip-filed
+usr/bin/archip-mapperd
+usr/bin/archip-vlmcd
+
+contrib/finalize_upgrade_0.4 usr/share/archipelago/tools
+
+etc/archipelago/archipelago.conf
+bash_completion/vlmc etc/bash_completion.d/
+bash_completion/archipelago etc/bash_completion.d/
