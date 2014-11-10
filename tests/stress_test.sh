@@ -15,20 +15,17 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-set -e
+# Do some basic stress-testing on xseg
 
-PACKAGES_DIR=$1
+source ../tools/helpers.sh
 
-shift
+parse_config
 
-TEMP_DIR=$(mktemp -d /tmp/devflow_autopkg_XXXXXXX)
+[ -n "${1}" ] || usage "[nr_times]"
 
-# Create the packages
-devflow-autopkg snapshot -b $TEMP_DIR $@
+PORTS_AVAIL=$(($PORTS / 2 - 1))
 
-# MOVE the packages
-mkdir -p $PACKAGES_DIR
-mv -n $TEMP_DIR/* $PACKAGES_DIR
-
-echo "Moved packages to: $(pwd)/$PACKAGES_DIR"
-
+for i in `seq 1 $1`
+do 
+	# call some function to do work
+done

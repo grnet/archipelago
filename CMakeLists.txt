@@ -1,5 +1,3 @@
-#!/bin/bash
-
 # Copyright (C) 2010-2014 GRNET S.A.
 #
 # This program is free software: you can redistribute it and/or modify
@@ -15,20 +13,15 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-set -e
+cmake_minimum_required(VERSION 2.8)
 
-PACKAGES_DIR=$1
+project (archipelago)
 
-shift
+add_subdirectory(src)
+add_subdirectory(python)
+add_subdirectory(ganeti)
+#add_subdirectory(tests)
+add_subdirectory(conf)
 
-TEMP_DIR=$(mktemp -d /tmp/devflow_autopkg_XXXXXXX)
-
-# Create the packages
-devflow-autopkg snapshot -b $TEMP_DIR $@
-
-# MOVE the packages
-mkdir -p $PACKAGES_DIR
-mv -n $TEMP_DIR/* $PACKAGES_DIR
-
-echo "Moved packages to: $(pwd)/$PACKAGES_DIR"
-
+add_custom_target(build)
+add_dependencies(build src python ganeti conf)

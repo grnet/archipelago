@@ -1,5 +1,3 @@
-#!/bin/bash
-
 # Copyright (C) 2010-2014 GRNET S.A.
 #
 # This program is free software: you can redistribute it and/or modify
@@ -14,21 +12,20 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
 
-set -e
+# Setup for xseg Makefiles.
 
-PACKAGES_DIR=$1
+ifndef COPTS
+export COPTS=-O2 -g -finline-functions $(MOPTS) $(DEBUG)
+endif
+ifndef CSTD
+export CSTD=-std=gnu99 -pedantic
+endif
 
-shift
-
-TEMP_DIR=$(mktemp -d /tmp/devflow_autopkg_XXXXXXX)
-
-# Create the packages
-devflow-autopkg snapshot -b $TEMP_DIR $@
-
-# MOVE the packages
-mkdir -p $PACKAGES_DIR
-mv -n $TEMP_DIR/* $PACKAGES_DIR
-
-echo "Moved packages to: $(pwd)/$PACKAGES_DIR"
+bindir=/usr/bin/
+pythondir=/usr/lib/python2.7/
+ganetidir=/usr/share/ganeti/extstorage/archipelago/
+confdir=/etc/archipelago/
+ganetihooksdir=/etc/ganeti/hooks/
 
