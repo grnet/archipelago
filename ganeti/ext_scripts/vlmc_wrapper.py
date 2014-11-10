@@ -59,14 +59,15 @@ def ReadEnv():
 
 
 def create(env):
-    """Create a new vlmc Image."""
+    """Create a new vlmc Image"""
     name = env.get("name")
     size = env.get("size")
     origin = env.get("origin")
-
+    origin_size = env.get("origin_size")
     sys.stderr.write("Creating volume '%s' of size '%s' from '%s'\n"
                      % (name, size, origin))
-    vlmc.create(name=name, size=int(size), snap=origin)
+    vlmc.create(name=name, size=int(size), snap=origin, assume_v0=True,
+                v0_size=int(origin_size))
     return 0
 
 

@@ -136,13 +136,13 @@ Notable new config option that should be configured is:
 * ``BLKTAP_ENABLED``: Whether or not the blktap module should be used. Must be
   set to true for nodes that will host VMs.
 
-Archipelago v0.4 creates a new system user and group called Archipelago. By
-default the configuration file is set up to run as those users.
-
+Archipelago v0.4 creates a new system user and group called ``archipelago``.
+By default the configuration file is set up to run as those users.
 If your are using Archipelago with ``filed`` special care is needed:
 
 * You must change the corresponding ``USER`` and ``GROUP`` values of the
-  configuration file to ``root``, and follow the supplementary procedure on the
+  configuration file to ``root``, and follow the
+  :ref:`supplementary procedure<nfs_share>` on the
   end of this upgrade guide.
 
 * You must make sure that the ``archipelago`` user and group have the same
@@ -191,21 +191,27 @@ Finalizing upgrade
 After upgrading all Archipelago nodes, you have to take certain steps to
 finalize the upgrade.
 
+.. _nfs_share:
+
 Adjust NFS shares permissions
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-In this section, we need to adjust the permissions of the directories and files
-on the NFS shares Archipelago uses. If you are not using Archipelago over NFS,
-skip this section.
+As already mentioned, Archipelago v0.4 creates the new ``archipelago`` system
+user and group. In this section, we describe how to adjust the permissions of
+the directories and files on the NFS shares that Archipelago is using in order
+to run Archipelago as ``archipelago:archipelago``. If you are not using
+Archipelago over NFS, skip this section.
 
 We will refer to Archipelago data directory as the directory that holds the
 Archipelago data. On new installations this would probably be ``/srv/archip``.
-If you are integrating with a previous Synnefo installation, the Archipelago
-data directory would be the one Pithos used (e.g. ``/srv/pithos/data``). In this
-case, you probably want to synchronize this step with the Synnefo upgrade to
-0.16. Please refer to the upgrade guide for Synnefo v0.16.
 
-Adjust the directory with the following commands accordingly.
+.. warning::
+
+ If you are integrating with a previous Synnefo installation, you must make sure
+ that both Archipelago and Pithos have access to Archipelago data. You should
+ skip this section, and perform the steps that are described in the
+ `Synnefo upgrade notes
+ <https://www.synnefo.org/docs/synnefo/latest/upgrade/upgrade-0.16.html>`_.
 
 1. Change Archipelago data group permissions
 --------------------------------------------

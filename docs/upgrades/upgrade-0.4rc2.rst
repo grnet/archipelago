@@ -34,9 +34,7 @@ The following steps must be applied to each node that gets upgraded.
 Archipelago v0.4rc2 relies on having group read/write permissions on certain
 files for the components to communicate with each other. Since snf-image is one
 of these components, if you are using it, you must upgrade snf-image on all
-nodes to v0.16.2 which can properly handle file creation permissions. You should
-also make sure that the new ``PITHCAT_UMASK`` setting of snf-image is set to
-``007``.
+nodes to v0.16.3 which can properly handle file creation permissions.
 
 1. Prepare the node
 ~~~~~~~~~~~~~~~~~~~
@@ -137,10 +135,9 @@ New config option that were introduced in rc2 is:
 
 .. tip::
 
-    You should also make sure that you have upgraded your snf-image to v0.16.2
-    and adjust the new ``PITHCAT_UMASK`` setting to ``007``.
+    You should also make sure that you have upgraded your snf-image to v0.16.3.
 
-Archipelago v0.4rc2 also creates a new system user and group called Archipelago.
+Archipelago v0.4rc2 also creates a new system user and group called ``archipelago``.
 By default the configuration file shipped with Archipelago is set up to run as
 those users. If you choose to use your previous configuration file, make sure
 you switch the ``USER`` and ``GROUP`` settings to ``archipelago`` (with one
@@ -190,18 +187,22 @@ finalize the upgrade.
 Adjust NFS shares permissions
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-In this section, we need to adjust the permissions of the directories and files
-on the NFS shares Archipelago uses. If you are not using Archipelago over NFS,
-skip this section.
+As already mentioned, Archipelago v0.4 creates the new ``archipelago`` system
+user and group. In this section, we describe how to adjust the permissions of
+the directories and files on the NFS shares that Archipelago is using in order
+to run Archipelago as ``archipelago:archipelago``. If you are not using
+Archipelago over NFS, skip this section.
 
 We will refer to the Archipelago data directory as the directory that holds the
 Archipelago data. On new installations this would probably be ``/srv/archip``.
-If you are integrating with a previous Synnefo installation, the Archipelago
-data directory would be the one Pithos used (e.g. ``/srv/pithos/data``). In this
-case, you probably want to synchronize this step with the Synnefo upgrade to
-0.16. Please refer to the upgrade guide for Synnefo v0.16.
 
-Adjust the directory with the following commands accordingly.
+.. warning::
+
+ If you are integrating with a previous Synnefo installation, you must make sure
+ that both Archipelago and Pithos have access to Archipelago data. You should
+ skip this section, and perform the steps that are described in the
+ `Synnefo upgrade notes
+ <https://www.synnefo.org/docs/synnefo/latest/upgrade/upgrade-0.16.html>`_.
 
 1. Change Archipelago data group permissions
 --------------------------------------------
