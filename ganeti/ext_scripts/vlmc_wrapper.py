@@ -39,7 +39,7 @@ Returns O after successfull completion, 1 on failure
 import os
 import sys
 
-from archipelago.common import Error, DEVICE_PREFIX, loadrc
+from archipelago.common import Error, DEVICE_PREFIX, loadrc, config
 from archipelago import vlmc as vlmc
 
 
@@ -162,6 +162,8 @@ def main():
         return 1
 
     loadrc(None)
+
+    os.umask(config['UMASK'])
 
     actions = {
         'create': create,

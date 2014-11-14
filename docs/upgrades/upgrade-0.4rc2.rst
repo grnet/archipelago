@@ -1,10 +1,10 @@
-Upgrade to Archipelago v0.4
-^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Upgrade to Archipelago v0.4rc2
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Upgrade Steps
 =============
 
-This guide assumes an upgrade from the previous (v0.3.x) version of Archipelago.
+This guide assumes an upgrade from the previous v0.4rc1 version of Archipelago.
 This guide does not support upgrading from an intermediate snapshot version of
 Archipelago.
 
@@ -12,6 +12,8 @@ If you plan to integrate Archipelago with Pithos, all Archipelago nodes must be
 upgraded first.
 
 The following steps must be applied to each node that gets upgraded.
+
+0. Prerequisites
 
 1. Prepare the node.
 
@@ -23,10 +25,16 @@ The following steps must be applied to each node that gets upgraded.
 
 5. Adjust the new config file.
 
-6. Remove the old config file
+6. Start Archipelago
 
-7. Start Archipelago
 
+0. Prerequisites
+~~~~~~~~~~~~~~~~
+
+Archipelago v0.4rc2 relies on having group read/write permissions on certain
+files for the components to communicate with each other. Since snf-image is one
+of these components, if you are using it, you must upgrade snf-image on all
+nodes to v0.16.3 which can properly handle file creation permissions.
 
 1. Prepare the node
 ~~~~~~~~~~~~~~~~~~~
@@ -49,16 +57,6 @@ the Cyclades service node:
 
         # snf-manage backend-modify --drained=True <backend_id>
 
-If upgrading from Archipelago version less that 0.3.5, the administrator must
-make sure that each mapped volume on the node is opened. An oneliner like the
-following should do the trick:
-
-.. code-block:: console
-
-        # for i in $(vlmc showmapped|grep -v image|awk '{print $2}'); do vlmc open $i ; done ;
-
-Make sure that no errors are raised. If so, the administrator must resolve them
-manually.
 
 2. Evacuate the node
 ~~~~~~~~~~~~~~~~~~~~
@@ -119,30 +117,36 @@ distro-provided blktap-dkms package must also be installed.
 
         # apt-get install blktap-archipelago-utils blktap-dkms
 
-5. Adjust the new config file
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+5. Adjust the config file
+~~~~~~~~~~~~~~~~~~~~~~~~~
 
-The new config file is located on ``/etc/archipelago/archipelago.conf``. There
-is also a sample configuration file for RADOS installations located at
-``/etc/archipelago/archipelago.conf.rados_example``. You can copy that to the
-Archipelago configuration file location in order to adjust installation-specific
-options only.
+The Archipelago config file is located on ``/etc/archipelago/archipelago.conf``.
+You can choose to keep your configuration file from rc1 or use the one shipped
+with rc2. In the first case, you must make sure to add the new configuration
+settings introduced in rc2. In the latter case, you should reconfigure
+Archipelago to match your installation.
 
-Adjust the new config file to the deployment needs (e.g. set ``filed``
-directories or ``radosd`` pools).
+New config option that were introduced in rc2 is:
 
-Notable new config option that should be configured is:
+* ``UMASK``: This setting on the ``[[Archipelago]]`` section controls the umask
+  of Archipelago processes and external tools (e.g.  ganeti external storage
+  script). Peers have a seperate ``umask`` option on their section. These
+  settings should be configured to 007.
 
-* ``BLKTAP_ENABLED``: Whether or not the blktap module should be used. Must be
-  set to true for nodes that will host VMs.
+.. tip::
 
-Archipelago v0.4 creates a new system user and group called ``archipelago``.
-By default the configuration file is set up to run as those users.
+    You should also make sure that you have upgraded your snf-image to v0.16.3.
+
+Archipelago v0.4rc2 also creates a new system user and group called ``archipelago``.
+By default the configuration file shipped with Archipelago is set up to run as
+those users. If you choose to use your previous configuration file, make sure
+you switch the ``USER`` and ``GROUP`` settings to ``archipelago`` (with one
+exception noted below).
+
 If your are using Archipelago with ``filed`` special care is needed:
 
 * You must change the corresponding ``USER`` and ``GROUP`` values of the
-  configuration file to ``root``, and follow the
-  :ref:`supplementary procedure<nfs_share>` on the
+  configuration file to ``root``, and follow the supplementary procedure on the
   end of this upgrade guide.
 
 * You must make sure that the ``archipelago`` user and group have the same
@@ -150,18 +154,7 @@ If your are using Archipelago with ``filed`` special care is needed:
   ``archipelago`` UID and GID are consistent across all Archipelago nodes for
   NFSv3 or there is a proper name mapping for NFSv4.
 
-6. Remove the old config file
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-After migrating your setting from the old config to the new one, you can safely
-remove it from your system.
-
-.. code-block:: console
-
-        # rm /etc/default/archipelago
-
-
-7. Start Archipelago
+6. Start Archipelago
 ~~~~~~~~~~~~~~~~~~~~
 
 After successfully configuring the new/upgraded Archipelago installation, start
@@ -191,8 +184,6 @@ Finalizing upgrade
 After upgrading all Archipelago nodes, you have to take certain steps to
 finalize the upgrade.
 
-.. _nfs_share:
-
 Adjust NFS shares permissions
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -202,7 +193,7 @@ the directories and files on the NFS shares that Archipelago is using in order
 to run Archipelago as ``archipelago:archipelago``. If you are not using
 Archipelago over NFS, skip this section.
 
-We will refer to Archipelago data directory as the directory that holds the
+We will refer to the Archipelago data directory as the directory that holds the
 Archipelago data. On new installations this would probably be ``/srv/archip``.
 
 .. warning::
@@ -270,46 +261,6 @@ Archipelago data. On new installations this would probably be ``/srv/archip``.
       # archipelago start
 
 
-Pithos integration when using ``Filed``
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-If you are using Pithos backed by Archipelago with ``filed``, after having
-upgraded all Archipelago nodes and successfully installed the upgraded Pithos
-version, the following steps must also be followed.
-
-
-1. Stop all Archipelago instances
----------------------------------
-
-On every node that runs Archipelago, perform the following:
-
-.. code-block:: console
-
-  # archipelago stop
-
-Use the ``-f`` option if there are mapped volumes. Have in mind that during the
-time Archipelago is stopped, the VMs will appear frozen whenever they attempt to
-perform any disk I/O.
-
-
-2. Enable Pithos object migration
----------------------------------
-
-Enable the ``pithos_migrate`` setting for all ``blockerm`` and ``blockerb``
-peers on all nodes. Add the following line ``pithos_migrate=True`` on the
-``blockerm`` and ``blockerb`` section of the configuration files.
-
-
-3. Start all Archipelago instances
-----------------------------------
-
-On every node that runs Archipelago, perform the following:
-
-.. code-block:: console
-
-  # archipelago start
-
-
 Change ``Filed`` lock files location
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 If your installation does not rely on ``filed`` skip this section.
@@ -357,8 +308,53 @@ On every node that runs Archipelago, perform the following:
   # archipelago start
 
 
+Pithos integration when using ``Filed``
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+If you haven't executed this proccedure while installing Archipelago v0.4rc1 it
+is recommended to perform it now. Otherwise skip this section.
+
+If you are using Pithos backed by Archipelago with ``filed``, after having
+upgraded all Archipelago nodes and successfully installed the upgraded Pithos
+version, the following steps must also be followed.
+
+
+1. Stop all Archipelago instances
+---------------------------------
+
+On every node that runs Archipelago, perform the following:
+
+.. code-block:: console
+
+  # archipelago stop
+
+Use the ``-f`` option if there are mapped volumes. Have in mind that during the
+time Archipelago is stopped, the VMs will appear frozen whenever they attempt to
+perform any disk I/O.
+
+
+2. Enable Pithos object migration
+---------------------------------
+
+Enable the ``pithos_migrate`` setting for all ``blockerm`` and ``blockerb``
+peers on all nodes. Add the following line ``pithos_migrate=True`` on the
+``blockerm`` and ``blockerb`` section of the configuration files.
+
+
+3. Start all Archipelago instances
+----------------------------------
+
+On every node that runs Archipelago, perform the following:
+
+.. code-block:: console
+
+  # archipelago start
+
+
 Convert all volume mapfiles
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~
+If you haven't executed this proccedure while installing Archipelago v0.4rc1 it
+is recommended to perform it now. Otherwise skip this section.
+
 Archipelago lazily upgrades the mapfiles to the latest version, when they are
 accessed. To make sure that all mapfiles have been upgraded to the latest
 version, the provided migration tool must be executed. The tool is located in

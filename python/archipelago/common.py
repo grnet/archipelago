@@ -33,9 +33,9 @@ from ctypes import (
     byref,
     c_int,
     c_char,
-    Structure
+    Structure,
+    CDLL
 )
-import ctypes
 cb_null_ptrtype = CFUNCTYPE(None, uint32_t)
 
 import os
@@ -52,6 +52,13 @@ from select import select
 import ConfigParser
 from grp import getgrnam
 from pwd import getpwnam
+import stat
+
+libc = CDLL("libc.so.6")
+
+get_errno_loc = libc.__errno_location
+get_errno_loc.restype = POINTER(c_int)
+
 
 random.seed()
 hostname = socket.gethostname()
@@ -107,6 +114,25 @@ def xseg_wait_signal_green(ctx, sd, timeout):
             else:
                 raise OSError(e, msg)
 
+def create_posixfd_dirs():
+    path = "/dev/shm/posixfd"
+    uid = getpwnam(config['USER']).pw_uid
+    gid = getgrnam(config['GROUP']).gr_gid
+
+    try:
+        os.mkdir(path, stat.S_IRWXU|stat.S_IRWXG)
+    except OSError as e:
+        if e.errno == errno.EEXIST:
+            if os.path.isdir(os.path.dirname(path)):
+                    pass
+            else:
+                raise Error("%s is not a directory" % path)
+        else:
+            raise Error("Cannot create directory %s" % path)
+
+    os.chown(path, uid, gid)
+    st = os.stat(path)
+    os.chmod(path, stat.S_IRWXU|stat.S_IRWXG|stat.S_ISGID)
 
 class Peer(object):
     cli_opts = None
@@ -114,7 +140,7 @@ class Peer(object):
     def __init__(self, role=None, daemon=True, nr_ops=16,
                  logfile=None, pidfile=None, portno_start=None,
                  portno_end=None, log_level=0, spec=None, threshold=None,
-                 cephx_id=None, user=None, group=None):
+                 user=None, group=None, umask="0o007"):
         if not role:
             raise Error("Role was not provided")
         self.role = role
@@ -129,6 +155,7 @@ class Peer(object):
         self.group = group
         self.user_uid = getpwnam(self.user).pw_uid
         self.group_gid = getgrnam(self.group).gr_gid
+        self.umask = int(umask, 0)
 
         self.nr_ops = nr_ops
         if not self.nr_ops > 0:
@@ -170,6 +197,19 @@ class Peer(object):
             raise Error("Log path %s does not exist or is not a directory" %
                         self.logfile)
 
+        self.log_level = log_level
+        self.threshold = threshold
+
+        if self.log_level < 0 or self.log_level > 3:
+            raise Error("%s: Invalid log level %d" %
+                        (self.role, self.log_level))
+
+        if self.cli_opts is None:
+            self.cli_opts = []
+        self.set_cli_options()
+
+    def start(self):
+
         try:
             os.makedirs(os.path.dirname(self.pidfile))
         except OSError as e:
@@ -183,19 +223,11 @@ class Peer(object):
                 raise Error("Cannot create path %s" %
                             os.path.dirname(self.pidfile))
 
-        self.log_level = log_level
-        self.threshold = threshold
-        self.cephx_id = cephx_id
+        os.chmod(os.path.dirname(self.pidfile), stat.S_IRWXU|stat.S_IRWXG)
+        os.chown(os.path.dirname(self.pidfile), -1, self.group_gid)
+        os.chown(os.path.dirname(self.logfile), -1, self.group_gid)
 
-        if self.log_level < 0 or self.log_level > 3:
-            raise Error("%s: Invalid log level %d" %
-                        (self.role, self.log_level))
 
-        if self.cli_opts is None:
-            self.cli_opts = []
-        self.set_cli_options()
-
-    def start(self):
         if self.get_pid():
             raise Error("Peer has valid pidfile")
         cmd = [os.path.join(BIN_DIR, self.executable)] + self.cli_opts
@@ -280,6 +312,9 @@ class Peer(object):
         if self.group:
             self.cli_opts.append("-gid")
             self.cli_opts.append(str(self.group_gid))
+        if self.umask:
+            self.cli_opts.append("--umask")
+            self.cli_opts.append(str(self.umask))
 
 
 class MTpeer(Peer):
@@ -297,9 +332,10 @@ class MTpeer(Peer):
 
 
 class Radosd(MTpeer):
-    def __init__(self, pool=None, **kwargs):
+    def __init__(self, pool=None, cephx_id=None, **kwargs):
         self.executable = RADOS_BLOCKER
         self.pool = pool
+        self.cephx_id = cephx_id
         super(Radosd, self).__init__(**kwargs)
 
         if self.cli_opts is None:
@@ -318,7 +354,7 @@ class Radosd(MTpeer):
 class Filed(MTpeer):
     def __init__(self, archip_dir=None, prefix=None, fdcache=None,
                  unique_str=None, nr_threads=1, nr_ops=16, direct=True,
-                 pithos_migrate=False, **kwargs):
+                 pithos_migrate=False, lock_dir=None, **kwargs):
         self.executable = FILE_BLOCKER
         self.archip_dir = archip_dir
         self.prefix = prefix
@@ -326,6 +362,7 @@ class Filed(MTpeer):
         self.unique_str = unique_str
         self.direct = direct
         self.pithos_migrate = pithos_migrate
+        self.lock_dir = lock_dir
         nr_threads = nr_ops
         if self.fdcache and fdcache < 2*nr_threads:
             raise Error("Fdcache should be greater than 2*nr_threads")
@@ -336,6 +373,8 @@ class Filed(MTpeer):
             raise Error("%s: Archip dir must be set" % self.role)
         if not os.path.isdir(self.archip_dir):
             raise Error("%s: Archip dir invalid" % self.role)
+        if self.lock_dir and not os.path.isdir(self.lock_dir):
+            raise Error("%s: Lock dir invalid" % self.role)
         if not self.fdcache:
             self.fdcache = 2*self.nr_ops
         if not self.unique_str:
@@ -362,6 +401,9 @@ class Filed(MTpeer):
             self.cli_opts.append("--directio")
         if self.pithos_migrate:
             self.cli_opts.append("--pithos-migrate")
+        if self.lock_dir:
+            self.cli_opts.append("--lockdir")
+            self.cli_opts.append(self.lock_dir)
 
 
 class Mapperd(Peer):
@@ -425,6 +467,7 @@ config = {
     'SEGMENT_ALIGNMENT': 12,
     'VTOOL_START': 1003,
     'VTOOL_END': 1003,
+    'UMASK': 0o007,
     #RESERVED 1023
 }
 
@@ -515,13 +558,20 @@ class Segment(object):
             raise Error("Cannot destroy segment")
 
     def join(self):
+
+        def errcheck(ret, func, args):
+            if not ret:
+                e = get_errno_loc()[0]
+                raise Error("Cannot join segment '%s': %s"
+                                % (config['SEGMENT_NAME'], os.strerror(e)))
+            return ret
+
         xconf = xseg_config()
         spec_buf = create_string_buffer(self.spec)
         xseg_parse_spec(spec_buf, xconf)
+        xseg_join.errcheck = errcheck
         ctx = xseg_join(xconf.type, xconf.name, "posixfd",
                         cast(0, cb_null_ptrtype))
-        if not ctx:
-            raise Error("Cannot join segment")
 
         return ctx
 
@@ -627,7 +677,8 @@ def get_vtool_port():
 
 acquired_locks = {}
 
-def get_lock(lock_file):
+def get_lock(lock_file, max_time=15):
+    elapsed = 0
     while True:
         try:
             fd = os.open(lock_file, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
@@ -635,8 +686,13 @@ def get_lock(lock_file):
         except OSError, (err, reason):
             print >> sys.stderr, lock_file, reason
             if err == errno.EEXIST:
-                print >> sys.stderr, "Retrying..."
-                time.sleep(0.2)
+                if elapsed < max_time:
+                    print >> sys.stderr, "Retrying..."
+                    time.sleep(0.2)
+                    elapsed += 0.2
+                else:
+                    raise Error("Could not acquire %s. Tried %d seconds" %
+                            (lock_file, max_time))
             else:
                 raise OSError(err, lock_file + ' ' + reason)
     return fd
@@ -691,11 +747,15 @@ def createDict(cfg, section):
         sec_dic['threshold'] = cfg.getint(section, 'threshold')
     if cfg.has_option(section, 'log_level'):
         sec_dic['log_level'] = cfg.getint(section, 'log_level')
+    if cfg.has_option(section, 'umask'):
+        sec_dic['umask'] = cfg.get(section, 'umask')
 
     t = str(cfg.get(section, 'type'))
     if t == 'file_blocker':
         sec_dic['nr_threads'] = cfg.getint(section, 'nr_threads')
         sec_dic['archip_dir'] = cfg.get(section, 'archip_dir')
+        if cfg.has_option(section, 'lock_dir'):
+            sec_dic['lock_dir'] = cfg.get(section, 'lock_dir')
         if cfg.has_option(section, 'fdcache'):
             sec_dic['fdcache'] = cfg.getint(section, 'fdcache')
         if cfg.has_option(section, 'direct'):
@@ -710,7 +770,7 @@ def createDict(cfg, section):
         if cfg.has_option(section, 'nr_threads'):
             sec_dic['nr_threads'] = cfg.getint(section, 'nr_threads')
         if cfg.has_option(section, 'cephx_id'):
-            sec_dic['cephx_id'] = cfg.get(section, 'cephx_id');
+            sec_dic['cephx_id'] = cfg.get(section, 'cephx_id')
         sec_dic['pool'] = cfg.get(section, 'pool')
     elif t == 'mapperd':
         sec_dic['blockerb_port'] = cfg.getint(section, 'blockerb_port')
@@ -742,6 +802,8 @@ def loadrc(rc):
     config['USER'] = cfg.get('ARCHIPELAGO','USER')
     config['GROUP'] = cfg.get('ARCHIPELAGO','GROUP')
     config['BLKTAP_ENABLED'] = cfg.getboolean('ARCHIPELAGO','BLKTAP_ENABLED')
+    if cfg.has_option('ARCHIPELAGO', 'UMASK'):
+        config['UMASK'] = int(cfg.get('ARCHIPELAGO', 'UMASK'), 0)
     roles = cfg.get('PEERS', 'ROLES')
     roles = str(roles)
     roles = roles.split(' ')
@@ -973,7 +1035,7 @@ class Request(object):
 
     def put(self, force=False):
         if not self.req:
-            return False;
+            return False
         if not force:
             if xq_count(byref(self.req.contents.path)) > 0:
                 return False
@@ -1158,6 +1220,10 @@ class Request(object):
     @classmethod
     def get_delete_request(cls, xseg, dst, target):
         return cls(xseg, dst, target, op=X_DELETE)
+
+    @classmethod
+    def get_update_request(cls, xseg, dst, target):
+        return cls(xseg, dst, target, op=X_UPDATE)
 
     @classmethod
     def get_clone_request(cls, xseg, dst, target, clone=None, clone_size=0):

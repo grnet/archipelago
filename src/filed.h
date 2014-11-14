@@ -49,10 +49,12 @@ struct fdcache_entry {
 struct pfiled {
 	uint32_t vpath_len;
 	uint32_t prefix_len;
+	uint32_t lockpath_len;
 	uint32_t uniquestr_len;
 	long maxfds;
 	uint32_t directio;
 	char vpath[MAX_PATH_SIZE + 1];
+	char lockpath[MAX_PATH_SIZE + 1];
 	char prefix[MAX_PREFIX_LEN + 1];
 	char uniquestr[MAX_UNIQUESTR_LEN + 1];
 	struct xcache cache;

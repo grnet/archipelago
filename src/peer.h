@@ -60,6 +60,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 
 
+#define PEER_DEFAULT_UMASK     0007
 
 /* main peer structs */
 struct peer_req {

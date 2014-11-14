@@ -89,8 +89,8 @@ int mpause(struct peerd *peer)
 	if (!port)
 		return -1;
 	
-	xlock_acquire(&port->rq_lock, peer->portno_start);
-	xlock_acquire(&port->pq_lock, peer->portno_start);
+	xlock_acquire(&port->rq_lock);
+	xlock_acquire(&port->pq_lock);
 	return 0;
 }
 
