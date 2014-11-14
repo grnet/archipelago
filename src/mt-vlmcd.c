@@ -1,35 +1,18 @@
 /*
- * Copyright 2012 GRNET S.A. All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or
- * without modification, are permitted provided that the following
- * conditions are met:
- *
- *   1. Redistributions of source code must retain the above
- *      copyright notice, this list of conditions and the following
- *      disclaimer.
- *   2. Redistributions in binary form must reproduce the above
- *      copyright notice, this list of conditions and the following
- *      disclaimer in the documentation and/or other materials
- *      provided with the distribution.
- *
- * THIS SOFTWARE IS PROVIDED BY GRNET S.A. ``AS IS'' AND ANY EXPRESS
- * OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
- * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
- * PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL GRNET S.A OR
- * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
- * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
- * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF
- * USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED
- * AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
- * ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGE.
- *
- * The views and conclusions contained in the software and
- * documentation are those of the authors and should not be
- * interpreted as representing official policies, either expressed
- * or implied, of GRNET S.A.
+Copyright (C) 2010-2014 GRNET S.A.
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
 #include <stdio.h>
@@ -48,7 +31,7 @@ enum io_state_enum {
 	CONCLUDED = 3
 };
 
-#define VF_VOLUME_FREEZED (1 << 0)
+#define VF_VOLUME_FROZEN (1 << 0)
 
 struct volume_info{
 	char name[XSEG_MAX_TARGETLEN + 1];
@@ -257,8 +240,9 @@ static int conclude_pr(struct peerd *peer, struct peer_req *pr)
 
 static int should_freeze_volume(struct xseg_request *req)
 {
-	if (req->op == X_CLOSE || req->op == X_SNAPSHOT ||
-		(req->op == X_WRITE && !req->size && (req->flags & XF_FLUSH)))
+	if (req->op == X_CLOSE || req->op == X_SNAPSHOT || req->op == X_DELETE || 
+		(req->op == X_WRITE && !req->size && (req->flags & XF_FLUSH)) ||
+               req->op == X_FLUSH)
 		return 1;
 	return 0;
 }
@@ -293,7 +277,7 @@ static int do_accepted_pr(struct peerd *peer, struct peer_req *pr)
 
 	if (should_freeze_volume(pr->req)){
 		XSEGLOG2(&lc, I, "Freezing volume %s", vi->name);
-		vi->flags |= VF_VOLUME_FREEZED;
+		vi->flags |= VF_VOLUME_FROZEN;
 		if (vi->active_reqs){
 			//assert vi->pending_pr == NULL;
 			XSEGLOG2(&lc, I, "Active reqs of %s: %lu. Pending pr is set to %lx",
@@ -314,16 +298,34 @@ static int do_accepted_pr(struct peerd *peer, struct peer_req *pr)
 
 	vio->err = 0; //reset error state
 
+	if (pr->req->op == X_FLUSH) {
+               /* We have no active requests here.
+                * Unfreeze volume and start serving waiting/pending requests.
+                */
+		vi->flags &= ~VF_VOLUME_FROZEN;
+		XSEGLOG2(&lc, I, "Completing flush request");
+		pr->req->serviced = 0;
+		conclude_pr(peer, pr);
+		xqindex xqi;
+		while (vi->pending_reqs && !(vi->flags & VF_VOLUME_FROZEN) &&
+				(xqi = __xq_pop_head(vi->pending_reqs)) != Noneidx) {
+			struct peer_req *ppr = (struct peer_req *) xqi;
+			do_accepted_pr(peer, ppr);
+		}
+		return 0;
+	}
+
+       //FIXME Remove this suboperation of X_WRITE. Support only X_FLUSH.
 	if (pr->req->op == X_WRITE && !pr->req->size &&
-			(pr->req->flags & (XF_FLUSH|XF_FUA))){
-		//hanlde flush requests here, so we don't mess with mapper
+			(pr->req->flags & (XF_FLUSH|XF_FUA))) {
+		//handle flush requests here, so we don't mess with mapper
 		//because of the -1 offset
-		vi->flags &= ~VF_VOLUME_FREEZED;
+		vi->flags &= ~VF_VOLUME_FROZEN;
 		XSEGLOG2(&lc, I, "Completing flush request");
 		pr->req->serviced = pr->req->size;
 		conclude_pr(peer, pr);
 		xqindex xqi;
-		while (vi->pending_reqs && !(vi->flags & VF_VOLUME_FREEZED) &&
+		while (vi->pending_reqs && !(vi->flags & VF_VOLUME_FROZEN) &&
 				(xqi = __xq_pop_head(vi->pending_reqs)) != Noneidx) {
 			struct peer_req *ppr = (struct peer_req *) xqi;
 			do_accepted_pr(peer, ppr);
@@ -351,12 +353,16 @@ static int do_accepted_pr(struct peerd *peer, struct peer_req *pr)
 	vio->mreq->size = pr->req->size;
 	vio->mreq->offset = pr->req->offset;
 	vio->mreq->flags = 0;
+	/* propagate v0 info */
+	vio->mreq->flags |= pr->req->flags & XF_ASSUMEV0;
+	vio->mreq->v0_size= pr->req->v0_size;
 	switch (pr->req->op) {
 		case X_READ: vio->mreq->op = X_MAPR; break;
 		case X_WRITE: vio->mreq->op = X_MAPW; break;
 		case X_INFO: vio->mreq->op = X_INFO; break;
 		case X_CLOSE: vio->mreq->op = X_CLOSE; break;
 		case X_OPEN: vio->mreq->op = X_OPEN; break;
+		case X_DELETE: vio->mreq->op = X_DELETE; break;
 		case X_SNAPSHOT:
 			     //FIXME hack
 			     vio->mreq->op = X_SNAPSHOT;
@@ -456,7 +462,7 @@ static int handle_accepted(struct peerd *peer, struct peer_req *pr,
 		}
 	}
 
-	if (vi->flags & VF_VOLUME_FREEZED){
+	if (vi->flags & VF_VOLUME_FROZEN){
 		XSEGLOG2(&lc, I, "Volume %s (vi %lx) frozen. Appending to pending_reqs",
 				vi->name, vi);
 		if (append_to_pending_reqs(vi, pr) < 0){
@@ -546,7 +552,7 @@ static int mapping_close(struct peerd *peer, struct peer_req *pr)
 		XSEGLOG2(&lc, E, "Volume has not volume info");
 		return 0;
 	}
-	vi->flags &= ~ VF_VOLUME_FREEZED;
+	vi->flags &= ~ VF_VOLUME_FROZEN;
 	if (!vi->pending_reqs || !xq_count(vi->pending_reqs)){
 		XSEGLOG2(&lc, I, "Volume %s (vi %lx) had no pending reqs. Removing",
 				vi->name, vi);
@@ -559,7 +565,7 @@ static int mapping_close(struct peerd *peer, struct peer_req *pr)
 		xqindex xqi;
 		XSEGLOG2(&lc, I, "Volume %s (vi %lx) had pending reqs. Handling",
 				vi->name, vi);
-		while (!(vi->flags & VF_VOLUME_FREEZED) &&
+		while (!(vi->flags & VF_VOLUME_FROZEN) &&
 				(xqi = __xq_pop_head(vi->pending_reqs)) != Noneidx) {
 			struct peer_req *ppr = (struct peer_req *) xqi;
 			do_accepted_pr(peer, ppr);
@@ -593,10 +599,44 @@ static int mapping_snapshot(struct peerd *peer, struct peer_req *pr)
 		return 0;
 	}
 	XSEGLOG2(&lc, D, "Unfreezing volume %s", vi->name);
-	vi->flags &= ~ VF_VOLUME_FREEZED;
+	vi->flags &= ~ VF_VOLUME_FROZEN;
 
 	xqindex xqi;
-	while (vi->pending_reqs && !(vi->flags & VF_VOLUME_FREEZED) &&
+	while (vi->pending_reqs && !(vi->flags & VF_VOLUME_FROZEN) &&
+			(xqi = __xq_pop_head(vi->pending_reqs)) != Noneidx) {
+		struct peer_req *ppr = (struct peer_req *) xqi;
+		do_accepted_pr(peer, ppr);
+	}
+	return 0;
+}
+
+static int mapping_delete(struct peerd *peer, struct peer_req *pr)
+{
+	struct vlmcd *vlmc = __get_vlmcd(peer);
+	struct vlmc_io *vio = __get_vlmcio(pr);
+	char *target = xseg_get_target(peer->xseg, pr->req);
+	struct volume_info *vi = find_volume_len(vlmc, target, pr->req->targetlen);
+	if (vio->mreq->state & XS_FAILED){
+		XSEGLOG2(&lc, E, "req %lx (op: %d) failed",
+				(unsigned long)vio->mreq, vio->mreq->op);
+		vio->err = 1;
+	}
+
+	xseg_put_request(peer->xseg, vio->mreq, pr->portno);
+	vio->mreq = NULL;
+	conclude_pr(peer, pr);
+
+	//assert volume freezed
+	//unfreeze
+	if (!vi){
+		XSEGLOG2(&lc, E, "Volume has no volume info");
+		return 0;
+	}
+	XSEGLOG2(&lc, D, "Unfreezing volume %s", vi->name);
+	vi->flags &= ~ VF_VOLUME_FROZEN;
+
+	xqindex xqi;
+	while (vi->pending_reqs && !(vi->flags & VF_VOLUME_FROZEN) &&
 			(xqi = __xq_pop_head(vi->pending_reqs)) != Noneidx) {
 		struct peer_req *ppr = (struct peer_req *) xqi;
 		do_accepted_pr(peer, ppr);
@@ -612,7 +652,7 @@ static int mapping_readwrite(struct peerd *peer, struct peer_req *pr)
 	uint64_t pos, datalen, offset;
 	uint32_t targetlen;
 	struct xseg_request *breq;
-	char *target;
+	char *target, *data;
 	int i,r;
 	xport p;
 	if (vio->mreq->state & XS_FAILED){
@@ -645,8 +685,24 @@ static int mapping_readwrite(struct peerd *peer, struct peer_req *pr)
 
 	pos = 0;
 	__set_vio_state(vio, SERVING);
+	vio->breq_cnt = 0;
 	for (i = 0; i < vio->breq_len; i++) {
 		datalen = mreply->segs[i].size;
+		if (mreply->segs[i].flags & XF_MAPFLAG_ZERO) {
+			vio->breqs[i] = NULL;
+			if (pr->req->op != X_READ) {
+				XSEGLOG2(&lc, E, "Mapper returned zero object "
+						"for a write I/O operation");
+				vio->err = 1;
+				break;
+			}
+			data = xseg_get_data(peer->xseg, pr->req);
+			data += pos;
+			memset(data, 0, datalen);
+			pos += datalen;
+			pr->req->serviced += datalen;
+			continue;
+		}
 		offset = mreply->segs[i].offset;
 		targetlen = mreply->segs[i].targetlen;
 		breq = xseg_get_request(peer->xseg, pr->portno, vlmc->bportno, X_ALLOC);
@@ -693,16 +749,17 @@ static int mapping_readwrite(struct peerd *peer, struct peer_req *pr)
 			XSEGLOG2(&lc, W, "Couldnt signal port %u", p);
 		}
 		vio->breqs[i] = breq;
+		vio->breq_cnt++;
 	}
-	vio->breq_cnt = i;
 	xseg_put_request(peer->xseg, vio->mreq, pr->portno);
 	vio->mreq = NULL;
-	if (i == 0) {
+	if (vio->breq_cnt == 0) {
 		free(vio->breqs);
 		vio->breqs = NULL;
-		vio->err = 1;
 		conclude_pr(peer, pr);
-		return -1;
+		if (vio->err) {
+			return -1;
+		}
 	}
 	return 0;
 }
@@ -729,6 +786,9 @@ static int handle_mapping(struct peerd *peer, struct peer_req *pr,
 			break;
 		case X_CLOSE:
 			mapping_close(peer, pr);
+			break;
+		case X_DELETE:
+			mapping_delete(peer, pr);
 			break;
 		case X_OPEN:
 			mapping_open(peer, pr);

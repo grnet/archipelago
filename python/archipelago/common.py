@@ -1,45 +1,41 @@
 #!/usr/bin/env python
 
-# Copyright 2012 GRNET S.A. All rights reserved.
+# Copyright (C) 2010-2014 GRNET S.A.
 #
-# Redistribution and use in source and binary forms, with or
-# without modification, are permitted provided that the following
-# conditions are met:
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
 #
-#   1. Redistributions of source code must retain the above
-#      copyright notice, this list of conditions and the following
-#      disclaimer.
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
 #
-#   2. Redistributions in binary form must reproduce the above
-#      copyright notice, this list of conditions and the following
-#      disclaimer in the documentation and/or other materials
-#      provided with the distribution.
-#
-# THIS SOFTWARE IS PROVIDED BY GRNET S.A. ``AS IS'' AND ANY EXPRESS
-# OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
-# WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-# PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL GRNET S.A OR
-# CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
-# SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
-# LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF
-# USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED
-# AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
-# LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
-# ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
-# POSSIBILITY OF SUCH DAMAGE.
-#
-# The views and conclusions contained in the software and
-# documentation are those of the authors and should not be
-# interpreted as representing official policies, either expressed
-# or implied, of GRNET S.A.
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
 
 
 from xseg.xseg_api import *
 from xseg.xprotocol import *
-from ctypes import CFUNCTYPE, cast, c_void_p, addressof, string_at, memmove, \
-    create_string_buffer, pointer, sizeof, POINTER, byref, c_int, c_char, Structure
-import ctypes
+from ctypes import (
+    CFUNCTYPE,
+    cast,
+    c_void_p,
+    addressof,
+    string_at,
+    memmove,
+    create_string_buffer,
+    pointer,
+    sizeof,
+    POINTER,
+    byref,
+    c_int,
+    c_char,
+    Structure,
+    CDLL
+)
 cb_null_ptrtype = CFUNCTYPE(None, uint32_t)
 
 import os
@@ -54,6 +50,15 @@ import socket
 import random
 from select import select
 import ConfigParser
+from grp import getgrnam
+from pwd import getpwnam
+import stat
+
+libc = CDLL("libc.so.6")
+
+get_errno_loc = libc.__errno_location
+get_errno_loc.restype = POINTER(c_int)
+
 
 random.seed()
 hostname = socket.gethostname()
@@ -62,7 +67,6 @@ valid_role_types = ['file_blocker', 'rados_blocker', 'mapperd', 'vlmcd']
 valid_segment_types = ['posix']
 
 peers = dict()
-xsegbd_args = []
 segment = None
 
 BIN_DIR = '/usr/bin/'
@@ -92,7 +96,7 @@ def is_power2(x):
 class posixfd_signal_desc(Structure):
     pass
 posixfd_signal_desc._fields_ = [
-    ('signal_file', c_char * sizeof(c_void_p)),
+    ('signal_file', 2 * c_char * sizeof(c_void_p)),
     ('fd', c_int),
     ('flag', c_int),
 ]
@@ -104,22 +108,54 @@ def xseg_wait_signal_green(ctx, sd, timeout):
     while True:
         try:
             os.read(fd, 512)
-        except OSError as (e,msg):
+        except OSError as (e, msg):
             if e == 11:
                 break
             else:
                 raise OSError(e, msg)
 
+def create_posixfd_dirs():
+    path = "/dev/shm/posixfd"
+    uid = getpwnam(config['USER']).pw_uid
+    gid = getgrnam(config['GROUP']).gr_gid
+
+    try:
+        os.mkdir(path, stat.S_IRWXU|stat.S_IRWXG)
+    except OSError as e:
+        if e.errno == errno.EEXIST:
+            if os.path.isdir(os.path.dirname(path)):
+                    pass
+            else:
+                raise Error("%s is not a directory" % path)
+        else:
+            raise Error("Cannot create directory %s" % path)
+
+    os.chown(path, uid, gid)
+    st = os.stat(path)
+    os.chmod(path, stat.S_IRWXU|stat.S_IRWXG|stat.S_ISGID)
 
 class Peer(object):
     cli_opts = None
 
     def __init__(self, role=None, daemon=True, nr_ops=16,
                  logfile=None, pidfile=None, portno_start=None,
-                 portno_end=None, log_level=0, spec=None, threshold=None):
+                 portno_end=None, log_level=0, spec=None, threshold=None,
+                 user=None, group=None, umask="0o007"):
         if not role:
             raise Error("Role was not provided")
         self.role = role
+
+        if not user:
+            raise Error("User was not provided")
+
+        self.user = user
+        if not group:
+            raise Error("Group was not provided")
+
+        self.group = group
+        self.user_uid = getpwnam(self.user).pw_uid
+        self.group_gid = getgrnam(self.group).gr_gid
+        self.umask = int(umask, 0)
 
         self.nr_ops = nr_ops
         if not self.nr_ops > 0:
@@ -161,6 +197,19 @@ class Peer(object):
             raise Error("Log path %s does not exist or is not a directory" %
                         self.logfile)
 
+        self.log_level = log_level
+        self.threshold = threshold
+
+        if self.log_level < 0 or self.log_level > 3:
+            raise Error("%s: Invalid log level %d" %
+                        (self.role, self.log_level))
+
+        if self.cli_opts is None:
+            self.cli_opts = []
+        self.set_cli_options()
+
+    def start(self):
+
         try:
             os.makedirs(os.path.dirname(self.pidfile))
         except OSError as e:
@@ -174,18 +223,11 @@ class Peer(object):
                 raise Error("Cannot create path %s" %
                             os.path.dirname(self.pidfile))
 
-        self.log_level = log_level
-        self.threshold = threshold
+        os.chmod(os.path.dirname(self.pidfile), stat.S_IRWXU|stat.S_IRWXG)
+        os.chown(os.path.dirname(self.pidfile), -1, self.group_gid)
+        os.chown(os.path.dirname(self.logfile), -1, self.group_gid)
 
-        if self.log_level < 0 or self.log_level > 3:
-            raise Error("%s: Invalid log level %d" %
-                        (self.role, self.log_level))
 
-        if self.cli_opts is None:
-            self.cli_opts = []
-        self.set_cli_options()
-
-    def start(self):
         if self.get_pid():
             raise Error("Peer has valid pidfile")
         cmd = [os.path.join(BIN_DIR, self.executable)] + self.cli_opts
@@ -264,6 +306,15 @@ class Peer(object):
         if self.threshold:
             self.cli_opts.append("--threshold")
             self.cli_opts.append(str(self.threshold))
+        if self.user:
+            self.cli_opts.append("-uid")
+            self.cli_opts.append(str(self.user_uid))
+        if self.group:
+            self.cli_opts.append("-gid")
+            self.cli_opts.append(str(self.group_gid))
+        if self.umask:
+            self.cli_opts.append("--umask")
+            self.cli_opts.append(str(self.umask))
 
 
 class MTpeer(Peer):
@@ -281,9 +332,10 @@ class MTpeer(Peer):
 
 
 class Radosd(MTpeer):
-    def __init__(self, pool=None, **kwargs):
+    def __init__(self, pool=None, cephx_id=None, **kwargs):
         self.executable = RADOS_BLOCKER
         self.pool = pool
+        self.cephx_id = cephx_id
         super(Radosd, self).__init__(**kwargs)
 
         if self.cli_opts is None:
@@ -294,17 +346,23 @@ class Radosd(MTpeer):
         if self.pool:
             self.cli_opts.append("--pool")
             self.cli_opts.append(self.pool)
+        if self.cephx_id:
+            self.cli_opts.append("--cephx-id")
+            self.cli_opts.append(self.cephx_id)
 
 
 class Filed(MTpeer):
     def __init__(self, archip_dir=None, prefix=None, fdcache=None,
-                 unique_str=None, nr_threads=1, nr_ops=16, direct=True, **kwargs):
+                 unique_str=None, nr_threads=1, nr_ops=16, direct=True,
+                 pithos_migrate=False, lock_dir=None, **kwargs):
         self.executable = FILE_BLOCKER
         self.archip_dir = archip_dir
         self.prefix = prefix
         self.fdcache = fdcache
         self.unique_str = unique_str
         self.direct = direct
+        self.pithos_migrate = pithos_migrate
+        self.lock_dir = lock_dir
         nr_threads = nr_ops
         if self.fdcache and fdcache < 2*nr_threads:
             raise Error("Fdcache should be greater than 2*nr_threads")
@@ -315,6 +373,8 @@ class Filed(MTpeer):
             raise Error("%s: Archip dir must be set" % self.role)
         if not os.path.isdir(self.archip_dir):
             raise Error("%s: Archip dir invalid" % self.role)
+        if self.lock_dir and not os.path.isdir(self.lock_dir):
+            raise Error("%s: Lock dir invalid" % self.role)
         if not self.fdcache:
             self.fdcache = 2*self.nr_ops
         if not self.unique_str:
@@ -339,6 +399,11 @@ class Filed(MTpeer):
             self.cli_opts.append(self.prefix)
         if self.direct:
             self.cli_opts.append("--directio")
+        if self.pithos_migrate:
+            self.cli_opts.append("--pithos-migrate")
+        if self.lock_dir:
+            self.cli_opts.append("--lockdir")
+            self.cli_opts.append(self.lock_dir)
 
 
 class Mapperd(Peer):
@@ -393,17 +458,16 @@ class Vlmcd(Peer):
 
 config = {
     'CEPH_CONF_FILE': '/etc/ceph/ceph.conf',
-#    'SPEC': "posix:archipelago:1024:5120:12",
+    # 'SPEC': "posix:archipelago:1024:5120:12",
     'SEGMENT_TYPE': 'posix',
     'SEGMENT_NAME': 'archipelago',
     'SEGMENT_DYNPORTS': 1024,
     'SEGMENT_PORTS': 2048,
     'SEGMENT_SIZE': 5120,
     'SEGMENT_ALIGNMENT': 12,
-    'XSEGBD_START': 0,
-    'XSEGBD_END': 499,
     'VTOOL_START': 1003,
     'VTOOL_END': 1003,
+    'UMASK': 0o007,
     #RESERVED 1023
 }
 
@@ -494,13 +558,20 @@ class Segment(object):
             raise Error("Cannot destroy segment")
 
     def join(self):
+
+        def errcheck(ret, func, args):
+            if not ret:
+                e = get_errno_loc()[0]
+                raise Error("Cannot join segment '%s': %s"
+                                % (config['SEGMENT_NAME'], os.strerror(e)))
+            return ret
+
         xconf = xseg_config()
         spec_buf = create_string_buffer(self.spec)
         xseg_parse_spec(spec_buf, xconf)
+        xseg_join.errcheck = errcheck
         ctx = xseg_join(xconf.type, xconf.name, "posixfd",
                         cast(0, cb_null_ptrtype))
-        if not ctx:
-            raise Error("Cannot join segment")
 
         return ctx
 
@@ -551,11 +622,23 @@ def check_conf():
     except KeyError:
         raise Error("Roles setup must be provided")
 
+    try:
+        getpwnam(config['USER'])
+    except KeyError:
+        raise Error("User '%s' does not exist" % config['USER'])
+
+    try:
+        getgrnam(config['GROUP'])
+    except KeyError:
+        raise Error("Group '%s' does not exist" % config['GROUP'])
+
     for role, role_type in config['roles']:
         if role_type not in valid_role_types:
             raise Error("%s is not a valid role" % role_type)
         try:
             role_config = config[role]
+            role_config['user'] = config['USER']
+            role_config['group'] = config['GROUP']
         except:
             raise Error("No config found for %s" % role)
 
@@ -563,8 +646,8 @@ def check_conf():
             peers[role] = Filed(role=role, spec=segment.get_spec(),
                                  prefix=ARCHIP_PREFIX, **role_config)
         elif role_type == 'rados_blocker':
-            peers[role] = Radosd(role=role, spec=segment.get_spec(),
-                               **role_config)
+            peers[role] = Radosd(role=role,
+                                 spec=segment.get_spec(), **role_config)
         elif role_type == 'mapperd':
             peers[role] = Mapperd(role=role, spec=segment.get_spec(),
                                   **role_config)
@@ -577,13 +660,6 @@ def check_conf():
                           xseg_ports)
 
     validatePortRange(config['VTOOL_START'], config['VTOOL_END'], xseg_ports)
-    validatePortRange(config['XSEGBD_START'], config['XSEGBD_END'],
-                      xseg_ports)
-
-    xsegbd_range = config['XSEGBD_END'] - config['XSEGBD_START']
-    vlmcd_range = peers['vlmcd'].portno_end - peers['vlmcd'].portno_start
-    if xsegbd_range > vlmcd_range:
-        raise Error("Xsegbd port range must be smaller that vlmcd port range")
     return True
 
 def get_segment():
@@ -601,7 +677,8 @@ def get_vtool_port():
 
 acquired_locks = {}
 
-def get_lock(lock_file):
+def get_lock(lock_file, max_time=15):
+    elapsed = 0
     while True:
         try:
             fd = os.open(lock_file, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
@@ -609,7 +686,13 @@ def get_lock(lock_file):
         except OSError, (err, reason):
             print >> sys.stderr, lock_file, reason
             if err == errno.EEXIST:
-                time.sleep(0.2)
+                if elapsed < max_time:
+                    print >> sys.stderr, "Retrying..."
+                    time.sleep(0.2)
+                    elapsed += 0.2
+                else:
+                    raise Error("Could not acquire %s. Tried %d seconds" %
+                            (lock_file, max_time))
             else:
                 raise OSError(err, lock_file + ' ' + reason)
     return fd
@@ -664,15 +747,21 @@ def createDict(cfg, section):
         sec_dic['threshold'] = cfg.getint(section, 'threshold')
     if cfg.has_option(section, 'log_level'):
         sec_dic['log_level'] = cfg.getint(section, 'log_level')
+    if cfg.has_option(section, 'umask'):
+        sec_dic['umask'] = cfg.get(section, 'umask')
 
     t = str(cfg.get(section, 'type'))
     if t == 'file_blocker':
         sec_dic['nr_threads'] = cfg.getint(section, 'nr_threads')
         sec_dic['archip_dir'] = cfg.get(section, 'archip_dir')
+        if cfg.has_option(section, 'lock_dir'):
+            sec_dic['lock_dir'] = cfg.get(section, 'lock_dir')
         if cfg.has_option(section, 'fdcache'):
             sec_dic['fdcache'] = cfg.getint(section, 'fdcache')
         if cfg.has_option(section, 'direct'):
             sec_dic['direct'] = cfg.getboolean(section, 'direct')
+        if cfg.has_option(section, 'pithos_migrate'):
+            sec_dic['pithos_migrate'] = cfg.getboolean(section, 'pithos_migrate')
         if cfg.has_option(section, 'unique_str'):
             sec_dic['unique_str'] = cfg.getint(section, 'unique_str')
         if cfg.has_option(section, 'prefix'):
@@ -680,6 +769,8 @@ def createDict(cfg, section):
     elif t == 'rados_blocker':
         if cfg.has_option(section, 'nr_threads'):
             sec_dic['nr_threads'] = cfg.getint(section, 'nr_threads')
+        if cfg.has_option(section, 'cephx_id'):
+            sec_dic['cephx_id'] = cfg.get(section, 'cephx_id')
         sec_dic['pool'] = cfg.get(section, 'pool')
     elif t == 'mapperd':
         sec_dic['blockerb_port'] = cfg.getint(section, 'blockerb_port')
@@ -706,10 +797,13 @@ def loadrc(rc):
     config['SEGMENT_PORTS'] = cfg.getint('XSEG','SEGMENT_PORTS')
     config['SEGMENT_DYNPORTS'] = cfg.getint('XSEG', 'SEGMENT_DYNPORTS')
     config['SEGMENT_SIZE'] = cfg.getint('XSEG','SEGMENT_SIZE')
-    config['XSEGBD_START'] = cfg.getint('XSEG','XSEGBD_START')
-    config['XSEGBD_END'] = cfg.getint('XSEG','XSEGBD_END')
     config['VTOOL_START'] = cfg.getint('XSEG','VTOOL_START')
     config['VTOOL_END'] = cfg.getint('XSEG','VTOOL_END')
+    config['USER'] = cfg.get('ARCHIPELAGO','USER')
+    config['GROUP'] = cfg.get('ARCHIPELAGO','GROUP')
+    config['BLKTAP_ENABLED'] = cfg.getboolean('ARCHIPELAGO','BLKTAP_ENABLED')
+    if cfg.has_option('ARCHIPELAGO', 'UMASK'):
+        config['UMASK'] = int(cfg.get('ARCHIPELAGO', 'UMASK'), 0)
     roles = cfg.get('PEERS', 'ROLES')
     roles = str(roles)
     roles = roles.split(' ')
@@ -855,7 +949,7 @@ class Xseg_ctx(object):
         if self.port is not None and self.dynalloc:
                 xseg_leave_dynport(self.ctx, self.port)
         if self.ctx:
-        #    xseg_quit_local_signal(self.ctx, self.portno)
+            xseg_quit_local_signal(self.ctx, self.portno)
             xseg_leave(self.ctx)
         self.ctx = None
 
@@ -889,7 +983,7 @@ class Request(object):
     req = None
 
     def __init__(self, xseg_ctx, dst_portno, target, datalen=0, size=0, op=None,
-                 data=None, flags=0, offset=0):
+                 data=None, flags=0, offset=0, v0_size=-1):
         if not target:
             raise Error("No target")
         targetlen = len(target)
@@ -925,6 +1019,7 @@ class Request(object):
         self.set_op(op)
         self.set_flags(flags)
         self.set_offset(offset)
+        self.set_v0_size(v0_size)
 
         return
 
@@ -940,7 +1035,7 @@ class Request(object):
 
     def put(self, force=False):
         if not self.req:
-            return False;
+            return False
         if not force:
             if xq_count(byref(self.req.contents.path)) > 0:
                 return False
@@ -968,6 +1063,12 @@ class Request(object):
 
     def set_size(self, size):
         self.req.contents.size = size
+
+    def get_v0_size(self):
+        return self.req.contents.v0_size
+
+    def set_v0_size(self, size):
+        self.req.contents.v0_size = size
 
     def get_serviced(self):
         return self.req.contents.serviced
@@ -1003,12 +1104,35 @@ class Request(object):
             if len(data) != self.req.contents.datalen:
                 return False
             p_data = create_string_buffer(data)
+            c_data = xseg_get_data_nonstatic(self.xseg_ctx.ctx, self.req)
+            memmove(c_data, p_data, self.req.contents.datalen)
+        elif isinstance(data, xseg_request_create):
+            import struct
+
+            size = sizeof(uint32_t) * 3 + data.cnt * sizeof(xseg_create_map_scatterlist)
+            if size != self.req.contents.datalen:
+                return False
+            p = struct.pack("=LLL", data.cnt, data.blocksize, data.create_flags)
+            p_data = create_string_buffer(p)
+            c_data = xseg_get_data_nonstatic(self.xseg_ctx.ctx, self.req)
+            memmove(c_data, p_data, sizeof(uint32_t)*3)
+            c_data = addressof(c_data.contents)
+            c_data += sizeof(uint32_t) * 3
+            c_data = cast(c_data, POINTER(c_char))
+            for i in range(0, data.cnt):
+                p = struct.pack("=256sLL", data.segs[i].target, data.segs[i].targetlen,
+                         data.segs[i].flags)
+                p_data = create_string_buffer(p)
+                memmove(c_data, p_data, sizeof(xseg_create_map_scatterlist))
+                c_data = addressof(c_data.contents)
+                c_data += sizeof(xseg_create_map_scatterlist)
+                c_data = cast(c_data, POINTER(c_char))
         else:
             if sizeof(data) != self.req.contents.datalen:
                 return False
             p_data = pointer(data)
-        c_data = xseg_get_data_nonstatic(self.xseg_ctx.ctx, self.req)
-        memmove(c_data, p_data, self.req.contents.datalen)
+            c_data = xseg_get_data_nonstatic(self.xseg_ctx.ctx, self.req)
+            memmove(c_data, p_data, self.req.contents.datalen)
 
         return True
 
@@ -1098,20 +1222,18 @@ class Request(object):
         return cls(xseg, dst, target, op=X_DELETE)
 
     @classmethod
-    def get_clone_request(cls, xseg, dst, target, clone=None, clone_size=0,
-            cont_addr=False):
+    def get_update_request(cls, xseg, dst, target):
+        return cls(xseg, dst, target, op=X_UPDATE)
+
+    @classmethod
+    def get_clone_request(cls, xseg, dst, target, clone=None, clone_size=0):
         datalen = sizeof(xseg_request_clone)
         xclone = xseg_request_clone()
         xclone.target = target
         xclone.targetlen= len(target)
         xclone.size = clone_size
 
-        flags = 0
-        if cont_addr:
-            flags = XF_CONTADDR
-
-        return cls(xseg, dst, clone, op=X_CLONE, data=xclone, datalen=datalen,
-                flags=flags)
+        return cls(xseg, dst, clone, op=X_CLONE, data=xclone, datalen=datalen)
 
     @classmethod
     def get_open_request(cls, xseg, dst, target):
@@ -1144,3 +1266,46 @@ class Request(object):
     @classmethod
     def get_hash_request(cls, xseg, dst, target, size=0, offset=0):
         return cls(xseg, dst, target, op=X_HASH, size=size, offset=offset)
+
+    @classmethod
+    def get_rename_request(cls, xseg, dst, target, newname=None):
+        """
+        Return a new request, formatted as a rename request with the given
+        arguments
+        """
+        datalen = sizeof(xseg_request_rename)
+        xrename = xseg_request_rename()
+        xrename.target = newname
+        xrename.targetlen= len(newname)
+
+        return cls(xseg, dst, target, op=X_RENAME, data=xrename, datalen=datalen)
+
+    @classmethod
+    def get_create_request(cls, xseg, dst, target, size=0, mapflags=None,
+            objects=None, blocksize=None):
+        """
+        Return a new request, formatted as a create request with the given
+        arguments
+        """
+        if blocksize is None:
+            raise Error("Blocksize not supplied")
+        if objects is None:
+            raise Error("Objects not supplied")
+        if mapflags is None:
+            mapflags = 0
+
+        xcreate = xseg_request_create()
+        xcreate.blocksize = blocksize
+        xcreate.create_flags = mapflags
+        xcreate.cnt = len(objects)
+        SegsArray = xseg_create_map_scatterlist * xcreate.cnt
+        xcreate.segs = SegsArray()
+        for i in range(0, xcreate.cnt):
+            xcreate.segs[i].target = objects[i]['name']
+            xcreate.segs[i].targetlen = len(xcreate.segs[i].target)
+            xcreate.segs[i].flags = objects[i]['flags']
+
+        datalen = sizeof(uint32_t) * 3 + sizeof(SegsArray)
+
+        return cls(xseg, dst, target, op=X_CREATE, size=size, data=xcreate,
+                datalen=datalen)

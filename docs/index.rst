@@ -1,7 +1,6 @@
 Archipelago
 ^^^^^^^^^^^
 
-
 Overview
 ========
 
@@ -32,8 +31,10 @@ install, configure and use Archipelago:
 
 .. toctree::
    :maxdepth: 2
-   :numbered:
    :glob:
 
    archipelago
-   archipelago_deploy
+   install-guide
+   admin-guide
+   upgrades/index
+   design/index

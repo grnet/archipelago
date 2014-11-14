@@ -39,7 +39,7 @@ Returns O after successfull completion, 1 on failure
 import os
 import sys
 
-from archipelago.common import Error, DEVICE_PREFIX, loadrc
+from archipelago.common import Error, DEVICE_PREFIX, loadrc, config
 from archipelago import vlmc as vlmc
 
 
@@ -53,6 +53,7 @@ def ReadEnv():
     return {"name": name,
             "size": os.getenv("VOL_SIZE"),
             "origin": os.getenv("EXTP_ORIGIN"),
+            "origin_size": os.getenv("EXTP_ORIGIN_SIZE", "-1"),
             "snapshot_name": os.getenv("VOL_SNAPSHOT_NAME"),
             }
 
@@ -62,14 +63,11 @@ def create(env):
     name = env.get("name")
     size = env.get("size")
     origin = env.get("origin")
-    cont_addr = False
-    if origin and origin.startswith('pithos:'):
-        cont_addr = True
-        origin = origin[7:]
-
+    origin_size = env.get("origin_size")
     sys.stderr.write("Creating volume '%s' of size '%s' from '%s'\n"
                      % (name, size, origin))
-    vlmc.create(name=name, size=int(size), snap=origin, cont_addr=cont_addr)
+    vlmc.create(name=name, size=int(size), snap=origin, assume_v0=True,
+                v0_size=int(origin_size))
     return 0
 
 
@@ -164,6 +162,8 @@ def main():
         return 1
 
     loadrc(None)
+
+    os.umask(config['UMASK'])
 
     actions = {
         'create': create,

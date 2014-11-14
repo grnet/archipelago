@@ -1,35 +1,18 @@
 /*
- * Copyright 2012 GRNET S.A. All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or
- * without modification, are permitted provided that the following
- * conditions are met:
- *
- *   1. Redistributions of source code must retain the above
- *      copyright notice, this list of conditions and the following
- *      disclaimer.
- *   2. Redistributions in binary form must reproduce the above
- *      copyright notice, this list of conditions and the following
- *      disclaimer in the documentation and/or other materials
- *      provided with the distribution.
- *
- * THIS SOFTWARE IS PROVIDED BY GRNET S.A. ``AS IS'' AND ANY EXPRESS
- * OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
- * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
- * PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL GRNET S.A OR
- * CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
- * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
- * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF
- * USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED
- * AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
- * ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGE.
- *
- * The views and conclusions contained in the software and
- * documentation are those of the authors and should not be
- * interpreted as representing official policies, either expressed
- * or implied, of GRNET S.A.
+Copyright (C) 2010-2014 GRNET S.A.
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
 #define _GNU_SOURCE
@@ -45,6 +28,8 @@
 #include <fcntl.h>
 #include <errno.h>
 #include <sched.h>
+#include <pwd.h>
+#include <grp.h>
 #ifdef MT
 #include <pthread.h>
 #endif
@@ -58,13 +43,7 @@
 #endif
 #endif
 
-#ifdef MT
-#define PEER_TYPE "pthread"
-#elif defined(FD)
 #define PEER_TYPE "posixfd"
-#else
-#define PEER_TYPE "posix"
-#endif
 
 //FIXME this should not be defined here probably
 #define MAX_SPEC_LEN 128
@@ -251,7 +230,7 @@ void log_pr(char *msg, struct peer_req *pr)
 inline struct peer_req *alloc_peer_req(struct peerd *peer, struct thread *t)
 {
 	struct peer_req *pr;
-	xqindex idx = xq_pop_head(&t->free_thread_reqs, t->thread_no);
+	xqindex idx = xq_pop_head(&t->free_thread_reqs);
 	if (idx != Noneidx)
 		goto out;
 
@@ -263,7 +242,7 @@ inline struct peer_req *alloc_peer_req(struct peerd *peer, struct thread *t)
 		nt = &peer->thread[(t->thread_no + i) % peer->nr_threads];
 		if (!xq_count(&nt->free_thread_reqs))
 				continue;
-		idx = xq_pop_head(&nt->free_thread_reqs, t->thread_no);
+		idx = xq_pop_head(&nt->free_thread_reqs);
 		if (idx != Noneidx)
 			goto out;
 	}
@@ -282,7 +261,7 @@ out:
  */
 inline struct peer_req *alloc_peer_req(struct peerd *peer)
 {
-	xqindex idx = xq_pop_head(&peer->free_reqs, 1);
+	xqindex idx = xq_pop_head(&peer->free_reqs);
 	if (idx == Noneidx)
 		return NULL;
 	return peer->peer_reqs + idx;
@@ -295,9 +274,9 @@ inline void free_peer_req(struct peerd *peer, struct peer_req *pr)
 	pr->req = NULL;
 #ifdef MT
 	struct thread *t = &peer->thread[pr->thread_no];
-	xq_append_head(&t->free_thread_reqs, idx, 1);
+	xq_append_head(&t->free_thread_reqs, idx);
 #else
-	xq_append_head(&peer->free_reqs, idx, 1);
+	xq_append_head(&peer->free_reqs, idx);
 #endif
 }
 
@@ -442,7 +421,7 @@ int check_ports(struct peerd *peer)
 		received = NULL;
 		if (!isTerminate()) {
 #ifdef MT
-			pr = alloc_peer_req(peer, t); 
+			pr = alloc_peer_req(peer, t);
 #else
 			pr = alloc_peer_req(peer);
 #endif
@@ -499,7 +478,6 @@ static void* thread_loop(void *arg)
 
 	XSEGLOG2(&lc, D, "thread %u\n",  (unsigned int) (t- peer->thread));
 	XSEGLOG2(&lc, I, "Thread %u has tid %u.\n", (unsigned int) (t- peer->thread), pid);
-	xseg_init_local_signal(xseg, peer->portno_start);
 	for (;!(isTerminate() && xq_count(&peer->free_reqs) == peer->nr_ops);) {
 		for(loops =  threshold; loops > 0; loops--) {
 			if (loops == 1)
@@ -584,6 +562,7 @@ int peerd_start_threads(struct peerd *peer)
 	for (i = 0; i < nr_threads; i++) {
 		pthread_join(peer->thread[i].tid, NULL);
 	}
+	xseg_quit_local_signal(peer->xseg, peer->portno_start);
 
 	return 0;
 }
@@ -635,7 +614,6 @@ static int generic_peerd_loop(void *arg)
 	uint64_t loops;
 
 	XSEGLOG2(&lc, I, "%s has tid %u.\n", id, pid);
-	xseg_init_local_signal(xseg, peer->portno_start);
 	//for (;!(isTerminate() && xq_count(&peer->free_reqs) == peer->nr_ops);) {
 	for (;!(isTerminate() && all_peer_reqs_free(peer));) {
 		//Heart of peerd_loop. This loop is common for everyone.
@@ -714,7 +692,7 @@ static struct peerd* peerd_init(uint32_t nr_ops, char* spec, long portno_start,
 			long portno_end, uint32_t nr_threads, xport defer_portno,
 			uint64_t threshold)
 {
-	int i;
+	int i, r;
 	struct peerd *peer;
 	struct xseg_port *port;
 	void *sd = NULL;
@@ -788,6 +766,12 @@ malloc_fail:
 
 	printf("Peer on ports  %u-%u\n", peer->portno_start, peer->portno_end);
 
+	r = xseg_init_local_signal(peer->xseg, peer->portno_start);
+	if (r < 0) {
+		XSEGLOG2(&lc, E, "Could not initialize local signals");
+		return NULL;
+	}
+
 	for (i = 0; i < nr_ops; i++) {
 		peer->peer_reqs[i].peer = peer;
 		peer->peer_reqs[i].req = NULL;
@@ -851,7 +835,8 @@ int pidfile_read(char *path, pid_t *pid)
 int pidfile_open(char *path, pid_t *old_pid)
 {
 	//nfs version > 3
-	int fd = open(path, O_CREAT|O_EXCL|O_WRONLY, S_IRUSR|S_IWUSR);
+	int fd = open(path, O_CREAT|O_EXCL|O_WRONLY,
+			S_IRUSR|S_IWUSR|S_IRGRP|S_IWGRP);
 	if (fd < 0){
 		if (errno == EEXIST)
 			pidfile_read(path, old_pid);
@@ -891,6 +876,8 @@ void usage(char *argv0)
 		"    -l        | None    | Logfile \n"
 		"    -d        | No      | Daemonize \n"
 		"    --pidfile | None    | Pidfile \n"
+		"    -uid      | None    | Set real EUID \n"
+		"    -gid      | None    | Set real EGID \n"
 #ifdef MT
 		"    -t        | No      | Number of threads \n"
 #endif
@@ -915,13 +902,18 @@ int main(int argc, char *argv[])
 	uint64_t threshold = 1000;
 	unsigned int debug_level = 0;
 	xport defer_portno = NoPort;
-	pid_t old_pid;
+	pid_t old_pid = 0;
 	int pid_fd = -1;
+	uid_t cur_uid, uid = -1;
+	gid_t cur_gid, gid = -1;
+	mode_t peer_umask = PEER_DEFAULT_UMASK;
 
 	char spec[MAX_SPEC_LEN + 1];
 	char logfile[MAX_LOGFILE_LEN + 1];
 	char pidfile[MAX_PIDFILE_LEN + 1];
 	char cpus[MAX_CPUS_LEN + 1];
+
+	char *username = NULL;
 
 	logfile[0] = 0;
 	pidfile[0] = 0;
@@ -939,6 +931,8 @@ int main(int argc, char *argv[])
 	READ_ARG_ULONG("-p", portno);
 	READ_ARG_ULONG("-n", nr_ops);
 	READ_ARG_ULONG("-v", debug_level);
+	READ_ARG_ULONG("-uid", uid);
+	READ_ARG_ULONG("-gid", gid);
 #ifdef MT
 	READ_ARG_ULONG("-t", nr_threads);
 #endif
@@ -950,12 +944,60 @@ int main(int argc, char *argv[])
 	READ_ARG_ULONG("--threshold", threshold);
 	READ_ARG_STRING("--cpus", cpus, MAX_CPUS_LEN);
 	READ_ARG_STRING("--pidfile", pidfile, MAX_PIDFILE_LEN);
+	READ_ARG_ULONG("--umask", peer_umask);
 	END_READ_ARGS();
 
 	if (help){
 		usage(argv[0]);
 		return 0;
 	}
+
+	if (gid != -1) {
+		struct group *gr;
+		gr = getgrgid(gid);
+		if (!gr) {
+			XSEGLOG2(&lc, E, "Group %d not found", gid);
+			return -1;
+		}
+	}
+
+	if (uid != -1) {
+		struct passwd *pw;
+		pw = getpwuid(uid);
+		if (!pw) {
+			XSEGLOG2(&lc, E, "User %d not found", uid);
+			return -1;
+		}
+		username = pw->pw_name;
+		if (gid == -1) {
+			gid = pw->pw_gid;
+		}
+	}
+
+	cur_uid = geteuid();
+	cur_gid = getegid();
+
+	if (gid != -1 && cur_gid != gid && setregid(gid, gid)) {
+		XSEGLOG2(&lc, E, "Could not set gid to %d", gid);
+		return -1;
+	}
+
+	if (uid != -1) {
+		if ((cur_gid != gid || cur_uid != uid)
+				&& initgroups(username, gid)) {
+			XSEGLOG2(&lc, E, "Could not initgroups for user %s, "
+					"gid %d", username, gid);
+			return -1;
+		}
+
+		if (cur_uid != uid && setreuid(uid, uid)) {
+			XSEGLOG2(&lc, E, "Failed to set uid %d", uid);
+		}
+	}
+
+	/* set umask of the process. Only keep permission bits */
+	peer_umask &= 0777;
+	umask(peer_umask);
 
 	r = init_logctx(&lc, argv[0], debug_level, logfile,
 			REDIRECT_STDOUT|REDIRECT_STDERR);
@@ -986,6 +1028,8 @@ int main(int argc, char *argv[])
 			r = -1;
 			goto out;
 		}
+		/* Break away from process group */
+		(void) setpgrp();
 	}
 
 	pidfile_write(pid_fd);

@@ -1,37 +1,19 @@
 #!/usr/bin/env python
 
-# Copyright 2012 GRNET S.A. All rights reserved.
+# Copyright (C) 2010-2014 GRNET S.A.
 #
-# Redistribution and use in source and binary forms, with or
-# without modification, are permitted provided that the following
-# conditions are met:
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
 #
-#   1. Redistributions of source code must retain the above
-#      copyright notice, this list of conditions and the following
-#      disclaimer.
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
 #
-#   2. Redistributions in binary form must reproduce the above
-#      copyright notice, this list of conditions and the following
-#      disclaimer in the documentation and/or other materials
-#      provided with the distribution.
-#
-# THIS SOFTWARE IS PROVIDED BY GRNET S.A. ``AS IS'' AND ANY EXPRESS
-# OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
-# WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-# PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL GRNET S.A OR
-# CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
-# SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
-# LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF
-# USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED
-# AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
-# LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
-# ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
-# POSSIBILITY OF SUCH DAMAGE.
-#
-# The views and conclusions contained in the software and
-# documentation are those of the authors and should not be
-# interpreted as representing official policies, either expressed
-# or implied, of GRNET S.A.
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
 
 
@@ -44,7 +26,7 @@ from subprocess import check_call
 from .common import *
 from .vlmc import showmapped as vlmc_showmapped
 from .vlmc import get_mapped as vlmc_get_mapped
-from blktap import VlmcTapdisk
+from blktap import VlmcTapdisk, VlmcTapdiskException
 
 def start_peer(peer, cli=False):
     if peer.is_running():
@@ -136,23 +118,13 @@ def stop_peers(peers, cli=False):
         stop_peer(p, cli)
 
 
-def start(user=False, role=None, cli=False, **kwargs):
+def start(role=None, cli=False, **kwargs):
     if role:
         try:
             p = peers[role]
         except KeyError:
             raise Error("Invalid peer %s" % role)
         return start_peer(p, cli)
-
-    if user:
-        get_segment().create()
-        start_peers(peers, cli)
-        mapped = vlmc_get_mapped()
-        if mapped:
-            for m in mapped:
-                if VlmcTapdisk.is_paused(m.device):
-                    VlmcTapdisk.unpause(m.device)
-        return
 
     if status() > 0:
         raise Error("Cannot start. Try stopping first")
@@ -162,51 +134,56 @@ def start(user=False, role=None, cli=False, **kwargs):
         print "Starting archipelago"
         print "===================="
         print ""
+
     try:
-        get_segment().create()
-        time.sleep(0.5)
+        #get_segment().create()
+        #time.sleep(0.5)
+        create_posixfd_dirs()
         start_peers(peers, cli)
-        load_module("blktap", None)
+        if config["BLKTAP_ENABLED"]:
+            load_module("blktap", None)
+            mapped = vlmc_get_mapped()
+            if mapped and len(mapped) > 0:
+                for m in mapped:
+                    if VlmcTapdisk.is_paused(m.device):
+                        VlmcTapdisk.unpause(m.device)
     except Exception as e:
         if cli:
             print red(e)
-        stop(user, role, cli)
+        stop(role, cli, force=True)
 
+def stop(role=None, cli=False, force=False, **kwargs):
+    try:
+        if config['BLKTAP_ENABLED'] is False and vlmc_get_mapped():
+            vlmc_showmapped()
+            raise Error("Cannot stop archipelago. Mapped volumes exist")
+    except VlmcTapdiskException:
+        pass
 
-def stop(user=False, role=None, cli=False, **kwargs):
     if role:
         try:
             p = peers[role]
         except KeyError:
             raise Error("Invalid peer %s" % role)
         return stop_peer(p, cli)
-    if user:
-        mapped = vlmc_get_mapped()
-        if mapped:
-            for m in mapped:
-                if not VlmcTapdisk.is_paused(m.device):
-                    VlmcTapdisk.pause(m.device)
-        stop_peers(peers, cli)
-        return get_segment().destroy()
+
     #check devices
     if cli:
         print "===================="
         print "Stoping archipelago"
         print "===================="
         print ""
-    if not loaded_module("blktap"):
-        stop_peers(peers, cli)
-        time.sleep(0.5)
-        get_segment().destroy()
-        return
 
-    if cli:
-        if vlmc_showmapped() > 0:
-            raise Error("Cannot stop archipelago. Mapped volumes exist")
-    else:
+    if config["BLKTAP_ENABLED"] and loaded_module('blktap'):
         mapped = vlmc_get_mapped()
         if mapped and len(mapped) > 0:
-            raise Error("Cannot stop archipelago. Mapped volumes exist")
+            if not force:
+                vlmc_showmapped()
+                raise Error("Cannot stop archipelago. Mapped volumes exist")
+            for m in mapped:
+                if not VlmcTapdisk.is_paused(m.device):
+                    VlmcTapdisk.pause(m.device)
+
     stop_peers(peers, cli)
     time.sleep(0.5)
     get_segment().destroy()
@@ -214,36 +191,47 @@ def stop(user=False, role=None, cli=False, **kwargs):
 
 def status(cli=False, **kwargs):
     r = 0
-    if not loaded_module("blktap"):
-        for role, _ in reversed(config['roles']):
-            p = peers[role]
-            if peer_running(p, cli):
-                r += 1
-        if cli:
-            pretty_print("blktap", red('Not loaded'))
-        return r
+    if config["BLKTAP_ENABLED"]:
+        if not loaded_module("blktap"):
+            for role, _ in reversed(config['roles']):
+                p = peers[role]
+                if peer_running(p, cli):
+                    r += 1
+            if cli:
+                pretty_print("blktap", red('Not loaded'))
+            return r
 
-    if cli:
-        if vlmc_showmapped() > 0:
-            r += 1
-    else:
-        mapped = vlmc_get_mapped()
-        if mapped and len(mapped) > 0:
-            r += 1
-    if loaded_module("blktap"):
         if cli:
-            pretty_print("blktap", green('Loaded'))
-        #r += 1
-    else:
-        if cli:
-            pretty_print("blktap", red('Not loaded'))
+            if vlmc_showmapped() > 0:
+                r += 1
+        else:
+            mapped = vlmc_get_mapped()
+            if mapped and len(mapped) > 0:
+                for m in mapped:
+                    if not VlmcTapdisk.is_paused(m.device):
+                        r += 1
+        if loaded_module("blktap"):
+            if cli:
+                pretty_print("blktap", green('Loaded'))
+            #r += 1
+        else:
+            if cli:
+                pretty_print("blktap", red('Not loaded'))
+
     for role, _ in reversed(config['roles']):
         p = peers[role]
         if peer_running(p, cli):
             r += 1
+    try:
+        if config['BLKTAP_ENABLED'] is False and vlmc_get_mapped():
+            print red("Mapped volumes exist while blktap module is disabled.")
+            vlmc_showmapped()
+            r += 1
+    except VlmcTapdiskException:
+        pass
     return r
 
 
 def restart(**kwargs):
-    stop(**kwargs)
+    stop(force=True, **kwargs)
     start(**kwargs)

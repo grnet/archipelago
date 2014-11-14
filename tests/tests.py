@@ -1,35 +1,17 @@
-# Copyright 2013 GRNET S.A. All rights reserved.
+# Copyright (C) 2010-2014 GRNET S.A.
 #
-# Redistribution and use in source and binary forms, with or
-# without modification, are permitted provided that the following
-# conditions are met:
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
 #
-#   1. Redistributions of source code must retain the above
-#      copyright notice, this list of conditions and the following
-#      disclaimer.
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
 #
-#   2. Redistributions in binary form must reproduce the above
-#      copyright notice, this list of conditions and the following
-#      disclaimer in the documentation and/or other materials
-#      provided with the distribution.
-#
-# THIS SOFTWARE IS PROVIDED BY GRNET S.A. ``AS IS'' AND ANY EXPRESS
-# OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
-# WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-# PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL GRNET S.A OR
-# CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
-# SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
-# LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF
-# USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED
-# AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
-# LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
-# ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
-# POSSIBILITY OF SUCH DAMAGE.
-#
-# The views and conclusions contained in the software and
-# documentation are those of the authors and should not be
-# interpreted as representing official policies, either expressed
-# or implied, of GRNET S.A.
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 import archipelago
 from archipelago.common import Xseg_ctx, Request, Filed, Mapperd, Vlmcd, Radosd, \
@@ -45,6 +27,9 @@ from copy import copy
 from sets import Set
 from binascii import hexlify, unhexlify
 from hashlib import sha256
+from struct import pack
+import pwd
+import grp
 
 def get_random_string(length=64, repeat=16):
     nr_repeats = length//repeat
@@ -82,11 +67,11 @@ def merkle_hash(hashes):
     while len(hashes) > 1 :
         hashes = [sha256(hashes[i] + hashes[i + 1]).digest() for i in range (0, len(hashes), 2)]
     return hashes[0]
-    
+
 
 def init():
     rnd.seed()
-#    archipelago.common.BIN_DIR=os.path.join(os.getcwd(), '../../peers/user/')
+    archipelago.common.BIN_DIR=os.path.join(os.getcwd(), '/tmp/build/src')
     archipelago.common.LOGS_PATH=os.path.join(os.getcwd(), 'logs')
     archipelago.common.PIDFILE_PATH=os.path.join(os.getcwd(), 'pids')
     if not os.path.isdir(archipelago.common.LOGS_PATH):
@@ -109,6 +94,8 @@ class XsegTest(unittest.TestCase):
             self.segment.destroy()
             self.segment.create()
         self.xseg = Xseg_ctx(self.segment)
+        self.user = pwd.getpwuid(os.geteuid()).pw_name
+        self.group = grp.getgrgid(os.getegid()).gr_name
 
     def tearDown(self):
         if self.xseg:
@@ -131,15 +118,11 @@ class XsegTest(unittest.TestCase):
 
     @staticmethod
     def get_object_name(volume, epoch, index):
-        epoch_64 = ctypes.c_uint64(epoch)
-        index_64 = ctypes.c_uint64(index)
-        epoch_64_char = ctypes.cast(ctypes.addressof(epoch_64), ctypes.c_char_p)
-        index_64_char = ctypes.cast(ctypes.addressof(index_64), ctypes.c_char_p)
-        epoch_64_str = ctypes.string_at(epoch_64_char, ctypes.sizeof(ctypes.c_uint64))
-        index_64_str = ctypes.string_at(index_64_char, ctypes.sizeof(ctypes.c_uint64))
+        epoch_64_str = pack(">Q", epoch)
+        index_64_str = pack(">Q", index)
         epoch_hex = hexlify(epoch_64_str)
         index_hex = hexlify(index_64_str)
-        return "archip_" + volume + "_" + epoch_hex + "_" + index_hex
+        return volume + "_" + epoch_hex + "_" + index_hex
 
     @staticmethod
     def get_map_reply(offset, size):
@@ -339,8 +322,7 @@ class XsegTest(unittest.TestCase):
 
     send_and_evaluate_delete = evaluate(send_delete)
 
-    def send_clone(self, dst, src_target, clone=None, clone_size=0,
-            cont_addr=False):
+    def send_clone(self, dst, src_target, clone=None, clone_size=0):
         #xclone = xseg_request_clone()
         #xclone.target = src_target
         #xclone.targetlen = len(src_target)
@@ -349,7 +331,7 @@ class XsegTest(unittest.TestCase):
         #req = self.get_req(X_CLONE, dst, clone, data=xclone,
                 #datalen=ctypes.sizeof(xclone))
         req = Request.get_clone_request(self.xseg, dst, src_target,
-                clone=clone, clone_size=clone_size, cont_addr=cont_addr)
+                clone=clone, clone_size=clone_size)
         req.submit()
         return req
 
@@ -412,6 +394,23 @@ class XsegTest(unittest.TestCase):
 
     send_and_evaluate_hash = evaluate(send_hash)
 
+    def send_create(self, dst, target, mapflags=0, size=0, objects=None,
+            blocksize=None):
+        req = Request.get_create_request(self.xseg, dst, target, size=size,
+                mapflags=mapflags, blocksize=blocksize, objects=objects)
+        req.submit()
+        return req
+
+    send_and_evaluate_create = evaluate(send_create)
+
+    def send_rename(self, dst, target, newname=None):
+        req = Request.get_rename_request(self.xseg, dst, target,
+                newname=newname)
+        req.submit()
+        return req
+
+    send_and_evaluate_rename = evaluate(send_rename)
+
     def get_filed(self, args, clean=False):
         path = args['archip_dir']
         if not os.path.exists(path):
@@ -420,7 +419,7 @@ class XsegTest(unittest.TestCase):
         if clean:
             recursive_remove(path)
 
-        return Filed(**args)
+        return Filed(user=self.user, group=self.group, **args)
 
     def get_radosd(self, args, clean=False):
         pool = args['pool']
@@ -432,13 +431,13 @@ class XsegTest(unittest.TestCase):
         cluster.create_pool(pool)
 
         cluster.shutdown()
-        return Radosd(**args)
+        return Radosd(user=self.user, group=self.group, **args)
 
     def get_mapperd(self, args):
-        return Mapperd(**args)
+        return Mapperd(user=self.user, group=self.group, **args)
 
     def get_vlmcd(self, args):
-        return Vlmcd(**args)
+        return Vlmcd(user=self.user, group=self.group, **args)
 
 class VlmcdTest(XsegTest):
     bfiled_args = {
@@ -451,6 +450,7 @@ class VlmcdTest(XsegTest):
             'portno_end': 0,
             'daemon': True,
             'log_level': 3,
+            'direct': False,
             }
     mfiled_args = {
             'role': 'vlmctest-blockerm',
@@ -462,6 +462,7 @@ class VlmcdTest(XsegTest):
             'portno_end': 1,
             'daemon': True,
             'log_level': 3,
+            'direct': False,
             }
     mapperd_args = {
             'role': 'vlmctest-mapper',
@@ -735,10 +736,10 @@ class VlmcdTest(XsegTest):
         mh = hexlify(merkle_hash(h))
         self.assertEqual(hash_map, mh)
 
+#        self.send_and_evaluate_clone(self.mapperdport, hash_map, clone=volume2,
+#                clone_size=volsize * 2, expected=False)
         self.send_and_evaluate_clone(self.mapperdport, hash_map, clone=volume2,
-                clone_size=volsize * 2, expected=False)
-        self.send_and_evaluate_clone(self.mapperdport, hash_map, clone=volume2,
-                clone_size=volsize * 2, cont_addr=True)
+                clone_size=volsize * 2)
         self.send_and_evaluate_read(self.vlmcdport, volume2, size=size,
                 offset=offset, expected_data=data)
         self.send_and_evaluate_read(self.vlmcdport, volume2, size=volsize - size,
@@ -756,6 +757,7 @@ class MapperdTest(XsegTest):
             'portno_end': 0,
             'daemon': True,
             'log_level': 3,
+            'direct': False,
             }
     mfiled_args = {
             'role': 'mappertest-blockerm',
@@ -767,6 +769,7 @@ class MapperdTest(XsegTest):
             'portno_end': 1,
             'daemon': True,
             'log_level': 3,
+            'direct': False,
             }
     mapperd_args = {
             'role': 'mappertest-mapper',
@@ -983,6 +986,38 @@ class MapperdTest(XsegTest):
             reqs.remove(req)
             self.assertTrue(req.put())
 
+    def test_mapr3(self):
+        volume = "myvolume"
+        volsize = 10*1024*1024
+        offset = 0
+        size = volsize
+
+
+        self.send_and_evaluate_clone(self.mapperdport, "", clone=volume,
+                clone_size=volsize)
+        stop_peer(self.mapperd)
+        start_peer(self.mapperd)
+
+        self.send_and_evaluate_acquire(self.blockerm.portno_start, volume, expected=True)
+        stop_peer(self.blockerm)
+        new_filed_args = copy(self.mfiled_args)
+        new_filed_args['unique_str'] = 'ThisisSparta'
+        self.blockerm = Filed(user=self.user, group=self.group,
+                              **new_filed_args)
+        start_peer(self.blockerm)
+
+        reqs = Set([])
+        reqs.add(self.send_map_read(self.mapperdport, volume, offset=offset,
+            size=size))
+        reqs.add(self.send_map_read(self.mapperdport, volume, offset=offset,
+            size=size))
+        ret = MapperdTest.get_zero_map_reply(offset, size)
+        while len(reqs) > 0:
+            req = self.xseg.wait_requests(reqs)
+            self.evaluate_req(req, data=ret)
+            reqs.remove(req)
+            self.assertTrue(req.put())
+
     def test_mapw(self):
         blocksize = self.blocksize
         volume = "myvolume"
@@ -1012,6 +1047,57 @@ class MapperdTest(XsegTest):
         offset = 100*1024*1024*1024 - 1
         self.send_and_evaluate_map_write(self.mapperdport, volume,
                 offset=offset, size=size, expected=False)
+
+    def test_rename(self):
+        blocksize = self.blocksize
+        volume = "myvolume"
+        newvolume = "newvolume"
+        volsize = 100*1024*1024*1024
+        offset = 90*1024*1024*1024 - 2
+        size = 512*1024
+        epoch = 1
+        snap = "snapshot"
+
+        ret = self.get_copy_map_reply(volume, offset, size, epoch)
+        self.send_and_evaluate_rename(self.mapperdport, volume,
+                newname=newvolume, expected=False)
+        self.send_and_evaluate_clone(self.mapperdport, "", clone=volume,
+                clone_size=volsize)
+        self.send_and_evaluate_map_write(self.mapperdport, volume,
+                expected_data=ret, offset=offset, size=size)
+        self.send_and_evaluate_map_read(self.mapperdport, volume,
+                expected_data = ret, offset=offset, size=size)
+        self.send_and_evaluate_rename(self.mapperdport, volume,
+                newname=newvolume)
+
+        self.send_and_evaluate_map_write(self.mapperdport, volume,
+                offset=offset, size=size, expected=False)
+        self.send_and_evaluate_map_read(self.mapperdport, volume,
+                offset=offset, size=size, expected=False)
+
+        self.send_and_evaluate_map_read(self.mapperdport, newvolume,
+                expected_data = ret, offset=offset, size=size)
+        self.send_and_evaluate_map_write(self.mapperdport, newvolume,
+                expected_data=ret, offset=offset, size=size)
+
+        self.send_and_evaluate_clone(self.mapperdport, "", clone=newvolume,
+                clone_size=volsize, expected=False)
+
+        self.send_and_evaluate_snapshot(self.mapperdport, newvolume, snap=snap)
+
+        stop_peer(self.mapperd)
+        start_peer(self.mapperd)
+
+        self.send_and_evaluate_map_read(self.mapperdport, newvolume,
+                expected_data = ret, offset=offset, size=size)
+        self.send_and_evaluate_map_read(self.mapperdport, snap,
+                expected_data = ret, offset=offset, size=size)
+
+        ret = self.get_copy_map_reply(newvolume, offset, size, epoch+1)
+        self.send_and_evaluate_map_write(self.mapperdport, newvolume,
+                expected_data=ret, offset=offset, size=size)
+
+
 
     def test_mapw2(self):
         blocksize = self.blocksize
@@ -1046,6 +1132,69 @@ class MapperdTest(XsegTest):
             self.evaluate_req(req, data=ret)
             reqs.remove(req)
             self.assertTrue(req.put())
+
+    def test_create(self):
+        blocksize = self.blocksize
+        volume = "myvolume"
+        volume2 = "myvolume2"
+        volume3 = "myvolume3"
+        volume4 = "myvolume4"
+        volsize = 100*1024*1024
+        offset = 0
+        epoch = 1
+
+        ret = self.get_copy_map_reply(volume, offset, volsize, epoch)
+
+        #create a new volume
+        self.send_and_evaluate_clone(self.mapperdport, "", clone=volume,
+                clone_size=volsize)
+        #write it and get objects
+        self.send_and_evaluate_map_write(self.mapperdport, volume,
+                expected_data=ret, offset=offset, size=volsize)
+
+
+        object_flags = XF_MAPFLAG_READONLY
+        objects = []
+        for i in range(0, ret.cnt):
+            objects.append({'name': ret.segs[i].target, 'flags': object_flags})
+
+        #try to create a new volume with the same name from these objects
+        self.send_and_evaluate_create(self.mapperdport, volume, size=volsize,
+                objects=objects, mapflags=0, blocksize=blocksize, expected=False)
+        #try to create a volume with less objects
+        self.send_and_evaluate_create(self.mapperdport, volume, size=2*volsize,
+                objects=objects, mapflags=0, blocksize=blocksize, expected=False)
+
+        #try to create a new volume with another name from these objects
+        self.send_and_evaluate_create(self.mapperdport, volume2, size=volsize,
+                objects=objects, mapflags=0, blocksize=blocksize)
+        #read it. Assert same objects.
+        self.send_and_evaluate_map_read(self.mapperdport, volume,
+                expected_data=ret, offset=offset, size=volsize)
+
+        ret2 = self.get_copy_map_reply(volume2, offset, volsize, epoch)
+        #write it and assert new objects.
+        self.send_and_evaluate_map_write(self.mapperdport, volume2,
+                expected_data=ret2, offset=offset, size=volsize)
+
+        #create a new map from the same objects but without the readonly flag
+        #on the objects
+        for i in range(0, len(objects)):
+            objects[i]['flags'] = 0
+        self.send_and_evaluate_create(self.mapperdport, volume3, size=volsize,
+                objects=objects, mapflags=0, blocksize=blocksize)
+        #write it and assert same objects.
+        self.send_and_evaluate_map_write(self.mapperdport, volume3,
+                expected_data=ret, offset=offset, size=volsize)
+
+        for i in range(0, len(objects)):
+            objects[i]['flags'] = XF_MAPFLAG_READONLY
+        #create a new volume with read only flag
+        self.send_and_evaluate_create(self.mapperdport, volume4, size=volsize,
+                objects=objects, mapflags=XF_MAPFLAG_READONLY, blocksize=blocksize)
+        #write it. Assert failed
+        self.send_and_evaluate_map_write(self.mapperdport, volume4,
+                offset=offset, size=volsize, expected=False)
 
 class BlockerTest(object):
     def test_write_read(self):
@@ -1102,7 +1251,8 @@ class BlockerTest(object):
                 expected_data=data)
         self.send_and_evaluate_delete(self.blockerport, target, True)
         data = '\x00' * datalen
-        self.send_and_evaluate_read(self.blockerport, target, size=datalen, expected_data=data)
+        self.send_and_evaluate_read(self.blockerport, target, size=datalen,
+                expected=False)
 
     def test_hash(self):
         datalen = 1024
@@ -1154,6 +1304,7 @@ class FiledTest(BlockerTest, XsegTest):
             'portno_end': 0,
             'daemon': True,
             'log_level': 3,
+            'direct': False,
             }
 
     def setUp(self):
@@ -1180,7 +1331,8 @@ class FiledTest(BlockerTest, XsegTest):
         stop_peer(self.blocker)
         new_filed_args = copy(self.filed_args)
         new_filed_args['unique_str'] = 'ThisisSparta'
-        self.blocker = Filed(**new_filed_args)
+        self.blocker = Filed(user=self.user, group=self.group,
+                             **new_filed_args)
         start_peer(self.blocker)
         self.send_and_evaluate_acquire(self.blockerport, target, expected=False)
         self.send_and_evaluate_release(self.blockerport, target, expected=False)

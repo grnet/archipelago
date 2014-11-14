@@ -6,6 +6,8 @@ usr/bin/archip-filed
 usr/bin/archip-mapperd
 usr/bin/archip-vlmcd
 
+contrib/finalize_upgrade_0.4 usr/share/archipelago/tools
+
 etc/archipelago/archipelago.conf
 bash_completion/vlmc etc/bash_completion.d/
 bash_completion/archipelago etc/bash_completion.d/
