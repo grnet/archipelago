@@ -12,7 +12,7 @@ Package: python-archipelago
 Section: python
 Architecture: any
 Depends: ${misc:Depends}, ${python:Depends}, python-xseg(>=0.4),
- python-pkg-resources
+ python-pkg-resources, psmisc
 Recommends: python-ceph
 Provides: ${python:Provides}, archipelago-tool1
 Description: Python archipelago module
