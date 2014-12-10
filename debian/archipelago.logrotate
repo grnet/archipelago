@@ -5,7 +5,8 @@
 	delaycompress
 	missingok
 	notifempty
-	create 664 root root
+	su archipelago archipelago
+	create 664 archipelago archipelago
 	postrotate
 		kill -USR1 `cat /var/run/archipelago/blockerb.pid` 2>/dev/null || true
 	endscript
@@ -18,7 +19,8 @@
 	delaycompress
 	missingok
 	notifempty
-	create 664 root root
+	su archipelago archipelago
+	create 664 archipelago archipelago
 	postrotate
 		kill -USR1 `cat /var/run/archipelago/blockerm.pid` 2>/dev/null || true
 	endscript
@@ -31,7 +33,8 @@
 	delaycompress
 	missingok
 	notifempty
-	create 664 root root
+	su archipelago archipelago
+	create 664 archipelago archipelago
 	postrotate
 		kill -USR1 `cat /var/run/archipelago/mapperd.pid` 2>/dev/null || true
 	endscript
@@ -44,7 +47,8 @@
 	delaycompress
 	missingok
 	notifempty
-	create 664 root root
+	su archipelago archipelago
+	create 664 archipelago archipelago
 	postrotate
 		kill -USR1 `cat /var/run/archipelago/vlmcd.pid` 2>/dev/null || true
 	endscript
