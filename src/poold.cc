@@ -361,3 +361,25 @@ bool archipelago::Socket::create()
     }
     return true;
 }
+
+bool archipelago::Socket::bind(const string endpoint)
+{
+    int len;
+    if (!is_valid()) {
+        return false;
+    }
+    setnonblocking(true);
+
+    if (access(endpoint.c_str(), F_OK) != -1) {
+        unlink(endpoint.c_str());
+    }
+    maddr.sun_family = AF_UNIX;
+    strcpy(maddr.sun_path, endpoint.c_str());
+    len = strlen(maddr.sun_path) + sizeof(maddr.sun_family);
+
+    int bind_rv = ::bind(msockfd, (struct sockaddr *)&maddr, len);
+    if (bind_rv == -1) {
+        return false;
+    }
+    return true;
+}
