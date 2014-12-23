@@ -25,6 +25,8 @@
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <sys/file.h>
+#include <fcntl.h>
 #include <signal.h>
 #include <errno.h>
 #include <pwd.h>
@@ -247,5 +249,42 @@ int archipelago::System::check_pid(const string& pidfile)
     if (kill(pid, 0) && errno == ESRCH) {
         return 0;
     }
+    return pid;
+}
+
+int archipelago::System::write_pid(const string& pidfile)
+{
+    FILE *f;
+    int fd;
+    int pid;
+
+    if (((fd = open(pidfile.c_str(), O_RDWR|O_CREAT, 0644)) == -1)
+            || ((f = fdopen(fd, "r+")) == NULL) ) {
+        logerror("Can't open or create " + pidfile);
+        return 0;
+    }
+
+    if (flock(fd, LOCK_EX|LOCK_NB) == -1) {
+        ostringstream pidstring;
+        fscanf(f, "%d", &pid);
+        fclose(f);
+        pidstring << pid;
+        logerror("Can't lock pidfile, lock is held by pid " + pidstring.str());
+    }
+
+    pid = getpid();
+    if (!fprintf(f, "%d\n",  pid)) {
+        logerror("Can't write pid.");
+        close(fd);
+        return 0;
+    }
+    fflush(f);
+
+    if (flock(fd, LOCK_UN) == -1) {
+        logerror("Can't unlock pidfile.");
+        close(fd);
+        return 0;
+    }
+    close(fd);
     return pid;
 }
