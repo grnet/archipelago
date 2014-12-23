@@ -415,3 +415,12 @@ bool archipelago::Socket::write(const void *buffer, const size_t size) const
     }
     return true;
 }
+
+int archipelago::Socket::read(void *buffer, size_t size) const
+{
+    int status = ::read(msockfd, buffer, size);
+    if (status <= 0) {
+        return 0;
+    }
+    return status;
+}
