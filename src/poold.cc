@@ -17,6 +17,7 @@
  */
 
 #include <iostream>
+#include <cstdio>
 
 #include <log4cplus/configurator.h>
 #include <log4cplus/logger.h>
@@ -218,4 +219,17 @@ int archipelago::System::set_system(bool daemonize, int uid, int gid,
         return -1;
     }
     return 0;
+}
+
+int archipelago::System::read_pid(const string& pidfile)
+{
+    FILE *f;
+    int pid;
+
+    if (!(f=fopen(pidfile.c_str(), "r"))) {
+        return 0;
+    }
+    fscanf(f, "%d", &pid);
+    fclose(f);
+    return pid;
 }
