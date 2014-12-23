@@ -25,6 +25,8 @@
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <signal.h>
+#include <errno.h>
 #include <pwd.h>
 #include <grp.h>
 
@@ -231,5 +233,19 @@ int archipelago::System::read_pid(const string& pidfile)
     }
     fscanf(f, "%d", &pid);
     fclose(f);
+    return pid;
+}
+
+int archipelago::System::check_pid(const string& pidfile)
+{
+    int pid = read_pid(pidfile);
+
+    if ((!pid) || (pid == getpid())) {
+        return 0;
+    }
+
+    if (kill(pid, 0) && errno == ESRCH) {
+        return 0;
+    }
     return pid;
 }
