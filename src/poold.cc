@@ -288,3 +288,8 @@ int archipelago::System::write_pid(const string& pidfile)
     close(fd);
     return pid;
 }
+
+int archipelago::System::remove_pid(const string& pidfile)
+{
+    return unlink(pidfile.c_str());
+}
