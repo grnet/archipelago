@@ -310,7 +310,7 @@ class archipelago::Socket {
         uint32_t events;
         bool create();
         bool bind(const string endpoint);
-        bool listen() const;
+        bool listen(int backlog) const;
         bool accept(Socket&) const;
 
         bool write(const void *buffer, const size_t size) const;
@@ -379,6 +379,18 @@ bool archipelago::Socket::bind(const string endpoint)
 
     int bind_rv = ::bind(msockfd, (struct sockaddr *)&maddr, len);
     if (bind_rv == -1) {
+        return false;
+    }
+    return true;
+}
+
+bool archipelago::Socket::listen(int backlog=5) const
+{
+    if (!is_valid()) {
+        return false;
+    }
+    int listen_rv = ::listen(msockfd, backlog);
+    if (listen_rv == -1) {
         return false;
     }
     return true;
