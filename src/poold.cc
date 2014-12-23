@@ -26,6 +26,7 @@ using namespace log4cplus;
 
 namespace archipelago {
     class Logger;
+    class System;
 }
 
 class archipelago::Logger: public log4cplus::Logger {
@@ -117,3 +118,20 @@ void archipelago::Logger::logtrace(const string& msg)
 {
     logGeneric(TRACE_LOG_LEVEL, msg);
 }
+
+class archipelago::System: public Logger {
+    private:
+        int cur_uid;
+        int cur_gid;
+        char *username;
+
+    public:
+        System(const string& logconffile);
+
+        int set_system(bool daemonize, int uid, int gid, mode_t mask,
+                const string& pidfile);
+        int read_pid(const string& pidfile);
+        int check_pid(const string& pidfile);
+        int write_pid(const string& pidfile);
+        int remove_pid(const string& pidfile);
+};
