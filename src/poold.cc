@@ -49,3 +49,41 @@ archipelago::Logger::Logger(const string& conffile, const string& instance)
     PropertyConfigurator::doConfigure(conffile);
     logger = getInstance(instance);
 }
+
+void archipelago::Logger::logGeneric(int loglevel, const string& msg)
+{
+    switch (loglevel) {
+    case FATAL_LOG_LEVEL:
+        if (logger.isEnabledFor(FATAL_LOG_LEVEL)) {
+            LOG4CPLUS_FATAL(logger, msg);
+        }
+        break;
+    case ERROR_LOG_LEVEL:
+        if (logger.isEnabledFor(ERROR_LOG_LEVEL)) {
+            LOG4CPLUS_ERROR(logger, msg);
+        }
+        break;
+    case INFO_LOG_LEVEL:
+        if (logger.isEnabledFor(INFO_LOG_LEVEL)) {
+            LOG4CPLUS_INFO(logger, msg);
+        }
+        break;
+    case DEBUG_LOG_LEVEL:
+        if (logger.isEnabledFor(DEBUG_LOG_LEVEL)) {
+            LOG4CPLUS_DEBUG(logger, msg);
+        }
+        break;
+    case WARN_LOG_LEVEL:
+        if (logger.isEnabledFor(WARN_LOG_LEVEL)) {
+            LOG4CPLUS_WARN(logger, msg);
+        }
+        break;
+    case TRACE_LOG_LEVEL:
+        if (logger.isEnabledFor(TRACE_LOG_LEVEL)) {
+            LOG4CPLUS_TRACE(logger, msg);
+        }
+        break;
+    default:
+        throw runtime_error("Unknown loglevel.");
+    }
+}
