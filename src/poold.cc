@@ -21,4 +21,20 @@
 using namespace std;
 
 namespace archipelago {
+    class Logger;
 }
+
+class archipelago::Logger {
+    public:
+        Logger();
+
+        void logerror(const string& msg);
+        void logfatal(const string& msg);
+        void loginfo(const string& msg);
+        void logdebug(const string& msg);
+        void logwarn(const string& msg);
+        void logtrace(const string& msg);
+
+    private:
+        void logGeneric(int loglevel, const string& msg);
+};
