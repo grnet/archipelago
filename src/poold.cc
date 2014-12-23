@@ -330,3 +330,10 @@ archipelago::Socket::Socket(): msockfd(-1)
     events = 0;
     memset(&maddr, 0, sizeof(maddr));
 }
+
+archipelago::Socket::~Socket()
+{
+    if (is_valid()) {
+        ::close(msockfd);
+    }
+}
