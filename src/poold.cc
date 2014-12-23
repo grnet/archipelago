@@ -352,3 +352,12 @@ bool archipelago::Socket::operator ==(const Socket& other) const
 {
     return this->msockfd == other.msockfd;
 }
+
+bool archipelago::Socket::create()
+{
+    msockfd = socket(AF_UNIX, SOCK_STREAM, 0);
+    if (!is_valid()) {
+        return false;
+    }
+    return true;
+}
