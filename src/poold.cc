@@ -395,3 +395,14 @@ bool archipelago::Socket::listen(int backlog=5) const
     }
     return true;
 }
+
+bool archipelago::Socket::accept(Socket& socket) const
+{
+    socklen_t addrlen = sizeof(maddr);
+    socket.msockfd = ::accept(msockfd, (struct sockaddr *)&maddr, &addrlen);
+
+    if (socket.msockfd <= 0) {
+        return false;
+    }
+    return true;
+}
