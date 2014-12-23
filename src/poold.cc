@@ -26,7 +26,10 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/file.h>
+#include <sys/socket.h>
+#include <sys/un.h>
 #include <fcntl.h>
+#include <arpa/inet.h>
 #include <signal.h>
 #include <errno.h>
 #include <pwd.h>
@@ -38,6 +41,7 @@ using namespace log4cplus;
 namespace archipelago {
     class Logger;
     class System;
+    class Socket;
 }
 
 class archipelago::Logger: public log4cplus::Logger {
@@ -293,3 +297,30 @@ int archipelago::System::remove_pid(const string& pidfile)
 {
     return unlink(pidfile.c_str());
 }
+
+class archipelago::Socket {
+    private:
+        int msockfd;
+        sockaddr_un maddr;
+
+    public:
+        Socket();
+        virtual ~Socket();
+
+        uint32_t events;
+        bool create();
+        bool bind(const string endpoint);
+        bool listen() const;
+        bool accept(Socket&) const;
+
+        bool write(const void *buffer, const size_t size) const;
+        int read(void *buffer, size_t size) const;
+
+        const void setnonblocking(const bool flag);
+        const bool is_valid() const {return msockfd != -1;}
+        const int& get_fd() const {return msockfd;}
+
+        bool operator <(const Socket& other) const;
+        bool operator >(const Socket& other) const;
+        bool operator ==(const Socket& other) const;
+};
