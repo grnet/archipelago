@@ -40,5 +40,12 @@ class archipelago::Logger: public log4cplus::Logger {
         void logtrace(const string& msg);
 
     private:
+        log4cplus::Logger logger;
         void logGeneric(int loglevel, const string& msg);
 };
+
+archipelago::Logger::Logger(const string& conffile, const string& instance)
+{
+    PropertyConfigurator::doConfigure(conffile);
+    logger = getInstance(instance);
+}
