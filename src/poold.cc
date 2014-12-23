@@ -337,3 +337,18 @@ archipelago::Socket::~Socket()
         ::close(msockfd);
     }
 }
+
+bool archipelago::Socket::operator <(const Socket& other) const
+{
+    return this->msockfd < other.msockfd;
+}
+
+bool archipelago::Socket::operator >(const Socket& other) const
+{
+    return this->msockfd > other.msockfd;
+}
+
+bool archipelago::Socket::operator ==(const Socket& other) const
+{
+    return this->msockfd == other.msockfd;
+}
