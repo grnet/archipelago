@@ -424,3 +424,19 @@ int archipelago::Socket::read(void *buffer, size_t size) const
     }
     return status;
 }
+
+const void archipelago::Socket::setnonblocking(const bool flag)
+{
+    int opts;
+    opts = fcntl(msockfd, F_GETFL);
+    if (opts < 0) {
+        return;
+    }
+
+    if (flag) {
+        opts = (opts | O_NONBLOCK);
+    } else {
+        opts = (opts & ~O_NONBLOCK);
+    }
+    fcntl(msockfd, F_SETFL, opts);
+}
