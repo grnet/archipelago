@@ -47,7 +47,12 @@ class archipelago::Logger: public log4cplus::Logger {
 
 archipelago::Logger::Logger(const string& conffile, const string& instance)
 {
-    PropertyConfigurator::doConfigure(conffile);
+    if (conffile.empty()) {
+        BasicConfigurator config;
+        config.configure();
+    } else {
+        PropertyConfigurator::doConfigure(conffile);
+    }
     logger = getInstance(instance);
 }
 
@@ -135,3 +140,9 @@ class archipelago::System: public Logger {
         int write_pid(const string& pidfile);
         int remove_pid(const string& pidfile);
 };
+
+archipelago::System::System(const string& logconffile)
+            : Logger(logconffile, "System")
+{
+    cur_uid = cur_gid = -1;
+}
