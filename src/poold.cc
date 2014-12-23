@@ -18,15 +18,19 @@
 
 #include <iostream>
 
+#include <log4cplus/configurator.h>
+#include <log4cplus/logger.h>
+
 using namespace std;
+using namespace log4cplus;
 
 namespace archipelago {
     class Logger;
 }
 
-class archipelago::Logger {
+class archipelago::Logger: public log4cplus::Logger {
     public:
-        Logger();
+        Logger(const string& conffile, const string& instance);
 
         void logerror(const string& msg);
         void logfatal(const string& msg);
