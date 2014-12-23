@@ -87,3 +87,33 @@ void archipelago::Logger::logGeneric(int loglevel, const string& msg)
         throw runtime_error("Unknown loglevel.");
     }
 }
+
+void archipelago::Logger::logerror(const string& msg)
+{
+    logGeneric(ERROR_LOG_LEVEL, msg);
+}
+
+void archipelago::Logger::logfatal(const string& msg)
+{
+    logGeneric(FATAL_LOG_LEVEL, msg);
+}
+
+void archipelago::Logger::loginfo(const string& msg)
+{
+    logGeneric(INFO_LOG_LEVEL, msg);
+}
+
+void archipelago::Logger::logdebug(const string& msg)
+{
+    logGeneric(DEBUG_LOG_LEVEL, msg);
+}
+
+void archipelago::Logger::logwarn(const string& msg)
+{
+    logGeneric(WARN_LOG_LEVEL, msg);
+}
+
+void archipelago::Logger::logtrace(const string& msg)
+{
+    logGeneric(TRACE_LOG_LEVEL, msg);
+}
