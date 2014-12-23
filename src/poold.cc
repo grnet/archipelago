@@ -324,3 +324,9 @@ class archipelago::Socket {
         bool operator >(const Socket& other) const;
         bool operator ==(const Socket& other) const;
 };
+
+archipelago::Socket::Socket(): msockfd(-1)
+{
+    events = 0;
+    memset(&maddr, 0, sizeof(maddr));
+}
