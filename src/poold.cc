@@ -406,3 +406,12 @@ bool archipelago::Socket::accept(Socket& socket) const
     }
     return true;
 }
+
+bool archipelago::Socket::write(const void *buffer, const size_t size) const
+{
+    int status = ::write(msockfd, buffer, size);
+    if (status == -1) {
+        return false;
+    }
+    return true;
+}
