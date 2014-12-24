@@ -20,6 +20,7 @@
 #define POOLD_HH
 
 #include <cstdio>
+#include <cstring>
 #include <iostream>
 #include <list>
 #include <map>
@@ -36,14 +37,13 @@
 #include <fcntl.h>
 #include <signal.h>
 #include <errno.h>
-#include <sys/socket.h>
-#include <sys/un.h>
 #include <sys/epoll.h>
-#include <arpa/inet.h>
 #include <sys/eventfd.h>
 #include <pthread.h>
+#include <arpa/inet.h>
 
 #include "logger.hh"
+#include "socket.hh"
 
 /*
  * message structure
@@ -61,31 +61,6 @@ namespace archipelago {
 using std::runtime_error;
 using namespace std;
 
-class Socket {
-private:
-    int msockfd;
-    sockaddr_un maddr;
-public:
-    Socket();
-    virtual ~Socket();
-
-    uint32_t events;
-    bool create();
-    bool bind(const string endpoint);
-    bool listen(int backlog) const;
-    bool accept(Socket&) const;
-
-    bool write(const void *buffer, const size_t size) const;
-    int read(void *buffer, size_t size) const;
-
-    const void setnonblocking(const bool flag);
-    const bool is_valid() const {return msockfd != -1;}
-    const int& get_fd() const {return msockfd;}
-
-    bool operator <(const Socket& other) const;
-    bool operator >(const Socket& other) const;
-    bool operator ==(const Socket& other) const;
-};
 
 class Epoll {
 private:
