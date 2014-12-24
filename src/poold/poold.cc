@@ -16,45 +16,28 @@
  *
  */
 
+#include <cstdio>
+#include <cstring>
+#include <iostream>
+#include <list>
+#include <map>
+#include <utility>
+#include <algorithm>
+#include <cstdlib>
+#include <functional>
+
 #include <arpa/inet.h>
+#include <sys/eventfd.h>
+#include <pthread.h>
+#include <unistd.h>
 
 #include "poold.hh"
 #include "system.hh"
+#include "sighandler.hh"
 
 using namespace std;
 
 namespace archipelago {
-
-bool SigHandler::bExitSignal = false;
-
-SigHandler::SigHandler() {}
-
-SigHandler::~SigHandler() {}
-
-bool SigHandler::gotExitSignal()
-{
-    return bExitSignal;
-}
-
-void SigHandler::setExitSignal(bool flag)
-{
-    bExitSignal = flag;
-}
-
-void SigHandler::exitSignalHandler(int ignored)
-{
-    SigHandler::bExitSignal = true;
-}
-
-void SigHandler::setupSignalHandlers()
-{
-    if (signal((int) SIGINT, SigHandler::exitSignalHandler) == SIG_ERR) {
-        throw SigException("Cannot setup SIGINT signal handler");
-    }
-    if (signal((int) SIGQUIT, SigHandler::exitSignalHandler) == SIG_ERR) {
-        throw SigException("Cannot setup SIGQUIT signal handler");
-    }
-}
 
 Poold::Poold(const int& startrange, const int& endrange,
         const string& uendpoint)
@@ -115,7 +98,8 @@ void Poold::set_socket_pollout(Socket& socket)
     }
 }
 
-void Poold::server() {
+void Poold::server()
+{
     if (!srvsock.create()) {
         logfatal("Could not create server socket. Aborting...");
         exit(EXIT_FAILURE);
@@ -145,7 +129,8 @@ void Poold::server() {
     socket_connection_state[&srvsock] = NONE;
 }
 
-void Poold::create_new_connection(Socket& socket) {
+void Poold::create_new_connection(Socket& socket)
+{
     if (socket.get_fd() == -1) {
         logfatal("Socket file descriptor error. Aborting...");
         exit(EXIT_FAILURE);
@@ -156,7 +141,8 @@ void Poold::create_new_connection(Socket& socket) {
     logdebug("Accepted new connection");
 }
 
-void Poold::clear_connection(Socket& socket) {
+void Poold::clear_connection(Socket& socket)
+{
     epoll.rm_socket(socket);
     list<int>::iterator i;
     list<int> L = socket_connection_ports[&socket];
@@ -173,7 +159,8 @@ void Poold::clear_connection(Socket& socket) {
     pthread_mutex_unlock(&mutex);
 }
 
-poolmsg_t *Poold::recv_msg(const Socket& socket) {
+poolmsg_t *Poold::recv_msg(const Socket& socket)
+{
     unsigned int buffer[2];
     poolmsg_t *msg;
 
@@ -187,7 +174,8 @@ poolmsg_t *Poold::recv_msg(const Socket& socket) {
     return msg;
 }
 
-int Poold::send_msg(const Socket& socket, int port) {
+int Poold::send_msg(const Socket& socket, int port)
+{
     const int buffer[1] = {port};
     logdebug("Sending port to client.");
 
@@ -198,7 +186,8 @@ int Poold::send_msg(const Socket& socket, int port) {
     return n;
 }
 
-int Poold::get_new_port(Socket& socket) {
+int Poold::get_new_port(Socket& socket)
+{
     if (port_pool.empty()) {
         logdebug("Port pool is empty.");
         return -1;
@@ -242,7 +231,8 @@ void Poold::handle_request(Socket& socket, poolmsg_t *msg)
     free(msg);
 }
 
-void Poold::serve_forever() {
+void Poold::serve_forever()
+{
     poolmsg_t *msg;
     while (Poold::bRunning) {
         int nfds = epoll.wait(events, 20, -1);
@@ -299,7 +289,8 @@ void Poold::serve_forever() {
     }
 }
 
-void Poold::run() {
+void Poold::run()
+{
     int rv = pthread_create(&th, NULL, poold_helper, static_cast<void*>(this));
     if (rv != 0) {
         logfatal("Error in thread creation. Aborting...");
@@ -307,7 +298,8 @@ void Poold::run() {
     }
 }
 
-void Poold::close() {
+void Poold::close()
+{
     Poold::bRunning = false;
     eventfd_write(evfd, 1);
     pthread_join(th, NULL);
@@ -334,8 +326,8 @@ void print_usage(int argc, char **argv, string pidfile, string socketpath)
         "\n";
 }
 
-int main(int argc, char **argv) {
-
+int main(int argc, char **argv)
+{
     int option = 0;
     int uid = -1;
     int gid = -1;
@@ -355,7 +347,6 @@ int main(int argc, char **argv) {
 #else
     string pidfile ("poold.pid");
 #endif
-
 
     while ((option = getopt(argc, argv, "hds:e:p:u:g:i:m:c:")) != -1) {
         switch (option) {

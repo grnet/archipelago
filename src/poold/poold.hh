@@ -19,27 +19,6 @@
 #ifndef POOLD_HH
 #define POOLD_HH
 
-#include <cstdio>
-#include <cstring>
-#include <iostream>
-#include <list>
-#include <map>
-#include <utility>
-#include <algorithm>
-#include <cstdlib>
-#include <stdexcept>
-#include <functional>
-
-#include <unistd.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <sys/file.h>
-#include <fcntl.h>
-#include <signal.h>
-#include <errno.h>
-#include <sys/eventfd.h>
-#include <pthread.h>
-
 #include "logger.hh"
 #include "socket.hh"
 #include "epoll.hh"
@@ -57,44 +36,16 @@ typedef struct poolmsg {
  */
 namespace archipelago {
 
-using std::runtime_error;
-using namespace std;
-
-class SigException: public std::runtime_error {
-private:
-    string what_;
-public:
-    explicit SigException(const std::string& msg)
-     : runtime_error(msg), what_(msg) {}
-
-    virtual const char* what() const throw()
-    {return what_.c_str();}
-    virtual ~SigException() throw() {}
-};
-
-class SigHandler {
-protected:
-    static bool bExitSignal;
-public:
-    SigHandler();
-    ~SigHandler();
-
-    static bool gotExitSignal();
-    static void setExitSignal(bool flag);
-    void setupSignalHandlers();
-    static void exitSignalHandler(int ignored);
-};
-
 class Poold: public Logger {
 private:
     int evfd;
     struct epoll_event events[20];
-    string endpoint;
+    std::string endpoint;
     int startrange;
     int endrange;
-    list<int> port_pool;
-    map<Socket*, int> socket_connection_state;
-    map<Socket*, list<int> > socket_connection_ports;
+    std::list<int> port_pool;
+    std::map<Socket*, int> socket_connection_state;
+    std::map<Socket*, std::list<int> > socket_connection_ports;
     bool bRunning;
     pthread_mutex_t mutex;
     pthread_t th;
@@ -116,7 +67,7 @@ protected:
     } ConnectionState;
 private:
     void initialize(const int& start, const int& end,
-            const string& uendpoint);
+            const std::string& uendpoint);
     void serve_forever();
     void create_new_connection(Socket& socket);
     void clear_connection(Socket& socket);
@@ -136,9 +87,9 @@ private:
     }
 public:
     Poold(const int& startrange, const int& endrange,
-            const string& uendpoint);
+            const std::string& uendpoint);
     Poold(const int& startrange, const int& endrange,
-            const string& endpoint, const string& logconf);
+            const std::string& endpoint, const std::string& logconf);
     void server();
     void run();
     void close();
