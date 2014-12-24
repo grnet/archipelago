@@ -19,8 +19,8 @@
 #ifndef POOLD_HH
 #define POOLD_HH
 
-#include <iostream>
 #include <cstdio>
+#include <iostream>
 #include <list>
 #include <map>
 #include <utility>
@@ -33,17 +33,15 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/file.h>
+#include <fcntl.h>
+#include <signal.h>
+#include <errno.h>
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <sys/epoll.h>
-#include <fcntl.h>
 #include <arpa/inet.h>
-#include <signal.h>
-#include <errno.h>
 #include <sys/eventfd.h>
 #include <pthread.h>
-#include <pwd.h>
-#include <grp.h>
 
 #include "logger.hh"
 
@@ -62,22 +60,6 @@ namespace archipelago {
 
 using std::runtime_error;
 using namespace std;
-
-class System: public Logger {
-private:
-    int cur_uid;
-    int cur_gid;
-    char *username;
-public:
-    System(const string& logconffile);
-
-    int set_system(bool daemonize, int uid, int gid, mode_t mask,
-            const string& pidfile);
-    int read_pid(const string& pidfile);
-    int check_pid(const string& pidfile);
-    int write_pid(const string& pidfile);
-    int remove_pid(const string& pidfile);
-};
 
 class Socket {
 private:
