@@ -572,3 +572,15 @@ bool archipelago::Epoll::set_fd_pollout(int fd, uint32_t events)
     }
     return true;
 }
+
+bool archipelago::Epoll::reset_fd_pollout(int fd, uint32_t events)
+{
+    struct epoll_event ev;
+    ev.data.fd = fd;
+    ev.events = events & ~((short) EPOLLOUT);
+    if (epoll_ctl(epollfd, EPOLL_CTL_MOD, fd, &ev) == -1) {
+        perror("epoll_ctl: fd");
+        return false;
+    }
+    return true;
+}
