@@ -45,6 +45,7 @@ namespace archipelago {
     class Socket;
     class Epoll;
     class SigException;
+    class SigHandler;
 }
 
 class archipelago::Logger: public log4cplus::Logger {
@@ -645,4 +646,17 @@ class archipelago::SigException: public std::runtime_error {
         virtual const char* what() const throw()
         {return what_.c_str();}
         virtual ~SigException() throw() {}
+};
+
+class archipelago::SigHandler {
+    protected:
+        static bool bExitSignal;
+    public:
+        SigHandler();
+        ~SigHandler();
+
+        static bool gotExitSignal();
+        static void setExitSignal(bool flag);
+        void setupSignalHandlers();
+        static void exitSignalHandler(int ignored);
 };
