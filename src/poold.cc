@@ -44,6 +44,7 @@ namespace archipelago {
     class System;
     class Socket;
     class Epoll;
+    class SigException;
 }
 
 class archipelago::Logger: public log4cplus::Logger {
@@ -632,3 +633,16 @@ int archipelago::Epoll::wait(struct epoll_event *events, int maxevents,
     }
     return nfds;
 }
+
+using std::runtime_error;
+class archipelago::SigException: public std::runtime_error {
+    private:
+        string what_;
+    public:
+        explicit SigException(const std::string& msg)
+         : runtime_error(msg), what_(msg) {}
+
+        virtual const char* what() const throw()
+        {return what_.c_str();}
+        virtual ~SigException() throw() {}
+};
