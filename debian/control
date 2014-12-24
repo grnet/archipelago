@@ -4,7 +4,7 @@ Priority: extra
 Maintainer: Filippos Giannakos <philipgian@grnet.gr>
 Build-Depends: debhelper (>= 7.0.50~), python, libst-dev, libxseg-dev(>=0.4),
  librados-dev(=0.61.2+grnet2-1) | librados-dev(>=0.65),
- libssl-dev, cmake(>=2.8)
+ libssl-dev, cmake(>=2.8), liblog4cplus-dev
 Standards-Version: 3.9.1
 X-Python-Version: >=2.6
 
@@ -21,7 +21,7 @@ Description: Python archipelago module
 Package: archipelago
 Architecture: amd64
 Depends: ${misc:Depends},  ${shlibs:Depends}, ${python:Depends},
- libxseg0(>=0.4), python-archipelago(=${binary:Version})
+ libxseg0(>=0.4), python-archipelago(=${binary:Version}), liblog4cplus-1.0-4
 Provides: archipelago-protocol1
 Replaces: archipelago-modules-dkms, archipelago-modules-0.3.5,
  archipelago-modules-0.3.4, archipelago-modules-0.3.3,
