@@ -796,3 +796,15 @@ void archipelago::Poold::initialize(const int& start, const int& end,
     }
     pthread_mutex_init(&mutex, NULL);
 }
+
+archipelago::Socket *archipelago::Poold::find_socket(int fd)
+{
+    map<Socket*, int>::iterator it;
+    for (it = socket_connection_state.begin();
+            it!= socket_connection_state.end(); ++it) {
+        if (it->first->get_fd() == fd) {
+            break;
+        }
+    }
+    return it->first;
+}
