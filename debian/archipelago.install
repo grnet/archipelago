@@ -5,6 +5,7 @@ usr/bin/archip-dummy
 usr/bin/archip-filed
 usr/bin/archip-mapperd
 usr/bin/archip-vlmcd
+usr/bin/archip-poold
 
 contrib/finalize_upgrade_0.4 usr/share/archipelago/tools
 
