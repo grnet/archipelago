@@ -769,3 +769,17 @@ class archipelago::Poold: public Logger {
         void run();
         void close();
 };
+
+archipelago::Poold::Poold(const int& startrange, const int& endrange,
+        const string& uendpoint)
+    : Logger("logging.conf", "Poold")
+{
+    initialize(startrange, endrange, uendpoint);
+}
+
+archipelago::Poold::Poold(const int& startrange, const int& endrange,
+        const string& uendpoint, const string& logconf)
+    : Logger(logconf, "Poold")
+{
+    initialize(startrange, endrange, uendpoint);
+}
