@@ -486,3 +486,15 @@ archipelago::Epoll::~Epoll()
 {
     ::close(epollfd);
 }
+
+bool archipelago::Epoll::add_fd(int fd, uint32_t events)
+{
+    struct epoll_event ev;
+    ev.data.fd = fd;
+    ev.events = events;
+    if (epoll_ctl(epollfd, EPOLL_CTL_ADD, fd, &ev) == -1) {
+        perror("epoll_ctl: fd");
+        return false;
+    }
+    return true;
+}
