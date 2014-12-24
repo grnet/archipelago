@@ -28,6 +28,7 @@
 #include <sys/file.h>
 #include <sys/socket.h>
 #include <sys/un.h>
+#include <sys/epoll.h>
 #include <fcntl.h>
 #include <arpa/inet.h>
 #include <signal.h>
@@ -472,3 +473,11 @@ class archipelago::Epoll {
 
         const int& get_epollfd() const {return epollfd;}
 };
+
+archipelago::Epoll::Epoll()
+{
+    epollfd = epoll_create1(0);
+    if (epollfd < 0) {
+        throw runtime_error("Cannot create epoll file descriptor.");
+    }
+}
