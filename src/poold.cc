@@ -498,3 +498,16 @@ bool archipelago::Epoll::add_fd(int fd, uint32_t events)
     }
     return true;
 }
+
+bool archipelago::Epoll::add_socket(Socket& socket, uint32_t events)
+{
+    if (socket.get_fd() == -1) {
+        return false;
+    }
+
+    if (!add_fd(socket.get_fd(), events)) {
+        return false;
+    }
+    socket.events = events;
+    return true;
+}
