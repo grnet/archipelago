@@ -828,3 +828,33 @@ void archipelago::Poold::set_socket_pollout(Socket& socket)
         logerror("epoll.set_socket_pollout error");
     }
 }
+
+void archipelago::Poold::server() {
+    if (!srvsock.create()) {
+        logfatal("Could not create server socket. Aborting...");
+        exit(EXIT_FAILURE);
+    }
+
+    if (!srvsock.bind(endpoint)) {
+        logfatal("Could not bind to endpoint. Aborting...");
+        exit(EXIT_FAILURE);
+    }
+
+    if (!srvsock.listen()) {
+        logfatal("Could not listen to socket. Aborting...");
+        exit(EXIT_FAILURE);
+    }
+
+    if (!epoll.add_socket(srvsock, EPOLLIN)) {
+        logfatal("Could not add server socket for polling (epoll). Aborting...");
+        exit(EXIT_FAILURE);
+    }
+
+    evfd = eventfd(0, EFD_NONBLOCK);
+    if (!epoll.add_fd(evfd, EPOLLIN | EPOLLET)) {
+        logfatal("Could not add eventfd file descriptor for polling (epoll). Aborting...");
+        exit(EXIT_FAILURE);
+    }
+
+    socket_connection_state[&srvsock] = NONE;
+}
