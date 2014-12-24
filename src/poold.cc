@@ -18,6 +18,13 @@
 
 #include <iostream>
 #include <cstdio>
+#include <list>
+#include <map>
+#include <utility>
+#include <algorithm>
+#include <cstdlib>
+#include <stdexcept>
+#include <functional>
 
 #include <log4cplus/configurator.h>
 #include <log4cplus/logger.h>
@@ -33,11 +40,18 @@
 #include <arpa/inet.h>
 #include <signal.h>
 #include <errno.h>
+#include <sys/eventfd.h>
+#include <pthread.h>
 #include <pwd.h>
 #include <grp.h>
 
 using namespace std;
 using namespace log4cplus;
+
+typedef struct poolmsg {
+    int type;
+    int port;
+} poolmsg_t;
 
 namespace archipelago {
     class Logger;
@@ -46,6 +60,7 @@ namespace archipelago {
     class Epoll;
     class SigException;
     class SigHandler;
+    class Poold;
 }
 
 class archipelago::Logger: public log4cplus::Logger {
@@ -691,3 +706,66 @@ void archipelago::SigHandler::setupSignalHandlers()
         throw SigException("Cannot setup SIGQUIT signal handler");
     }
 }
+
+class archipelago::Poold: public Logger {
+    private:
+        int evfd;
+        struct epoll_event events[20];
+        string endpoint;
+        int startrange;
+        int endrange;
+        list<int> port_pool;
+        map<Socket*, int> socket_connection_state;
+        map<Socket*, list<int> > socket_connection_ports;
+        bool bRunning;
+        pthread_mutex_t mutex;
+        pthread_t th;
+
+        Epoll epoll;
+        Socket srvsock;
+
+    protected:
+        enum _poolmsgtype {
+            GET_PORT,
+            LEAVE_PORT,
+            LEAVE_ALL_PORTS,
+        } PoolMsgType;
+
+        enum _connstate {
+            NONE,
+            REPLY_PORT,
+            REPLY_LEAVE_PORT_SUCCESS,
+            REPLY_LEAVE_PORT_FAIL,
+            REPLY_LEAVE_ALL_PORTS,
+        } ConnectionState;
+
+    private:
+        void initialize(const int& start, const int& end,
+                const string& uendpoint);
+        void serve_forever();
+        void create_new_connection(Socket& socket);
+        void clear_connection(Socket& socket);
+        void handle_request(Socket& socket, poolmsg_t *msg);
+        int get_new_port(Socket& socket);
+        poolmsg_t *recv_msg(const Socket& socket);
+        int send_msg(const Socket& socket, int port);
+
+        Socket *find_socket(int fd);
+        void set_socket_pollin(Socket& socket);
+        void set_socket_pollout(Socket& socket);
+
+        static void *poold_helper(void *arg) {
+            Poold *pool = static_cast<Poold *>(arg);
+            pool->serve_forever();
+            return NULL;
+        }
+
+    public:
+        Poold(const int& startrange, const int& endrange,
+                const string& uendpoint);
+        Poold(const int& startrange, const int& endrange,
+                const string& endpoint, const string& logconf);
+        void server();
+        void run();
+        void close();
+};
