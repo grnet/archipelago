@@ -481,3 +481,8 @@ archipelago::Epoll::Epoll()
         throw runtime_error("Cannot create epoll file descriptor.");
     }
 }
+
+archipelago::Epoll::~Epoll()
+{
+    ::close(epollfd);
+}
