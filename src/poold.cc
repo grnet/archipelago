@@ -818,3 +818,13 @@ void archipelago::Poold::set_socket_pollin(Socket& socket)
         logerror("epoll.set_socket_pollin error");
     }
 }
+
+void archipelago::Poold::set_socket_pollout(Socket& socket)
+{
+    if (!epoll.reset_socket_pollin(socket)) {
+        logerror("epoll.reset_socket_pollin error");
+    }
+    if (!epoll.set_socket_pollout(socket)) {
+        logerror("epoll.set_socket_pollout error");
+    }
+}
