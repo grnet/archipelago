@@ -42,6 +42,7 @@ namespace archipelago {
     class Logger;
     class System;
     class Socket;
+    class Epoll;
 }
 
 class archipelago::Logger: public log4cplus::Logger {
@@ -440,3 +441,34 @@ const void archipelago::Socket::setnonblocking(const bool flag)
     }
     fcntl(msockfd, F_SETFL, opts);
 }
+
+class archipelago::Epoll {
+    private:
+        int epollfd;
+
+    public:
+        Epoll();
+        ~Epoll();
+
+        bool add_socket(Socket& socket, uint32_t events);
+        bool add_fd(int fd, uint32_t events);
+
+        bool rm_socket(Socket& socket);
+        bool rm_fd(int fd, uint32_t events);
+
+        bool set_socket_pollin(Socket& socket);
+        bool reset_socket_pollin(Socket& socket);
+
+        bool set_socket_pollout(Socket& socket);
+        bool reset_socket_pollout(Socket& socket);
+
+        bool set_fd_pollin(int fd, uint32_t events);
+        bool reset_fd_pollin(int fd, uint32_t events);
+
+        bool set_fd_pollout(int fd, uint32_t events);
+        bool reset_fd_pollout(int fd, uint32_t events);
+
+        int wait(struct epoll_event *events, int maxevents, int timeout);
+
+        const int& get_epollfd() const {return epollfd;}
+};
