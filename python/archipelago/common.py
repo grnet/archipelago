@@ -53,6 +53,7 @@ import ConfigParser
 from grp import getgrnam
 from pwd import getpwnam
 import stat
+import struct
 
 libc = CDLL("libc.so.6")
 
@@ -1107,8 +1108,6 @@ class Request(object):
             c_data = xseg_get_data_nonstatic(self.xseg_ctx.ctx, self.req)
             memmove(c_data, p_data, self.req.contents.datalen)
         elif isinstance(data, xseg_request_create):
-            import struct
-
             size = sizeof(uint32_t) * 3 + data.cnt * sizeof(xseg_create_map_scatterlist)
             if size != self.req.contents.datalen:
                 return False
@@ -1309,3 +1308,58 @@ class Request(object):
 
         return cls(xseg, dst, target, op=X_CREATE, size=size, data=xcreate,
                 datalen=datalen)
+
+
+class PoolClient(object):
+    def __init__(self, endpoint="/var/run/archipelago/poold.socket"):
+        self.request = {'GET_PORT': 0, "LEAVE_PORT": 1, "LEAVE_ALL_PORTS": 2}
+        self.socket = None
+        self.endpoint = endpoint
+
+    def __send_msg(self, msg):
+        self.socket.send(msg)
+
+    def __recv_msg(self):
+        tmp = self.socket.recv(struct.calcsize("i"))
+        port = struct.unpack("i", tmp)[0]
+        return port
+
+    def __create_msg(self, code, port):
+        return struct.pack("!II", code, port)
+
+    def __create_socket(self):
+        if self.socket is None:
+            self.socket = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+
+    def __send_and_recv_msg(self, msg):
+        self.__send_msg(msg)
+        return self.__recv_msg()
+
+    def connect(self):
+        self.__create_socket()
+        self.socket.settimeout(5)
+        self.socket.connect(self.endpoint)
+        self.socket.settimeout(None)
+
+    def get_port(self):
+        msg = self.__create_msg(self.request['GET_PORT'], 0)
+        port = self.__send_and_recv_msg(msg)
+        return int(port)
+
+    def leave_port(self, port):
+        msg = self.__create_msg(self.request['LEAVE_PORT'], port)
+        return bool(self.__send_and_recv_msg(msg))
+
+    def leave_all_ports(self):
+        msg = self.__create_msg(self.request['LEAVE_ALL_PORTS'], 0)
+        return bool(self.__send_and_recv_msg(msg))
+
+    def alive(self):
+        if select([self.socket], [], [], 0)[0]:
+            return False
+        return True
+
+    def close(self):
+        self.socket.shutdown(socket.SHUT_RDWR)
+        self.socket.close()
+        self.socket = None
