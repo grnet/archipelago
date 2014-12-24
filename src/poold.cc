@@ -1045,3 +1045,95 @@ void print_usage(int argc, char **argv, string pidfile, string socketpath)
         "-d\tdaemonize (default: no)\n"
         "\n";
 }
+
+int main(int argc, char **argv) {
+
+    int option = 0;
+    int uid = -1;
+    int gid = -1;
+    bool daemonize = false;
+    int startpoolrange = 1;
+    int endpoolrange = 100;
+    mode_t mask = 0007;
+    sigset_t tmpsigset;
+#ifdef POOLD_SOCKET_PATH
+    string socketpath (POOLD_SOCKET_PATH);
+#else
+    string socketpath ("poold.socket");
+#endif
+    string logconffile;
+#ifdef POOLD_PIDFILE
+    string pidfile (POOLD_PIDFILE);
+#else
+    string pidfile ("poold.pid");
+#endif
+
+
+    while ((option = getopt(argc, argv, "hds:e:p:u:g:i:m:c:")) != -1) {
+        switch (option) {
+        case 's':
+            startpoolrange= atoi(optarg);
+            break;
+        case 'e':
+            endpoolrange= atoi(optarg);
+            break;
+        case 'p':
+            socketpath.assign(optarg, strlen(optarg));
+            break;
+        case 'c':
+            logconffile.assign(optarg, strlen(optarg));
+            break;
+        case 'd':
+            daemonize = true;
+            break;
+        case 'u':
+            uid = atoi(optarg);
+            break;
+        case 'g':
+            gid = atoi(optarg);
+            break;
+        case 'i':
+            pidfile = pidfile.assign(optarg, strlen(optarg));
+            break;
+        case 'm':
+            mask = atol(optarg);
+            break;
+        case 'h':
+            print_usage(argc, argv, pidfile, socketpath);
+            exit(EXIT_SUCCESS);
+        default:
+            print_usage(argc, argv, pidfile, socketpath);
+            exit(EXIT_FAILURE);
+        }
+    }
+
+    archipelago::System system = archipelago::System(logconffile);
+
+    if (system.set_system(daemonize, uid, gid, mask, pidfile) < 0) {
+        system.logerror("Cannot set application settings. Aborting...");
+        exit(EXIT_FAILURE);
+    }
+
+    archipelago::Poold pool = archipelago::Poold(startpoolrange, endpoolrange,
+            socketpath, logconffile);
+    pool.server();
+    pool.loginfo("Running server.");
+    pool.run();
+
+    try {
+        archipelago::SigHandler sigh;
+        sigh.setupSignalHandlers();
+        pool.loginfo("Setting up signal handlers.");
+
+        (void) sigemptyset(&tmpsigset);
+        while (!sigh.gotExitSignal()) {
+            sigsuspend(&tmpsigset);
+        }
+    } catch (archipelago::SigException& e) {
+        pool.logfatal("Signal Handler Exception: " + std::string(e.what()));
+    }
+    pool.close();
+    system.remove_pid(pidfile);
+    pool.loginfo("Closing server.");
+    return 0;
+}
