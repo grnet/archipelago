@@ -660,3 +660,34 @@ class archipelago::SigHandler {
         void setupSignalHandlers();
         static void exitSignalHandler(int ignored);
 };
+
+bool archipelago::SigHandler::bExitSignal = false;
+
+archipelago::SigHandler::SigHandler() {}
+
+archipelago::SigHandler::~SigHandler() {}
+
+bool archipelago::SigHandler::gotExitSignal()
+{
+    return bExitSignal;
+}
+
+void archipelago::SigHandler::setExitSignal(bool flag)
+{
+    bExitSignal = flag;
+}
+
+void archipelago::SigHandler::exitSignalHandler(int ignored)
+{
+    SigHandler::bExitSignal = true;
+}
+
+void archipelago::SigHandler::setupSignalHandlers()
+{
+    if (signal((int) SIGINT, SigHandler::exitSignalHandler) == SIG_ERR) {
+        throw SigException("Cannot setup SIGINT signal handler");
+    }
+    if (signal((int) SIGQUIT, SigHandler::exitSignalHandler) == SIG_ERR) {
+        throw SigException("Cannot setup SIGQUIT signal handler");
+    }
+}
