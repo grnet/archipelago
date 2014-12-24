@@ -783,3 +783,16 @@ archipelago::Poold::Poold(const int& startrange, const int& endrange,
 {
     initialize(startrange, endrange, uendpoint);
 }
+
+void archipelago::Poold::initialize(const int& start, const int& end,
+        const string& uendpoint)
+{
+    bRunning = true;
+    endpoint = uendpoint;
+    startrange = start;
+    endrange  = end;
+    for (int i = startrange; i < endrange + 1; i++) {
+        port_pool.push_back(i);
+    }
+    pthread_mutex_init(&mutex, NULL);
+}
