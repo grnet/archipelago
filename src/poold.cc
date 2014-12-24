@@ -955,3 +955,60 @@ void archipelago::Poold::handle_request(Socket& socket, poolmsg_t *msg)
     Poold::set_socket_pollout(socket);
     free(msg);
 }
+
+void archipelago::Poold::serve_forever() {
+    poolmsg_t *msg;
+    while (Poold::bRunning) {
+        int nfds = epoll.wait(events, 20, -1);
+        if (!Poold::bRunning) {
+            break; //Cleanup
+        }
+
+        for (int n = 0; n < nfds; n++) {
+            int epfd = events[n].data.fd;
+            if (epfd == srvsock.get_fd()) {
+                Socket *clientsock = new Socket();
+                if (!srvsock.accept(*clientsock)) {
+                    logfatal("Could not accept socket. Aborting...");
+                    exit(EXIT_FAILURE);
+                }
+                Poold::create_new_connection(*clientsock);
+            } else if (epfd == evfd) {
+                /* Exit loop */
+                return;
+            } else if (events[n].events & EPOLLRDHUP ||
+                            events[n].events & EPOLLHUP ||
+                            events[n].events & EPOLLERR) {
+                Socket *clientsock = Poold::find_socket(epfd);
+                Poold::clear_connection(*clientsock);
+                delete clientsock;
+                ::close(epfd);
+            } else if (events[n].events & EPOLLIN) {
+                Socket *clientsock = Poold::find_socket(epfd);
+                msg = Poold::recv_msg(*clientsock);
+                Poold::handle_request(*clientsock, msg);
+            } else if (events[n].events & EPOLLOUT) {
+                Socket *clientsock = Poold::find_socket(epfd);
+                switch (socket_connection_state[clientsock]) {
+                case REPLY_PORT:
+                    Poold::send_msg(*clientsock, get_new_port(*clientsock));
+                    break;
+                case REPLY_LEAVE_PORT_SUCCESS:
+                    Poold::send_msg(*clientsock, 1);
+                    break;
+                case REPLY_LEAVE_PORT_FAIL:
+                    Poold::send_msg(*clientsock, 0);
+                    break;
+                case REPLY_LEAVE_ALL_PORTS:
+                    Poold::send_msg(*clientsock, 1);
+                    break;
+                default:
+                    Poold::send_msg(*clientsock, 0);
+                    logerror("Unknown state.");
+                }
+                socket_connection_state[clientsock] = NONE;
+                Poold::set_socket_pollin(*clientsock);
+            }
+        }
+    }
+}
