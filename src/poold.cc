@@ -869,3 +869,20 @@ void archipelago::Poold::create_new_connection(Socket& socket) {
     socket_connection_state[&socket] = NONE;
     logdebug("Accepted new connection");
 }
+
+void archipelago::Poold::clear_connection(Socket& socket) {
+    epoll.rm_socket(socket);
+    list<int>::iterator i;
+    list<int> L = socket_connection_ports[&socket];
+    logdebug("Clearing connection");
+
+    pthread_mutex_lock(&mutex);
+    for ( i = L.begin(); i != L.end(); i++) {
+        port_pool.push_front(*i);
+    }
+
+    socket_connection_state.erase(&socket);
+    socket_connection_ports[&socket].clear();
+    socket_connection_ports.erase(&socket);
+    pthread_mutex_unlock(&mutex);
+}
