@@ -594,3 +594,12 @@ bool archipelago::Epoll::set_socket_pollin(Socket& socket)
     socket.events |= EPOLLIN;
     return true;
 }
+
+bool archipelago::Epoll::reset_socket_pollin(Socket& socket)
+{
+    if (!reset_fd_pollin(socket.get_fd(), socket.events)) {
+        return false;
+    }
+    socket.events &= ~((short) EPOLLIN);
+    return true;
+}
