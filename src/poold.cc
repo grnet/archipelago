@@ -1028,3 +1028,20 @@ void archipelago::Poold::close() {
     loginfo("Cleanup.");
     unlink(endpoint.c_str());
 }
+
+void print_usage(int argc, char **argv, string pidfile, string socketpath)
+{
+    std::cout << "Usage: " << argv[0] << " [options]\n"
+        "\nOptions:\n"
+        "-h\tprint this help message\n"
+        "-s\tset start of the pool range (default: 1)\n"
+        "-e\tset end of the pool range (default: 100)\n"
+        "-p\tset socket path (default: '"<< socketpath << "')\n"
+        "-c\tset logging configuration file (default: none)\n"
+        "-i\tset pidfile (default: '"<< pidfile << "')\n"
+        "-u\tset real EUID\n"
+        "-g\tset real EGID\n"
+        "-m\tset umask (default: 0007)\n"
+        "-d\tdaemonize (default: no)\n"
+        "\n";
+}
