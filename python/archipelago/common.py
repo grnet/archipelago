@@ -64,7 +64,8 @@ get_errno_loc.restype = POINTER(c_int)
 random.seed()
 hostname = socket.gethostname()
 
-valid_role_types = ['file_blocker', 'rados_blocker', 'mapperd', 'vlmcd']
+valid_role_types = ['file_blocker', 'rados_blocker', 'mapperd', 'vlmcd',
+                    'poold']
 valid_segment_types = ['posix']
 
 peers = dict()
@@ -89,6 +90,7 @@ FILE_BLOCKER = 'archip-filed'
 RADOS_BLOCKER = 'archip-radosd'
 MAPPER = 'archip-mapperd'
 VLMC = 'archip-vlmcd'
+POOLD = 'archip-poold'
 
 def is_power2(x):
     return bool(x != 0 and (x & (x-1)) == 0)
@@ -457,6 +459,144 @@ class Vlmcd(Peer):
             self.cli_opts.append(str(self.mapper_port))
 
 
+class Poold(object):
+    def __init__(self, role=None, daemon=True, logging_conf=None, pidfile=None,
+                 portno_start=None, portno_end=None, user=None, group=None,
+                 socket_path=None, umask="0o007"):
+        self.executable = POOLD
+        if not role:
+            raise Error("Role was not provided")
+        self.role = role
+
+        if not user:
+            raise Error("User was not provided")
+        self.user = user
+
+        if not group:
+            raise Error("Group was not provided")
+        self.group = group
+
+        self.user_uid = getpwnam(self.user).pw_uid
+        self.group_gid = getgrnam(self.group).gr_gid
+        self.umask = int(umask, 0)
+
+        if portno_start is None:
+            raise Error("portno_start must be provided for %s" % role)
+        self.portno_start = portno_start
+
+        if portno_end is None:
+            raise Error("portno_end must be provided for %s" % role)
+        self.portno_end = portno_end
+
+        self.daemon = daemon
+        self.logging_conf = logging_conf
+        if pidfile:
+            self.pidfile = pidfile
+        else:
+            self.pidfile = os.path.join(PIDFILE_PATH, role + PID_SUFFIX)
+        self.socket_path = socket_path
+        self.set_cli_options()
+
+    def start(self):
+
+        try:
+            os.makedirs(os.path.dirname(self.pidfile))
+        except OSError as e:
+            if e.errno == errno.EEXIST:
+                if os.path.isdir(os.path.dirname(self.pidfile)):
+                    pass
+                else:
+                    raise Error("Pid path %s is not a directory" %
+                                os.path.dirname(self.pidfile))
+            else:
+                raise Error("Cannot create path %s" %
+                            os.path.dirname(self.pidfile))
+
+        os.chmod(os.path.dirname(self.pidfile), stat.S_IRWXU | stat.S_IRWXG)
+        os.chown(os.path.dirname(self.pidfile), -1, self.group_gid)
+
+        if self.get_pid():
+            raise Error("Poold daemon has a valid pidfile.")
+        cmd = [os.path.join(BIN_DIR, self.executable)] + self.cli_opts
+        try:
+            check_call(cmd, shell=False)
+        except Exception as e:
+            raise Error("Cannot start %s: %s" % (self.role, str(e)))
+
+    def stop(self):
+        pid = self.get_pid()
+        if not pid:
+            raise Error("Peer %s not running" % self.role)
+
+        if self.__is_running(pid):
+            os.kill(pid, signal.SIGQUIT)
+
+    def __is_running(self, pid):
+        name = self.executable
+        for p in psutil.process_iter():
+            if p.name[0:len(name)] == name and pid == p.pid:
+                return True
+
+        return False
+
+    def is_running(self):
+        pid = self.get_pid()
+        if not pid:
+            return False
+
+        if not self.__is_running(pid):
+            raise Error("Poold daemon %s has a valid pidfile but is not "
+                        "running" % self.role)
+
+        return True
+
+    def get_pid(self):
+        if not self.pidfile:
+            return None
+
+        pf = None
+        try:
+            pf = open(self.pidfile, "r")
+            pid = int(pf.read())
+            pf.close()
+        except:
+            if pf:
+                pf.close()
+            return None
+
+        return pid
+
+    def set_cli_options(self):
+        self.cli_opts = []
+        if self.daemon:
+            self.cli_opts.append("-d")
+        if self.logging_conf:
+            self.cli_opts.append("-c")
+            self.cli_opts.append(self.logging_conf)
+        if self.pidfile:
+            self.cli_opts.append("-i")
+            self.cli_opts.append(self.pidfile)
+        if self.portno_start is not None:
+            self.cli_opts.append("-s")
+            self.cli_opts.append(str(self.portno_start))
+        if self.portno_end is not None:
+            self.cli_opts.append("-e")
+            self.cli_opts.append(str(self.portno_end))
+        if self.user:
+            self.cli_opts.append("-u")
+            self.cli_opts.append(str(self.user_uid))
+        if self.group:
+            self.cli_opts.append("-g")
+            self.cli_opts.append(str(self.group_gid))
+        if self.umask:
+            self.cli_opts.append("-m")
+            self.cli_opts.append(str(self.umask))
+        if self.socket_path:
+            self.cli_opts.append("-p")
+            self.cli_opts.append(str(self.socket_path))
+
+
+
 config = {
     'CEPH_CONF_FILE': '/etc/ceph/ceph.conf',
     # 'SPEC': "posix:archipelago:1024:5120:12",
@@ -655,6 +795,8 @@ def check_conf():
         elif role_type == 'vlmcd':
             peers[role] = Vlmcd(role=role, spec=segment.get_spec(),
                                 **role_config)
+        elif role_type == 'poold':
+            peers[role] = Poold(role=role, **role_config)
         else:
             raise Error("No valid peer type: %s" % role_type)
         validatePortRange(peers[role].portno_start, peers[role].portno_end,
@@ -739,9 +881,12 @@ def exclusive(get_port=False):
 
 def createDict(cfg, section):
     sec_dic = {}
-    sec_dic['portno_start'] = cfg.getint(section, 'portno_start')
-    sec_dic['portno_end'] = cfg.getint(section, 'portno_end')
-    sec_dic['nr_ops'] = cfg.getint(section, 'nr_ops')
+    t = str(cfg.get(section, 'type'))
+    if t != 'poold':
+        sec_dic['portno_start'] = cfg.getint(section, 'portno_start')
+        sec_dic['portno_end'] = cfg.getint(section, 'portno_end')
+        sec_dic['nr_ops'] = cfg.getint(section, 'nr_ops')
+
     if cfg.has_option(section, 'logfile'):
         sec_dic['logfile'] = str(cfg.get(section, 'logfile'))
     if cfg.has_option(section, 'threshold'):
@@ -751,7 +896,6 @@ def createDict(cfg, section):
     if cfg.has_option(section, 'umask'):
         sec_dic['umask'] = cfg.get(section, 'umask')
 
-    t = str(cfg.get(section, 'type'))
     if t == 'file_blocker':
         sec_dic['nr_threads'] = cfg.getint(section, 'nr_threads')
         sec_dic['archip_dir'] = cfg.get(section, 'archip_dir')
@@ -779,6 +923,19 @@ def createDict(cfg, section):
     elif t == 'vlmcd':
         sec_dic['blocker_port'] = cfg.getint(section, 'blocker_port')
         sec_dic['mapper_port'] = cfg.getint(section, 'mapper_port')
+    elif t == 'poold':
+        if cfg.has_option(section, 'portno_start'):
+            sec_dic['portno_start'] = cfg.getint(section, 'portno_start')
+        if cfg.has_option(section, 'portno_end'):
+            sec_dic['portno_end'] = cfg.getint(section, 'portno_end')
+        if cfg.has_option(section, 'umask'):
+            sec_dic['umask'] = cfg.get(section, 'umask')
+        if cfg.has_option(section, 'logging_conf'):
+            sec_dic['logging_conf'] = cfg.get(section, 'logging_conf')
+        if cfg.has_option(section, 'socket_path'):
+            sec_dic['socket_path'] = cfg.get(section, 'socket_path')
+        if cfg.has_option(section, 'pidfile'):
+            sec_dic['pidfile'] = cfg.get(section, 'pidfile')
 
     return sec_dic
 
