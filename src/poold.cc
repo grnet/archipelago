@@ -924,3 +924,34 @@ int archipelago::Poold::get_new_port(Socket& socket) {
     pthread_mutex_unlock(&mutex);
     return port;
 }
+
+void archipelago::Poold::handle_request(Socket& socket, poolmsg_t *msg)
+{
+    list<int>::iterator i;
+    list<int> L = socket_connection_ports[&socket];
+    logdebug("Handle request.");
+
+    if (msg->type == GET_PORT) {
+        socket_connection_state[&socket] = REPLY_PORT;
+    } else if (msg->type == LEAVE_PORT) {
+        if (find(L.begin(), L.end(), msg->port) != L.end()) {
+            socket_connection_ports[&socket].remove(msg->port);
+            pthread_mutex_lock(&mutex);
+            port_pool.push_front(msg->port);
+            pthread_mutex_unlock(&mutex);
+            socket_connection_state[&socket] = REPLY_LEAVE_PORT_SUCCESS;
+        } else {
+            socket_connection_state[&socket] = REPLY_LEAVE_PORT_FAIL;
+        }
+    } else if (msg->type == LEAVE_ALL_PORTS) {
+        for ( i = L.begin(); i != L.end(); i++) {
+            socket_connection_ports[&socket].remove(*i);
+            pthread_mutex_lock(&mutex);
+            port_pool.push_front(*i);
+            pthread_mutex_unlock(&mutex);
+        }
+        socket_connection_state[&socket] = REPLY_LEAVE_ALL_PORTS;
+    }
+    Poold::set_socket_pollout(socket);
+    free(msg);
+}
