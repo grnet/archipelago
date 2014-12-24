@@ -808,3 +808,13 @@ archipelago::Socket *archipelago::Poold::find_socket(int fd)
     }
     return it->first;
 }
+
+void archipelago::Poold::set_socket_pollin(Socket& socket)
+{
+    if (!epoll.reset_socket_pollout(socket)) {
+        logerror("epoll.reset_socket_pollout error");
+    }
+    if (!epoll.set_socket_pollin(socket)) {
+        logerror("epoll.set_socket_pollin error");
+    }
+}
