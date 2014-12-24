@@ -1012,3 +1012,11 @@ void archipelago::Poold::serve_forever() {
         }
     }
 }
+
+void archipelago::Poold::run() {
+    int rv = pthread_create(&th, NULL, poold_helper, static_cast<void*>(this));
+    if (rv != 0) {
+        logfatal("Error in thread creation. Aborting...");
+        exit(EXIT_FAILURE);
+    }
+}
