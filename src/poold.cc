@@ -886,3 +886,17 @@ void archipelago::Poold::clear_connection(Socket& socket) {
     socket_connection_ports.erase(&socket);
     pthread_mutex_unlock(&mutex);
 }
+
+poolmsg_t *archipelago::Poold::recv_msg(const Socket& socket) {
+    unsigned int buffer[2];
+    poolmsg_t *msg;
+
+    logdebug("Receiving new message.");
+    if (!socket.read(&buffer, sizeof(buffer))) {
+        logerror("Socket read error.");
+    }
+    msg = (poolmsg_t *)calloc(1, sizeof(poolmsg_t));
+    msg->type = ntohl(buffer[0]);
+    msg->port = ntohl(buffer[1]);
+    return msg;
+}
