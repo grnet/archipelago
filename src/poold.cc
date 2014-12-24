@@ -612,3 +612,12 @@ bool archipelago::Epoll::set_socket_pollout(Socket& socket)
     socket.events |= EPOLLOUT;
     return true;
 }
+
+bool archipelago::Epoll::reset_socket_pollout(Socket& socket)
+{
+    if (!reset_fd_pollout(socket.get_fd(), socket.events)) {
+        return false;
+    }
+    socket.events &= ~((short) EPOLLOUT);
+    return true;
+}
