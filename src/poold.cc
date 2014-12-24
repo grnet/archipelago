@@ -1020,3 +1020,11 @@ void archipelago::Poold::run() {
         exit(EXIT_FAILURE);
     }
 }
+
+void archipelago::Poold::close() {
+    Poold::bRunning = false;
+    eventfd_write(evfd, 1);
+    pthread_join(th, NULL);
+    loginfo("Cleanup.");
+    unlink(endpoint.c_str());
+}
