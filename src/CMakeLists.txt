@@ -69,5 +69,17 @@ set_target_properties(archip-mapperd
 	COMPILE_DEFINITIONS "ST_THREADS"
 	)
 
+set(poold_definitions
+    POOLD_SOCKET_PATH="/var/run/archipelago/poold.socket"
+    POOLD_PIDFILE="/var/run/archipelago/poold.pid")
+set(POOLD_SRC poold.cc)
+add_executable(archip-poold ${POOLD_SRC})
+target_link_libraries(archip-poold log4cplus pthread)
+set_target_properties(
+    archip-poold
+    PROPERTIES
+    COMPILE_DEFINITIONS "${poold_definitions}"
+    )
+
 INSTALL_TARGETS(/bin archip-filed archip-radosd archip-vlmcd archip-mapperd
-	archip-bench archip-dummy archip-benchfd)
+	archip-bench archip-dummy archip-benchfd archip-poold)
