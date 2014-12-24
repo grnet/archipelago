@@ -603,3 +603,12 @@ bool archipelago::Epoll::reset_socket_pollin(Socket& socket)
     socket.events &= ~((short) EPOLLIN);
     return true;
 }
+
+bool archipelago::Epoll::set_socket_pollout(Socket& socket)
+{
+    if (!set_fd_pollout(socket.get_fd(), socket.events)) {
+        return false;
+    }
+    socket.events |= EPOLLOUT;
+    return true;
+}
