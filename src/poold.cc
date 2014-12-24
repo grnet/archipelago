@@ -900,3 +900,14 @@ poolmsg_t *archipelago::Poold::recv_msg(const Socket& socket) {
     msg->port = ntohl(buffer[1]);
     return msg;
 }
+
+int archipelago::Poold::send_msg(const Socket& socket, int port) {
+    const int buffer[1] = {port};
+    logdebug("Sending port to client.");
+
+    int n = socket.write(buffer, sizeof(buffer));
+    if (n < 0) {
+        logerror("Socket write error.");
+    }
+    return n;
+}
