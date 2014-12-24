@@ -858,3 +858,14 @@ void archipelago::Poold::server() {
 
     socket_connection_state[&srvsock] = NONE;
 }
+
+void archipelago::Poold::create_new_connection(Socket& socket) {
+    if (socket.get_fd() == -1) {
+        logfatal("Socket file descriptor error. Aborting...");
+        exit(EXIT_FAILURE);
+    }
+    socket.setnonblocking(true);
+    epoll.add_socket(socket, EPOLLIN | EPOLLRDHUP | EPOLLHUP | EPOLLERR);
+    socket_connection_state[&socket] = NONE;
+    logdebug("Accepted new connection");
+}
