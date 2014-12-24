@@ -29,9 +29,6 @@
 #include <stdexcept>
 #include <functional>
 
-#include <log4cplus/configurator.h>
-#include <log4cplus/logger.h>
-
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -48,6 +45,8 @@
 #include <pwd.h>
 #include <grp.h>
 
+#include "logger.hh"
+
 /*
  * message structure
  */
@@ -63,23 +62,6 @@ namespace archipelago {
 
 using std::runtime_error;
 using namespace std;
-using namespace log4cplus;
-
-class Logger: public log4cplus::Logger {
-public:
-    Logger(const string& conffile, const string& instance);
-
-    void logerror(const string& msg);
-    void logfatal(const string& msg);
-    void loginfo(const string& msg);
-    void logdebug(const string& msg);
-    void logwarn(const string& msg);
-    void logtrace(const string& msg);
-private:
-    log4cplus::Logger logger;
-    void logGeneric(int loglevel, const string& msg);
-};
-
 
 class System: public Logger {
 private:
