@@ -621,3 +621,14 @@ bool archipelago::Epoll::reset_socket_pollout(Socket& socket)
     socket.events &= ~((short) EPOLLOUT);
     return true;
 }
+
+int archipelago::Epoll::wait(struct epoll_event *events, int maxevents,
+        int timeout)
+{
+    int nfds = epoll_wait(epollfd, events, maxevents, timeout);
+    if (nfds == -1 && errno != EINTR) {
+        perror("epoll_wait");
+        exit(EXIT_FAILURE);
+    }
+    return nfds;
+}
