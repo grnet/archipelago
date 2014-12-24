@@ -911,3 +911,16 @@ int archipelago::Poold::send_msg(const Socket& socket, int port) {
     }
     return n;
 }
+
+int archipelago::Poold::get_new_port(Socket& socket) {
+    if (port_pool.empty()) {
+        logdebug("Port pool is empty.");
+        return -1;
+    }
+    pthread_mutex_lock(&mutex);
+    int port = port_pool.front();
+    port_pool.pop_front();
+    socket_connection_ports[&socket].push_front(port);
+    pthread_mutex_unlock(&mutex);
+    return port;
+}
