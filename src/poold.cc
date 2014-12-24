@@ -584,3 +584,13 @@ bool archipelago::Epoll::reset_fd_pollout(int fd, uint32_t events)
     }
     return true;
 }
+
+bool archipelago::Epoll::set_socket_pollin(Socket& socket)
+{
+
+    if (!set_fd_pollin(socket.get_fd(), socket.events)) {
+        return false;
+    }
+    socket.events |= EPOLLIN;
+    return true;
+}
