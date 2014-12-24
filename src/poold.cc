@@ -523,3 +523,16 @@ bool archipelago::Epoll::rm_fd(int fd, uint32_t events)
     }
     return true;
 }
+
+bool archipelago::Epoll::rm_socket(Socket& socket)
+{
+    if (socket.get_fd() == -1) {
+        return false;
+    }
+
+    if (!rm_fd(socket.get_fd(), socket.events)) {
+        return false;
+    }
+    socket.events = 0;
+    return true;
+}
