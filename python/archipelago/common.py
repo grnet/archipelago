@@ -1520,3 +1520,200 @@ class PoolClient(object):
         self.socket.shutdown(socket.SHUT_RDWR)
         self.socket.close()
         self.socket = None
+
+
+class ArchipelagoPoolClient(PoolClient):
+    """Archipelago connection pool client
+
+    The class can be instantiated without any argument, the default
+    configuration file which is used is '/etc/archipelago/archipelago.conf':
+
+        pool = ArchipelagoPoolClient()
+
+    or using another configuration file:
+
+        pool = ArchipelagoPoolClient(conffile='local.conf')
+
+    or using another connection endpoint for the connection pooler:
+
+        pool = ArchipelagoPoolClient(endpoint='poold.socket')
+
+        or
+
+        pool = ArchipelagoPoolClient(conffile='local.conf',
+                                     endpoint='poold.socket')
+
+    or using a set of keyword arguments describing the full segment
+    characteristics:
+
+        pool = ArchipelagoPoolClient(segtype='posix', segname='archipelago',
+                                     dynports=1024, ports=2048, segsize=2048,
+                                     segalign=12)
+
+    The basic segment parameters are:
+
+    - *segname*: the segment name
+    - *segtype*: the segment type
+    - *dynports*: the dynamic ports range
+    - *ports*: the total ports range
+    - *segsize*: the segmen size
+    - *segalign*: the segment alignment
+
+    Any other keyword parameter will be passed to the underlying client
+    libraries: the list of supported parameters depends on the library version.
+
+    The following functionality is provided:
+
+    - Connect to connection pooler
+
+        pool.connect()
+
+    - Get an Archipelago port
+
+        portctx = pool.get_port()
+
+    - Return Archipelago port back to connection pool
+
+        pool.leave_port(portctx)
+
+    - Check if connection is alive
+
+        pool.alive()
+
+    - Return all ports the instantiated object holds back to the
+      connection pool
+
+        pool.leave_all_ports()
+
+    """
+    def __init__(self, conffile=None, endpoint=None, segname=None, # NOQA
+                 segtype=None, dynports=None, ports=None, segsize=None,
+                 segalign=None, **kwargs):
+        self.__segargs = ['segname', 'segtype', 'dynports', 'ports', 'segsize',
+                          'segalign']
+        self.__segment = None
+        self.__xsegctx = dict()
+        self.conffile = conffile
+
+        items = []
+        if segname is not None:
+            items.append(('segname', segname))
+        if segtype is not None:
+            items.append(('segtype', segtype))
+        if dynports is not None:
+            items.append(('dynports', dynports))
+        if ports is not None:
+            items.append(('ports', ports))
+        if segsize is not None:
+            items.append(('segsize', segsize))
+        if segalign is not None:
+            items.append(('segalign', segalign))
+
+        items.extend([k, v] for (k, v) in kwargs.iteritems() if v is not None)
+
+        if conffile is not None and items:
+            raise TypeError(
+                "'%s' is an invalid keyword argument when the conffile is "
+                "specified" % items[0][0])
+
+        if conffile is None:
+            if not items:
+                self.conffile = '/etc/archipelago/archipelago.conf'
+                self.__parse_conffile()
+            else:
+                createargs = {k: v for (k, v) in items if k in self.__segargs}
+                for k in self.__segargs:
+                    if k not in createargs:
+                        raise TypeError("'%s' argument is missing" % k)
+                self.__create_segment(**createargs)
+        else:
+            self.__parse_conffile()
+
+        if endpoint:
+            super(ArchipelagoPoolClient, self).__init__(endpoint=endpoint)
+        else:
+            super(ArchipelagoPoolClient, self).__init__()
+
+    def __parse_conffile(self):
+        cfg = ConfigParser.ConfigParser()
+        cfg.readfp(open(self.conffile))
+        try:
+            segtype = cfg.get('xseg', 'segment_type')
+        except ConfigParser.NoOptionError:
+            segtype = 'posix'
+        try:
+            segname = cfg.get('xseg', 'segment_name')
+        except ConfigParser.NoOptionError:
+            segname = 'archipelago'
+        try:
+            segalign = cfg.get('xseg', 'segment_alignment')
+        except ConfigParser.NoOptionError:
+            segalign = 12
+        dynports = cfg.getint('xseg', 'segment_dynports')
+        ports = cfg.getint('xseg', 'segment_ports')
+        segsize = cfg.getint('xseg', 'segment_size')
+
+        self.__create_segment(segtype, segname, dynports, ports, segsize,
+                              segalign)
+
+    def __create_segment(self, segtype=None, segname=None, dynports=None,
+                         ports=None, segsize=None, segalign=None):
+        if dynports >= ports:
+            raise TypeError("Wrong dynports or ports argument.")
+        self.__segment = Segment(segtype, segname, dynports, ports, segsize,
+                                 segalign)
+
+    def connect(self):
+        """Connect to Archipelago connection pooler"""
+        super(ArchipelagoPoolClient, self).connect()
+
+    def get_port(self):
+        """Retrieve an Archipelago port
+
+        :returns: a new Archipelago port on success, None on fail
+        """
+        portno = super(ArchipelagoPoolClient, self).get_port()
+        if portno != -1:
+            xsegctx = Xseg_ctx(self.__segment, portno)
+            self.__xsegctx[xsegctx] = portno
+            return xsegctx
+        return None
+
+    def leave_port(self, port):
+        """Return Archipelago port back to connection pool
+
+        :param xsegctx: the port to return to connection pool
+
+        :returns: True on success, False on fail
+
+        :raises: Exception
+        """
+        if isinstance(port, Xseg_ctx) and port in self.__xsegctx:
+            portno = self.__xsegctx[port]
+            port.shutdown()
+            del self.__xsegctx[port]
+            return super(ArchipelagoPoolClient, self).leave_port(portno)
+        raise TypeError('Wrong port context.')
+
+    def leave_all_ports(self):
+        """Return all retrieved Archipelago ports back to connection pool
+
+        :returns: True on success, False on fail
+        """
+        for xsegctx in self.__xsegctx.keys():
+            xsegctx.shutdown()
+        self.__xsegctx.clear()
+        return super(ArchipelagoPoolClient, self).leave_all_ports()
+
+    def alive(self):
+        """Check if connection is alive
+
+        :returns: True on success, False on fail
+        """
+        return super(ArchipelagoPoolClient, self).alive()
+
+    def close(self):
+        """Close connection to Archipelago connection pooler"""
+        # Try to leave all ports before closing
+        self.leave_all_ports()
+        super(ArchipelagoPoolClient, self).close()
