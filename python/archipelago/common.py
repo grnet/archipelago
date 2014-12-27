@@ -45,7 +45,6 @@ import psutil
 import errno
 import signal
 from subprocess import check_call
-from collections import namedtuple
 import socket
 import random
 from select import select
@@ -74,7 +73,7 @@ segment = None
 BIN_DIR = '/usr/bin/'
 DEFAULTS = '/etc/archipelago/archipelago.conf'
 
-#system defaults
+# system defaults
 ARCHIP_PREFIX = 'archip_'
 LOG_SUFFIX = '.log'
 PID_SUFFIX = '.pid'
@@ -92,10 +91,12 @@ MAPPER = 'archip-mapperd'
 VLMC = 'archip-vlmcd'
 POOLD = 'archip-poold'
 
+
 def is_power2(x):
     return bool(x != 0 and (x & (x-1)) == 0)
 
-#hack to test green waiting with python gevent.
+
+# hack to test green waiting with python gevent.
 class posixfd_signal_desc(Structure):
     pass
 posixfd_signal_desc._fields_ = [
@@ -103,6 +104,7 @@ posixfd_signal_desc._fields_ = [
     ('fd', c_int),
     ('flag', c_int),
 ]
+
 
 def xseg_wait_signal_green(ctx, sd, timeout):
     posixfd_sd = cast(sd, POINTER(posixfd_signal_desc))
@@ -117,13 +119,14 @@ def xseg_wait_signal_green(ctx, sd, timeout):
             else:
                 raise OSError(e, msg)
 
+
 def create_posixfd_dirs():
     path = "/dev/shm/posixfd"
     uid = getpwnam(config['USER']).pw_uid
     gid = getgrnam(config['GROUP']).gr_gid
 
     try:
-        os.mkdir(path, stat.S_IRWXU|stat.S_IRWXG)
+        os.mkdir(path, stat.S_IRWXU | stat.S_IRWXG)
     except OSError as e:
         if e.errno == errno.EEXIST:
             if os.path.isdir(os.path.dirname(path)):
@@ -135,12 +138,13 @@ def create_posixfd_dirs():
 
     os.chown(path, uid, gid)
     st = os.stat(path)
-    os.chmod(path, stat.S_IRWXU|stat.S_IRWXG|stat.S_ISGID)
+    os.chmod(path, stat.S_IRWXU | stat.S_IRWXG | stat.S_ISGID)
+
 
 class Peer(object):
     cli_opts = None
 
-    def __init__(self, role=None, daemon=True, nr_ops=16,
+    def __init__(self, role=None, daemon=True, nr_ops=16,  # NOQA
                  logfile=None, pidfile=None, portno_start=None,
                  portno_end=None, log_level=0, spec=None, threshold=None,
                  user=None, group=None, umask="0o007"):
@@ -226,10 +230,9 @@ class Peer(object):
                 raise Error("Cannot create path %s" %
                             os.path.dirname(self.pidfile))
 
-        os.chmod(os.path.dirname(self.pidfile), stat.S_IRWXU|stat.S_IRWXG)
+        os.chmod(os.path.dirname(self.pidfile), stat.S_IRWXU | stat.S_IRWXG)
         os.chown(os.path.dirname(self.pidfile), -1, self.group_gid)
         os.chown(os.path.dirname(self.logfile), -1, self.group_gid)
-
 
         if self.get_pid():
             raise Error("Peer has valid pidfile")
@@ -282,7 +285,7 @@ class Peer(object):
 
         return pid
 
-    def set_cli_options(self):
+    def set_cli_options(self):  # NOQA
         if self.daemon:
             self.cli_opts.append("-d")
         if self.nr_ops:
@@ -370,7 +373,8 @@ class Filed(MTpeer):
         if self.fdcache and fdcache < 2*nr_threads:
             raise Error("Fdcache should be greater than 2*nr_threads")
 
-        super(Filed, self).__init__(nr_threads=nr_threads, nr_ops=nr_ops, **kwargs)
+        super(Filed, self).__init__(nr_threads=nr_threads, nr_ops=nr_ops,
+                                    **kwargs)
 
         if not self.archip_dir:
             raise Error("%s: Archip dir must be set" % self.role)
@@ -566,7 +570,7 @@ class Poold(object):
 
         return pid
 
-    def set_cli_options(self):
+    def set_cli_options(self):  # NOQA
         self.cli_opts = []
         if self.daemon:
             self.cli_opts.append("-d")
@@ -596,7 +600,6 @@ class Poold(object):
             self.cli_opts.append(str(self.socket_path))
 
 
-
 config = {
     'CEPH_CONF_FILE': '/etc/ceph/ceph.conf',
     # 'SPEC': "posix:archipelago:1024:5120:12",
@@ -609,7 +612,7 @@ config = {
     'VTOOL_START': 1003,
     'VTOOL_END': 1003,
     'UMASK': 0o007,
-    #RESERVED 1023
+    # RESERVED 1023
 }
 
 FIRST_COLUMN_WIDTH = 23
@@ -642,6 +645,7 @@ class Error(Exception):
     def __str__(self):
         return self.msg
 
+
 class Segment(object):
     type = 'posix'
     name = 'archipelago'
@@ -665,20 +669,20 @@ class Segment(object):
             raise Error("Segment type not valid")
         if self.alignment != 12:
             raise Error("Wrong alignemt")
-        if self.dynports >= self.ports :
+        if self.dynports >= self.ports:
             raise Error("Dynports >= max ports")
 
         self.spec = self.get_spec()
 
     def get_spec(self):
         if not self.spec:
-            params = [self.type, self.name, str(self.dynports), str(self.ports),
-                      str(self.size), str(self.alignment)]
+            params = [self.type, self.name, str(self.dynports),
+                      str(self.ports), str(self.size), str(self.alignment)]
             self.spec = ':'.join(params).encode()
         return self.spec
 
     def create(self):
-        #fixme blocking....
+        # FIXME blocking....
         xconf = xseg_config()
         c_spec = create_string_buffer(self.spec)
         xseg_parse_spec(c_spec, xconf)
@@ -687,7 +691,7 @@ class Segment(object):
             raise Error("Cannot create segment")
 
     def destroy(self):
-        #fixme blocking....
+        # FIXME blocking....
         try:
             xseg = self.join()
         except:
@@ -704,7 +708,7 @@ class Segment(object):
             if not ret:
                 e = get_errno_loc()[0]
                 raise Error("Cannot join segment '%s': %s"
-                                % (config['SEGMENT_NAME'], os.strerror(e)))
+                            % (config['SEGMENT_NAME'], os.strerror(e)))
             return ret
 
         xconf = xseg_config()
@@ -716,7 +720,8 @@ class Segment(object):
 
         return ctx
 
-def check_conf():
+
+def check_conf():  # NOQA
     port_ranges = []
 
     def isExec(file_path):
@@ -741,7 +746,8 @@ def check_conf():
                         (portno_start, portno_end))
         for start, end in port_ranges:
             if not (portno_end < start or portno_start > end):
-                raise Error("Port range conflict: (%d, %d) confilcts with (%d, %d)" %
+                raise Error("Port range conflict: (%d, %d) conflicts with"
+                            " (%d, %d)" %
                             (portno_start, portno_end,  start, end))
         port_ranges.append((portno_start, portno_end))
 
@@ -753,9 +759,8 @@ def check_conf():
     xseg_align = config['SEGMENT_ALIGNMENT']
 
     global segment
-    segment = Segment(xseg_type, xseg_name, xseg_dynports, xseg_ports, xseg_size,
-                      xseg_align)
-
+    segment = Segment(xseg_type, xseg_name, xseg_dynports, xseg_ports,
+                      xseg_size, xseg_align)
 
     try:
         if not config['roles']:
@@ -785,7 +790,7 @@ def check_conf():
 
         if role_type == 'file_blocker':
             peers[role] = Filed(role=role, spec=segment.get_spec(),
-                                 prefix=ARCHIP_PREFIX, **role_config)
+                                prefix=ARCHIP_PREFIX, **role_config)
         elif role_type == 'rados_blocker':
             peers[role] = Radosd(role=role,
                                  spec=segment.get_spec(), **role_config)
@@ -805,13 +810,17 @@ def check_conf():
     validatePortRange(config['VTOOL_START'], config['VTOOL_END'], xseg_ports)
     return True
 
+
 def get_segment():
     return segment
+
 
 def construct_peers():
     return peers
 
 vtool_port = None
+
+
 def get_vtool_port():
     global vtool_port
     if vtool_port is None:
@@ -819,6 +828,7 @@ def get_vtool_port():
     return vtool_port
 
 acquired_locks = {}
+
 
 def get_lock(lock_file, max_time=15):
     elapsed = 0
@@ -835,12 +845,13 @@ def get_lock(lock_file, max_time=15):
                     elapsed += 0.2
                 else:
                     raise Error("Could not acquire %s. Tried %d seconds" %
-                            (lock_file, max_time))
+                                (lock_file, max_time))
             else:
                 raise OSError(err, lock_file + ' ' + reason)
     return fd
 
-def exclusive(get_port=False):
+
+def exclusive(get_port=False):  # NOQA
     def wrap(fn):
         def lock(*args, **kwargs):
             if not os.path.exists(LOCK_PATH):
@@ -854,7 +865,8 @@ def exclusive(get_port=False):
 
             if get_port:
                 vtool_port = get_vtool_port()
-                lock_file = os.path.join(LOCK_PATH, VLMC_LOCK_FILE + '_' + str(vtool_port))
+                lock_file = os.path.join(LOCK_PATH, VLMC_LOCK_FILE + '_' +
+                                         str(vtool_port))
             else:
                 lock_file = os.path.join(LOCK_PATH, VLMC_LOCK_FILE)
             try:
@@ -879,7 +891,8 @@ def exclusive(get_port=False):
         return lock
     return wrap
 
-def createDict(cfg, section):
+
+def createDict(cfg, section):  # NOQA
     sec_dic = {}
     t = str(cfg.get(section, 'type'))
     if t != 'poold':
@@ -906,7 +919,8 @@ def createDict(cfg, section):
         if cfg.has_option(section, 'direct'):
             sec_dic['direct'] = cfg.getboolean(section, 'direct')
         if cfg.has_option(section, 'pithos_migrate'):
-            sec_dic['pithos_migrate'] = cfg.getboolean(section, 'pithos_migrate')
+            sec_dic['pithos_migrate'] = cfg.getboolean(section,
+                                                       'pithos_migrate')
         if cfg.has_option(section, 'unique_str'):
             sec_dic['unique_str'] = cfg.getint(section, 'unique_str')
         if cfg.has_option(section, 'prefix'):
@@ -952,14 +966,14 @@ def loadrc(rc):
 
     cfg = ConfigParser.ConfigParser()
     cfg.readfp(cfg_fd)
-    config['SEGMENT_PORTS'] = cfg.getint('XSEG','SEGMENT_PORTS')
+    config['SEGMENT_PORTS'] = cfg.getint('XSEG', 'SEGMENT_PORTS')
     config['SEGMENT_DYNPORTS'] = cfg.getint('XSEG', 'SEGMENT_DYNPORTS')
-    config['SEGMENT_SIZE'] = cfg.getint('XSEG','SEGMENT_SIZE')
-    config['VTOOL_START'] = cfg.getint('XSEG','VTOOL_START')
-    config['VTOOL_END'] = cfg.getint('XSEG','VTOOL_END')
-    config['USER'] = cfg.get('ARCHIPELAGO','USER')
-    config['GROUP'] = cfg.get('ARCHIPELAGO','GROUP')
-    config['BLKTAP_ENABLED'] = cfg.getboolean('ARCHIPELAGO','BLKTAP_ENABLED')
+    config['SEGMENT_SIZE'] = cfg.getint('XSEG', 'SEGMENT_SIZE')
+    config['VTOOL_START'] = cfg.getint('XSEG', 'VTOOL_START')
+    config['VTOOL_END'] = cfg.getint('XSEG', 'VTOOL_END')
+    config['USER'] = cfg.get('ARCHIPELAGO', 'USER')
+    config['GROUP'] = cfg.get('ARCHIPELAGO', 'GROUP')
+    config['BLKTAP_ENABLED'] = cfg.getboolean('ARCHIPELAGO', 'BLKTAP_ENABLED')
     if cfg.has_option('ARCHIPELAGO', 'UMASK'):
         config['UMASK'] = int(cfg.get('ARCHIPELAGO', 'UMASK'), 0)
     roles = cfg.get('PEERS', 'ROLES')
@@ -1058,6 +1072,7 @@ def check_pidfile(name):
 
     return pid
 
+
 class Xseg_ctx(object):
     ctx = None
     port = None
@@ -1069,7 +1084,7 @@ class Xseg_ctx(object):
         ctx = segment.join()
         if not ctx:
             raise Error("Cannot join segment")
-        if portno == None:
+        if portno is None:
             port = xseg_bind_dynport(ctx)
             portno = xseg_portno_nonstatic(ctx, port)
             dynalloc = True
@@ -1127,7 +1142,7 @@ class Xseg_ctx(object):
             for req in requests:
                 xseg_req = req.req
                 if addressof(received.contents) == \
-                            addressof(xseg_req.contents):
+                        addressof(xseg_req.contents):
                     return req
             p = xseg_respond(self.ctx, received, self.portno, X_ALLOC)
             if p == NoPort:
@@ -1140,8 +1155,8 @@ class Request(object):
     xseg_ctx = None
     req = None
 
-    def __init__(self, xseg_ctx, dst_portno, target, datalen=0, size=0, op=None,
-                 data=None, flags=0, offset=0, v0_size=-1):
+    def __init__(self, xseg_ctx, dst_portno, target, datalen=0,  # NOQA
+                 size=0, op=None, data=None, flags=0, offset=0, v0_size=-1):
         if not target:
             raise Error("No target")
         targetlen = len(target)
@@ -1265,10 +1280,12 @@ class Request(object):
             c_data = xseg_get_data_nonstatic(self.xseg_ctx.ctx, self.req)
             memmove(c_data, p_data, self.req.contents.datalen)
         elif isinstance(data, xseg_request_create):
-            size = sizeof(uint32_t) * 3 + data.cnt * sizeof(xseg_create_map_scatterlist)
+            size = sizeof(uint32_t) * 3 + \
+                data.cnt * sizeof(xseg_create_map_scatterlist)
             if size != self.req.contents.datalen:
                 return False
-            p = struct.pack("=LLL", data.cnt, data.blocksize, data.create_flags)
+            p = struct.pack("=LLL", data.cnt, data.blocksize,
+                            data.create_flags)
             p_data = create_string_buffer(p)
             c_data = xseg_get_data_nonstatic(self.xseg_ctx.ctx, self.req)
             memmove(c_data, p_data, sizeof(uint32_t)*3)
@@ -1276,8 +1293,8 @@ class Request(object):
             c_data += sizeof(uint32_t) * 3
             c_data = cast(c_data, POINTER(c_char))
             for i in range(0, data.cnt):
-                p = struct.pack("=256sLL", data.segs[i].target, data.segs[i].targetlen,
-                         data.segs[i].flags)
+                p = struct.pack("=256sLL", data.segs[i].target,
+                                data.segs[i].targetlen, data.segs[i].flags)
                 p_data = create_string_buffer(p)
                 memmove(c_data, p_data, sizeof(xseg_create_map_scatterlist))
                 c_data = addressof(c_data.contents)
@@ -1323,14 +1340,14 @@ class Request(object):
 
     def success(self):
         if not bool(self.req.contents.state & XS_SERVED) and not \
-            bool(self.req.contents.state & XS_FAILED):
+                bool(self.req.contents.state & XS_FAILED):
             raise Error("Request not completed, nor Failed")
-        return bool((self.req.contents.state & XS_SERVED) and not \
-                   (self.req.contents.state & XS_FAILED))
+        return bool((self.req.contents.state & XS_SERVED) and not
+                    (self.req.contents.state & XS_FAILED))
 
     @classmethod
     def get_write_request(cls, xseg, dst, target, data=None, offset=0,
-            datalen=0, flags=0):
+                          datalen=0, flags=0):
         if data is None:
             data = ""
         size = len(data)
@@ -1343,7 +1360,7 @@ class Request(object):
     @classmethod
     def get_read_request(cls, xseg, dst, target, size=0, offset=0, datalen=0):
         if not datalen:
-            datalen=size
+            datalen = size
         return cls(xseg, dst, target, op=X_READ, offset=offset, size=size,
                    datalen=datalen)
 
@@ -1352,13 +1369,15 @@ class Request(object):
         return cls(xseg, dst, target, op=X_INFO)
 
     @classmethod
-    def get_copy_request(cls, xseg, dst, target, copy_target=None, size=0, offset=0):
+    def get_copy_request(cls, xseg, dst, target, copy_target=None, size=0,
+                         offset=0):
         datalen = sizeof(xseg_request_copy)
         xcopy = xseg_request_copy()
         xcopy.target = target
         xcopy.targetlen = len(target)
-        return cls(xseg, dst, copy_target, op=X_COPY, data=xcopy, datalen=datalen,
-                size=size, offset=offset)
+        return cls(xseg, dst, copy_target, op=X_COPY, data=xcopy,
+                   datalen=datalen, size=size, offset=offset)
+
     @classmethod
     def get_acquire_request(cls, xseg, dst, target, wait=False):
         flags = 0
@@ -1386,7 +1405,7 @@ class Request(object):
         datalen = sizeof(xseg_request_clone)
         xclone = xseg_request_clone()
         xclone.target = target
-        xclone.targetlen= len(target)
+        xclone.targetlen = len(target)
         xclone.size = clone_size
 
         return cls(xseg, dst, clone, op=X_CLONE, data=xclone, datalen=datalen)
@@ -1404,20 +1423,20 @@ class Request(object):
         datalen = sizeof(xseg_request_snapshot)
         xsnapshot = xseg_request_snapshot()
         xsnapshot.target = snap
-        xsnapshot.targetlen= len(snap)
+        xsnapshot.targetlen = len(snap)
 
         return cls(xseg, dst, target, op=X_SNAPSHOT, data=xsnapshot,
-                datalen=datalen)
+                   datalen=datalen)
 
     @classmethod
     def get_mapr_request(cls, xseg, dst, target, offset=0, size=0):
         return cls(xseg, dst, target, op=X_MAPR, offset=offset, size=size,
-                datalen=0)
+                   datalen=0)
 
     @classmethod
     def get_mapw_request(cls, xseg, dst, target, offset=0, size=0):
         return cls(xseg, dst, target, op=X_MAPW, offset=offset, size=size,
-                datalen=0)
+                   datalen=0)
 
     @classmethod
     def get_hash_request(cls, xseg, dst, target, size=0, offset=0):
@@ -1432,13 +1451,14 @@ class Request(object):
         datalen = sizeof(xseg_request_rename)
         xrename = xseg_request_rename()
         xrename.target = newname
-        xrename.targetlen= len(newname)
+        xrename.targetlen = len(newname)
 
-        return cls(xseg, dst, target, op=X_RENAME, data=xrename, datalen=datalen)
+        return cls(xseg, dst, target, op=X_RENAME, data=xrename,
+                   datalen=datalen)
 
     @classmethod
     def get_create_request(cls, xseg, dst, target, size=0, mapflags=None,
-            objects=None, blocksize=None):
+                           objects=None, blocksize=None):
         """
         Return a new request, formatted as a create request with the given
         arguments
@@ -1464,7 +1484,7 @@ class Request(object):
         datalen = sizeof(uint32_t) * 3 + sizeof(SegsArray)
 
         return cls(xseg, dst, target, op=X_CREATE, size=size, data=xcreate,
-                datalen=datalen)
+                   datalen=datalen)
 
 
 class PoolClient(object):
@@ -1586,7 +1606,7 @@ class ArchipelagoPoolClient(PoolClient):
         pool.leave_all_ports()
 
     """
-    def __init__(self, conffile=None, endpoint=None, segname=None, # NOQA
+    def __init__(self, conffile=None, endpoint=None, segname=None,  # NOQA
                  segtype=None, dynports=None, ports=None, segsize=None,
                  segalign=None, **kwargs):
         self.__segargs = ['segname', 'segtype', 'dynports', 'ports', 'segsize',
@@ -1621,7 +1641,8 @@ class ArchipelagoPoolClient(PoolClient):
                 self.conffile = '/etc/archipelago/archipelago.conf'
                 self.__parse_conffile()
             else:
-                createargs = {k: v for (k, v) in items if k in self.__segargs}
+                createargs = dict((k, v) for (k, v) in items
+                                  if k in self.__segargs)
                 for k in self.__segargs:
                     if k not in createargs:
                         raise TypeError("'%s' argument is missing" % k)
@@ -1638,20 +1659,20 @@ class ArchipelagoPoolClient(PoolClient):
         cfg = ConfigParser.ConfigParser()
         cfg.readfp(open(self.conffile))
         try:
-            segtype = cfg.get('xseg', 'segment_type')
+            segtype = cfg.get('XSEG', 'segment_type')
         except ConfigParser.NoOptionError:
             segtype = 'posix'
         try:
-            segname = cfg.get('xseg', 'segment_name')
+            segname = cfg.get('XSEG', 'segment_name')
         except ConfigParser.NoOptionError:
             segname = 'archipelago'
         try:
-            segalign = cfg.get('xseg', 'segment_alignment')
+            segalign = cfg.get('XSEG', 'segment_alignment')
         except ConfigParser.NoOptionError:
             segalign = 12
-        dynports = cfg.getint('xseg', 'segment_dynports')
-        ports = cfg.getint('xseg', 'segment_ports')
-        segsize = cfg.getint('xseg', 'segment_size')
+        dynports = cfg.getint('XSEG', 'segment_dynports')
+        ports = cfg.getint('XSEG', 'segment_ports')
+        segsize = cfg.getint('XSEG', 'segment_size')
 
         self.__create_segment(segtype, segname, dynports, ports, segsize,
                               segalign)
