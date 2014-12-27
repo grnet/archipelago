@@ -17,18 +17,16 @@
 #
 
 
-import os
 import sys
 import time
-import errno
-from subprocess import check_call
 
-from .common import *
-from .vlmc import showmapped as vlmc_showmapped
-from .vlmc import get_mapped as vlmc_get_mapped
+from common import *
+from vlmc import showmapped as vlmc_showmapped
+from vlmc import get_mapped as vlmc_get_mapped
 from blktap import VlmcTapdisk, VlmcTapdiskException
 
-def start_peer(peer, cli=False):
+
+def start_peer(peer, cli=False):  # NOQA
     if peer.is_running():
         raise Error("Cannot start peer %s. Peer already running" % peer.role)
     if cli:
@@ -48,12 +46,12 @@ def start_peer(peer, cli=False):
             sys.stdout.write("\n")
         raise Error("Cannot start %s" % peer.role)
 
-#TODO configurable
+# TODO configurable
     i = 0
     while not peer.is_running():
         time.sleep(0.1)
         i += 1
-        if i > 30: #3secs
+        if i > 30:  # 3secs
             if cli:
                 sys.stdout.write(red("FAILED".ljust(SECOND_COLUMN_WIDTH)))
                 sys.stdout.write("\n")
@@ -118,7 +116,7 @@ def stop_peers(peers, cli=False):
         stop_peer(p, cli)
 
 
-def start(role=None, cli=False, **kwargs):
+def start(role=None, cli=False, **kwargs):  # NOQA
     if role:
         try:
             p = peers[role]
@@ -136,8 +134,8 @@ def start(role=None, cli=False, **kwargs):
         print ""
 
     try:
-        #get_segment().create()
-        #time.sleep(0.5)
+        # get_segment().create()
+        # time.sleep(0.5)
         create_posixfd_dirs()
         start_peers(peers, cli)
         if config["BLKTAP_ENABLED"]:
@@ -152,7 +150,8 @@ def start(role=None, cli=False, **kwargs):
             print red(e)
         stop(role, cli, force=True)
 
-def stop(role=None, cli=False, force=False, **kwargs):
+
+def stop(role=None, cli=False, force=False, **kwargs):  # NOQA
     try:
         if config['BLKTAP_ENABLED'] is False and vlmc_get_mapped():
             vlmc_showmapped()
@@ -167,7 +166,7 @@ def stop(role=None, cli=False, force=False, **kwargs):
             raise Error("Invalid peer %s" % role)
         return stop_peer(p, cli)
 
-    #check devices
+    # check devices
     if cli:
         print "===================="
         print "Stoping archipelago"
@@ -189,7 +188,7 @@ def stop(role=None, cli=False, force=False, **kwargs):
     get_segment().destroy()
 
 
-def status(cli=False, **kwargs):
+def status(cli=False, **kwargs):  # NOQA
     r = 0
     if config["BLKTAP_ENABLED"]:
         if not loaded_module("blktap"):
@@ -213,7 +212,7 @@ def status(cli=False, **kwargs):
         if loaded_module("blktap"):
             if cli:
                 pretty_print("blktap", green('Loaded'))
-            #r += 1
+            # r += 1
         else:
             if cli:
                 pretty_print("blktap", red('Not loaded'))

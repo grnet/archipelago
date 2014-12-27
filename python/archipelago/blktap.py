@@ -16,6 +16,7 @@
 import os
 import subprocess
 
+
 def cmd_open(cmd, bufsize=-1, env=None):
     inst = subprocess.Popen(cmd, shell=False, bufsize=bufsize,
                             stdin=subprocess.PIPE,
@@ -33,17 +34,18 @@ def doexec(args, inputtext=None):
     rc = proc.wait()
     return (rc, stdout, stderr)
 
+
 class TDFlags:
-    TD_DEAD                 = 0x0001
-    TD_CLOSED               = 0x0002
-    TD_QUIESCE_REQUESTED    = 0x0004
-    TD_QUIESCED             = 0x0008
-    TD_PAUSE_REQUESTED      = 0x0010
-    TD_PAUSED               = 0x0020
-    TD_SHUTDOWN_REQUESTED   = 0x0040
-    TD_LOCKING              = 0x0080
-    TD_LOG_DROPPED          = 0x0100
-    TD_PAUSE_MASK           = TD_PAUSE_REQUESTED|TD_PAUSED
+    TD_DEAD = 0x0001
+    TD_CLOSED = 0x0002
+    TD_QUIESCE_REQUESTED = 0x0004
+    TD_QUIESCED = 0x0008
+    TD_PAUSE_REQUESTED = 0x0010
+    TD_PAUSED = 0x0020
+    TD_SHUTDOWN_REQUESTED = 0x0040
+    TD_LOCKING = 0x0080
+    TD_LOG_DROPPED = 0x0100
+    TD_PAUSE_MASK = TD_PAUSE_REQUESTED | TD_PAUSED
 
 
 class VlmcTapdiskException(Exception):
@@ -74,9 +76,9 @@ class VlmcTapdisk(object):
         def __str__(self):
             return 'volume=%s pid=%s minor=%s state=%s device=%s mport=%s ' \
                    'vport=%s, assume_v0=%s v0_size=%s' \
-                    % (self.volume, self.pid, self.minor, self.state,
-                       self.device, self.mport, self.vport, self.assume_v0,
-                       self.v0_size)
+                   % (self.volume, self.pid, self.minor, self.state,
+                      self.device, self.mport, self.vport, self.assume_v0,
+                      self.v0_size)
 
     @staticmethod
     def exc(*args):
@@ -85,8 +87,8 @@ class VlmcTapdisk(object):
         stdout.close()
         stderr.close()
         if rc:
-            raise VlmcTapdiskException('%s failed (%s %s %s)' % \
-                                   (args, rc, out, err))
+            raise VlmcTapdiskException('%s failed (%s %s %s)' %
+                                       (args, rc, out, err))
         return out
 
     @staticmethod
@@ -98,7 +100,7 @@ class VlmcTapdisk(object):
             print "'tap-ctl check' failed: %s" % e
             return -1
 
-    @staticmethod
+    @staticmethod  # NOQA
     def list():
         tapdisks = []
         _list = VlmcTapdisk.exc('list')
@@ -116,7 +118,7 @@ class VlmcTapdisk(object):
                     tapdisk.minor = int(value)
                     if tapdisk.minor >= 0:
                         tapdisk.device = '%s%s' % \
-                                        (VlmcTapdisk.TAP_DEV, tapdisk.minor)
+                            (VlmcTapdisk.TAP_DEV, tapdisk.minor)
                 elif key == 'state':
                     tapdisk.state = int(value, 16)
                 elif key == 'args' and value.find(':') != -1:
@@ -130,7 +132,7 @@ class VlmcTapdisk(object):
                         if arg.startswith('vport='):
                             tapdisk.vport = int(arg[len('vport='):])
                         if arg.startswith('v0_size='):
-                            tapdisk.v0_size= int(arg[len('v0_size='):])
+                            tapdisk.v0_size = int(arg[len('v0_size='):])
                         if arg.startswith('assume_v0'):
                             tapdisk.assume_v0 = True
 
@@ -199,8 +201,8 @@ class VlmcTapdisk(object):
         if tapdisk and tapdisk.pid:
             import json
             stats = VlmcTapdisk.exc('stats',
-                            '-p%s' % tapdisk.pid,
-                            '-m%s' % tapdisk.minor)
+                                    '-p%s' % tapdisk.pid,
+                                    '-m%s' % tapdisk.minor)
             return json.loads(stats)
         return None
 

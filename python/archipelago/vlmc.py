@@ -25,7 +25,7 @@ from binascii import hexlify
 from ctypes import c_uint32, c_uint64, string_at
 from distutils.spawn import find_executable
 
-from .common import *
+from common import *
 from blktap import VlmcTapdisk
 
 
@@ -95,6 +95,7 @@ def is_device_mapped(device):
             return d_id
     return None
 
+
 def parse_assume_v0(req, assume_v0, v0_size):
     if assume_v0:
         flags = req.get_flags()
@@ -103,13 +104,14 @@ def parse_assume_v0(req, assume_v0, v0_size):
         if v0_size is not None and v0_size != -1:
             req.set_v0_size(v0_size)
 
+
 def is_valid_name(name):
     """Validates a resource name"""
     if name.startswith(ARCHIP_PREFIX) or name.endswith('_lock') or \
        re.match('.*_(\d|[a-f]){16}', name):
         return False
-
     return True
+
 
 def create(name, size=None, snap=None, assume_v0=False, v0_size=-1, **kwargs):
     if len(name) < 6:
@@ -131,7 +133,7 @@ def create(name, size=None, snap=None, assume_v0=False, v0_size=-1, **kwargs):
     xseg_ctx = Xseg_ctx(get_segment())
     mport = peers['mapperd'].portno_start
     req = Request.get_clone_request(xseg_ctx, mport, snap, clone=name,
-            clone_size=size)
+                                    clone_size=size)
     parse_assume_v0(req, assume_v0, v0_size)
     req.submit()
     req.wait()
@@ -142,7 +144,8 @@ def create(name, size=None, snap=None, assume_v0=False, v0_size=-1, **kwargs):
         raise Error("vlmc creation failed")
 
 
-def snapshot(name, snap_name=None, cli=False, assume_v0=False, v0_size=-1, **kwargs):
+def snapshot(name, snap_name=None, cli=False, assume_v0=False, v0_size=-1,
+             **kwargs):
     if len(name) < 6:
         raise Error("Name should have at least len 6")
 
@@ -167,7 +170,9 @@ def snapshot(name, snap_name=None, cli=False, assume_v0=False, v0_size=-1, **kwa
     if cli:
         sys.stdout.write("Snapshot name: %s\n" % snap_name)
 
-def rename(name, newname=None, cli=False, assume_v0=False, v0_size=-1, **kwargs):
+
+def rename(name, newname=None, cli=False, assume_v0=False, v0_size=-1,
+           **kwargs):
     if len(name) < 6:
         raise Error("Name should have at least len 6")
 
@@ -226,7 +231,7 @@ def hash(name, cli=False, assume_v0=False, v0_size=-1, **kwargs):
         return hash_name
 
 
-def list_volumes(cli=False, **kwargs):
+def list_volumes(cli=False, **kwargs):  # NOQA
     """
     Quick 'n dirty way to list volumes. This bypasses the archipelago
     infrastructure and goes directly to storage.
@@ -253,14 +258,14 @@ def list_volumes(cli=False, **kwargs):
                 return None
         else:
             _, version, _, _, flags = unpack(">LLQLL",
-                                        header[:4*size_uint32t + size_uint64t])
+                                             header[:4*size_uint32t +
+                                                    size_uint64t])
             if flags & 1:
                 readonly = True
             if flags & 2:
                 deleted = True
 
         return (version, readonly, deleted)
-
 
     def get_volumes():
         Volume = namedtuple('Volume', ['name', 'version', 'header_object',
@@ -284,8 +289,8 @@ def list_volumes(cli=False, **kwargs):
                     if volume.startswith(ARCHIP_PREFIX):
                         volume = volume[len(ARCHIP_PREFIX):]
                     yield Volume(name=volume, version=version,
-                            header_object=name, deleted=deleted,
-                            readonly=readonly)
+                                 header_object=name, deleted=deleted,
+                                 readonly=readonly)
                 except:
                     pass
         elif isinstance(peers['blockerm'], Filed):
@@ -305,8 +310,8 @@ def list_volumes(cli=False, **kwargs):
                         if volume.startswith(ARCHIP_PREFIX):
                             volume = volume[len(ARCHIP_PREFIX):]
                         yield Volume(name=volume, version=version,
-                            header_object=name, deleted=deleted,
-                            readonly=readonly)
+                                     header_object=name, deleted=deleted,
+                                     readonly=readonly)
                     except:
                         pass
         else:
@@ -343,6 +348,7 @@ def remove(name, assume_v0=False, v0_size=-1, **kwargs):
     xseg_ctx.shutdown()
     if not ret:
         raise Error("vlmc removal failed")
+
 
 def update_volume(name, assume_v0=False, v0_size=-1, **kwargs):
 
