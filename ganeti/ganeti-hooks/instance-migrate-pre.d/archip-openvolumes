@@ -23,6 +23,7 @@ import socket
 from archipelago import vlmc as vlmc
 from archipelago.common import loadrc
 
+
 def hooks_log(msg):
     f = open('/var/log/ganeti/hooks.log', 'a')
     f.write("%s\n" % msg)
@@ -84,4 +85,3 @@ if __name__ == '__main__':
         exit(0)
 
     exit(archip_premigrate())
-
