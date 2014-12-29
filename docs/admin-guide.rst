@@ -167,6 +167,17 @@ RADOS blocker is another form of blocker which stores each objects as a single
 object in a RADOS pool. It can be used instead of the file blocker, to create
 and use disks over RADOS storage.
 
+The Connection pooler (poold)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The connection pooler is a lightweight middleware that works between the
+XSEG protocol (and the provided port mechanism) and the Archipelago client
+(QEMU, block driver, userspace peers). When a client connects to the server a
+connection will be assigned to it for the whole duration it stays connected.
+The client can interact with the server and acquire a new port from the pool
+or leave that port back to the pool. When the client disconnects, the server
+will put back into the pool all the acquired client resources.
+
 The Block devices (blktap)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
 
