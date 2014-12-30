@@ -502,7 +502,8 @@ void *init_thread_loop(void *arg)
 	pthread_t thread = pthread_self();
 	long int thread_num = t - t->peer->thread;
 	char *thread_id;
-	int i;
+	char *tmp;
+	int i, thread_id_size;
 
 	cpu_set_t mask;
 	int r;
@@ -520,20 +521,12 @@ void *init_thread_loop(void *arg)
 
 	/*
 	 * We need an identifier for every thread that will spin in peerd_loop.
-	 * The following code is a way to create a string of this format:
-	 *		"Thread <num>"
-	 * minus the null terminator. What we do is we create this string with
-	 * snprintf and then resize it to exclude the null terminator with
-	 * realloc. Finally, the result string is passed to the (void *arg) field
-	 * of struct thread.
-	 *
-	 * Since the highest thread number can't be more than 5 digits, using 13
-	 * chars should be more than enough.
 	 */
-	thread_id = malloc(13 * sizeof(char));
-	snprintf(thread_id, 13, "Thread %ld", thread_num);
-	for (i = 0; thread_id[i]; i++) {}
-	t->arg = (void *)realloc(thread_id, i-1);
+	thread_id_size = asprintf(&tmp, "Thread %ld", thread_num);
+	thread_id = malloc(thread_id_size * sizeof(char));
+	memcpy(thread_id, tmp, thread_id_size);
+	free(tmp);
+	t->arg = (void *) thread_id;
 	pthread_setspecific(threadkey, t);
 
 	//Start thread loop
