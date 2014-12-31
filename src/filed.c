@@ -76,8 +76,9 @@ static void * cache_node_init(void *p, void *xh)
 	//struct pfiled *pfiled = __get_pfiled(peer);
 	xcache_handler h = *(xcache_handler *)(xh);
 	struct fdcache_entry *fdentry = malloc(sizeof(struct fdcache_entry));
-	if (!fdentry)
+	if (!fdentry) {
 		return NULL;
+	}
 
 	XSEGLOG2(&lc, D, "Initialing node h: %llu with %p",
 			(long long unsigned)h, fdentry);
@@ -106,8 +107,9 @@ static void cache_put(void *p, void *e)
 
 	XSEGLOG2(&lc, D, "Putting entry %p with fd %d", fdentry, fdentry->fd);
 
-	if (fdentry->fd != -1)
+	if (fdentry->fd != -1) {
 		close(fdentry->fd);
+	}
 
 	fdentry->fd = -1;
 	fdentry->flags = 0;
@@ -118,8 +120,9 @@ static void close_cache_entry(struct peerd *peer, struct peer_req *pr)
 {
 	struct pfiled *pfiled = __get_pfiled(peer);
 	struct fio *fio = __get_fio(pr);
-	if (fio->h != NoEntry)
+	if (fio->h != NoEntry) {
 		xcache_put(&pfiled->cache, fio->h);
+	}
 }
 
 static void pfiled_complete(struct peerd *peer, struct peer_req *pr)
@@ -485,8 +488,9 @@ static ssize_t aligned_read(int fd, void *data, ssize_t size, off_t offset, int 
 		memcpy(data, tmp_data + misaligned_offset, size);
 		free(tmp_data);
 	}
-	if (r >= size)
+	if (r >= size) {
 		r = size;
+	}
 	return r;
 }
 
@@ -524,8 +528,9 @@ static ssize_t aligned_write(int fd, void *data, size_t size, off_t offset, int 
 		misaligned_size = aligned_size % alignment;
 
 		// in case there is no misaligned_size
-		if (misaligned_size)
+		if (misaligned_size) {
 			aligned_size = aligned_size + alignment - misaligned_size;
+		}
 
 		// Allocate aligned memory
 		r = posix_memalign(&tmp_data, alignment, aligned_size);
@@ -580,25 +585,28 @@ static ssize_t aligned_write(int fd, void *data, size_t size, off_t offset, int 
 		free(tmp_data);
 	}
 
-	if (r >= size)
+	if (r >= size) {
 		r = size;
+	}
 	return r;
 }
 
 static ssize_t filed_write(int fd, void *data, size_t size, off_t offset, int direct)
 {
-	if (direct)
+	if (direct) {
 		return aligned_write(fd, data, size, offset, 512);
-	else
+	} else {
 		return persisting_write(fd, data, size, offset);
+	}
 }
 
 static ssize_t filed_read(int fd, void *data, size_t size, off_t offset, int direct)
 {
-	if (direct)
+	if (direct) {
 		return aligned_read(fd, data, size, offset, 512);
-	else
+	} else {
 		return persisting_read(fd, data, size, offset);
+	}
 }
 
 static ssize_t pfiled_read(struct pfiled *pfiled, int fd, void *data, size_t size, off_t offset)
@@ -636,8 +644,9 @@ static ssize_t generic_io_path(char *path, void *data, size_t size, off_t offset
 static ssize_t read_path(char *path, void *data, size_t size, off_t offset, int direct)
 {
 	int flags = O_RDONLY;
-	if (direct)
+	if (direct) {
 		flags |= O_DIRECT;
+	}
 
 	return generic_io_path(path, data, size, offset, 0, flags, 0);
 }
@@ -657,8 +666,9 @@ static ssize_t pfiled_read_name(struct pfiled *pfiled, char *name, uint32_t name
 static ssize_t write_path(char *path, void *data, size_t size, off_t offset, int direct, int extra_open_flags, mode_t mode)
 {
 	int flags = O_RDWR | extra_open_flags;
-	if (direct)
+	if (direct) {
 		flags |= O_DIRECT;
+	}
 	return generic_io_path(path, data, size, offset, 1, flags, mode);
 }
 
@@ -730,11 +740,12 @@ static int open_file_path(struct pfiled *pfiled, char *path, int create)
 		XSEGLOG2(&lc, D, "Opening file %s with O_RDWR", path);
 	}
 
-	if (pfiled->directio)
+	if (pfiled->directio) {
 		flags |= O_DIRECT;
+	}
 
 	fd = open(path, flags, S_IRUSR|S_IWUSR|S_IRGRP|S_IWGRP|S_IROTH|S_IWOTH);
-	if (fd < 0){
+	if (fd < 0) {
 		XSEGLOG2(&lc, E, "Could not open file %s. Error: %s", path, strerror_r(errno, error_str, 1023));
 		return -errno;
 	}
@@ -786,7 +797,6 @@ static int open_file(struct pfiled *pfiled, char *target, uint32_t targetlen, in
 		return open_file_write(pfiled, target, targetlen);
 	} else if (mode == READ) {
 		return open_file_read(pfiled, target, targetlen);
-
 	} else {
 		XSEGLOG2(&lc, E, "Invalid mode for target");
 	}
@@ -902,7 +912,7 @@ static void handle_read(struct peerd *peer, struct peer_req *pr)
 
 
 	fd = dir_open(pfiled, fio, target, req->targetlen, READ);
-	if (fd < 0){
+	if (fd < 0) {
 		XSEGLOG2(&lc, E, "Open failed");
 		pfiled_fail(peer, pr);
 		return;
@@ -930,8 +940,7 @@ out:
 		XSEGLOG2(&lc, I, "Handle read completed for pr: %p, req: %p",
 				pr, pr->req);
 		pfiled_complete(peer, pr);
-	}
-	else {
+	} else {
 		XSEGLOG2(&lc, E, "Handle read failed for pr: %p, req: %p",
 				pr, pr->req);
 		pfiled_fail(peer, pr);
@@ -958,7 +967,7 @@ static void handle_write(struct peerd *peer, struct peer_req *pr)
 	}
 
 	fd = dir_open(pfiled, fio, target, req->targetlen, WRITE);
-	if (fd < 0){
+	if (fd < 0) {
 		XSEGLOG2(&lc, E, "Open failed");
 		pfiled_fail(peer, pr);
 		return;
@@ -998,8 +1007,7 @@ static void handle_write(struct peerd *peer, struct peer_req *pr)
 		XSEGLOG2(&lc, I, "Handle write completed for pr: %p, req: %p",
 				pr, pr->req);
 		pfiled_complete(peer, pr);
-	}
-	else {
+	} else {
 		XSEGLOG2(&lc, E, "Handle write failed for pr: %p, req: %p",
 				pr, pr->req);
 		pfiled_fail(peer, pr);
@@ -1069,7 +1077,7 @@ static void handle_copy(struct peerd *peer, struct peer_req *pr)
 	ssize_t limit = 0;
 
 	XSEGLOG2(&lc, I, "Handle copy started for pr: %p, req: %p", pr, pr->req);
-	if (!buf){
+	if (!buf) {
 		XSEGLOG2(&lc, E, "Out of memory");
 		pfiled_fail(peer, pr);
 		return;
@@ -1095,7 +1103,7 @@ static void handle_copy(struct peerd *peer, struct peer_req *pr)
 	}
 
 	r = fstat(src, &st);
-	if (r < 0){
+	if (r < 0) {
 		XSEGLOG2(&lc, E, "fail in stat for src %s", buf);
 		goto out;
 	}
@@ -1116,11 +1124,13 @@ static void handle_copy(struct peerd *peer, struct peer_req *pr)
 
 out:
 	req->serviced = c;
-	if (limit && c == limit)
+	if (limit && c == limit) {
 		req->serviced = req->size;
+	}
 
-	if (src > 0)
+	if (src > 0) {
 		close(src);
+	}
 	free(buf);
 	if (r < 0) {
 		XSEGLOG2(&lc, E, "Handle copy failed for pr: %p, req: %p", pr, pr->req);
@@ -1144,7 +1154,7 @@ static void handle_delete(struct peerd *peer, struct peer_req *pr)
 
 	XSEGLOG2(&lc, I, "Handle delete started for pr: %p, req: %p", pr, pr->req);
 
-	if (!buf){
+	if (!buf) {
 		XSEGLOG2(&lc, E, "Out of memory");
 		pfiled_fail(peer, pr);
 		return;
@@ -1194,7 +1204,7 @@ static int __get_precalculated_hash(struct peerd *peer, char *target,
 
 	r = pfiled_read_name(pfiled, hash_file, hash_file_len, hash, HEXLIFIED_SHA256_DIGEST_SIZE, 0);
 	if (r < 0) {
-		if (errno != ENOENT){
+		if (errno != ENOENT) {
 			XSEGLOG2(&lc, E, "Error opening %s", hash_file);
 		} else {
 			XSEGLOG2(&lc, I, "No precalculated hash for %s", hash_file);
@@ -1205,7 +1215,7 @@ static int __get_precalculated_hash(struct peerd *peer, char *target,
 	len = (uint32_t)r;
 	XSEGLOG2(&lc, D, "Read %u bytes", len);
 
-	if (len == HEXLIFIED_SHA256_DIGEST_SIZE){
+	if (len == HEXLIFIED_SHA256_DIGEST_SIZE) {
 		hash[HEXLIFIED_SHA256_DIGEST_SIZE] = 0;
 		XSEGLOG2(&lc, D, "Found hash for %s : %s", hash_file, hash);
 		ret = 0;
@@ -1233,7 +1243,7 @@ static int __set_precalculated_hash(struct peerd *peer, char *target,
 	r = pfiled_write_name(pfiled, hash_file, hash_file_len, hash, HEXLIFIED_SHA256_DIGEST_SIZE, 0,
 			O_CREAT|O_EXCL, S_IWUSR|S_IRUSR|S_IRGRP|S_IWGRP|S_IROTH|S_IWOTH);
 	if (r < 0) {
-		if (errno != EEXIST){
+		if (errno != EEXIST) {
 			XSEGLOG2(&lc, E, "Error opening %s", hash_file);
 		} else {
 			XSEGLOG2(&lc, I, "Hash file already exists %s", hash_file);
@@ -1369,14 +1379,14 @@ static void handle_hash(struct peerd *peer, struct peer_req *pr)
 	}
 
 	tmpfile_pathname = malloc(MAX_PATH_SIZE + MAX_FILENAME_SIZE + 1);
-	if (!tmpfile_pathname){
+	if (!tmpfile_pathname) {
 		XSEGLOG2(&lc, E, "Out of memory");
 		r = -1;
 		goto out;
 	}
 
 	tmpfile = malloc(MAX_FILENAME_SIZE);
-	if (!tmpfile){
+	if (!tmpfile) {
 		XSEGLOG2(&lc, E, "Out of memory");
 		r = -1;
 		goto out;
@@ -1482,7 +1492,7 @@ static int __locked_by(char *lockfile, char *expected, uint32_t expected_len, in
 	XSEGLOG2(&lc, D, "Started. Lockfile: %s, expected: %s, expected_len: %u", lockfile, expected, expected_len);
 	r = read_path(lockfile, tmpbuf, MAX_UNIQUESTR_LEN, 0, direct);
 	if (r < 0) {
-		if (errno != ENOENT){
+		if (errno != ENOENT) {
 			XSEGLOG2(&lc, E, "Error opening %s", lockfile);
 		} else {
 			//-2 == retry
@@ -1493,7 +1503,7 @@ static int __locked_by(char *lockfile, char *expected, uint32_t expected_len, in
 	}
 	len = (uint32_t)r;
 	XSEGLOG2(&lc, D, "Read %u bytes", len);
-	if (!strncmp(tmpbuf, expected, expected_len)){
+	if (!strncmp(tmpbuf, expected, expected_len)) {
 		XSEGLOG2(&lc, D, "Lock file %s locked by us.", lockfile);
 		ret = 0;
 	}
@@ -1522,7 +1532,7 @@ static int __try_lock(struct pfiled *pfiled, char *tmpfile, char *lockfile,
 
 	while (link(tmpfile, lockfile) < 0) {
 		//actual error
-		if (errno != EEXIST){
+		if (errno != EEXIST) {
 			XSEGLOG2(&lc, E, "Error linking %s to %s",
 					tmpfile, lockfile);
 			return -1;
@@ -1613,13 +1623,14 @@ static void handle_acquire(struct peerd *peer, struct peer_req *pr)
 	//nfs v >= 3
 	XSEGLOG2(&lc, D, "Tmpfile: %s", tmpfile_pathname);
 	flags = O_RDWR|O_CREAT|O_EXCL;
-	if (pfiled->directio)
+	if (pfiled->directio) {
 		flags |= O_DIRECT;
+	}
 	fd = open(tmpfile_pathname, flags,
 			S_IRUSR|S_IWUSR|S_IRGRP|S_IWGRP|S_IROTH|S_IWOTH);
 	if (fd < 0) {
 		//actual error
-		if (errno != EEXIST){
+		if (errno != EEXIST) {
 			XSEGLOG2(&lc, E, "Error opening %s", tmpfile_pathname);
 			goto out;
 		} else {
@@ -1632,7 +1643,7 @@ static void handle_acquire(struct peerd *peer, struct peer_req *pr)
 				tmpfile_pathname);
 		r = __try_lock(pfiled, tmpfile_pathname, lockfile_pathname,
 				req->flags, fd);
-		if (r < 0){
+		if (r < 0) {
 			XSEGLOG2(&lc, E, "Trying to get lock %s failed", buf);
 			ret = -1;
 		} else {
@@ -1649,11 +1660,10 @@ static void handle_acquire(struct peerd *peer, struct peer_req *pr)
 		}
 	}
 out:
-	if (ret < 0){
+	if (ret < 0) {
 		XSEGLOG2(&lc, I, "Failed to acquire lock %s", buf);
 		pfiled_fail(peer, pr);
-	}
-	else{
+	} else {
 		XSEGLOG2(&lc, I, "Acquired lock %s", buf);
 		pfiled_complete(peer, pr);
 	}
@@ -1733,8 +1743,9 @@ int dispatch(struct peerd *peer, struct peer_req *pr, struct xseg_request *req,
 		                enum dispatch_reason reason)
 {
 	struct fio *fio = __get_fio(pr);
-	if (reason == dispatch_accept)
+	if (reason == dispatch_accept) {
 		fio->h = NoEntry;
+	}
 
 	switch (req->op) {
 		case X_READ:
@@ -1782,7 +1793,7 @@ int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 		.on_init = cache_init,
 		.on_put = cache_put,
 	};
-	if (!pfiled){
+	if (!pfiled) {
 		XSEGLOG2(&lc, E, "Out of memory");
 		ret = -ENOMEM;
 		goto out;
@@ -1794,7 +1805,7 @@ int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 
 	for (i = 0; i < peer->nr_ops; i++) {
 		peer->peer_reqs[i].priv = malloc(sizeof(struct fio));
-		if (!peer->peer_reqs->priv){
+		if (!peer->peer_reqs->priv) {
 			XSEGLOG2(&lc, E, "Out of memory");
 			ret = -ENOMEM;
 			goto out;
@@ -1825,12 +1836,12 @@ int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 
 	//TODO test path exist/is_dir/have_access
 	pfiled->vpath_len = strlen(pfiled->vpath);
-	if (!pfiled->vpath_len){
+	if (!pfiled->vpath_len) {
 		XSEGLOG2(&lc, E, "Archipelago path was not provided");
 		usage(argv[0]);
 		return -1;
 	}
-	if (pfiled->vpath[pfiled->vpath_len -1] != '/'){
+	if (pfiled->vpath[pfiled->vpath_len -1] != '/') {
 		pfiled->vpath[pfiled->vpath_len] = '/';
 		pfiled->vpath[++pfiled->vpath_len]= '\0';
 	}
