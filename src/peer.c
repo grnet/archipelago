@@ -157,9 +157,6 @@ static int setup_signals(struct peerd *peer)
 
 	sa.sa_handler = renew_logfile;
 	r = sigaction(SIGUSR1, &sa, NULL);
-	if (r < 0) {
-		return r;
-	}
 
 	return r;
 }
