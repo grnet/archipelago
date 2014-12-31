@@ -173,9 +173,9 @@ void print_req(struct xseg *xseg, struct xseg_request *req)
 
 	if (1) {
 		strncpy(target, req_target, end);
-		target[end] = 0;
+		target[end] = '\0';
 		strncpy(data, req_data, 63);
-		data[63] = 0;
+		data[63] = '\0';
 		printf("req id:%lu, op:%u %llu:%lu serviced: %lu, reqstate: %u\n"
 				"src: %u, transit: %u, dst: %u effective dst: %u\n"
 				"target[%u]:'%s', data[%llu]:\n%s------------------\n\n",
@@ -208,9 +208,9 @@ void log_pr(char *msg, struct peer_req *pr)
 	unsigned int end = (pr->req->targetlen> 63) ? 63 : pr->req->targetlen;
 	if (verbose) {
 		strncpy(target, req_target, end);
-		target[end] = 0;
+		target[end] = '\0';
 		strncpy(data, req_data, 63);
-		data[63] = 0;
+		data[63] = '\0';
 		printf("%s: req id:%u, op:%u %llu:%lu serviced: %lu, retval: %lu, reqstate: %u\n"
 				"target[%u]:'%s', data[%llu]:\n%s------------------\n\n",
 				msg,
@@ -795,7 +795,7 @@ int pidfile_write(int pid_fd)
 {
 	char buf[16];
 	snprintf(buf, sizeof(buf), "%ld", syscall(SYS_gettid));
-	buf[15] = 0;
+	buf[15] = '\0';
 
 	lseek(pid_fd, 0, SEEK_SET);
 	int ret = write(pid_fd, buf, strlen(buf));
@@ -811,7 +811,7 @@ int pidfile_read(char *path, pid_t *pid)
 	if (fd < 0)
 		return -1;
 	int ret = read(fd, buf, 15);
-	buf[15]=0;
+	buf[15]='\0';
 	close(fd);
 	if (ret < 0)
 		return -1;
@@ -908,10 +908,10 @@ int main(int argc, char *argv[])
 
 	char *username = NULL;
 
-	logfile[0] = 0;
-	pidfile[0] = 0;
-	spec[0] = 0;
-	cpus[0] = 0;
+	logfile[0] = '\0';
+	pidfile[0] = '\0';
+	spec[0] = '\0';
+	cpus[0] = '\0';
 
 	//capture here -g spec, -n nr_ops, -p portno, -t nr_threads -v verbose level
 	// -dp xseg_portno to defer blocking requests
