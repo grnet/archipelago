@@ -361,7 +361,7 @@ static int strnjoin(char *dest, int n, ...)
 		strncpy(dest + pos, s, l);
 		pos += l;
 	}
-	dest[pos] = 0;
+	dest[pos] = '\0';
 	va_end(ap);
 
 	return pos;
@@ -807,7 +807,7 @@ static int dir_open(struct pfiled *pfiled, struct fio *fio,
 		return -1;
 	}
 	strncpy(name, target, targetlen);
-	name[targetlen] = 0;
+	name[targetlen] = '\0';
 	XSEGLOG2(&lc, I, "Dir open started for %s", name);
 
 	h = xcache_lookup(&pfiled->cache, name);
@@ -967,7 +967,7 @@ static void handle_write(struct peerd *peer, struct peer_req *pr)
 	if (!req->size) {
 		if (req->flags & (XF_FLUSH | XF_FUA)) {
 			/* No FLUSH/FUA support yet (O_SYNC ?).
-			 * note that with FLUSH/size == 0 
+			 * note that with FLUSH/size == 0
 			 * there will probably be a (uint64_t)-1 offset */
 			pfiled_complete(peer, pr);
 			return;
@@ -1190,7 +1190,7 @@ static int __get_precalculated_hash(struct peerd *peer, char *target,
 
 	hash_file = malloc(MAX_FILENAME_SIZE + 1);
 	hash_file_len = strjoin(hash_file, target, targetlen, HASH_SUFFIX, HASH_SUFFIX_LEN);
-	hash[0] = 0;
+	hash[0] = '\0';
 
 	r = pfiled_read_name(pfiled, hash_file, hash_file_len, hash, HEXLIFIED_SHA256_DIGEST_SIZE, 0);
 	if (r < 0) {
@@ -1302,7 +1302,7 @@ static void handle_hash(struct peerd *peer, struct peer_req *pr)
 		goto out;
 	}
 
-	if (hash_name[0] != 0) {
+	if (hash_name[0] != '\0') {
 		XSEGLOG2(&lc, I, "Precalucated hash found %s", hash_name);
 		goto found;
 	}
@@ -1310,7 +1310,7 @@ static void handle_hash(struct peerd *peer, struct peer_req *pr)
 	XSEGLOG2(&lc, I, "No precalculated hash found");
 
 	strncpy(name, target, req->targetlen);
-	name[req->targetlen] = 0;
+	name[req->targetlen] = '\0';
 
 	pathname = malloc(MAX_PATH_SIZE + MAX_FILENAME_SIZE + 1);
 	//object_data = malloc(sizeof(char) * req->size);
@@ -1349,7 +1349,7 @@ static void handle_hash(struct peerd *peer, struct peer_req *pr)
 	SHA256(object_data, sum, sha);
 
 	hexlify(sha, SHA256_DIGEST_SIZE, hash_name);
-	hash_name[HEXLIFIED_SHA256_DIGEST_SIZE] = 0;
+	hash_name[HEXLIFIED_SHA256_DIGEST_SIZE] = '\0';
 
 
 	r = create_path(pathname, pfiled, hash_name, HEXLIFIED_SHA256_DIGEST_SIZE, 1);
@@ -1832,7 +1832,7 @@ int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 	}
 	if (pfiled->vpath[pfiled->vpath_len -1] != '/'){
 		pfiled->vpath[pfiled->vpath_len] = '/';
-		pfiled->vpath[++pfiled->vpath_len]= 0;
+		pfiled->vpath[++pfiled->vpath_len]= '\0';
 	}
 
 	pfiled->lockpath_len = strlen(pfiled->lockpath);
@@ -1840,7 +1840,7 @@ int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 	if (pfiled->lockpath_len &&
 			pfiled->lockpath[pfiled->lockpath_len -1] != '/') {
 		pfiled->lockpath[pfiled->lockpath_len] = '/';
-		pfiled->lockpath[++pfiled->lockpath_len]= 0;
+		pfiled->lockpath[++pfiled->lockpath_len]= '\0';
 	}
 
 	r = getrlimit(RLIMIT_NOFILE, &rlim);
