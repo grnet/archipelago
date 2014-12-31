@@ -126,34 +126,40 @@ static int setup_signals(struct peerd *peer)
 	if (r < 0)
 		return r;
 	r = sigaction(SIGINT, &sa, NULL);
-	if (r < 0)
+	if (r < 0) {
 		return r;
+	}
 	r = sigaction(SIGQUIT, &sa, NULL);
-	if (r < 0)
+	if (r < 0) {
 		return r;
+	}
 
 	/*
 	 * Get the current limits for core files and raise them to the largest
 	 * value possible
 	 */
-	if (getrlimit(RLIMIT_CORE, &rlim) < 0)
+	if (getrlimit(RLIMIT_CORE, &rlim) < 0) {
 		return r;
+	}
 
 	rlim.rlim_cur = rlim.rlim_max;
 
-	if (setrlimit(RLIMIT_CORE, &rlim) < 0)
+	if (setrlimit(RLIMIT_CORE, &rlim) < 0) {
 		return r;
+	}
 
 	/* Install handler for segfaults */
 	sa.sa_handler = segv_handler;
 	r = sigaction(SIGSEGV, &sa, NULL);
-	if (r < 0)
+	if (r < 0) {
 		return r;
+	}
 
 	sa.sa_handler = renew_logfile;
 	r = sigaction(SIGUSR1, &sa, NULL);
-	if (r < 0)
+	if (r < 0) {
 		return r;
+	}
 
 	return r;
 }
@@ -229,8 +235,9 @@ inline struct peer_req *alloc_peer_req(struct peerd *peer, struct thread *t)
 {
 	struct peer_req *pr;
 	xqindex idx = xq_pop_head(&t->free_thread_reqs);
-	if (idx != Noneidx)
+	if (idx != Noneidx) {
 		goto out;
+	}
 
 	/* try to steal from another thread */
 	/*
@@ -260,8 +267,9 @@ out:
 inline struct peer_req *alloc_peer_req(struct peerd *peer)
 {
 	xqindex idx = xq_pop_head(&peer->free_reqs);
-	if (idx == Noneidx)
+	if (idx == Noneidx) {
 		return NULL;
+	}
 	return peer->peer_reqs + idx;
 }
 #endif
@@ -294,14 +302,16 @@ int all_peer_reqs_free(struct peerd *peer)
 #else
 	free_reqs = xq_count(&peer->free_reqs);
 #endif
-	if (free_reqs == peer->nr_ops)
+	if (free_reqs == peer->nr_ops) {
 		return 1;
+	}
 	return 0;
 }
 
 struct timeval resp_start, resp_end, resp_accum = {0, 0};
 uint64_t responds = 0;
-void get_responds_stats(){
+void get_responds_stats()
+{
 		printf("Time waiting respond %lu.%06lu sec for %llu times.\n",
 				//(unsigned int)(t - peer->thread),
 				resp_accum.tv_sec, resp_accum.tv_usec, (long long unsigned int) responds);
@@ -312,7 +322,7 @@ void fail(struct peerd *peer, struct peer_req *pr)
 {
 	struct xseg_request *req = pr->req;
 	uint32_t p;
-	if (req){
+	if (req) {
 		XSEGLOG2(&lc, D, "failing req %u", (unsigned int) (pr - peer->peer_reqs));
 		req->state |= XS_FAILED;
 		//xseg_set_req_data(peer->xseg, pr->req, NULL);
@@ -330,7 +340,7 @@ void complete(struct peerd *peer, struct peer_req *pr)
 {
 	struct xseg_request *req = pr->req;
 	uint32_t p;
-	if (req){
+	if (req) {
 		req->state |= XS_SERVED;
 		//xseg_set_req_data(peer->xseg, pr->req, NULL);
 		//gettimeofday(&resp_start, NULL);
@@ -371,7 +381,8 @@ static void handle_received(struct peerd *peer, struct peer_req *pr,
 }
 struct timeval sub_start, sub_end, sub_accum = {0, 0};
 uint64_t submits = 0;
-void get_submits_stats(){
+void get_submits_stats()
+{
 		printf("Time waiting submit %lu.%06lu sec for %llu times.\n",
 				//(unsigned int)(t - peer->thread),
 				sub_accum.tv_sec, sub_accum.tv_usec, (long long unsigned int) submits);
@@ -385,8 +396,9 @@ int submit_peer_req(struct peerd *peer, struct peer_req *pr)
 	//TODO small function with error checking
 	XSEGLOG2 (&lc, D, "submitting peer req %u\n", (unsigned int)(pr - peer->peer_reqs));
 	ret = xseg_set_req_data(peer->xseg, req, (void *)(pr));
-	if (ret < 0)
+	if (ret < 0) {
 		return -1;
+	}
 	//printf("pr: %x , req_data: %x \n", pr, xseg_get_req_data(peer->xseg, req));
 	//gettimeofday(&sub_start, NULL);
 	ret = xseg_submit(peer->xseg, req, pr->portno, X_ALLOC);
@@ -394,8 +406,9 @@ int submit_peer_req(struct peerd *peer, struct peer_req *pr)
 	//submits++;
 	//timersub(&sub_end, &sub_start, &sub_end);
 	//timeradd(&sub_end, &sub_accum, &sub_accum);
-	if (ret == NoPort)
+	if (ret == NoPort) {
 		return -1;
+	}
 	xseg_signal(peer->xseg, ret);
 	return 0;
 }
@@ -440,10 +453,10 @@ int check_ports(struct peerd *peer)
 		received = xseg_receive(xseg, i, X_NONBLOCK);
 		if (received) {
 			r =  xseg_get_req_data(xseg, received, (void **) &pr);
-			if (r < 0 || !pr){
+			if (r < 0 || !pr) {
 				XSEGLOG2(&lc, W, "Received request with no pr data\n");
 				xport p = xseg_respond(peer->xseg, received, peer->portno_start, X_ALLOC);
-				if (p == NoPort){
+				if (p == NoPort) {
 					XSEGLOG2(&lc, W, "Could not respond stale request");
 					xseg_put_request(xseg, received, portno_start);
 					continue;
@@ -478,10 +491,12 @@ static void* thread_loop(void *arg)
 	XSEGLOG2(&lc, I, "Thread %u has tid %u.\n", (unsigned int) (t- peer->thread), pid);
 	for (;!(isTerminate() && xq_count(&peer->free_reqs) == peer->nr_ops);) {
 		for(loops =  threshold; loops > 0; loops--) {
-			if (loops == 1)
+			if (loops == 1) {
 				xseg_prepare_wait(xseg, peer->portno_start);
-			if (check_ports(peer, t))
+			}
+			if (check_ports(peer, t)) {
 				loops = threshold;
+			}
 		}
 		XSEGLOG2(&lc, I, "Thread %u goes to sleep\n", (unsigned int) (t- peer->thread));
 		xseg_wait_signal(xseg, peer->sd, 10000000UL);
@@ -548,8 +563,9 @@ int peerd_start_threads(struct peerd *peer)
 					init_thread_loop, (void *)(peer->thread + i));
 	}
 
-	if (peer->interactive_func)
+	if (peer->interactive_func) {
 		peer->interactive_func();
+	}
 	for (i = 0; i < nr_threads; i++) {
 		pthread_join(peer->thread[i].tid, NULL);
 	}
@@ -563,13 +579,13 @@ int defer_request(struct peerd *peer, struct peer_req *pr)
 {
 	int r;
 	xport p;
-	if (!canDefer(peer)){
+	if (!canDefer(peer)) {
 		XSEGLOG2(&lc, E, "Peer cannot defer requests");
 		return -1;
 	}
 	p = xseg_forward(peer->xseg, pr->req, peer->defer_portno, pr->portno,
 			X_ALLOC);
-	if (p == NoPort){
+	if (p == NoPort) {
 		XSEGLOG2(&lc, E, "Cannot defer request %lx", pr->req);
 		return -1;
 	}
@@ -619,7 +635,7 @@ static int generic_peerd_loop(void *arg)
 				loops = threshold;
 		}
 #ifdef ST_THREADS
-		if (ta){
+		if (ta) {
 			st_sleep(0);
 			continue;
 		}
@@ -672,8 +688,9 @@ static struct xseg *join(char *spec)
 
 	(void)xseg_parse_spec(spec, &config);
 	xseg = xseg_join(config.type, config.name, PEER_TYPE, NULL);
-	if (xseg)
+	if (xseg) {
 		return xseg;
+	}
 
 	(void)xseg_create(&config);
 	return xseg_join(config.type, config.name, PEER_TYPE, NULL);
@@ -703,10 +720,12 @@ static struct peerd* peerd_init(uint32_t nr_ops, char* spec, long portno_start,
 #ifdef MT
 	peer->nr_threads = nr_threads;
 	peer->thread = calloc(nr_threads, sizeof(struct thread));
-	if (!peer->thread)
+	if (!peer->thread) {
 		goto malloc_fail;
-	if (!xq_alloc_empty(&peer->threads, nr_threads))
+	}
+	if (!xq_alloc_empty(&peer->threads, nr_threads)) {
 		goto malloc_fail;
+	}
 	for (i = 0; i < nr_threads; i++) {
 		if (!xq_alloc_empty(&peer->thread[i].free_thread_reqs, nr_ops))
 			goto malloc_fail;
@@ -717,24 +736,27 @@ static struct peerd* peerd_init(uint32_t nr_ops, char* spec, long portno_start,
 
 	pthread_key_create(&threadkey, NULL);
 #else
-	if (!xq_alloc_seq(&peer->free_reqs, nr_ops, nr_ops))
+	if (!xq_alloc_seq(&peer->free_reqs, nr_ops, nr_ops)) {
 		goto malloc_fail;
-	if (peer->free_reqs.size < peer->nr_ops)
+	}
+	if (peer->free_reqs.size < peer->nr_ops) {
 		peer->nr_ops = peer->free_reqs.size;
+	}
 #endif
 	peer->peer_reqs = calloc(nr_ops, sizeof(struct peer_req));
-	if (!peer->peer_reqs){
+	if (!peer->peer_reqs) {
 malloc_fail:
 		perror("malloc");
 		return NULL;
 	}
-	if (xseg_initialize()){
+	if (xseg_initialize()) {
 		printf("cannot initialize library\n");
 		return NULL;
 	}
 	peer->xseg = join(spec);
-	if (!peer->xseg)
+	if (!peer->xseg) {
 		return NULL;
+	}
 
 	peer->portno_start = (xport) portno_start;
 	peer->portno_end= (xport) portno_end;
@@ -811,11 +833,11 @@ int pidfile_read(char *path, pid_t *pid)
 	int ret = read(fd, buf, 15);
 	buf[15]='\0';
 	close(fd);
-	if (ret < 0)
+	if (ret < 0) {
 		return -1;
-	else{
+	} else{
 		*pid = strtol(buf, &endptr, 10);
-		if (endptr != &buf[ret]){
+		if (endptr != &buf[ret]) {
 			*pid = 0;
 			return -1;
 		}
@@ -828,9 +850,10 @@ int pidfile_open(char *path, pid_t *old_pid)
 	//nfs version > 3
 	int fd = open(path, O_CREAT|O_EXCL|O_WRONLY,
 			S_IRUSR|S_IWUSR|S_IRGRP|S_IWGRP);
-	if (fd < 0){
-		if (errno == EEXIST)
+	if (fd < 0) {
+		if (errno == EEXIST) {
 			pidfile_read(path, old_pid);
+		}
 	}
 	return fd;
 }
@@ -842,8 +865,9 @@ int get_cpu_list(char *cpus, struct cpu_list *cpu_list)
 
 	while ((tok = strtok(cpus, ",")) != NULL) {
 		cpu_list->cpus[i++] = strtol(tok, &rem, 10);
-		if (strlen(rem) > 0)	/* Not a number */
+		if (strlen(rem) > 0) {	/* Not a number */
 			return -1;
+		}
 		cpus = NULL;
 	}
 
@@ -938,7 +962,7 @@ int main(int argc, char *argv[])
 	READ_ARG_ULONG("--umask", peer_umask);
 	END_READ_ARGS();
 
-	if (help){
+	if (help) {
 		usage(argv[0]);
 		return 0;
 	}
@@ -992,13 +1016,13 @@ int main(int argc, char *argv[])
 
 	r = init_logctx(&lc, argv[0], debug_level, logfile,
 			REDIRECT_STDOUT|REDIRECT_STDERR);
-	if (r < 0){
+	if (r < 0) {
 		XSEGLOG("Cannot initialize logging to logfile");
 		return -1;
 	}
 	XSEGLOG2(&lc, D, "Main thread has tid %ld.\n", syscall(SYS_gettid));
 
-	if (pidfile[0]){
+	if (pidfile[0]) {
 		pid_fd = pidfile_open(pidfile, &old_pid);
 		if (pid_fd < 0) {
 			if (old_pid) {
@@ -1010,11 +1034,11 @@ int main(int argc, char *argv[])
 		}
 	}
 
-	if (daemonize){
-		if (close(STDIN_FILENO)){
+	if (daemonize) {
+		if (close(STDIN_FILENO)) {
 			XSEGLOG2(&lc, W, "Could not close stdin");
 		}
-		if (daemon(0, 1) < 0){
+		if (daemon(0, 1) < 0) {
 			XSEGLOG2(&lc, E, "Cannot daemonize");
 			r = -1;
 			goto out;
@@ -1055,7 +1079,7 @@ int main(int argc, char *argv[])
 		portno_start = portno;
 		portno_end = portno;
 	}
-	if (portno_start == -1 || portno_end == -1){
+	if (portno_start == -1 || portno_end == -1) {
 		XSEGLOG2(&lc, E, "Portno or {portno_start, portno_end} must be supplied");
 		usage(argv[0]);
 		r = -1;
@@ -1063,14 +1087,15 @@ int main(int argc, char *argv[])
 	}
 
 	peer = peerd_init(nr_ops, spec, portno_start, portno_end, nr_threads, defer_portno, threshold);
-	if (!peer){
+	if (!peer) {
 		r = -1;
 		goto out;
 	}
 	setup_signals(peer);
 	r = custom_peer_init(peer, argc, argv);
-	if (r < 0)
+	if (r < 0) {
 		goto out;
+	}
 #if defined(MT)
 	//TODO err check
 	peerd_start_threads(peer);
@@ -1081,7 +1106,8 @@ int main(int argc, char *argv[])
 	r = init_peerd_loop(peer);
 #endif
 out:
-	if (pid_fd > 0)
+	if (pid_fd > 0) {
 		pidfile_remove(pidfile, pid_fd);
+	}
 	return r;
 }
