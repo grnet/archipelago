@@ -15,7 +15,7 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-/* 
+/*
  *
  * vkoukis.c
  *
@@ -80,11 +80,11 @@ void perr_func(enum perr_type type, int want_errno, char *fmt, ...)
 	p += vsprintf(p, fmt, ap);
 	p += sprintf(p, "\n");
 
-	if (want_errno == 1)
+	if (want_errno == 1) {
 		/* Print last error returned from system call */
 		p += sprintf(p, "\tErrno was: %d - %s\n",
 				err_number, strerror_r(err_number, errbuf, PERR_BUF_SIZE));
-
+	}
 	/*
 	 * Output the buffer to stderr with a single call to fprintf,
 	 * which is thread-safe and locks the stderr semaphore
@@ -93,8 +93,9 @@ void perr_func(enum perr_type type, int want_errno, char *fmt, ...)
 	fflush(stderr);
 	va_end(ap);
 
-	if (type > 0)
+	if (type > 0) {
 		exit(1);
+	}
 }
 
 void init_perr(char *prog_name)
@@ -124,8 +125,9 @@ size_t strlcat(char *dst, const char *src, size_t siz)
 	dlen = d - dst;
 	n = siz - dlen;
 
-	if (n == 0)
+	if (n == 0) {
 		return(dlen + strlen(s));
+	}
 	while (*s != '\0') {
 		if (n != 1) {
 			*d++ = *s;
@@ -161,12 +163,12 @@ size_t strlcpy(char *dst, const char *src, size_t siz)
 
 	/* Not enough room in dst, add NUL and traverse rest of src */
 	if (n == 0) {
-		if (siz != 0)
+		if (siz != 0) {
 			*d = '\0';		/* NUL-terminate dst */
+		}
 		while (*s++)
 			;
 	}
 
 	return (s - src - 1);	/* count does not include NUL */
 }
-
