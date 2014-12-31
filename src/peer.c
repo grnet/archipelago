@@ -171,27 +171,25 @@ void print_req(struct xseg *xseg, struct xseg_request *req)
 	req_target = xseg_get_target(xseg, req);
 	req_data = xseg_get_data(xseg, req);
 
-	if (1) {
-		strncpy(target, req_target, end);
-		target[end] = '\0';
-		strncpy(data, req_data, 63);
-		data[63] = '\0';
-		printf("req id:%lu, op:%u %llu:%lu serviced: %lu, reqstate: %u\n"
-				"src: %u, transit: %u, dst: %u effective dst: %u\n"
-				"target[%u]:'%s', data[%llu]:\n%s------------------\n\n",
-				(unsigned long)(req),
-				(unsigned int)req->op,
-				(unsigned long long)req->offset,
-				(unsigned long)req->size,
-				(unsigned long)req->serviced,
-				(unsigned int)req->state,
-				(unsigned int)req->src_portno,
-				(unsigned int)req->transit_portno,
-				(unsigned int)req->dst_portno,
-				(unsigned int)req->effective_dst_portno,
-				(unsigned int)req->targetlen, target,
-				(unsigned long long)req->datalen, data);
-	}
+	strncpy(target, req_target, end);
+	target[end] = '\0';
+	strncpy(data, req_data, 63);
+	data[63] = '\0';
+	printf("req id:%lu, op:%u %llu:%lu serviced: %lu, reqstate: %u\n"
+			"src: %u, transit: %u, dst: %u effective dst: %u\n"
+			"target[%u]:'%s', data[%llu]:\n%s------------------\n\n",
+			(unsigned long)(req),
+			(unsigned int)req->op,
+			(unsigned long long)req->offset,
+			(unsigned long)req->size,
+			(unsigned long)req->serviced,
+			(unsigned int)req->state,
+			(unsigned int)req->src_portno,
+			(unsigned int)req->transit_portno,
+			(unsigned int)req->dst_portno,
+			(unsigned int)req->effective_dst_portno,
+			(unsigned int)req->targetlen, target,
+			(unsigned long long)req->datalen, data);
 }
 void log_pr(char *msg, struct peer_req *pr)
 {
