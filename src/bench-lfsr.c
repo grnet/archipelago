@@ -166,8 +166,9 @@ static uint64_t lfsr_create_xormask(uint8_t *taps)
 	int i;
 	uint64_t xormask = 0;
 
-	for(i = 0; i < MAX_TAPS && taps[i] != 0; i++)
+	for(i = 0; i < MAX_TAPS && taps[i] != 0; i++) {
 		xormask |= 1UL << (taps[i] - 1);
+    }
 
 	return xormask;
 }
@@ -176,9 +177,11 @@ static uint8_t *find_lfsr(uint64_t size)
 {
 	int i;
 
-	for (i = 3; i < 64; i++)
-		if ((1UL << i) > size) /* TODO: Explain why. */
+	for (i = 3; i < 64; i++) {
+		if ((1UL << i) > size) {/* TODO: Explain why. */
 			return taps[i];
+        }
+    }
 
 	return NULL;
 }
@@ -207,8 +210,9 @@ int prepare_spin(struct bench_lfsr *lfsr, unsigned int spin)
 	uint64_t x, y;
 	int i;
 
-	if (spin > 15)
+	if (spin > 15) {
 		return 1;
+    }
 
 	x = max / (spin + 1);
 	y = max % (spin + 1);
@@ -234,8 +238,9 @@ int lfsr_reset(struct bench_lfsr *lfsr, unsigned long seed)
 	lfsr->last_val = seed & bitmask;
 
 	/* All-ones state is illegal for XNOR LFSRs */
-	if (lfsr->last_val == bitmask)
+	if (lfsr->last_val == bitmask) {
 		return 1;
+    }
 
 	return 0;
 }
@@ -246,19 +251,21 @@ int lfsr_init(struct bench_lfsr *lfsr, uint64_t nums, unsigned long seed,
 	uint8_t *lfsr_taps;
 
 	lfsr_taps = find_lfsr(nums);
-	if (!lfsr_taps)
+	if (!lfsr_taps) {
 		return 1;
+    }
 
 	lfsr->max_val = nums - 1;
 	lfsr->xormask = lfsr_create_xormask(lfsr_taps);
 	lfsr->cached_bit = 1UL << (lfsr_taps[0] - 1);
 
-	if (prepare_spin(lfsr, spin))
+	if (prepare_spin(lfsr, spin)) {
 		return 1;
+    }
 
-	if (lfsr_reset(lfsr, seed))
+	if (lfsr_reset(lfsr, seed)) {
 		return 1;
+    }
 
 	return 0;
 }
-
