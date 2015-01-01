@@ -63,8 +63,9 @@ static inline uint64_t __get_object_from_name(struct object_vars *obv,
 		char *name)
 {
 	/* In case of --objname switch */
-	if (obv->name[0])
+	if (obv->name[0]) {
 		return 0;
+    }
 
 	/* Keep only the object number */
 	return atol(name + obv->namelen - obv->objnumlen);
@@ -84,8 +85,9 @@ static inline void __write_sig(struct bench_lfsr *sg, uint64_t *d, uint64_t s,
 
 	/* Write random numbers (based on global_id) every 24 bytes */
 	/* TODO: Should we use memcpy? */
-	for (i = pos; i < (s / 8) - (3 - pos); i += 3)
+	for (i = pos; i < (s / 8) - (3 - pos); i += 3) {
 		*(d + i) = lfsr_next(sg);
+    }
 
 	/* special care for last chunk */
 	last_val = lfsr_next(sg);
@@ -102,14 +104,16 @@ static inline int __read_sig(struct bench_lfsr *sg, uint64_t *d, uint64_t s,
 
 	/* TODO: Should we use memcmp? */
 	for (i = pos; i < (s / 8) - (3 - pos); i += 3) {
-		if (*(d + i) != lfsr_next(sg))
+		if (*(d + i) != lfsr_next(sg)) {
 			return 1;
+        }
 	}
 	/* special care for last chunk */
 	last_val = lfsr_next(sg);
 	space_left = s - (i * 8);
-	if (memcmp(d + i, &last_val, __snap_to_bound8(space_left)))
+	if (memcmp(d + i, &last_val, __snap_to_bound8(space_left))) {
 		return 1;
+    }
 
 	return 0;
 }
@@ -180,12 +184,15 @@ static int readwrite_chunk_full(struct bench *prefs, struct xseg_request *req)
 		__write_sig(&obj_lfsr, d, s, 1);
 		__write_sig(&off_lfsr, d, s, 2);
 	} else {
-		if (__read_sig(&id_lfsr, d, s, 0))
+		if (__read_sig(&id_lfsr, d, s, 0)) {
 			return 1;
-		if (__read_sig(&obj_lfsr, d, s, 1))
+        }
+		if (__read_sig(&obj_lfsr, d, s, 1)) {
 			return 1;
-		if(__read_sig(&off_lfsr, d, s, 2))
+        }
+		if(__read_sig(&off_lfsr, d, s, 2)) {
 			return 1;
+        }
 	}
 
 	return 0;
@@ -218,10 +225,11 @@ static int readwrite_chunk_meta(struct bench *prefs, struct xseg_request *req)
 		memcpy(d, &sig, sig_s);
 		memcpy(d + s - sig_s, &sig, sig_s);
 	} else {
-		if (memcmp(d, &sig, sig_s))
+		if (memcmp(d, &sig, sig_s)) {
 			r = 1;
-		else if (memcmp(d + s - sig_s, &sig, sig_s))
+        } else if (memcmp(d + s - sig_s, &sig, sig_s)) {
 			r = 1;
+        }
 	}
 	//PRINT_SIG(start, d);
 	//PRINT_SIG(end, (d + s - sig_s));
@@ -280,4 +288,3 @@ int read_chunk(struct bench *prefs, struct xseg_request *req)
 	}
 	return r;
 }
-
