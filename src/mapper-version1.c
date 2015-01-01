@@ -34,8 +34,7 @@ int read_object_v1(struct map_node *mn, unsigned char *buf)
 		hexlify(buf+1, SHA256_DIGEST_SIZE, mn->object + MAPPER_PREFIX_LEN);
 		mn->object[MAX_OBJECT_LEN] = 0;
 		mn->objectlen = strlen(mn->object);
-	}
-	else {
+	} else {
 		mn->flags &= ~MF_OBJECT_WRITABLE;
 		mn->flags &= ~MF_OBJECT_ARCHIP;
 		hexlify(buf+1, SHA256_DIGEST_SIZE, mn->object);
@@ -55,8 +54,7 @@ void object_to_map_v1(unsigned char* buf, struct map_node *mn)
 	if (buf[0]){
 		/* strip common prefix */
 		unhexlify(mn->object+MAPPER_PREFIX_LEN, (unsigned char *)(buf+1));
-	}
-	else {
+	} else {
 		unhexlify(mn->object, (unsigned char *)(buf+1));
 	}
 	//if name == zero block, raize MF_OBJECT_ZERO
@@ -96,8 +94,9 @@ int read_map_v1(struct map *m, unsigned char *data)
 	uint64_t nr_objs = m->nr_objs;
 
 	map_node = calloc(nr_objs, sizeof(struct map_node));
-	if (!map_node)
+	if (!map_node) {
 		return -1;
+    }
 	m->objects = map_node;
 
 	for (i = 0; i < nr_objs; i++) {
@@ -172,11 +171,13 @@ int write_map_data_v1(struct peer_req *pr, struct map *map)
 {
 	int r = 0;
 	struct xseg_request *req = __write_map_data_v1(pr, map);
-	if (!req)
+	if (!req) {
 		return -1;
+    }
 	wait_on_pr(pr, (!(req->state & XS_FAILED || req->state & XS_SERVED)));
-	if (req->state & XS_FAILED)
+	if (req->state & XS_FAILED) {
 		r = -1;
+    }
 	put_request(pr, req);
 	return r;
 }
@@ -225,8 +226,9 @@ int load_map_data_v1(struct peer_req *pr, struct map *map)
 	char *data;
 
 	req = __load_map_data_v1(pr, map);
-	if (!req)
+	if (!req) {
 		return -1;
+    }
 	wait_on_pr(pr, (!(req->state & XS_FAILED || req->state & XS_SERVED)));
 
 	if (req->state & XS_FAILED){
@@ -279,4 +281,3 @@ void write_map_header_v1(struct map *map, struct v1_header_struct *v1_hdr)
 	v1_hdr->version = __cpu_to_le32(MAP_V1);
 	v1_hdr->size = __cpu_to_le64(map->size);
 }
-

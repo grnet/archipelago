@@ -303,8 +303,9 @@ static struct xseg_request * prepare_write_object_v2(struct peer_req *pr,
 	struct xseg_request *req;
 
 	req = prepare_write_objects_v2(pr, map, mn->objectidx, 1);
-	if (!req)
+	if (!req) {
 		return NULL;
+    }
 	data = xseg_get_data(peer->xseg, req);
 	object_to_map_v2((unsigned char *)data, mn);
 	return req;
@@ -522,11 +523,13 @@ static int write_objects_v2(struct peer_req *pr, struct map *map, uint64_t start
 	mio->cb = write_objects_v2_cb;
 
 	r = __write_objects_v2(pr, map, start, nr);
-	if (r < 0)
+	if (r < 0) {
 		mio->err = 1;
+    }
 
-	if (mio->pending_reqs > 0)
+	if (mio->pending_reqs > 0) {
 		wait_on_pr(pr, mio->pending_reqs > 0);
+    }
 
 	mio->priv = NULL;
 	mio->cb = NULL;
@@ -662,11 +665,13 @@ static int load_map_objects_v2(struct peer_req *pr, struct map *map, uint64_t st
 	XSEGLOG2(&lc, D, "Allocated buf: %p for %llu objs", buf, nr);
 
 	r = __load_map_objects_v2(pr, map, start, nr, buf);
-	if (r < 0)
+	if (r < 0) {
 		mio->err = 1;
+    }
 
-	if (mio->pending_reqs > 0)
+	if (mio->pending_reqs > 0) {
 		wait_on_pr(pr, mio->pending_reqs > 0);
+    }
 
 	if (mio->err) {
 		XSEGLOG2(&lc, E, "Error issuing load request");

@@ -193,7 +193,7 @@ struct map_node {
 				MF_MAP_DELETING_DATA|MF_MAP_DESTROYING|        \
 				MF_MAP_TRUNCATING|MF_MAP_CLOSING)
 
-/* hex value of "AMF." 
+/* hex value of "AMF."
  * Stands for Archipelago Map Format */
 #define MAP_SIGNATURE (uint32_t)(0x414d462e)
 
@@ -337,8 +337,9 @@ static inline uint64_t __calc_map_obj(uint64_t size, uint32_t blocksize)
 	uint64_t nr_objs;
 
 	nr_objs = size / blocksize;
-	if (size % blocksize)
+	if (size % blocksize) {
 		nr_objs++;
+    }
 
 	return nr_objs;
 }

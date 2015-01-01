@@ -79,13 +79,15 @@ int read_map_v0(struct map *m, unsigned char * data)
 
 	map_node = realloc(m->objects,
 			(m->nr_objs + max_read_obj) * sizeof(struct map_node));
-	if (!map_node)
+	if (!map_node) {
 		return -1;
+    }
 	m->objects = map_node;
 	limit = m->nr_objs + max_read_obj;
 	for (i = m->nr_objs; i < limit; i++) {
-		if (!memcmp(data+pos, nulls, v0_objectsize_in_map))
+		if (!memcmp(data+pos, nulls, v0_objectsize_in_map)) {
 			break;
+        }
 		map_node[i].objectidx = i;
 		map_node[i].map = m;
 		map_node[i].waiters = 0;
@@ -160,11 +162,13 @@ int write_map_data_v0(struct peer_req *pr, struct map *map)
 {
 	int r = 0;
 	struct xseg_request *req = __write_map_data_v0(pr, map);
-	if (!req)
+	if (!req) {
 		return -1;
+    }
 	wait_on_pr(pr, (!(req->state & XS_FAILED || req->state & XS_SERVED)));
-	if (req->state & XS_FAILED)
+	if (req->state & XS_FAILED) {
 		r = -1;
+    }
 	put_request(pr, req);
 	return r;
 }
@@ -220,8 +224,9 @@ int load_map_data_v0(struct peer_req *pr, struct map *map)
 
 retry:
 	req = __load_map_data_v0(pr, map);
-	if (!req)
+	if (!req) {
 		return -1;
+    }
 	wait_on_pr(pr, (!(req->state & XS_FAILED || req->state & XS_SERVED)));
 
 	if (req->state & XS_FAILED){
@@ -233,8 +238,9 @@ retry:
 	data = xseg_get_data(peer->xseg, req);
 	r = read_map_v0(map, (unsigned char *)data);
 	put_request(pr, req);
-	if (!r)
+	if (!r) {
 		goto retry;
+    }
 	return 0;
 }
 

@@ -81,8 +81,9 @@ static struct map * find_map(struct mapperd *mapper, char *volume)
 	struct map *m = NULL;
 	int r = xhash_lookup(mapper->hashmaps, (xhashidx) volume,
 				(xhashidx *) &m);
-	if (r < 0)
+	if (r < 0) {
 		return NULL;
+    }
 	return m;
 }
 
@@ -91,7 +92,7 @@ static struct map * find_map_len(struct mapperd *mapper, char *target,
 {
 	char buf[XSEG_MAX_TARGETLEN+1];
 
-	if (targetlen > MAX_VOLUME_LEN){
+	if (targetlen > MAX_VOLUME_LEN) {
 		XSEGLOG2(&lc, E, "Namelen %u too long. Max: %d",
 					targetlen, MAX_VOLUME_LEN);
 		return NULL;
@@ -105,7 +106,7 @@ static struct map * find_map_len(struct mapperd *mapper, char *target,
 //	}
 //	else {
 		strncpy(buf, target, targetlen);
-		buf[targetlen] = 0;
+		buf[targetlen] = '\0';
 //	}
 
 	XSEGLOG2(&lc, D, "looking up map %s, len %u",
@@ -123,7 +124,7 @@ static int insert_map(struct mapperd *mapper, struct map *map)
 		goto out;
 	}
 
-	XSEGLOG2(&lc, D, "Inserting map %s, len: %d (map: %lx)", 
+	XSEGLOG2(&lc, D, "Inserting map %s, len: %d (map: %lx)",
 			map->key, strlen(map->key), (unsigned long) map);
 	r = xhash_insert(mapper->hashmaps, (xhashidx) map->key, (xhashidx) map);
 	while (r == -XHASH_ERESIZE) {
@@ -196,8 +197,9 @@ int initialize_map_objects(struct map *map)
 	uint64_t i;
 	struct map_node *map_node = map->objects;
 
-	if (!map_node)
+	if (!map_node) {
 		return -1;
+    }
 
 	for (i = 0; i < map->nr_objs; i++) {
 		map_node[i].map = map;
@@ -250,8 +252,9 @@ static inline void put_map(struct map *map)
 			}
 		}
 		//clean up map
-		if (map->objects)
+		if (map->objects) {
 			free(map->objects);
+        }
 		XSEGLOG2(&lc, I, "Freed map %s", map->volume);
 		free(map);
 	}
@@ -260,7 +263,7 @@ static inline void put_map(struct map *map)
 static void change_map_volume(struct map *map, char *name, uint32_t namelen)
 {
 	strncpy(map->volume, name, namelen);
-	map->volume[namelen] = 0;
+	map->volume[namelen] = '\0';
 	map->volumelen = namelen;
 }
 
@@ -278,11 +281,11 @@ static struct map * create_map(char *name, uint32_t namelen, uint32_t flags)
 	}
 	m->size = -1;
 	strncpy(m->volume, name, namelen);
-	m->volume[namelen] = 0;
+	m->volume[namelen] = '\0';
 	m->volumelen = namelen;
 	//initialize key to volume name
 	strncpy(m->key, name, namelen);
-	m->key[namelen] = 0;
+	m->key[namelen] = '\0';
 	/* Use the latest map version here, when creating a new map. If
 	 * the map is read from storage, this version will be rewritten
 	 * with the right value.
@@ -315,8 +318,9 @@ static void wait_all_map_objects_ready(struct map *map)
 	//TODO: maybe add counter on the map on how many objects are used, to
 	//speed up the common case, where there are no used objects.
 	map->state |= MF_MAP_SERIALIZING;
-	if (map->users)
+	if (map->users) {
 		wait_all_objects_ready(map);
+    }
 
 	for (i = 0; i < map->nr_objs; i++) {
 		mn = get_mapnode(map, i);
@@ -361,8 +365,9 @@ static int do_copyups(struct peer_req *pr, struct r2o *mns, int n)
 			mn = mns[i].mn;
 			//do copyups
 			if (mn->state & MF_OBJECT_NOT_READY){
-				if (!can_wait)
+				if (!can_wait) {
 					continue;
+                }
 				/* here mn->flags should be
 				 * MF_OBJECT_COPYING or MF_OBJECT_WRITING or
 				 * later MF_OBJECT_HASHING.
@@ -397,8 +402,9 @@ static int do_copyups(struct peer_req *pr, struct r2o *mns, int n)
 		XSEGLOG2(&lc, E, "Mio->err, pending_copyups: %d", mio->pending_reqs);
 	}
 
-	if (mio->pending_reqs > 0)
+	if (mio->pending_reqs > 0) {
 		wait_on_pr(pr, mio->pending_reqs > 0);
+    }
 
 	return mio->err ? -1 : 0;
 }
@@ -549,8 +555,7 @@ static int do_open(struct peer_req *pr, struct map *map)
 {
 	if (map->state & MF_MAP_EXCLUSIVE) {
 		return 0;
-	}
-	else {
+	} else {
 		return -1;
 	}
 }
@@ -717,9 +722,10 @@ static int do_snapshot(struct peer_req *pr, struct map *map)
 		// their state into not read.
 		// No other operation that manipulated map objects can occur
 		// simutaneously with snapshot operation.
-		if (mn->state & MF_OBJECT_NOT_READY)
+		if (mn->state & MF_OBJECT_NOT_READY) {
 			XSEGLOG2(&lc, E, "BUG: object not ready");
 	//		wait_on_mapnode(mn, mn->state & MF_OBJECT_NOT_READY);
+        }
 
 		mn->flags &= ~MF_OBJECT_WRITABLE;
 		put_mapnode(mn);
@@ -749,8 +755,9 @@ static int do_snapshot(struct peer_req *pr, struct map *map)
 
 	map->state &= ~MF_MAP_SNAPSHOTTING;
 
-	if (map->opened_count == cur_count)
+	if (map->opened_count == cur_count) {
 		close_map(pr, map);
+    }
 
 	XSEGLOG2(&lc, I, "Snapshot for map %s completed", map->volume);
 	return 0;
@@ -777,8 +784,9 @@ static int do_destroy(struct peer_req *pr, struct map *map)
 	struct xseg_request *req;
 	int r;
 
-	if (!(map->state & MF_MAP_EXCLUSIVE))
+	if (!(map->state & MF_MAP_EXCLUSIVE)) {
 		return -1;
+    }
 
 	if (map->flags & MF_MAP_DELETED) {
 		XSEGLOG2(&lc, E, "Map %s already deleted", map->volume);
@@ -796,8 +804,9 @@ static int do_destroy(struct peer_req *pr, struct map *map)
 	mio->pending_reqs = 0;
 	for (i = 0; i < nr_objs; i++) {
 		//throttle generated requests
-		if (mio->pending_reqs >= peer->nr_ops)
+		if (mio->pending_reqs >= peer->nr_ops) {
 			wait_on_pr(pr, mio->pending_reqs >= peer->nr_ops);
+        }
 
 		mn = get_mapnode(map, i);
 		if (!mn) {
@@ -837,8 +846,9 @@ static int do_destroy(struct peer_req *pr, struct map *map)
 		//mapnode will be put by delete_object on completion
 	}
 
-	if (mio->pending_reqs > 0)
+	if (mio->pending_reqs > 0) {
 		wait_on_pr(pr, mio->pending_reqs > 0);
+    }
 
 	if (mio->err) {
 		XSEGLOG2(&lc, E, "Error while removing objects of %s", map->volume);
@@ -1030,14 +1040,14 @@ static int do_mapr(struct peer_req *pr, struct map *map)
 	int r = req2objs(pr, map, 0);
 	if  (r < 0){
 		XSEGLOG2(&lc, I, "Map r of map %s, range: %llu-%llu failed",
-				map->volume, 
-				(unsigned long long) pr->req->offset, 
+				map->volume,
+				(unsigned long long) pr->req->offset,
 				(unsigned long long) (pr->req->offset + pr->req->size));
 		return -1;
 	}
 	XSEGLOG2(&lc, I, "Map r of map %s, range: %llu-%llu completed",
-			map->volume, 
-			(unsigned long long) pr->req->offset, 
+			map->volume,
+			(unsigned long long) pr->req->offset,
 			(unsigned long long) (pr->req->offset + pr->req->size));
 	XSEGLOG2(&lc, D, "Req->offset: %llu, req->size: %llu",
 			(unsigned long long) pr->req->offset,
@@ -1067,14 +1077,14 @@ static int do_mapw(struct peer_req *pr, struct map *map)
 	r = req2objs(pr, map, 1);
 	if  (r < 0){
 		XSEGLOG2(&lc, I, "Map w of map %s, range: %llu-%llu failed",
-				map->volume, 
-				(unsigned long long) pr->req->offset, 
+				map->volume,
+				(unsigned long long) pr->req->offset,
 				(unsigned long long) (pr->req->offset + pr->req->size));
 		return -1;
 	}
 	XSEGLOG2(&lc, I, "Map w of map %s, range: %llu-%llu completed",
-			map->volume, 
-			(unsigned long long) pr->req->offset, 
+			map->volume,
+			(unsigned long long) pr->req->offset,
 			(unsigned long long) (pr->req->offset + pr->req->size));
 	XSEGLOG2(&lc, D, "Req->offset: %llu, req->size: %llu",
 			(unsigned long long) pr->req->offset,
@@ -1139,10 +1149,11 @@ static int do_clone(struct peer_req *pr, struct map *map)
 	clonemap->flags = 0;
 	clonemap->epoch++;
 
-	if (!(xclone->size))
+	if (!(xclone->size)) {
 		clonemap->size = map->size;
-	else
+    } else {
 		clonemap->size = xclone->size;
+    }
 	if (clonemap->size < map->size){
 		XSEGLOG2(&lc, W, "Requested clone size (%llu) < map size (%llu)"
 				"\n\t for requested clone %s",
@@ -1166,17 +1177,19 @@ static int do_clone(struct peer_req *pr, struct map *map)
 			strncpy(map_nodes[i].object, mn->object, mn->objectlen);
 			map_nodes[i].objectlen = mn->objectlen;
 			map_nodes[i].flags = 0;
-			if (mn->flags & MF_OBJECT_ARCHIP)
+			if (mn->flags & MF_OBJECT_ARCHIP) {
 				map_nodes[i].flags |= MF_OBJECT_ARCHIP;
-			if (mn->flags & MF_OBJECT_ZERO)
+            }
+			if (mn->flags & MF_OBJECT_ZERO) {
 				map_nodes[i].flags |= MF_OBJECT_ZERO;
+            }
 			put_mapnode(mn);
 		} else {
 			strncpy(map_nodes[i].object, zero_block, ZERO_BLOCK_LEN);
 			map_nodes[i].objectlen = ZERO_BLOCK_LEN;
 			map_nodes[i].flags = MF_OBJECT_ZERO;
 		}
-		map_nodes[i].object[map_nodes[i].objectlen] = 0; //NULL terminate
+		map_nodes[i].object[map_nodes[i].objectlen] = '\0'; //NULL terminate
 		map_nodes[i].state = 0;
 		map_nodes[i].objectidx = i;
 		map_nodes[i].map = clonemap;
@@ -1240,10 +1253,12 @@ static int truncate_map(struct peer_req *pr, struct map *map, uint64_t offset)
                            strncpy(map_nodes[i].object, mn->object, mn->objectlen);
                            map_nodes[i].objectlen = mn->objectlen;
                            map_nodes[i].flags = 0;
-                           if (mn->flags & MF_OBJECT_ARCHIP)
+                           if (mn->flags & MF_OBJECT_ARCHIP) {
                                    map_nodes[i].flags |= MF_OBJECT_ARCHIP;
-                           if (mn->flags & MF_OBJECT_ZERO)
+                           }
+                           if (mn->flags & MF_OBJECT_ZERO) {
                                    map_nodes[i].flags |= MF_OBJECT_ZERO;
+                           }
                            put_mapnode(mn);
                    } else {
                            strncpy(map_nodes[i].object, zero_block, ZERO_BLOCK_LEN);
@@ -1344,8 +1359,9 @@ struct map * get_map(struct peer_req *pr, char *name, uint32_t namelen,
 	if (!map) {
 		if (flags & MF_LOAD){
 			map = create_map(name, namelen, flags);
-			if (!map)
+			if (!map) {
 				return NULL;
+            }
 			r = insert_map(mapper, map);
 			if (r < 0) {
 				XSEGLOG2(&lc, E, "Cannot insert map %s", map->volume);
@@ -1380,7 +1396,7 @@ retry:
 				if (r < 0) {
 					XSEGLOG2(&lc, E, "Could not rename map, continuing with the old map");
 				} else {
-
+					//FIXME WHAT HERE????
 				}
 			}
 
@@ -1448,8 +1464,9 @@ static int map_action(int (action)(struct peer_req *pr, struct map *map),
 	}
 	int r = action(pr, map);
 	//always drop cache if map not read exclusively
-	if (!(map->state & MF_MAP_CANCACHE))
+	if (!(map->state & MF_MAP_CANCACHE)) {
 		dropcache(pr, map);
+	}
 	signal_map(map);
 	put_map(map);
 	return r;
@@ -1461,10 +1478,11 @@ void * handle_info(struct peer_req *pr)
 	char *target = xseg_get_target(peer->xseg, pr->req);
 	int r = map_action(do_info, pr, target, pr->req->targetlen,
 				MF_ARCHIP|MF_LOAD);
-	if (r < 0)
+	if (r < 0) {
 		fail(peer, pr);
-	else
+	} else {
 		complete(peer, pr);
+	}
 	ta--;
 	return NULL;
 }
@@ -1571,10 +1589,11 @@ void * handle_clone(struct peer_req *pr)
 		put_map(map);
 	}
 out:
-	if (r < 0)
+	if (r < 0) {
 		fail(peer, pr);
-	else
+	} else {
 		complete(peer, pr);
+	}
 	ta--;
 	return NULL;
 }
@@ -1714,10 +1733,11 @@ void * handle_create(struct peer_req *pr)
 	close_map(pr, map);
 	put_map(map);
 out:
-	if (r < 0)
+	if (r < 0) {
 		fail(peer, pr);
-	else
+	} else {
 		complete(peer, pr);
+	}
 	ta--;
 	return NULL;
 }
@@ -1728,10 +1748,11 @@ void * handle_mapr(struct peer_req *pr)
 	char *target = xseg_get_target(peer->xseg, pr->req);
 	int r = map_action(do_mapr, pr, target, pr->req->targetlen,
 				MF_ARCHIP|MF_LOAD|MF_EXCLUSIVE);
-	if (r < 0)
+	if (r < 0) {
 		fail(peer, pr);
-	else
+	} else {
 		complete(peer, pr);
+	}
 	ta--;
 	return NULL;
 }
@@ -1742,10 +1763,11 @@ void * handle_mapw(struct peer_req *pr)
 	char *target = xseg_get_target(peer->xseg, pr->req);
 	int r = map_action(do_mapw, pr, target, pr->req->targetlen,
 				MF_ARCHIP|MF_LOAD|MF_EXCLUSIVE|MF_FORCE);
-	if (r < 0)
+	if (r < 0) {
 		fail(peer, pr);
-	else
+	} else {
 		complete(peer, pr);
+	}
 	XSEGLOG2(&lc, D, "Ta: %d", ta);
 	ta--;
 	return NULL;
@@ -1760,10 +1782,11 @@ void * handle_destroy(struct peer_req *pr)
 	 */
 	int r = map_action(do_destroy, pr, target, pr->req->targetlen,
 				MF_ARCHIP|MF_LOAD|MF_EXCLUSIVE);
-	if (r < 0)
+	if (r < 0) {
 		fail(peer, pr);
-	else
+	} else {
 		complete(peer, pr);
+	}
 	ta--;
 	return NULL;
 }
@@ -1774,10 +1797,11 @@ void * handle_open(struct peer_req *pr)
 	char *target = xseg_get_target(peer->xseg, pr->req);
 	int r = map_action(do_open, pr, target, pr->req->targetlen,
 				MF_ARCHIP|MF_LOAD|MF_EXCLUSIVE);
-	if (r < 0)
+	if (r < 0) {
 		fail(peer, pr);
-	else
+	} else {
 		complete(peer, pr);
+	}
 	ta--;
 	return NULL;
 }
@@ -1789,10 +1813,11 @@ void * handle_close(struct peer_req *pr)
 	//here we do not want to load
 	int r = map_action(do_close, pr, target, pr->req->targetlen,
 				MF_ARCHIP|MF_EXCLUSIVE|MF_FORCE);
-	if (r < 0)
+	if (r < 0) {
 		fail(peer, pr);
-	else
+	} else {
 		complete(peer, pr);
+	}
 	ta--;
 	return NULL;
 }
@@ -1806,10 +1831,11 @@ void * handle_snapshot(struct peer_req *pr)
 	 */
 	int r = map_action(do_snapshot, pr, target, pr->req->targetlen,
 				MF_ARCHIP|MF_LOAD|MF_EXCLUSIVE);
-	if (r < 0)
+	if (r < 0) {
 		fail(peer, pr);
-	else
+	} else {
 		complete(peer, pr);
+	}
 	ta--;
 	return NULL;
 }
@@ -1823,10 +1849,11 @@ void * handle_rename(struct peer_req *pr)
 	 */
 	int r = map_action(do_rename, pr, target, pr->req->targetlen,
 				MF_ARCHIP|MF_LOAD|MF_EXCLUSIVE);
-	if (r < 0)
+	if (r < 0) {
 		fail(peer, pr);
-	else
+	} else {
 		complete(peer, pr);
+	}
 	ta--;
 	return NULL;
 }
@@ -1840,10 +1867,11 @@ void * handle_hash(struct peer_req *pr)
 	 */
 	int r = map_action(do_hash, pr, target, pr->req->targetlen,
 				MF_ARCHIP|MF_LOAD);
-	if (r < 0)
+	if (r < 0) {
 		fail(peer, pr);
-	else
+	} else {
 		complete(peer, pr);
+	}
 	ta--;
 	return NULL;
 }
@@ -1854,10 +1882,11 @@ void * handle_truncate(struct peer_req *pr)
    char *target = xseg_get_target(peer->xseg, pr->req);
    int r = map_action(do_truncate, pr, target, pr->req->targetlen,
                    MF_ARCHIP|MF_LOAD|MF_EXCLUSIVE);
-   if (r < 0)
-           fail(peer, pr);
-   else
-           complete(peer, pr);
+   if (r < 0) {
+		fail(peer, pr);
+   } else {
+		complete(peer, pr);
+   }
    ta--;
    return NULL;
 }
@@ -1868,10 +1897,11 @@ void * handle_update(struct peer_req *pr)
    char *target = xseg_get_target(peer->xseg, pr->req);
    int r = map_action(do_update, pr, target, pr->req->targetlen,
                    MF_ARCHIP|MF_LOAD|MF_EXCLUSIVE);
-   if (r < 0)
-           fail(peer, pr);
-   else
-           complete(peer, pr);
+   if (r < 0) {
+		fail(peer, pr);
+   } else {
+		complete(peer, pr);
+   }
    ta--;
    return NULL;
 }
@@ -2069,14 +2099,17 @@ void custom_peer_finalize(struct peerd *peer)
 	xhash_iter_init(mapper->hashmaps, &it);
 	while (xhash_iterate(mapper->hashmaps, &it, &key, &val)){
 		map = (struct map *)val;
-		if (!(map->state & MF_MAP_EXCLUSIVE))
+		if (!(map->state & MF_MAP_EXCLUSIVE)) {
 			continue;
+		}
 		req = __close_map(pr, map);
-		if (!req)
+		if (!req) {
 			continue;
+		}
 		wait_reply(peer, req);
-		if (!(req->state & XS_SERVED))
+		if (!(req->state & XS_SERVED)) {
 			XSEGLOG2(&lc, E, "Couldn't close map %s", map->volume);
+		}
 		map->state &= ~MF_MAP_CLOSING;
 		put_request(pr, req);
 	}
@@ -2087,9 +2120,9 @@ void custom_peer_finalize(struct peerd *peer)
 /*
 void print_obj(struct map_node *mn)
 {
-	fprintf(stderr, "[%llu]object name: %s[%u] exists: %c\n", 
-			(unsigned long long) mn->objectidx, mn->object, 
-			(unsigned int) mn->objectlen, 
+	fprintf(stderr, "[%llu]object name: %s[%u] exists: %c\n",
+			(unsigned long long) mn->objectidx, mn->object,
+			(unsigned int) mn->objectlen,
 			(mn->flags & MF_OBJECT_WRITABLE) ? 'y' : 'n');
 }
 
@@ -2098,9 +2131,9 @@ void print_map(struct map *m)
 	uint64_t nr_objs = m->size/MAPPER_DEFAULT_BLOCKSIZE;
 	if (m->size % MAPPER_DEFAULT_BLOCKSIZE)
 		nr_objs++;
-	fprintf(stderr, "Volume name: %s[%u], size: %llu, nr_objs: %llu, version: %u\n", 
-			m->volume, m->volumelen, 
-			(unsigned long long) m->size, 
+	fprintf(stderr, "Volume name: %s[%u], size: %llu, nr_objs: %llu, version: %u\n",
+			m->volume, m->volumelen,
+			(unsigned long long) m->size,
 			(unsigned long long) nr_objs,
 			m->version);
 	uint64_t i;
