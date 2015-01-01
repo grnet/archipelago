@@ -41,24 +41,24 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 /* fdcache node info */
 struct fdcache_entry {
-	volatile int fd;
-	volatile unsigned int flags;
+    volatile int fd;
+    volatile unsigned int flags;
 };
 
 /* pfiled context */
 struct pfiled {
-	uint32_t vpath_len;
-	uint32_t prefix_len;
-	uint32_t lockpath_len;
-	uint32_t uniquestr_len;
-	long maxfds;
-	uint32_t directio;
-	char vpath[MAX_PATH_SIZE + 1];
-	char lockpath[MAX_PATH_SIZE + 1];
-	char prefix[MAX_PREFIX_LEN + 1];
-	char uniquestr[MAX_UNIQUESTR_LEN + 1];
-	struct xcache cache;
-	uint32_t migrate;
+    uint32_t vpath_len;
+    uint32_t prefix_len;
+    uint32_t lockpath_len;
+    uint32_t uniquestr_len;
+    long maxfds;
+    uint32_t directio;
+    char vpath[MAX_PATH_SIZE + 1];
+    char lockpath[MAX_PATH_SIZE + 1];
+    char prefix[MAX_PREFIX_LEN + 1];
+    char uniquestr[MAX_UNIQUESTR_LEN + 1];
+    struct xcache cache;
+    uint32_t migrate;
 };
 
 /*
@@ -66,9 +66,9 @@ struct pfiled {
  * containing information on a pending I/O operation
  */
 struct fio {
-	uint32_t state;
-	xcache_handler h;
-	char str_id[FIO_STR_ID_LEN];
+    uint32_t state;
+    xcache_handler h;
+    char str_id[FIO_STR_ID_LEN];
 };
 
 
@@ -77,4 +77,4 @@ static int open_file_write_path(struct pfiled *pfiled, char *path);
 static int open_file_read_path(struct pfiled *pfiled, char *path);
 
 
-#endif /* end of include guard: _FILE_H */
+#endif                          /* end of include guard: _FILE_H */
