@@ -33,14 +33,14 @@ struct map;
  * max object len in disk. just the unhexlified name.
  */
 struct v0_object_on_disk {
-	unsigned char name[SHA256_DIGEST_SIZE];
+    unsigned char name[SHA256_DIGEST_SIZE];
 };
 
 #define v0_objectsize_in_map (sizeof(struct v0_object_on_disk))
 
 struct v0_header_struct {
-	/* Empty */
-} __attribute__((packed));
+    /* Empty */
+} __attribute__ ((packed));
 #define v0_mapheader_size (sizeof(struct v0_header_struct))
 
 extern struct map_ops v0_ops;
@@ -49,4 +49,4 @@ int read_map_header_v0(struct map *map, struct v0_header_struct *v0_hdr);
 void write_map_header_v0(struct map *map, struct v0_header_struct *v0_hdr);
 
 
-#endif /* end MAPPERVERSION0_H */
+#endif                          /* end MAPPERVERSION0_H */

@@ -19,4 +19,4 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #define MAPPERVERSIONS_H
 
-#endif /* end MAPPERVERSIONS_H */
+#endif                          /* end MAPPERVERSIONS_H */

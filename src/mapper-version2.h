@@ -33,10 +33,10 @@ struct map;
  * byte for flags + map_node->objectlen + max object len in disk
  */
 struct v2_object_on_disk {
-	unsigned char flags;
-	uint32_t objectlen;
-	unsigned char object[v2_max_objectlen];
-}__attribute__((packed));
+    unsigned char flags;
+    uint32_t objectlen;
+    unsigned char object[v2_max_objectlen];
+} __attribute__ ((packed));
 
 //This must be a power of 2. Currently set to 128.
 #define v2_objectsize_in_map (sizeof(struct v2_object_on_disk))
@@ -50,13 +50,13 @@ struct v2_object_on_disk {
  * 	map epoch     - uint64_t
  */
 struct v2_header_struct {
-	uint32_t signature;
-	uint32_t version;
-	uint64_t size;
-	uint32_t blocksize;
-	uint32_t flags;
-	uint64_t epoch;
-} __attribute__((packed));
+    uint32_t signature;
+    uint32_t version;
+    uint64_t size;
+    uint32_t blocksize;
+    uint32_t flags;
+    uint64_t epoch;
+} __attribute__ ((packed));
 
 #define v2_mapheader_size (sizeof(struct v2_header_struct))
 
@@ -65,4 +65,4 @@ extern struct map_ops v2_ops;
 int read_map_header_v2(struct map *map, struct v2_header_struct *v2_hdr);
 void write_map_header_v2(struct map *map, struct v2_header_struct *v2_hdr);
 
-#endif /* end MAPPERVERSION2_H */
+#endif                          /* end MAPPERVERSION2_H */

@@ -19,5 +19,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include <mapper-versions.h>
 
 struct map_functions map_functions[] = { map_functions_v0,
- 					 map_functions_v1,
-					 map_functions_v2};
+    map_functions_v1,
+    map_functions_v2
+};

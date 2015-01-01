@@ -29,15 +29,15 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include <mapper-version2.h>
 
 /* Alternative, each header file could define an appropriate MAP_V# */
-enum {MAP_V0, MAP_V1, MAP_V2};
+enum { MAP_V0, MAP_V1, MAP_V2 };
 #define MAP_LATEST_VERSION MAP_V2
 #define MAP_LATEST_MOPS &v2_ops
 
 struct header_struct {
-	uint32_t signature;
-	uint32_t version;
-	unsigned char pad[504];
-} __attribute__((packed));
+    uint32_t signature;
+    uint32_t version;
+    unsigned char pad[504];
+} __attribute__ ((packed));
 
 #define MAX_MAPHEADER_SIZE (sizeof(struct header_struct))
 
@@ -100,13 +100,14 @@ struct map;
 struct map_node;
 /* Map I/O ops */
 struct map_ops {
-	void (*object_to_map)(unsigned char *buf, struct map_node *mn);
-	int (*read_object)(struct map_node *mn, unsigned char *buf);
-	struct xseg_request * (*prepare_write_object)(struct peer_req *pr,
-			struct map *map, struct map_node *mn);
-	int (*load_map_data)(struct peer_req *pr, struct map *map);
-	int (*write_map_data)(struct peer_req *pr, struct map *map);
-	int (*delete_map_data)(struct peer_req *pr, struct map *map);
+    void (*object_to_map) (unsigned char *buf, struct map_node * mn);
+    int (*read_object) (struct map_node * mn, unsigned char *buf);
+    struct xseg_request *(*prepare_write_object) (struct peer_req * pr,
+                                                  struct map * map,
+                                                  struct map_node * mn);
+    int (*load_map_data) (struct peer_req * pr, struct map * map);
+    int (*write_map_data) (struct peer_req * pr, struct map * map);
+    int (*delete_map_data) (struct peer_req * pr, struct map * map);
 };
 
 /* general mapper flags */
@@ -129,10 +130,10 @@ struct map_ops {
 
 
 extern char *zero_block;
-#define ZERO_BLOCK_LEN (64) /* strlen(zero_block) */
+#define ZERO_BLOCK_LEN (64)     /* strlen(zero_block) */
 
 /* callback function type */
-typedef void (*cb_t)(struct peer_req *pr, struct xseg_request *req);
+typedef void (*cb_t) (struct peer_req * pr, struct xseg_request * req);
 
 
 /* map object flags */
@@ -145,21 +146,21 @@ typedef void (*cb_t)(struct peer_req *pr, struct xseg_request *req);
 #define MF_OBJECT_COPYING	(1 << 0)
 #define MF_OBJECT_WRITING	(1 << 1)
 #define MF_OBJECT_DELETING	(1 << 2)
-//#define MF_OBJECT_DESTROYED	(1 << 3)
+//#define MF_OBJECT_DESTROYED   (1 << 3)
 #define MF_OBJECT_SNAPSHOTTING	(1 << 4)
 
 #define MF_OBJECT_NOT_READY	(MF_OBJECT_COPYING|MF_OBJECT_WRITING|\
 				MF_OBJECT_DELETING|MF_OBJECT_SNAPSHOTTING)
 struct map_node {
-	uint32_t flags;
-	volatile uint32_t state;
-	uint64_t objectidx;	/* FIXME this is probably not needed */
-	uint32_t objectlen;
-	char object[MAX_OBJECT_LEN + 1]; 	/* NULL terminated string */
-	struct map *map;
-	volatile uint32_t ref;
-	volatile uint32_t waiters;
-	st_cond_t cond;
+    uint32_t flags;
+    volatile uint32_t state;
+    uint64_t objectidx;         /* FIXME this is probably not needed */
+    uint32_t objectlen;
+    char object[MAX_OBJECT_LEN + 1];    /* NULL terminated string */
+    struct map *map;
+    volatile uint32_t ref;
+    volatile uint32_t waiters;
+    st_cond_t cond;
 };
 
 
@@ -176,7 +177,7 @@ struct map_node {
 #define MF_MAP_EXCLUSIVE	(1 << 5)
 #define MF_MAP_OPENING		(1 << 6)
 #define MF_MAP_CLOSING		(1 << 7)
-//#define MF_MAP_DELETED		(1 << 8)
+//#define MF_MAP_DELETED                (1 << 8)
 #define MF_MAP_SNAPSHOTTING	(1 << 9)
 #define MF_MAP_SERIALIZING	(1 << 10)
 #define MF_MAP_HASHING		(1 << 11)
@@ -198,43 +199,43 @@ struct map_node {
 #define MAP_SIGNATURE (uint32_t)(0x414d462e)
 
 struct map {
-	uint32_t version;
-	uint32_t signature;
-	uint64_t epoch;
-	uint32_t flags;
-	volatile uint32_t state;
-	uint64_t size;
-	uint32_t blocksize;
-	uint64_t nr_objs;
-	uint32_t volumelen;
-	char volume[MAX_VOLUME_LEN + 1]; /* NULL terminated string */
-	char key[MAX_VOLUME_LEN + 1]; /* NULL terminated string, for cache */
-	struct map_node *objects;
-	volatile uint32_t ref;
-	volatile uint32_t waiters;
-	st_cond_t cond;
-	uint64_t opened_count;
-	struct map_ops *mops;
+    uint32_t version;
+    uint32_t signature;
+    uint64_t epoch;
+    uint32_t flags;
+    volatile uint32_t state;
+    uint64_t size;
+    uint32_t blocksize;
+    uint64_t nr_objs;
+    uint32_t volumelen;
+    char volume[MAX_VOLUME_LEN + 1];    /* NULL terminated string */
+    char key[MAX_VOLUME_LEN + 1];       /* NULL terminated string, for cache */
+    struct map_node *objects;
+    volatile uint32_t ref;
+    volatile uint32_t waiters;
+    st_cond_t cond;
+    uint64_t opened_count;
+    struct map_ops *mops;
 
-	volatile uint32_t users;
-	volatile uint32_t waiters_users;
-	st_cond_t users_cond;
+    volatile uint32_t users;
+    volatile uint32_t waiters_users;
+    st_cond_t users_cond;
 };
 
 struct mapperd {
-	xport bportno;		/* blocker that accesses data */
-	xport mbportno;		/* blocker that accesses maps */
-	xhash_t *hashmaps; // hash_function(target) --> struct map
+    xport bportno;              /* blocker that accesses data */
+    xport mbportno;             /* blocker that accesses maps */
+    xhash_t *hashmaps;          // hash_function(target) --> struct map
 };
 
 struct mapper_io {
-	xhash_t *copyups_nodes;		/* hash map (xseg_request) --> (corresponding map_node of copied up object)*/
-	volatile int err;		/* error flag */
-	cb_t cb;
-	volatile int active;
-	void *priv;
-	volatile uint64_t pending_reqs;
-	uint64_t count;
+    xhash_t *copyups_nodes;     /* hash map (xseg_request) --> (corresponding map_node of copied up object) */
+    volatile int err;           /* error flag */
+    cb_t cb;
+    volatile int active;
+    void *priv;
+    volatile uint64_t pending_reqs;
+    uint64_t count;
 };
 
 /* usefull abstraction macros for context switching */
@@ -322,69 +323,70 @@ struct mapper_io {
 
 
 /* Helper functions */
-static inline struct mapperd * __get_mapperd(struct peerd *peer)
+static inline struct mapperd *__get_mapperd(struct peerd *peer)
 {
-	return (struct mapperd *) peer->priv;
+    return (struct mapperd *) peer->priv;
 }
 
-static inline struct mapper_io * __get_mapper_io(struct peer_req *pr)
+static inline struct mapper_io *__get_mapper_io(struct peer_req *pr)
 {
-	return (struct mapper_io *) pr->priv;
+    return (struct mapper_io *) pr->priv;
 }
 
 static inline uint64_t __calc_map_obj(uint64_t size, uint32_t blocksize)
 {
-	uint64_t nr_objs;
+    uint64_t nr_objs;
 
-	nr_objs = size / blocksize;
-	if (size % blocksize) {
-		nr_objs++;
+    nr_objs = size / blocksize;
+    if (size % blocksize) {
+        nr_objs++;
     }
 
-	return nr_objs;
+    return nr_objs;
 }
 
 static inline uint64_t calc_map_obj(struct map *map)
 {
-	return __calc_map_obj(map->size, map->blocksize);
+    return __calc_map_obj(map->size, map->blocksize);
 }
 
-static inline int is_valid_blocksize(uint64_t x) {
-	   return (x && !(x & (x - 1)) && x > MIN_BLOCKSIZE);
+static inline int is_valid_blocksize(uint64_t x)
+{
+    return (x && !(x & (x - 1)) && x > MIN_BLOCKSIZE);
 }
 
 /* map handling functions */
-struct xseg_request * __open_map(struct peer_req *pr, struct map *m,
-						uint32_t flags);
+struct xseg_request *__open_map(struct peer_req *pr, struct map *m,
+                                uint32_t flags);
 int open_map(struct peer_req *pr, struct map *map, uint32_t flags);
-struct xseg_request * __close_map(struct peer_req *pr, struct map *map);
+struct xseg_request *__close_map(struct peer_req *pr, struct map *map);
 int close_map(struct peer_req *pr, struct map *map);
-struct xseg_request * __write_map(struct peer_req* pr, struct map *map);
-int write_map(struct peer_req* pr, struct map *map);
-int write_map_metadata(struct peer_req* pr, struct map *map);
-struct xseg_request * __load_map(struct peer_req *pr, struct map *m);
+struct xseg_request *__write_map(struct peer_req *pr, struct map *map);
+int write_map(struct peer_req *pr, struct map *map);
+int write_map_metadata(struct peer_req *pr, struct map *map);
+struct xseg_request *__load_map(struct peer_req *pr, struct map *m);
 int read_map(struct map *map, unsigned char *buf);
 int load_map(struct peer_req *pr, struct map *map);
-struct xseg_request * __copyup_object(struct peer_req *pr, struct map_node *mn);
+struct xseg_request *__copyup_object(struct peer_req *pr, struct map_node *mn);
 void copyup_cb(struct peer_req *pr, struct xseg_request *req);
-struct xseg_request * __object_write(struct peerd *peer, struct peer_req *pr,
-				struct map *map, struct map_node *mn);
+struct xseg_request *__object_write(struct peerd *peer, struct peer_req *pr,
+                                    struct map *map, struct map_node *mn);
 int __set_node(struct mapper_io *mio, struct xseg_request *req,
-			struct map_node *mn);
-struct map_node * __get_node(struct mapper_io *mio, struct xseg_request *req);
+               struct map_node *mn);
+struct map_node *__get_node(struct mapper_io *mio, struct xseg_request *req);
 int send_request(struct peer_req *pr, struct xseg_request *req);
-struct xseg_request * get_request(struct peer_req *pr, xport dst, char * target,
-		uint32_t targetlen, uint64_t datalen);
+struct xseg_request *get_request(struct peer_req *pr, xport dst, char *target,
+                                 uint32_t targetlen, uint64_t datalen);
 void put_request(struct peer_req *pr, struct xseg_request *req);
-struct xseg_request * __load_map_metadata(struct peer_req *pr, struct map *map);
+struct xseg_request *__load_map_metadata(struct peer_req *pr, struct map *map);
 int load_map_metadata(struct peer_req *pr, struct map *map);
 int delete_map_data(struct peer_req *pr, struct map *map);
 int delete_map(struct peer_req *pr, struct map *map, int delete_data);
 int purge_map(struct peer_req *pr, struct map *map);
 int initialize_map_objects(struct map *map);
 int hash_map(struct peer_req *pr, struct map *map, struct map *hashed_map);
-struct map_node * get_mapnode(struct map *map, uint64_t objindex);
+struct map_node *get_mapnode(struct map *map, uint64_t objindex);
 void put_mapnode(struct map_node *mn);
-struct xseg_request * __object_delete(struct peer_req *pr, struct map_node *mn);
+struct xseg_request *__object_delete(struct peer_req *pr, struct map_node *mn);
 void object_delete_cb(struct peer_req *pr, struct xseg_request *req);
-#endif /* end MAPPER_H */
+#endif                          /* end MAPPER_H */

@@ -34,15 +34,15 @@ struct map;
  * transparency byte + max object len in disk
  */
 struct v1_object_on_disk {
-	unsigned char flags;
-	unsigned char name[SHA256_DIGEST_SIZE];
+    unsigned char flags;
+    unsigned char name[SHA256_DIGEST_SIZE];
 };
 #define v1_objectsize_in_map (sizeof(struct v1_object_on_disk))
 
 struct v1_header_struct {
-	uint32_t version;
-	uint64_t size;
-} __attribute__((packed));
+    uint32_t version;
+    uint64_t size;
+} __attribute__ ((packed));
 
 #define v1_mapheader_size (sizeof(struct v1_header_struct))
 
@@ -51,4 +51,4 @@ extern struct map_ops v1_ops;
 int read_map_header_v1(struct map *map, struct v1_header_struct *v1_hdr);
 void write_map_header_v1(struct map *map, struct v1_header_struct *v1_hdr);
 
-#endif /* end MAPPERVERSION1_H */
+#endif                          /* end MAPPERVERSION1_H */
