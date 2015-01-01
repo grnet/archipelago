@@ -47,60 +47,72 @@ static char *perr_prog_name = NULL;
  */
 void perr_func(enum perr_type type, int want_errno, char *fmt, ...)
 {
-	va_list ap;
-	time_t timeval;
-	int err_number = errno;		/* We need errno NOW */
-	char buf[PERR_BUF_SIZE], errbuf[PERR_BUF_SIZE], timebuf[PERR_BUF_SIZE];
-	char *t = NULL, *p = buf;
+    va_list ap;
+    time_t timeval;
+    int err_number = errno;     /* We need errno NOW */
+    char buf[PERR_BUF_SIZE], errbuf[PERR_BUF_SIZE], timebuf[PERR_BUF_SIZE];
+    char *t = NULL, *p = buf;
 
-	va_start(ap, fmt);
-	switch (type) {
-		case PFE: t = "Fatal error"; break;
-		case PE: t = "Error"; break;
-		case PW: t = "Warning"; break;
-		case PI: t = "Info"; break;
-		case PD: t = "Debug"; break;
-		default: raise(SIGABRT);
-	}
-	if (!perr_prog_name) {
-		perr_prog_name = "Internal perr error";
-		perr(1, 0, "init_perr has not been called");
-	}
+    va_start(ap, fmt);
+    switch (type) {
+    case PFE:
+        t = "Fatal error";
+        break;
+    case PE:
+        t = "Error";
+        break;
+    case PW:
+        t = "Warning";
+        break;
+    case PI:
+        t = "Info";
+        break;
+    case PD:
+        t = "Debug";
+        break;
+    default:
+        raise(SIGABRT);
+    }
+    if (!perr_prog_name) {
+        perr_prog_name = "Internal perr error";
+        perr(1, 0, "init_perr has not been called");
+    }
 
-	time(&timeval);
-	ctime_r(&timeval, timebuf);
-	*strchr(timebuf, '\n') = '\0';
+    time(&timeval);
+    ctime_r(&timeval, timebuf);
+    *strchr(timebuf, '\n') = '\0';
 
-	p += sprintf(p, "%s: %s: ", perr_prog_name, t);
-	p += sprintf(p, "Thread %lu, PID %lu\n\t",
-			(unsigned long)pthread_self(), (unsigned long)getpid());
+    p += sprintf(p, "%s: %s: ", perr_prog_name, t);
+    p += sprintf(p, "Thread %lu, PID %lu\n\t",
+                 (unsigned long) pthread_self(), (unsigned long) getpid());
 
-	p += sprintf(p, "%s (%ld):\n\t", timebuf, timeval);
+    p += sprintf(p, "%s (%ld):\n\t", timebuf, timeval);
 
-	p += vsprintf(p, fmt, ap);
-	p += sprintf(p, "\n");
+    p += vsprintf(p, fmt, ap);
+    p += sprintf(p, "\n");
 
-	if (want_errno == 1) {
-		/* Print last error returned from system call */
-		p += sprintf(p, "\tErrno was: %d - %s\n",
-				err_number, strerror_r(err_number, errbuf, PERR_BUF_SIZE));
-	}
-	/*
-	 * Output the buffer to stderr with a single call to fprintf,
-	 * which is thread-safe and locks the stderr semaphore
-	 */
-	fprintf(stderr, "%s", buf);
-	fflush(stderr);
-	va_end(ap);
+    if (want_errno == 1) {
+        /* Print last error returned from system call */
+        p += sprintf(p, "\tErrno was: %d - %s\n",
+                     err_number, strerror_r(err_number, errbuf,
+                                            PERR_BUF_SIZE));
+    }
+    /*
+     * Output the buffer to stderr with a single call to fprintf,
+     * which is thread-safe and locks the stderr semaphore
+     */
+    fprintf(stderr, "%s", buf);
+    fflush(stderr);
+    va_end(ap);
 
-	if (type > 0) {
-		exit(1);
-	}
+    if (type > 0) {
+        exit(1);
+    }
 }
 
 void init_perr(char *prog_name)
 {
-	perr_prog_name = prog_name;
+    perr_prog_name = prog_name;
 }
 
 /*
@@ -114,30 +126,30 @@ void init_perr(char *prog_name)
  */
 size_t strlcat(char *dst, const char *src, size_t siz)
 {
-	char *d = dst;
-	const char *s = src;
-	size_t n = siz;
-	size_t dlen;
+    char *d = dst;
+    const char *s = src;
+    size_t n = siz;
+    size_t dlen;
 
-	/* Find the end of dst and adjust bytes left but don't go past end */
-	while (n-- != 0 && *d != '\0')
-		d++;
-	dlen = d - dst;
-	n = siz - dlen;
+    /* Find the end of dst and adjust bytes left but don't go past end */
+    while (n-- != 0 && *d != '\0')
+        d++;
+    dlen = d - dst;
+    n = siz - dlen;
 
-	if (n == 0) {
-		return(dlen + strlen(s));
-	}
-	while (*s != '\0') {
-		if (n != 1) {
-			*d++ = *s;
-			n--;
-		}
-		s++;
-	}
-	*d = '\0';
+    if (n == 0) {
+        return (dlen + strlen(s));
+    }
+    while (*s != '\0') {
+        if (n != 1) {
+            *d++ = *s;
+            n--;
+        }
+        s++;
+    }
+    *d = '\0';
 
-	return (dlen + (s - src));	/* count does not include NUL */
+    return (dlen + (s - src));  /* count does not include NUL */
 }
 
 /*
@@ -149,26 +161,25 @@ size_t strlcat(char *dst, const char *src, size_t siz)
  */
 size_t strlcpy(char *dst, const char *src, size_t siz)
 {
-	char *d = dst;
-	const char *s = src;
-	size_t n = siz;
+    char *d = dst;
+    const char *s = src;
+    size_t n = siz;
 
-	/* Copy as many bytes as will fit */
-	if (n != 0 && --n != 0) {
-		do {
-			if ((*d++ = *s++) == 0)
-				break;
-		} while (--n != 0);
-	}
+    /* Copy as many bytes as will fit */
+    if (n != 0 && --n != 0) {
+        do {
+            if ((*d++ = *s++) == 0)
+                break;
+        } while (--n != 0);
+    }
 
-	/* Not enough room in dst, add NUL and traverse rest of src */
-	if (n == 0) {
-		if (siz != 0) {
-			*d = '\0';		/* NUL-terminate dst */
-		}
-		while (*s++)
-			;
-	}
+    /* Not enough room in dst, add NUL and traverse rest of src */
+    if (n == 0) {
+        if (siz != 0) {
+            *d = '\0';          /* NUL-terminate dst */
+        }
+        while (*s++);
+    }
 
-	return (s - src - 1);	/* count does not include NUL */
+    return (s - src - 1);       /* count does not include NUL */
 }

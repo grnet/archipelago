@@ -49,7 +49,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define assert(condition)	do { } while (0)
 #endif
 
-#define PERR_BUF_SIZE		2048	
+#define PERR_BUF_SIZE		2048
 #define HOSTNAME_BUF_SIZE	100
 
 /* Compiler-specific stuff */
@@ -64,7 +64,7 @@ enum perr_type { PFE = 1, PE = 0, PI = -1, PW = -2, PD = -3 };
 
 void init_perr(char *prog_name);
 void perr_func(int type, int want_errno, char *fmt, ...)
-	__attribute__ ((format (printf, 3, 4)));
+    __attribute__ ((format(printf, 3, 4)));
 
 /* No inline form of perr can be used, since it is variadic (See gcc manual) */
 
@@ -87,4 +87,4 @@ void perr_func(int type, int want_errno, char *fmt, ...)
 size_t strlcpy(char *dst, const char *src, size_t siz);
 size_t strlcat(char *dst, const char *src, size_t siz);
 
-#endif	/* _COMMON_H */
+#endif                          /* _COMMON_H */
