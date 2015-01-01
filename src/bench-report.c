@@ -109,13 +109,15 @@ int calculate_report_lines(struct bench *prefs)
 	if (ptype == PTYPE_REQ || ptype == PTYPE_BOTH) {
 		lines = 6;
 		if ((GET_FLAG(VERIFY, prefs->flags) != VERIFY_NO) &&
-				(prefs->op == X_READ))
+				(prefs->op == X_READ)) {
 			lines++;
+        }
 	}
 	if (ptype == PTYPE_IO || ptype == PTYPE_BOTH) {
 		lines += 1;
-		if (prefs->op == X_READ || prefs->op == X_WRITE)
+		if (prefs->op == X_READ || prefs->op == X_WRITE) {
 			lines++;
+        }
 	}
 
 	return lines;
@@ -139,8 +141,9 @@ void print_io_stats(struct bench *prefs)
 	double iops;
 
 	if (!prefs->status->received) {
-		if (prefs->op == X_READ || prefs->op == X_WRITE)
+		if (prefs->op == X_READ || prefs->op == X_WRITE) {
 			fprintf(stdout, "Bandwidth:    NaN\n");
+        }
 		fprintf(stdout, "IOPS:         NaN\n");
 		return;
 	}
@@ -149,8 +152,9 @@ void print_io_stats(struct bench *prefs)
 	iops = __calculate_iops(prefs->rep->interval, elapsed);
 	__calculate_bw(prefs, iops, &bw);
 
-	if (prefs->op == X_READ || prefs->op == X_WRITE)
+	if (prefs->op == X_READ || prefs->op == X_WRITE) {
 		fprintf(stdout, "Bandwidth:    %.3lf %s\n", bw.val, bw.unit);
+    }
 	fprintf(stdout, "IOPS:         %.3lf\n", iops);
 }
 
@@ -166,9 +170,10 @@ void print_req_stats(struct bench *prefs)
 			prefs->status->received,
 			prefs->status->failed);
 	if ((prefs->op == X_READ) &&
-			(GET_FLAG(VERIFY, prefs->flags) != VERIFY_NO))
+			(GET_FLAG(VERIFY, prefs->flags) != VERIFY_NO)) {
 		fprintf(stdout, "Requests corrupted: %10lu\n",
 				prefs->status->corrupted);
+    }
 	fprintf(stdout, "\n");
 }
 
@@ -177,10 +182,11 @@ void print_remaining(struct bench *prefs)
 	uint64_t remaining;
 
 	remaining = prefs->status->max - prefs->status->received;
-	if (remaining)
+	if (remaining) {
 		fprintf(stdout, "Requests remaining: %10lu\n", remaining);
-	else
+    } else {
 		fprintf(stdout, "All requests have been served.\n");
+    }
 }
 
 void print_total_res(struct bench *prefs)
@@ -222,10 +228,12 @@ static void __print_progress(struct bench *prefs)
 {
 	int ptype = prefs->rep->type;
 
-	if (ptype == PTYPE_REQ || ptype == PTYPE_BOTH)
+	if (ptype == PTYPE_REQ || ptype == PTYPE_BOTH) {
 			print_req_stats(prefs);
-	if (ptype == PTYPE_IO || ptype == PTYPE_BOTH)
+    }
+	if (ptype == PTYPE_IO || ptype == PTYPE_BOTH) {
 			print_io_stats(prefs);
+    }
 	fflush(stdout);
 }
 
@@ -241,5 +249,3 @@ void print_progress(struct bench *prefs)
 	__print_progress(prefs);
 	timer_start(prefs, prefs->total_tm);
 }
-
-
