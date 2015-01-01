@@ -250,4 +250,3 @@ int validate_seed(struct bench *prefs, unsigned long seed);
 
 void inspect_obv(struct object_vars *obv);
 uint64_t __get_object(struct bench *prefs, uint64_t new);
-

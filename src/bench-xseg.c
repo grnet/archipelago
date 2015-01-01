@@ -281,8 +281,9 @@ int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 		obv->prefixlen = 0;
 		obv->namelen = strlen(objname);
 	} else {
-		if (!prefix[0])	/* In this case we use a default value */
+		if (!prefix[0])	{/* In this case we use a default value */
 			strcpy(prefix, "bench");
+        }
 		strncpy(obv->prefix, prefix, XSEG_MAX_TARGETLEN);
 		obv->prefixlen = strlen(prefix);
 		/* We add 2 for the extra dashes */
@@ -325,8 +326,9 @@ int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 	}
 	SET_FLAG(PATTERN, prefs->flags, r);
 
-	if (!verify[0])
+	if (!verify[0]) {
 		strcpy(verify, "no");
+    }
 	r = read_verify(verify);
 	if (r < 0) {
 		XSEGLOG2(&lc, E, "Invalid syntax: --verify %s\n", verify);
@@ -335,10 +337,11 @@ int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 	SET_FLAG(VERIFY, prefs->flags, r);
 
 	//Default iodepth value is 1
-	if (iodepth < 0)
+	if (iodepth < 0) {
 		prefs->iodepth = 1;
-	else
+    } else {
 		prefs->iodepth = iodepth;
+    }
 
 	/**************************\
 	 * Check timer parameters *
@@ -348,8 +351,9 @@ int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 	//We can choose which timers will be used by adjusting the "insanity"
 	//level of the benchmark i.e. the obscurity of code paths (get request,
 	//submit request) that will be timed.
-	if (!insanity[0])
+	if (!insanity[0]) {
 		strcpy(insanity, "sane");
+    }
 
 	r = read_insanity(insanity);
 	if (r < 0) {
@@ -367,8 +371,9 @@ int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 	//						[k|K|m|M|g|G]
 	//If not, it will be considered as size in bytes.
 	//Must be integer multiple of segment's page size (typically 4k).
-	if (!block_size[0])
+	if (!block_size[0]) {
 		strcpy(block_size,"4k");
+    }
 
 	prefs->bs = str2num(block_size);
 	if (!prefs->bs) {
@@ -382,8 +387,9 @@ int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 	//Object size (os): Defaults to 4M.
 	//Must have the same format as "block size"
 	//Must be integer multiple of "block size"
-	if (!object_size[0])
+	if (!object_size[0]) {
 		strcpy(object_size,"4M");
+    }
 
 	prefs->os = str2num(object_size);
 	if (!prefs->os) {
@@ -476,14 +482,18 @@ int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 	 * Create timers for all metrics *
 	\*********************************/
 
-	if (init_timer(&prefs->total_tm, INSANITY_SANE))
+	if (init_timer(&prefs->total_tm, INSANITY_SANE)) {
 		goto tm_fail;
-	if (init_timer(&prefs->sub_tm, INSANITY_MANIC))
+    }
+	if (init_timer(&prefs->sub_tm, INSANITY_MANIC)) {
 		goto tm_fail;
-	if (init_timer(&prefs->get_tm, INSANITY_PARANOID))
+    }
+	if (init_timer(&prefs->get_tm, INSANITY_PARANOID)) {
 		goto tm_fail;
-	if (init_timer(&prefs->rec_tm, INSANITY_ECCENTRIC))
+    }
+	if (init_timer(&prefs->rec_tm, INSANITY_ECCENTRIC)) {
 		goto tm_fail;
+    }
 
 	/***********************\
 	 * Initialize the LFSR *
@@ -546,8 +556,9 @@ reseed:
 	\**********************************/
 
 	/* Progress report is on by default */
-	if (!progress[0])
+	if (!progress[0]) {
 		strcpy(progress, "yes");
+    }
 	r = read_progress(progress);
 	if (r < 0) {
 		XSEGLOG2(&lc, E, "Invalid syntax: --progress %s\n", progress);
@@ -568,8 +579,9 @@ reseed:
 
 	if (GET_FLAG(PROGRESS, prefs->flags) != PROGRESS_NO) {
 		/* Progress type is 'both' by default */
-		if (!ptype[0])
+		if (!ptype[0]) {
 			strcpy(ptype, "both");
+        }
 		prefs->rep->type = read_progress_type(ptype);
 		if (prefs->rep->type < 0) {
 			XSEGLOG2(&lc, E, "Invalid syntax: --ptype %s\n", ptype);
@@ -580,8 +592,9 @@ reseed:
 
 	if (GET_FLAG(PROGRESS, prefs->flags) != PROGRESS_NO) {
 		/* By default, we print every 5% */
-		if (!pinterval[0])
+		if (!pinterval[0]) {
 			strcpy(pinterval, "5%");
+        }
 		prefs->rep->interval = read_interval(prefs, pinterval);
 		if (prefs->rep->interval == 0) {
 			XSEGLOG2(&lc, E, "Invalid syntax: --pinterval %s\n",
@@ -591,8 +604,9 @@ reseed:
 	}
 
 	/* Pinging the target peer is on by default */
-	if (!ping[0])
+	if (!ping[0]) {
 		strcpy(ping, "no");
+    }
 	r = read_ping(ping);
 	if (r < 0) {
 		XSEGLOG2(&lc, E, "Invalid syntax: --ping %s\n", ping);
@@ -604,12 +618,13 @@ reseed:
 	peer->peerd_loop = bench_peerd_loop;
 	peer->priv = (void *) prefs;
 
-	if (obv->prefixlen)
+	if (obv->prefixlen) {
 		XSEGLOG2(&lc, I, "Seed is %u, prefix is %s",
 				obv->seed, obv->prefix);
-	else
+    } else {
 		XSEGLOG2(&lc, I, "Seed is %u, object name is %s",
 				obv->seed, obv->name);
+    }
 
 	return 0;
 
@@ -847,14 +862,16 @@ int bench_peerd_loop(void *arg)
 	XSEGLOG2(&lc, I, "%s has tid %u.\n",id, pid);
 	xseg_init_local_signal(xseg, peer->portno_start);
 
-	if (GET_FLAG(PROGRESS, prefs->flags) != PROGRESS_NO)
+	if (GET_FLAG(PROGRESS, prefs->flags) != PROGRESS_NO) {
 		print_dummy_progress(prefs);
+    }
 
 	/* If no ping is going to be sent, we can begin the benchmark now. */
-	if (GET_FLAG(PING, prefs->flags) == PING_MODE_ON)
+	if (GET_FLAG(PING, prefs->flags) == PING_MODE_ON) {
 		send_ping_request(peer, prefs);
-	else
+    } else {
 		timer_start(prefs, prefs->total_tm);
+    }
 
 send_request:
 	while (!(isTerminate() && all_peer_reqs_free(peer))) {
@@ -871,8 +888,9 @@ send_request:
 		}
 		//Heart of peerd_loop. This loop is common for everyone.
 		for (loops = threshold; loops > 0; loops--) {
-			if (loops == 1)
+			if (loops == 1) {
 				xseg_prepare_wait(xseg, peer->portno_start);
+            }
 
 			if (CAN_PRINT_PROGRESS(prefs, next_report)) {
 				print_progress(prefs);
@@ -883,10 +901,11 @@ send_request:
 				//If an old request has just been acked, the
 				//most sensible thing to do is to immediately
 				//send a new one
-				if (prefs->status->received < prefs->status->max)
+				if (prefs->status->received < prefs->status->max) {
 					goto send_request;
-				else
+                } else {
 					return 0;
+                }
 			}
 		}
 		XSEGLOG2(&lc, I, "%s goes to sleep\n", id);
@@ -907,15 +926,17 @@ void custom_peer_finalize(struct peerd *peer)
 
 	timer_stop(prefs, prefs->total_tm, NULL);
 
-	if (GET_FLAG(PROGRESS, prefs->flags) != PROGRESS_NO)
+	if (GET_FLAG(PROGRESS, prefs->flags) != PROGRESS_NO) {
 		clear_report_lines(prefs->rep->lines);
+    }
 
 	print_req_stats(prefs);
 	print_remaining(prefs);
 	print_total_res(prefs);
 
-	if (GET_FLAG(INSANITY, prefs->flags) >= prefs->rec_tm->insanity)
+	if (GET_FLAG(INSANITY, prefs->flags) >= prefs->rec_tm->insanity) {
 		print_rec_res(prefs);
+    }
 
 	print_divider();
 	/*
@@ -973,19 +994,22 @@ static void handle_received(struct peerd *peer, struct peer_req *pr)
 
 	timer_stop(prefs, rec, (struct timespec *)pr->priv);
 
-	if (!(pr->req->state & XS_SERVED))
+	if (!(pr->req->state & XS_SERVED)) {
 		prefs->status->failed++;
-	else if (CAN_VERIFY(prefs) && read_chunk(prefs, pr->req))
+    } else if (CAN_VERIFY(prefs) && read_chunk(prefs, pr->req)) {
 		prefs->status->corrupted++;
+    }
 
 out:
-	if (xseg_put_request(peer->xseg, pr->req, pr->portno))
+	if (xseg_put_request(peer->xseg, pr->req, pr->portno)) {
 		XSEGLOG2(&lc, W, "Cannot put xseg request\n");
+    }
 
 	free_peer_req(peer, pr);
 
-	if (start_timer)
+	if (start_timer) {
 		timer_start(prefs, prefs->total_tm);
+    }
 }
 
 int dispatch(struct peerd *peer, struct peer_req *pr, struct xseg_request *req,
