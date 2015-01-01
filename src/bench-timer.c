@@ -77,8 +77,9 @@ void timer_start(struct bench *prefs, struct timer *timer)
 {
 	//We need a low-latency way to get current time in nanoseconds.
 	//QUESTION: Is this way the best way?
-	if (GET_FLAG(INSANITY, prefs->flags) < timer->insanity)
+	if (GET_FLAG(INSANITY, prefs->flags) < timer->insanity) {
 		return;
+    }
 
 	clock_gettime(CLOCK_BENCH, &timer->start_time);
 }
@@ -88,8 +89,9 @@ void timer_stop(struct bench *prefs, struct timer *timer,
 {
 	struct timespec end_time;
 
-	if (GET_FLAG(INSANITY, prefs->flags) < timer->insanity)
+	if (GET_FLAG(INSANITY, prefs->flags) < timer->insanity) {
 		return;
+    }
 
 	/*
 	 * There are timers such as rec_tm whose start_time cannot be trusted
@@ -98,8 +100,9 @@ void timer_stop(struct bench *prefs, struct timer *timer,
 	 * In this case, the submission time must be passed explicitly to this
 	 * function using the "start" argument.
 	 */
-	if (!start_time)
+	if (!start_time) {
 		start_time = &timer->start_time;
+    }
 
 	clock_gettime(CLOCK_BENCH, &end_time);
 
