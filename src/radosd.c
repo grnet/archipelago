@@ -140,7 +140,6 @@ static int do_aio_generic(struct peerd *peer, struct peer_req *pr, uint32_t op,
 			break;
 		default:
 			return -1;
-			break;
 	}
 	if (r < 0) {
 		rados_aio_release(rados_compl);
