@@ -30,4 +30,4 @@ void hexlify(unsigned char *data, long datalen, char *hex);
 void unhexlify(char *hex, unsigned char *data);
 
 void merkle_hash(unsigned char *hashes, unsigned long len,
-		unsigned char hash[SHA256_DIGEST_SIZE]);
+                 unsigned char hash[SHA256_DIGEST_SIZE]);
