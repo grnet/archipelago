@@ -64,53 +64,53 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 /* main peer structs */
 struct peer_req {
-	struct peerd *peer;
-	struct xseg_request *req;
-	ssize_t retval;
-	xport portno;
-	void *priv;
+    struct peerd *peer;
+    struct xseg_request *req;
+    ssize_t retval;
+    xport portno;
+    void *priv;
 #ifdef ST_THREADS
-	st_cond_t cond;
+    st_cond_t cond;
 #endif
 #ifdef MT
-	int thread_no;
+    int thread_no;
 #endif
 };
 
 struct thread {
-	pthread_t tid;
-	struct peerd *peer;
-	int thread_no;
-	struct xq free_thread_reqs;
-	void *priv;
-	void *arg;
+    pthread_t tid;
+    struct peerd *peer;
+    int thread_no;
+    struct xq free_thread_reqs;
+    void *priv;
+    void *arg;
 };
 
 struct peerd {
-	struct xseg *xseg;
-	xport portno_start;
-	xport portno_end;
-	long nr_ops;
-	uint64_t threshold;
-	xport defer_portno;
-	struct peer_req *peer_reqs;
-	struct xq free_reqs;
-	int (*peerd_loop)(void *arg);
-	void *sd;
-	void *priv;
+    struct xseg *xseg;
+    xport portno_start;
+    xport portno_end;
+    long nr_ops;
+    uint64_t threshold;
+    xport defer_portno;
+    struct peer_req *peer_reqs;
+    struct xq free_reqs;
+    int (*peerd_loop) (void *arg);
+    void *sd;
+    void *priv;
 #ifdef MT
-	uint32_t nr_threads;
-	struct thread *thread;
-	struct xq threads;
-	void (*interactive_func)(void);
+    uint32_t nr_threads;
+    struct thread *thread;
+    struct xq threads;
+    void (*interactive_func) (void);
 #else
 #endif
 };
 
 enum dispatch_reason {
-	dispatch_accept = 0,
-	dispatch_receive = 1,
-	dispatch_internal = 2
+    dispatch_accept = 0,
+    dispatch_receive = 1,
+    dispatch_internal = 2
 };
 
 void fail(struct peerd *peer, struct peer_req *pr);
@@ -128,7 +128,7 @@ void print_req(struct xseg *xseg, struct xseg_request *req);
 int all_peer_reqs_free(struct peerd *peer);
 
 #ifdef MT
-int thread_execute(struct peerd *peer, void (*func)(void *arg), void *arg);
+int thread_execute(struct peerd *peer, void (*func) (void *arg), void *arg);
 struct peer_req *alloc_peer_req(struct peerd *peer, struct thread *t);
 int check_ports(struct peerd *peer, struct thread *t);
 #else
@@ -136,9 +136,10 @@ struct peer_req *alloc_peer_req(struct peerd *peer);
 int check_ports(struct peerd *peer);
 #endif
 
-static inline struct peerd * __get_peerd(void * custom_peerd)
+static inline struct peerd *__get_peerd(void *custom_peerd)
 {
-	return (struct peerd *) ((unsigned long) custom_peerd  - offsetof(struct peerd, priv));
+    return (struct peerd *) ((unsigned long) custom_peerd -
+                             offsetof(struct peerd, priv));
 }
 
 
@@ -152,7 +153,7 @@ extern uint32_t ta;
 
 static inline int isTerminate(void)
 {
-	return terminated;
+    return terminated;
 }
 
 /********************************
@@ -165,8 +166,8 @@ void custom_peer_finalize(struct peerd *peer);
 
 /* dispatch function */
 int dispatch(struct peerd *peer, struct peer_req *pr, struct xseg_request *req,
-		enum dispatch_reason reason);
+             enum dispatch_reason reason);
 
 void custom_peer_usage();
 
-#endif /* end of PEER_H */
+#endif                          /* end of PEER_H */
