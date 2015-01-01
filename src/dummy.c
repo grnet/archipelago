@@ -24,34 +24,33 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include <time.h>
 #include <xseg/util.h>
 
-struct timespec delay = {0, 4000000};
+struct timespec delay = { 0, 4000000 };
 
 void custom_peer_usage()
 {
-	fprintf(stderr, "Custom peer options: \n"
-			"none \n\n");
+    fprintf(stderr, "Custom peer options: \nnone \n\n");
 }
 
 int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 {
-	return 0;
+    return 0;
 }
 
 void custom_peer_finalize(struct peerd *peer)
 {
-	return;
+    return;
 }
 
 int dispatch(struct peerd *peer, struct peer_req *pr, struct xseg_request *req,
-		enum dispatch_reason reason)
+             enum dispatch_reason reason)
 {
-	if (canDefer(peer))
-		defer_request(peer, pr);
-	else {
-//		printf("completing req id: %u (remote %u)\n", (unsigned int) (pr - peer->peer_reqs), (unsigned int) pr->req->priv);
-//		nanosleep(&delay,NULL);
-		//print_req(peer->xseg, pr->req);
-		complete(peer, pr);
-	}
-	return 0;
+    if (canDefer(peer)) {
+        defer_request(peer, pr);
+    } else {
+//              printf("completing req id: %u (remote %u)\n", (unsigned int) (pr - peer->peer_reqs), (unsigned int) pr->req->priv);
+//              nanosleep(&delay,NULL);
+        //print_req(peer->xseg, pr->req);
+        complete(peer, pr);
+    }
+    return 0;
 }
