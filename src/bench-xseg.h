@@ -54,14 +54,14 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
  * in chunk's memory range and if 00, it's off.
  */
 #define VERIFY_FLAG_POS 1
-#define VERIFY_BITMASK 3	/* i.e. "11" in binary form */
+#define VERIFY_BITMASK 3        /* i.e. "11" in binary form */
 #define VERIFY_NO 0
 #define	VERIFY_META 1
 #define	VERIFY_FULL 2
 
 /* Timer insanity occupies 4th and 5th flag bit */
 #define INSANITY_FLAG_POS 3
-#define INSANITY_BITMASK 3	/* i.e. "11" in binary form */
+#define INSANITY_BITMASK 3      /* i.e. "11" in binary form */
 #define INSANITY_SANE 0
 #define INSANITY_ECCENTRIC 1
 #define INSANITY_MANIC 2
@@ -69,7 +69,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 /* Progress bar option occupies 6th flag bit */
 #define PROGRESS_FLAG_POS 5
-#define PROGRESS_BITMASK 3	/* i.e. "11" in binary form */
+#define PROGRESS_BITMASK 3      /* i.e. "11" in binary form */
 #define PROGRESS_NO 0
 #define PROGRESS_YES 1
 
@@ -121,51 +121,51 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define OBJNUMLEN 15
 
 struct bench {
-	uint64_t to; //Total number of objects (not for read/write)
-	uint64_t ts; //Total I/O size
-	uint64_t os; //Object size
-	uint64_t bs; //Block size
-	uint32_t iodepth; //Num of in-flight xseg reqs
-	xport dst_port;
-	xport src_port;
-	uint32_t op;	//xseg operation
-	uint64_t flags;
-	unsigned int interval;
-	struct peerd *peer;
-	struct req_status *status;
-	struct bench_lfsr *lfsr;
-	struct object_vars *objvars;
-	struct progress_report *rep;
-	struct timer *total_tm; //Total time for benchmark
-	struct timer *get_tm;	//Time for xseg_get_request
-	struct timer *sub_tm;	//Time for xseg_submit_request
-	struct timer *rec_tm;	//Time for xseg_receive_request
+    uint64_t to;                //Total number of objects (not for read/write)
+    uint64_t ts;                //Total I/O size
+    uint64_t os;                //Object size
+    uint64_t bs;                //Block size
+    uint32_t iodepth;           //Num of in-flight xseg reqs
+    xport dst_port;
+    xport src_port;
+    uint32_t op;                //xseg operation
+    uint64_t flags;
+    unsigned int interval;
+    struct peerd *peer;
+    struct req_status *status;
+    struct bench_lfsr *lfsr;
+    struct object_vars *objvars;
+    struct progress_report *rep;
+    struct timer *total_tm;     //Total time for benchmark
+    struct timer *get_tm;       //Time for xseg_get_request
+    struct timer *sub_tm;       //Time for xseg_submit_request
+    struct timer *rec_tm;       //Time for xseg_receive_request
 };
 
 struct object_vars {
-	char name[XSEG_MAX_TARGETLEN];
-	int namelen;
-	char prefix[XSEG_MAX_TARGETLEN];
-	int prefixlen;
-	uint64_t seed;
-	int seedlen; /* seed length is hardcoded for now*/
-	uint64_t objnum;
-	int objnumlen;	/* object number length is hardcoded for now*/
+    char name[XSEG_MAX_TARGETLEN];
+    int namelen;
+    char prefix[XSEG_MAX_TARGETLEN];
+    int prefixlen;
+    uint64_t seed;
+    int seedlen;                /* seed length is hardcoded for now */
+    uint64_t objnum;
+    int objnumlen;              /* object number length is hardcoded for now */
 };
 
 struct req_status {
-	uint64_t max;		/* Max requests for benchmark */
-	uint64_t submitted;
-	uint64_t received;
-	uint64_t corrupted;	/* Requests that did not pass verification */
-	uint64_t failed;
+    uint64_t max;               /* Max requests for benchmark */
+    uint64_t submitted;
+    uint64_t received;
+    uint64_t corrupted;         /* Requests that did not pass verification */
+    uint64_t failed;
 };
 
 struct progress_report {
-	int type;
-	uint64_t prev_recv;
-	uint64_t interval;
-	int lines;
+    int type;
+    uint64_t prev_recv;
+    uint64_t interval;
+    int lines;
 };
 
 /*
@@ -174,8 +174,8 @@ struct progress_report {
  * of the biggest timespec.
  */
 struct timespec2 {
-	unsigned long tv_sec2;
-	uint64_t tv_nsec2;
+    unsigned long tv_sec2;
+    uint64_t tv_nsec2;
 };
 
 /*
@@ -189,37 +189,37 @@ struct timespec2 {
  *           this timer is more trivial.
  */
 struct timer {
-	struct timespec sum;
-	struct timespec2 sum_sq;
-	struct timespec start_time;
-	struct timespec elapsed_time;
-	uint64_t completed;
-	int insanity;
+    struct timespec sum;
+    struct timespec2 sum_sq;
+    struct timespec start_time;
+    struct timespec elapsed_time;
+    uint64_t completed;
+    int insanity;
 };
 
 struct tm_result {
-	unsigned int s;
-	unsigned int ms;
-	unsigned int us;
-	unsigned int ns;
+    unsigned int s;
+    unsigned int ms;
+    unsigned int us;
+    unsigned int ns;
 };
 
 struct signature {
-	uint64_t id;
-	uint64_t object;
-	uint64_t offset;
+    uint64_t id;
+    uint64_t object;
+    uint64_t offset;
 };
 
 struct bw {
-	double val;
-	char unit[5];
+    double val;
+    char unit[5];
 };
 
 int bench_peerd_loop(void *arg);
 
 void timer_start(struct bench *prefs, struct timer *sample_req);
 void timer_stop(struct bench *prefs, struct timer *sample_tm,
-		struct timespec *start);
+                struct timespec *start);
 int init_timer(struct timer **tm, int insanity);
 uint64_t str2num(char *str);
 int read_op(char *op);
