@@ -16,8 +16,10 @@
  *
  */
 
-#include "logger.hh"
+#include <cstdio>
+#include <cstdarg>
 #include <log4cplus/configurator.h>
+#include "logger.hh"
 
 namespace archipelago {
 
@@ -73,6 +75,19 @@ void Logger::logGeneric(int loglevel, const std::string& msg)
     }
 }
 
+std::string Logger::toString(const char *fmt, va_list ap)
+{
+    va_list args;
+    va_copy(args, ap);
+    size_t size = ::vsnprintf(NULL, 0, fmt, args);
+    std::string buffer;
+    buffer.reserve(size + 1);
+    buffer.resize(size);
+    va_copy(args, ap);
+    ::vsnprintf(&buffer[0], size + 1, fmt, args);
+    return buffer;
+}
+
 void Logger::logerror(const std::string& msg)
 {
     logGeneric(ERROR_LOG_LEVEL, msg);
@@ -101,6 +116,84 @@ void Logger::logwarn(const std::string& msg)
 void Logger::logtrace(const std::string& msg)
 {
     logGeneric(TRACE_LOG_LEVEL, msg);
+}
+
+void Logger::vflogerror(const char *msg, va_list ap)
+{
+    logerror(toString(msg, ap));
+}
+
+void Logger::vflogfatal(const char *msg, va_list ap)
+{
+    logfatal(toString(msg, ap));
+}
+
+void Logger::vfloginfo(const char *msg, va_list ap)
+{
+    loginfo(toString(msg, ap));
+}
+
+void Logger::vflogdebug(const char *msg, va_list ap)
+{
+    logdebug(toString(msg, ap));
+}
+
+void Logger::vflogwarn(const char *msg, va_list ap)
+{
+    logwarn(toString(msg, ap));
+}
+
+void Logger::vflogtrace(const char *msg, va_list ap)
+{
+    logtrace(toString(msg, ap));
+}
+
+void Logger::flogerror(const char *msg, ...)
+{
+    va_list args;
+    va_start(args, msg);
+    vflogerror(msg, args);
+    va_end(args);
+}
+
+void Logger::flogfatal(const char *msg, ...)
+{
+    va_list args;
+    va_start(args, msg);
+    vflogfatal(msg, args);
+    va_end(args);
+}
+
+void Logger::floginfo(const char *msg, ...)
+{
+    va_list args;
+    va_start(args, msg);
+    vfloginfo(msg, args);
+    va_end(args);
+}
+
+void Logger::flogdebug(const char *msg, ...)
+{
+    va_list args;
+    va_start(args, msg);
+    vflogdebug(msg, args);
+    va_end(args);
+}
+
+void Logger::flogwarn(const char *msg, ...)
+{
+    va_list args;
+    va_start(args, msg);
+    vflogwarn(msg, args);
+    va_end(args);
+}
+
+void Logger::flogtrace(const char *msg, ...)
+{
+    va_list args;
+    va_start(args, msg);
+    vflogtrace(msg, args);
+    va_end(args);
 }
 
 }
