@@ -24,6 +24,7 @@
 #include <utility>
 #include <algorithm>
 #include <cstdlib>
+#include <cerrno>
 #include <functional>
 
 #include <arpa/inet.h>
@@ -236,6 +237,10 @@ void Poold::serve_forever()
     poolmsg_t *msg;
     while (Poold::bRunning) {
         int nfds = epoll.wait(events, 20, -1);
+        if (nfds == -1 && errno != EINTR) {
+            logfatal("epoll.wait fatal error. Aborting...");
+            exit(EXIT_FAILURE);
+        }
         if (!Poold::bRunning) {
             break; //Cleanup
         }

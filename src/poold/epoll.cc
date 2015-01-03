@@ -19,9 +19,9 @@
 #include <stdexcept>
 #include <cstdio>
 #include <cstdlib>
+#include <cerrno>
 
 #include <unistd.h>
-#include <errno.h>
 #include "epoll.hh"
 
 namespace archipelago {
@@ -47,7 +47,6 @@ bool Epoll::add_fd(int fd, uint32_t events)
     ev.data.fd = fd;
     ev.events = events;
     if (epoll_ctl(epollfd, EPOLL_CTL_ADD, fd, &ev) == -1) {
-        perror("epoll_ctl: fd");
         return false;
     }
     return true;
@@ -72,7 +71,6 @@ bool Epoll::rm_fd(int fd, uint32_t events)
     ev.data.fd = fd;
     ev.events = events;
     if (epoll_ctl(epollfd, EPOLL_CTL_DEL, fd, &ev) == -1) {
-        perror("epoll_ctl: fd");
         return false;
     }
     return true;
@@ -97,7 +95,6 @@ bool Epoll::set_fd_pollin(int fd, uint32_t events)
     ev.data.fd = fd;
     ev.events = events | EPOLLIN;
     if (epoll_ctl(epollfd, EPOLL_CTL_MOD, fd, &ev) == -1) {
-        perror("epoll_ctl: fd");
         return false;
     }
     return true;
@@ -109,7 +106,6 @@ bool Epoll::reset_fd_pollin(int fd, uint32_t events)
     ev.data.fd = fd;
     ev.events = events & ~((short) EPOLLIN);
     if (epoll_ctl(epollfd, EPOLL_CTL_MOD, fd, &ev) == -1) {
-        perror("epoll_ctl: fd");
         return false;
     }
     return true;
@@ -179,12 +175,7 @@ bool Epoll::reset_socket_pollout(Socket& socket)
 int Epoll::wait(struct epoll_event *events, int maxevents,
         int timeout)
 {
-    int nfds = epoll_wait(epollfd, events, maxevents, timeout);
-    if (nfds == -1 && errno != EINTR) {
-        perror("epoll_wait");
-        exit(EXIT_FAILURE);
-    }
-    return nfds;
+    return epoll_wait(epollfd, events, maxevents, timeout);
 }
 
 }
