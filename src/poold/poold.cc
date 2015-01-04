@@ -31,6 +31,7 @@
 #include <sys/eventfd.h>
 #include <pthread.h>
 #include <unistd.h>
+#include <getopt.h>
 
 #include "poold.hh"
 #include "system.hh"
@@ -318,16 +319,16 @@ void print_usage(int argc, char **argv, string pidfile, string socketpath)
 {
     std::cout << "Usage: " << argv[0] << " [options]\n"
         "\nOptions:\n"
-        "-h\tprint this help message\n"
-        "-s\tset start of the pool range (default: 1)\n"
-        "-e\tset end of the pool range (default: 100)\n"
-        "-p\tset socket path (default: '"<< socketpath << "')\n"
-        "-c\tset logging configuration file (default: none)\n"
-        "-i\tset pidfile (default: '"<< pidfile << "')\n"
-        "-u\tset real EUID\n"
-        "-g\tset real EGID\n"
-        "-m\tset umask (default: 0007)\n"
-        "-d\tdaemonize (default: no)\n"
+        "-h, --help\t\tprint this help message\n"
+        "-s, --start\t\tset start of the pool range (default: 1)\n"
+        "-e, --end\t\tset end of the pool range (default: 100)\n"
+        "-p, --socketpath\tset socket path (default: '"<< socketpath << "')\n"
+        "-c, --logconfig\t\tset logging configuration file (default: none)\n"
+        "-i, --pidfile\t\tset pidfile (default: '"<< pidfile << "')\n"
+        "-u, --user\t\tset real EUID\n"
+        "-g, --group\t\tset real EGID\n"
+        "-m, --umask\t\tset umask (default: 0007)\n"
+        "-d, --daemonize\t\tdaemonize (default: no)\n"
         "\n";
 }
 
@@ -353,7 +354,23 @@ int main(int argc, char **argv)
     string pidfile ("poold.pid");
 #endif
 
-    while ((option = getopt(argc, argv, "hds:e:p:u:g:i:m:c:")) != -1) {
+    static struct option poold_long_opts[] = {
+        {"help", no_argument, 0, 'h'},
+        {"start", required_argument, 0, 's'},
+        {"end", required_argument, 0, 'e'},
+        {"socketpath", required_argument, 0, 'p'},
+        {"logconfig", required_argument, 0, 'c'},
+        {"pidfile", required_argument, 0, 'i'},
+        {"user", required_argument, 0, 'u'},
+        {"group", required_argument, 0, 'g'},
+        {"umask", required_argument, 0, 'm'},
+        {"daemonize", no_argument, 0, 'd'},
+        {0, 0, 0, 0}
+    };
+
+    int long_opts_index = 0;
+    while ((option = getopt_long(argc, argv, "hds:e:p:u:g:i:m:c:",
+                    poold_long_opts, &long_opts_index)) != -1) {
         switch (option) {
         case 's':
             startpoolrange= atoi(optarg);
