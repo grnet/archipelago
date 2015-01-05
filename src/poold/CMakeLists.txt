@@ -18,7 +18,7 @@ cmake_minimum_required(VERSION 2.8)
 set(poold_definitions
     POOLD_SOCKET_PATH="/var/run/archipelago/poold.socket"
     POOLD_PIDFILE="/var/run/archipelago/poold.pid")
-set(POOLD_SRC poold.cc logger.cc system.cc socket.cc epoll.cc sighandler.cc)
+set(POOLD_SRC poold.cc system.cc socket.cc epoll.cc sighandler.cc)
 add_executable(archip-poold ${POOLD_SRC})
 target_link_libraries(archip-poold log4cplus pthread)
 set_target_properties(

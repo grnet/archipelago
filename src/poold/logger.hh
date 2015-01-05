@@ -19,14 +19,28 @@
 #ifndef LOGGER_HH
 #define LOGGER_HH
 
+#include <cstdio>
 #include <cstdarg>
+#include <log4cplus/configurator.h>
 #include <log4cplus/logger.h>
 
 namespace archipelago {
 
+using std::runtime_error;
+using namespace log4cplus;
+
 class Logger: public log4cplus::Logger {
 public:
-    Logger(const std::string& conffile, const std::string& instance);
+    Logger(const std::string& conffile, const std::string& instance)
+    {
+        if (conffile.empty()) {
+            BasicConfigurator config;
+            config.configure();
+        } else {
+            PropertyConfigurator::doConfigure(conffile);
+        }
+        logger = getInstance(instance);
+    }
 
     void logerror(const std::string& msg);
     void logfatal(const std::string& msg);
@@ -51,9 +65,141 @@ public:
 
 private:
     log4cplus::Logger logger;
-    void logGeneric(int loglevel, const std::string& msg);
     std::string toString(const char *fmt, va_list ap);
 };
+
+inline std::string Logger::toString(const char *fmt, va_list ap)
+{
+    va_list args;
+    va_copy(args, ap);
+    size_t size = ::vsnprintf(NULL, 0, fmt, args);
+    std::string buffer;
+    buffer.reserve(size + 1);
+    buffer.resize(size);
+    va_copy(args, ap);
+    ::vsnprintf(&buffer[0], size + 1, fmt, args);
+    return buffer;
+}
+
+inline void Logger::logerror(const std::string& msg)
+{
+    if (logger.isEnabledFor(ERROR_LOG_LEVEL)) {
+        LOG4CPLUS_ERROR(logger, msg);
+    }
+}
+
+inline void Logger::logfatal(const std::string& msg)
+{
+    if (logger.isEnabledFor(FATAL_LOG_LEVEL)) {
+        LOG4CPLUS_FATAL(logger, msg);
+    }
+}
+
+inline void Logger::loginfo(const std::string& msg)
+{
+    if (logger.isEnabledFor(INFO_LOG_LEVEL)) {
+        LOG4CPLUS_INFO(logger, msg);
+    }
+}
+
+inline void Logger::logdebug(const std::string& msg)
+{
+    if (logger.isEnabledFor(DEBUG_LOG_LEVEL)) {
+        LOG4CPLUS_DEBUG(logger, msg);
+    }
+}
+
+inline void Logger::logwarn(const std::string& msg)
+{
+    if (logger.isEnabledFor(WARN_LOG_LEVEL)) {
+        LOG4CPLUS_WARN(logger, msg);
+    }
+}
+
+inline void Logger::logtrace(const std::string& msg)
+{
+    if (logger.isEnabledFor(TRACE_LOG_LEVEL)) {
+        LOG4CPLUS_TRACE(logger, msg);
+    }
+}
+
+inline void Logger::vflogerror(const char *msg, va_list ap)
+{
+    logerror(toString(msg, ap));
+}
+
+inline void Logger::vflogfatal(const char *msg, va_list ap)
+{
+    logfatal(toString(msg, ap));
+}
+
+inline void Logger::vfloginfo(const char *msg, va_list ap)
+{
+    loginfo(toString(msg, ap));
+}
+
+inline void Logger::vflogdebug(const char *msg, va_list ap)
+{
+    logdebug(toString(msg, ap));
+}
+
+inline void Logger::vflogwarn(const char *msg, va_list ap)
+{
+    logwarn(toString(msg, ap));
+}
+
+inline void Logger::vflogtrace(const char *msg, va_list ap)
+{
+    logtrace(toString(msg, ap));
+}
+
+inline void Logger::flogerror(const char *msg, ...)
+{
+    va_list args;
+    va_start(args, msg);
+    vflogerror(msg, args);
+    va_end(args);
+}
+
+inline void Logger::flogfatal(const char *msg, ...)
+{
+    va_list args;
+    va_start(args, msg);
+    vflogfatal(msg, args);
+    va_end(args);
+}
+
+inline void Logger::floginfo(const char *msg, ...)
+{
+    va_list args;
+    va_start(args, msg);
+    vfloginfo(msg, args);
+    va_end(args);
+}
+
+inline void Logger::flogdebug(const char *msg, ...)
+{
+    va_list args;
+    va_start(args, msg);
+    vflogdebug(msg, args);
+    va_end(args);
+}
+
+inline void Logger::flogwarn(const char *msg, ...)
+{
+    va_list args;
+    va_start(args, msg);
+    vflogwarn(msg, args);
+    va_end(args);
+}
+
+inline void Logger::flogtrace(const char *msg, ...)
+{
+    va_list args;
+    va_start(args, msg);
+    vflogtrace(msg, args);
+    va_end(args);
+}
 
 }
 
