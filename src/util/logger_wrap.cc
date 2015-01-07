@@ -19,8 +19,8 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include <cstdarg>
 #include <stdexcept>
 #include <exception>
-#include "../logger.h"
-#include "../poold/logger.hh"
+#include "logger.h"
+#include "poold/logger.hh"
 
 extern "C" {
 
