@@ -22,7 +22,7 @@
 #include <cerrno>
 
 #include <unistd.h>
-#include "epoll.hh"
+#include "poold/epoll.hh"
 
 namespace archipelago {
 

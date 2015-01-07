@@ -27,8 +27,8 @@
 #include <pwd.h>
 #include <grp.h>
 
-#include "system.hh"
-#include "logger.hh"
+#include "poold/system.hh"
+#include "poold/logger.hh"
 
 namespace archipelago {
 

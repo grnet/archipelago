@@ -15,6 +15,7 @@
 
 cmake_minimum_required(VERSION 2.8)
 
+include_directories("${PROJECT_SOURCE_DIR}/include")
 set(poold_definitions
     POOLD_SOCKET_PATH="/var/run/archipelago/poold.socket"
     POOLD_PIDFILE="/var/run/archipelago/poold.pid")

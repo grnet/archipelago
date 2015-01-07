@@ -16,7 +16,7 @@
  *
  */
 
-#include "sighandler.hh"
+#include "poold/sighandler.hh"
 
 namespace archipelago {
 

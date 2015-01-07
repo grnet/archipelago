@@ -33,9 +33,9 @@
 #include <unistd.h>
 #include <getopt.h>
 
-#include "poold.hh"
-#include "system.hh"
-#include "sighandler.hh"
+#include "poold/poold.hh"
+#include "poold/system.hh"
+#include "poold/sighandler.hh"
 
 using namespace std;
 

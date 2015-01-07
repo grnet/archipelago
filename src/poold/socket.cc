@@ -21,7 +21,7 @@
 #include <unistd.h>
 #include <fcntl.h>
 
-#include "socket.hh"
+#include "poold/socket.hh"
 
 namespace archipelago {
 
