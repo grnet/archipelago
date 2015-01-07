@@ -17,7 +17,7 @@ cmake_minimum_required(VERSION 2.8)
 
 project (archipelago_peers)
 
-include_directories(${CMAKE_CURRENT_SOURCE_DIR})
+include_directories("${CMAKE_CURRENT_SOURCE_DIR}/include")
 add_subdirectory(poold)
 
 set(DUMMY_SRC dummy.c peer.c)
