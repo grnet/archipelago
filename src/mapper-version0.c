@@ -16,9 +16,10 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
 #include <xseg/xseg.h>
-#include <mapper.h>
-#include <mapper-version0.h>
 #include <stdlib.h>
+
+#include "mapper.h"
+#include "mapper-version0.h"
 
 /* version 0 functions */
 #define v0_chunked_read_size (512*1024)

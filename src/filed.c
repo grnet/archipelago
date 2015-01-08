@@ -30,13 +30,13 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include <pthread.h>
 #include <syscall.h>
 #include <sys/sendfile.h>
-#include <peer.h>
 #include <openssl/sha.h>
 #include <sys/resource.h>
-
 #include <xseg/xseg.h>
 #include <xseg/protocol.h>
-#include <hash.h>
+
+#include "hash.h"
+#include "peer.h"
 #include "filed.h"
 
 #define min(_a, _b) (_a < _b ? _a : _b)

@@ -15,8 +15,8 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include <mapper.h>
-#include <mapper-versions.h>
+#include "mapper.h"
+#include "mapper-versions.h"
 
 struct map_functions map_functions[] = { map_functions_v0,
     map_functions_v1,

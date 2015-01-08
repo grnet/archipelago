@@ -30,12 +30,12 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include <sched.h>
 #include <pwd.h>
 #include <grp.h>
+#include <xseg/xseg.h>
 #ifdef MT
 #include <pthread.h>
 #endif
 
-#include <xseg/xseg.h>
-#include <peer.h>
+#include "peer.h"
 
 #ifdef MT
 #ifdef ST_THREADS

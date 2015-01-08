@@ -23,9 +23,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
 #define _GNU_SOURCE
-
-#include "pthread.h"
-
+#include <pthread.h>
 #include <time.h>
 #include <errno.h>
 #include <stdio.h>
@@ -34,7 +32,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include <stdarg.h>
 #include <unistd.h>
 #include <signal.h>
-
 #include <sys/time.h>
 #include <sys/types.h>
 

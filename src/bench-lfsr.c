@@ -18,7 +18,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include <stdio.h>
 #include <math.h>
 
-#include <bench-lfsr.h>
+#include "bench-lfsr.h"
 
 /*
  * LFSR taps retrieved from:

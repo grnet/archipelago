@@ -21,19 +21,18 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include <unistd.h>
 #include <sys/types.h>
 #include <pthread.h>
-#include <xseg/xseg.h>
-#include <peer.h>
 #include <time.h>
+#include <xseg/xseg.h>
 #include <xseg/xhash.h>
 #include <xseg/protocol.h>
-//#include <sys/stat.h>
-//#include <fcntl.h>
 #include <errno.h>
 #include <sched.h>
 #include <sys/syscall.h>
-#include <hash.h>
-#include <mapper.h>
-#include <mapper-versions.h>
+
+#include "peer.h"
+#include "hash.h"
+#include "mapper.h"
+#include "mapper-versions.h"
 
 uint64_t cur_count = 0;
 

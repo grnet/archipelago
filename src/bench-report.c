@@ -23,14 +23,14 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include <sys/types.h>
 #include <pthread.h>
 #include <xseg/xseg.h>
-#include <peer.h>
 #include <time.h>
 #include <xseg/util.h>
 #include <signal.h>
-#include <bench-xseg.h>
-
 #include <math.h>
 #include <string.h>
+
+#include "peer.h"
+#include "bench-xseg.h"
 
 /******************************\
  * Static miscellaneous tools *

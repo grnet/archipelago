@@ -19,14 +19,15 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include <stdlib.h>
 #include <unistd.h>
 #include <xseg/xseg.h>
-#include <peer.h>
-#include <rados/librados.h>
 #include <xseg/protocol.h>
-#include <pthread.h>
+#include <rados/librados.h>
 #include <openssl/sha.h>
 #include <ctype.h>
 #include <errno.h>
-#include <hash.h>
+#include <pthread.h>
+
+#include "peer.h"
+#include "hash.h"
 
 
 #define LOCK_SUFFIX "_lock"

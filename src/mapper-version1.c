@@ -15,11 +15,12 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include <xseg/xseg.h>
-#include <mapper.h>
-#include <mapper-version1.h>
 #include <asm/byteorder.h>
 #include <stdlib.h>
+#include <xseg/xseg.h>
+
+#include "mapper.h"
+#include "mapper-version1.h"
 
 /* v1 functions */
 

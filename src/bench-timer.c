@@ -21,13 +21,14 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include <sys/syscall.h>
 #include <sys/types.h>
 #include <pthread.h>
-#include <xseg/xseg.h>
-#include <peer.h>
 #include <time.h>
+#include <xseg/xseg.h>
 #include <xseg/util.h>
 #include <signal.h>
-#include <bench-xseg.h>
 #include <limits.h>
+
+#include "bench-xseg.h"
+#include "peer.h"
 
 #define SEC 1000000000          //1sec = 10^9 nsec
 #define SEC2 (uint64_t) SEC*SEC //1sec*1sec = 10^18 nsec^2

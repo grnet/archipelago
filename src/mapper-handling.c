@@ -20,15 +20,16 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include <string.h>
 #include <unistd.h>
 #include <sys/types.h>
-#include <xseg/xseg.h>
-#include <peer.h>
 #include <time.h>
+#include <xseg/xseg.h>
 #include <xseg/protocol.h>
-#include <hash.h>
-#include <mapper.h>
-#include <mapper-versions.h>
 #include <xseg/xhash.h>
 #include <asm/byteorder.h>
+
+#include "peer.h"
+#include "hash.h"
+#include "mapper.h"
+#include "mapper-versions.h"
 
 
 #define NO_V0SIZE ((uint64_t)-1)

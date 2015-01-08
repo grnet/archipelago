@@ -15,11 +15,12 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include <mapper.h>
-#include <mapper-version2.h>
-#include <xseg/xseg.h>
 #include <stdlib.h>
 #include <asm/byteorder.h>
+#include <xseg/xseg.h>
+
+#include "mapper.h"
+#include "mapper-version2.h"
 
 
 /* Must be a power of 2, as the blocksize */

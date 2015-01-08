@@ -20,9 +20,10 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include <unistd.h>
 #include <xseg/xseg.h>
 #include <xseg/protocol.h>
-#include <peer.h>
 #include <sched.h>
 #include <sys/syscall.h>
+
+#include "peer.h"
 
 enum io_state_enum {
     ACCEPTED = 0,

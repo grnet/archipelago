@@ -20,8 +20,9 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include <sys/types.h>
 #include <pthread.h>
 #include <xseg/xseg.h>
-#include <peer.h>
 #include <sys/time.h>
+
+#include "peer.h"
 
 #define INPUT_BUF_SIZE 256
 #define MAX_NR_ARGS 100
@@ -88,7 +89,7 @@ int mpause(struct peerd *peer)
 	struct xseg_port *port = xseg_get_port(xseg, peer->portno_start);
 	if (!port)
 		return -1;
-	
+
 	xlock_acquire(&port->rq_lock);
 	xlock_acquire(&port->pq_lock);
 	return 0;
@@ -100,7 +101,7 @@ int munpause(struct peerd *peer)
 	struct xseg_port *port = xseg_get_port(xseg, peer->portno_start);
 	if (!port)
 		return -1;
-	
+
 	xlock_release(&port->rq_lock);
 	xlock_release(&port->pq_lock);
 	return 0;
@@ -178,8 +179,8 @@ int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 		return -1;
 	peer->priv = monitor;
 	monitor->mon_portno = NoPort;
-	
-	
+
+
 	for (i = 0; i < peer->nr_ops; i++) {
 		mio = malloc(sizeof(struct monitor_io));
 		if (!mio)
@@ -187,7 +188,7 @@ int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 		peer->peer_reqs[i].priv = mio;
 		mio->src_portno = NoPort;
 	}
-	
+
 	for (i = 1; i < argc; i++) {
 		if (!strcmp(argv[i], "-mp") && (i + 1 < argc)) {
 			monitor->mon_portno = atoi(argv[i+1]);
