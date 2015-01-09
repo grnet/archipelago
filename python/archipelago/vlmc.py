@@ -24,6 +24,7 @@ from struct import pack, unpack
 from binascii import hexlify
 from ctypes import c_uint32, c_uint64, string_at
 from distutils.spawn import find_executable
+from collections import namedtuple
 
 from common import *
 from blktap import VlmcTapdisk
