@@ -544,8 +544,8 @@ void *init_thread_loop(void *arg)
      * We need an identifier for every thread that will spin in peerd_loop.
      */
     thread_id_size = asprintf(&tmp, "Thread %ld", thread_num);
-    thread_id = malloc(thread_id_size * sizeof(char));
-    memcpy(thread_id, tmp, thread_id_size);
+    thread_id = malloc((thread_id_size + 1) * sizeof(char));
+    memcpy(thread_id, tmp, thread_id_size + 1);
     free(tmp);
     t->arg = (void *) thread_id;
     pthread_setspecific(threadkey, t);
