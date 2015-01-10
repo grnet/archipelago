@@ -20,7 +20,7 @@ project (archipelago_peers)
 include_directories("${CMAKE_CURRENT_SOURCE_DIR}/include")
 add_subdirectory(poold)
 
-set(DUMMY_SRC dummy.c peer.c)
+set(DUMMY_SRC dummy/dummy.c peer.c)
 add_executable(archip-dummy ${DUMMY_SRC})
 target_link_libraries(archip-dummy xseg pthread)
 set_target_properties(archip-dummy
@@ -28,7 +28,7 @@ set_target_properties(archip-dummy
 	COMPILE_DEFINITIONS "MT"
 	)
 
-set(RADOS_SRC radosd.c peer.c hash.c)
+set(RADOS_SRC radosd/radosd.c peer.c util/hash.c)
 add_executable(archip-radosd ${RADOS_SRC})
 target_link_libraries(archip-radosd xseg pthread rados crypto)
 set_target_properties(archip-radosd
@@ -36,8 +36,8 @@ set_target_properties(archip-radosd
 	COMPILE_DEFINITIONS "MT"
 	)
 
-set(BENCH_SRC bench-xseg.c peer.c bench-lfsr.c bench-timer.c bench-utils.c
-	bench-report.c bench-verify.c)
+set(BENCH_SRC bench/bench-xseg.c peer.c bench/bench-lfsr.c bench/bench-timer.c
+    bench/bench-utils.c bench/bench-report.c bench/bench-verify.c)
 add_executable(archip-bench ${BENCH_SRC})
 target_link_libraries(archip-bench xseg pthread m)
 
@@ -49,7 +49,7 @@ set_target_properties(archip-benchfd
 	)
 
 
-set(FILED_SRC filed.c peer.c hash.c)
+set(FILED_SRC filed/filed.c peer.c util/hash.c)
 add_executable(archip-filed ${FILED_SRC})
 target_link_libraries(archip-filed xseg pthread crypto)
 set_target_properties(archip-filed
@@ -57,12 +57,13 @@ set_target_properties(archip-filed
 	COMPILE_DEFINITIONS "MT"
 	)
 
-set(VLMCD_SRC mt-vlmcd.c peer.c)
+set(VLMCD_SRC vlmcd/mt-vlmcd.c peer.c)
 add_executable(archip-vlmcd ${VLMCD_SRC})
 target_link_libraries(archip-vlmcd xseg)
 
-set(MAPPERD_SRC mapper.c peer.c hash.c mapper-handling.c 
-	mapper-version0.c mapper-version1.c mapper-version2.c)
+set(MAPPERD_SRC mapperd/mapper.c peer.c util/hash.c mapperd/mapper-handling.c
+	mapperd/mapper-version0.c mapperd/mapper-version1.c
+    mapperd/mapper-version2.c)
 add_executable(archip-mapperd ${MAPPERD_SRC})
 target_link_libraries(archip-mapperd xseg st crypto)
 set_target_properties(archip-mapperd
