@@ -615,21 +615,17 @@ static int dropcache(struct peer_req *pr, struct map *map)
 
 static int do_close(struct peer_req *pr, struct map *map)
 {
-    if (!(map->state & MF_MAP_CANCACHE)) {
-        XSEGLOG2(&lc, E, "Attempted to close a not opened/cached map");
+    if (!(map->state & MF_MAP_EXCLUSIVE)) {
+        XSEGLOG2(&lc, E, "Attempted to close a not opened map");
         return -1;
     }
     /* Do not close the map while there are pending requests on the
      * map nodes.
      */
     wait_all_map_objects_ready(map);
-    if (map->state & MF_MAP_EXCLUSIVE) {
-        if (close_map(pr, map) < 0) {
-            return -1;
-        }
+    if (close_map(pr, map) < 0) {
+        return -1;
     }
-    /* order mapper to drop the cache, after close */
-    map->state &= ~MF_MAP_CANCACHE;
 
     return 0;
 }
@@ -1410,21 +1406,6 @@ struct map *get_map(struct peer_req *pr, char *name, uint32_t namelen,
                 }
             }
 
-            /* old archip maps are not read only */
-            if (map->state & MF_MAP_EXCLUSIVE) {
-                /* cache map files opened exlusively,
-                 * but drop the lock if map is readonly.
-                 */
-                if (map->flags & MF_MAP_READONLY) {
-                    close_map(pr, map);
-                }
-                map->state |= MF_MAP_CANCACHE;
-            } else if (map->flags & MF_MAP_READONLY &&
-                       map->version == MAP_LATEST_VERSION) {
-                /* always cache read only maps */
-                map->state |= MF_MAP_CANCACHE;
-            }
-
             /* If the map is deleted, drop everything and return
              * NULL.
              */
@@ -1475,7 +1456,7 @@ static int map_action(int (action) (struct peer_req * pr, struct map * map),
     }
     int r = action(pr, map);
     //always drop cache if map not read exclusively
-    if (!(map->state & MF_MAP_CANCACHE)) {
+    if (!(map->state & MF_MAP_EXCLUSIVE)) {
         dropcache(pr, map);
     }
     signal_map(map);
