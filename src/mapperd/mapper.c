@@ -114,7 +114,7 @@ static struct map *find_map_len(struct mapperd *mapper, char *target,
 }
 
 
-static int insert_map(struct mapperd *mapper, struct map *map)
+static int insert_cache(struct mapperd *mapper, struct map *map)
 {
     int r = -1;
 
@@ -1365,7 +1365,7 @@ struct map *get_map(struct peer_req *pr, char *name, uint32_t namelen,
             if (!map) {
                 return NULL;
             }
-            r = insert_map(mapper, map);
+            r = insert_cache(mapper, map);
             if (r < 0) {
                 XSEGLOG2(&lc, E, "Cannot insert map %s", map->volume);
                 put_map(map);
