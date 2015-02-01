@@ -48,15 +48,16 @@ The new mapfile will be consisted from three different data structures and
 each one will span one data file.
 
 #. The header file will include the signature, the version, the volume size,
-   the volume blocksize, the epoch, the flags field and finally a new field
+   the volume blocksize, the epoch, the flags field and finally a new flag
    called sgc that denotes if the volume has been garbage collected and will be
    used during the migration from v2 to v3 and later on for bootstrapping
    reasons.
 
 #. The metadata file is a new file introduced in v3 and will include the
-   signature, a flags field, the version, the current volume index, the volume
-   array length, the content addressable array length, the content addressable
-   array and finaly the volume array.
+   the current volume index, the volume array length, the content addressable
+   array length, the content addressable array, the volume array and finally
+   the size in bytes of the unhexlified content addressable object placed in
+   the relevant array.
 
 #. The mapdata file has a new form in v3 and it will include the epoch, the
    volume index, the type that denotes if the object is content addressable or
