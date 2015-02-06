@@ -5,7 +5,7 @@ This is a coding style guide for Archipelago.
 ## 1. Indentation and layout
 1.1 Use 4 spaces for indentation, no tabs.
 
-1.2 Put the case in switch statements on the same indentation
+1.2 Put the case in switch statements on the same indentation level:
 ```
     switch(op) {
     case 1:
@@ -26,7 +26,7 @@ This is a coding style guide for Archipelago.
 1.4 Line length should not exceed 80 characters.
 
 ## 2. Spaces
-2.1 Use spaces around binary and ternary operators.
+2.1 Use spaces around binary and ternary operators:
 ```
     n = n + 8;
     if (j == 8 || i < 9) {
@@ -35,28 +35,27 @@ This is a coding style guide for Archipelago.
     n = j < 1 ? j : 0;
 ```
 
-2.2 Do not use spaces around unary operators.
+2.2 Do not use spaces around unary operators:
 ```
     n -= 2;
     j = *p;
     for (n = 0; n < 10; n++) {
 ```
 
-2.3 Do not use spaces between a function and its parameters, or
-a template and its parameters.
+2.3 Do not use spaces between a function and its parameters, or a template and
+its parameters:
 ```
     abs(-2.0)
     std::vector<kernel*>
 ```
 
-2.4 Bind '&' to the type and not the variable
+2.4 Bind '&' to the type and not the variable:
 ```
     int& k;
 ```
 
 The rule does not apply when multiple variables are declared on the same line.
 In such cases, it is preferable to do:
-
 ...
     int &k, &l;
 ...
@@ -70,22 +69,21 @@ In such cases, it is preferable to do:
 ## 3. Braces
 3.1 Use curly braces for the 'if' statement even if it is only a line.
 
-3.2 Use single-space when a brace-delimited block is part of a statement.
+3.2 Use single-space when a brace-delimited block is part of a statement:
 ```
     if (n == 8) {
         ...
     }
 ```
 
-3.3 In inline methods use the open braces at the same line of the method.
+3.3 In inline methods use the open braces at the same line of the method:
 ```
     int use_scope() {
         ...
     }
 ```
 
-3.4 In longer methods the opening brace should be at the beginning of the
-line.
+3.4 In longer methods the opening brace should be at the beginning of the line:
 ```
     void abs()
     {
@@ -94,29 +92,30 @@ line.
 ```
 
 ## 4. Commenting
-4.1 Use the // C++ comment style for normal comments
+4.1 Use the // C++ comment style for normal comments.
+
 4.2 Use /* */ comments for namespaces, classes, method or functions.
 
 ## 5. Macros and Enums
-5.1 Avoid macros when a method or function would do. Prefer enum and constant
-to macro.
+5.1 Avoid macros when a method or function would do. Prefer enum and constant to
+macro.
 
-5.2 Prefer "enum class" to "enum" (C++)
+5.2 Prefer "enum class" to "enum" (C++).
 
 5.3 Capitalize macro names and enum labels. For "enum class", non-capitalized
 values are fine.
 
 ## 6. Functions
-6.1 Put no space between function name and the argument list.
+6.1 Put no space between function name and the argument list:
 ```
-double sqrt(double d)
-{
+    double sqrt(double d)
+    {
 ```
 
-6.2 Avoid parentheses around return value
+6.2 Avoid parentheses around return value:
 ```
-return 0;
-return i + j
+    return 0;
+    return i + j;
 ```
 
 "return" is not a function call, parentheses are not required.
