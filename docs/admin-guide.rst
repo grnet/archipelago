@@ -772,7 +772,7 @@ Common options among all peers are:
     0-3.
 
   ``nr_ops``
-    **Description**: Max number of flying operations.
+    **Description**: Max number of flying operations. Must be a power of 2.
 
   ``umask``
     **Description**: Set umask for peer.
