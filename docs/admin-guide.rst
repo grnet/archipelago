@@ -722,13 +722,13 @@ may come handy for debugging
     **Allowed values**: Any positive integer.
 
   ``VTOOL_START``
-    **Description**: Start port of vlmc tool.
+    **Description**: Start of port range that can be used by the vlmc tool.
 
     **Allowed values**: Any port in the range [0-``SEGMENT_PORTS``). It must not
     confict with any other port range.
 
   ``VTOOL_END``
-    **Description**: End port of vlmc tool.
+    **Description**: End of port range that can be used by the vlmc tool.
 
     **Allowed values**: Any port in the range
     (``VTOOL_START``-``SEGMENT_PORTS``). It must not confict with any other port
@@ -762,16 +762,17 @@ Common options among all peers are:
     role.
 
   ``portno_start``
-    **Description**: Start port of the peer.
+    **Description**: Start of port range that will be used by the peer.
 
   ``portno_end``
-    **Description**: End port of the peer.
+    **Description**: End of port range that will be used by the peer.
 
   ``log_level``
-    **Description**: Loggging lever for the peer. Available logging levels 0-3.
+    **Description**: Loggging level for each xseg peer. Available logging levels
+    0-3.
 
   ``nr_ops``
-    **Description**: Number of ops, each peer can have flying.
+    **Description**: Max number of flying operations. Must be a power of 2.
 
   ``umask``
     **Description**: Set umask for peer.
@@ -785,15 +786,15 @@ Common options among all peers are:
     Currently only blockers support threads with the following caveats:
 
       a) Threads in ``filed`` are I/O threads that perform blocking I/O.
-      b) Threads in ``radosd`` are processing threads. For lock congestion
-         reasons, avoid setting them to a value larger than 4.
+      b) Threads in ``radosd`` are processing threads. For lock
+         congestion reasons, avoid setting them to a value larger than 4.
 
 .. * ``logfile``:
 .. * ``pidfile``:
 
 ``filed``-specific options:
   ``nr_threads``
-    **Description**: Number of I/O threads to server requests.
+    **Description**: Number of I/O threads to serve requests.
 
   ``archip_dir``
     **Description**: Directory where the files will reside. This must be one
@@ -825,7 +826,7 @@ Common options among all peers are:
 
 ``radosd``-specific options:
   ``nr_threads``
-    **Description**: Number of threads to server requests.
+    **Description**: Number of threads to serve requests.
 
   ``pool``
     **Description**: RADOS pool where the objects will be stored.
