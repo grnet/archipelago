@@ -39,10 +39,10 @@ def vlmc_parser():
     create_parser.add_argument('-v0', '--assume_v0',  action='store_true',
                                default=False,
                                help='treat snapshot as version 0, if '
-                               'necessary')
+                                    'necessary')
     create_parser.add_argument('--v0_size', type=int, nargs='?', default=-1,
-                               help='set size of snapshot to be assumed, if '
-                               'found as version 0')
+                               help='set size of snapshot, if found as version '
+			             '0')
     create_parser.add_argument('name', type=str,  help='volume/device name')
     create_parser.set_defaults(func=vlmc.create)
 
@@ -51,10 +51,10 @@ def vlmc_parser():
     remove_parser.add_argument('-v0', '--assume_v0',  action='store_true',
                                default=False,
                                help='treat target volume as version 0, if '
-                               'necessary')
+                                    'necessary')
     remove_parser.add_argument('--v0_size', type=int, nargs='?', default=-1,
-                               help='set size of target volume to be assumed, if '
-                               'found as version 0')
+                               help='set size of target volume, if found as '
+                                    'version 0')
     remove_parser.set_defaults(func=vlmc.remove)
 
     rm_parser = subparsers.add_parser('rm', help='delete volume')
@@ -66,10 +66,10 @@ def vlmc_parser():
     map_parser.add_argument('-v0', '--assume_v0',  action='store_true',
                             default=False,
                             help='treat target volume as version 0, if '
-                            'necessary')
+                                 'necessary')
     map_parser.add_argument('--v0_size', type=int, nargs='?', default=-1,
-                            help='set size of target volume to be assumed, if '
-                            'found as version 0')
+                            help='set size of target volume, if found as '
+                                 'version 0')
     map_parser.add_argument('-ro', '--readonly',  action='store_true',
                             default=False, help='map target as readonly')
     map_parser.set_defaults(func=vlmc.map_volume)
@@ -92,10 +92,10 @@ def vlmc_parser():
     snapshot_parser.add_argument('-v0', '--assume_v0',  action='store_true',
                                  default=False,
                                  help='treat target volume as version 0 if, '
-                                 'necessary')
+                                      'necessary')
     snapshot_parser.add_argument('--v0_size', type=int, nargs='?', default=-1,
-                                 help='set size of target volume to be assumed,'
-                                 ' if found as version 0')
+                                 help='set size of target volume, if found as '
+                                      'version 0')
     snapshot_parser.set_defaults(func=vlmc.snapshot)
 
     rename_parser = subparsers.add_parser('rename', help='rename volume')
@@ -105,10 +105,10 @@ def vlmc_parser():
     rename_parser.add_argument('-v0', '--assume_v0',  action='store_true',
                                default=False,
                                help='treat target volume as version 0, if '
-                               'necessary')
+                                    'necessary')
     rename_parser.add_argument('--v0_size', type=int, nargs='?', default=-1,
-                               help='set size of target volume to be assumed, '
-                               'if found as version 0')
+                               help='set size of target volume, if found as '
+                                    'version 0')
     rename_parser.set_defaults(func=vlmc.rename)
 
     ls_parser = subparsers.add_parser('ls', help='list volumes')
@@ -121,10 +121,10 @@ def vlmc_parser():
     resize_parser.add_argument('-v0', '--assume_v0',  action='store_true',
                                default=False,
                                help='treat target volume as version 0, if '
-                               'necessary')
+			             'necessary')
     resize_parser.add_argument('--v0_size', type=int, nargs='?', default=-1,
-                               help='set size of target volume to be assumed, '
-                               'if found as version 0')
+                               help='set size of target volume, if found as '
+                                    'version 0')
     resize_parser.set_defaults(func=vlmc.resize)
 
     open_parser = subparsers.add_parser('open', help='open volume')
@@ -132,10 +132,10 @@ def vlmc_parser():
     open_parser.add_argument('-v0', '--assume_v0',  action='store_true',
                              default=False,
                              help='treat target volume as version 0, if '
-                             'necessary')
+                                  'necessary')
     open_parser.add_argument('--v0_size', type=int, nargs='?', default=-1,
-                             help='set size of target volume to be assumed, if '
-                             'found as version 0')
+                             help='set size of target volume, if found as '
+                                  'version 0')
     open_parser.set_defaults(func=vlmc.open_volume)
 
     close_parser = subparsers.add_parser('close', help='close volume')
@@ -143,10 +143,10 @@ def vlmc_parser():
     close_parser.add_argument('-v0', '--assume_v0',  action='store_true',
                               default=False,
                               help='treat target volume as version 0, if '
-                              'necessary')
+                                   'necessary')
     close_parser.add_argument('--v0_size', type=int, nargs='?', default=-1,
-                              help='set size of target volume to be assumed, if'
-                              ' found as version 0')
+                              help='set size of target volume, if found as '
+                                   'version 0')
     close_parser.set_defaults(func=vlmc.close_volume)
 
     lock_parser = subparsers.add_parser('lock', help='lock volume')
@@ -164,10 +164,10 @@ def vlmc_parser():
     info_parser.add_argument('-v0', '--assume_v0',  action='store_true',
                              default=False,
                              help='treat target volume as version 0, if '
-                             'necessary')
+                                  'necessary')
     info_parser.add_argument('--v0_size', type=int, nargs='?', default=-1,
-                             help='set size of target volume to be assumed, if '
-                             'found as version 0')
+                             help='set size of target volume, if found as '
+                                  'version 0')
     info_parser.set_defaults(func=vlmc.info)
 
 #    map_info_parser = subparsers.add_parser('mapinfo',
@@ -185,8 +185,8 @@ def vlmc_parser():
                              help='treat target volume as version 0, if '
                              'necessary')
     hash_parser.add_argument('--v0_size', type=int, nargs='?', default=-1,
-                             help='set size of target volume to be assumed, if '
-                             'found as version 0')
+                             help='set size of target volume, if found as '
+                                  'version 0')
     hash_parser.set_defaults(func=vlmc.hash)
 
     return parser
@@ -210,9 +210,10 @@ def archipelago_parser():
     stop_parser.add_argument('-f', '--force',  action='store_true',
                              default=False,
                              help='stop archipelago even if mapped volumes '
-                             'exist')
+                                  'exist')
 
-    status_parser = subparsers.add_parser('status', help='show archipelago status')
+    status_parser = subparsers.add_parser('status',
+		                           help='show archipelago status')
     status_parser.set_defaults(func=archipelago.status)
 
     restart_parser = subparsers.add_parser('restart',
