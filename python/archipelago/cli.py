@@ -38,7 +38,7 @@ def vlmc_parser():
                                help='create from snapshot')
     create_parser.add_argument('-v0', '--assume_v0',  action='store_true',
                                default=False,
-                               help='assume snapshot as version 0, if '
+                               help='treat snapshot as version 0, if '
                                'necessary')
     create_parser.add_argument('--v0_size', type=int, nargs='?', default=-1,
                                help='set size of snapshot to be assumed, if '
@@ -50,7 +50,7 @@ def vlmc_parser():
     remove_parser.add_argument('name', type=str,  help='volume/device name')
     remove_parser.add_argument('-v0', '--assume_v0',  action='store_true',
                                default=False,
-                               help='assume target volume as version 0, if '
+                               help='treat target volume as version 0, if '
                                'necessary')
     remove_parser.add_argument('--v0_size', type=int, nargs='?', default=-1,
                                help='set size of target volume to be assumed, if '
@@ -65,7 +65,7 @@ def vlmc_parser():
     map_parser.add_argument('name', type=str,  help='volume/device name')
     map_parser.add_argument('-v0', '--assume_v0',  action='store_true',
                             default=False,
-                            help='assume target volume as version 0, if '
+                            help='treat target volume as version 0, if '
                             'necessary')
     map_parser.add_argument('--v0_size', type=int, nargs='?', default=-1,
                             help='set size of target volume to be assumed, if '
@@ -91,7 +91,7 @@ def vlmc_parser():
     snapshot_parser.add_argument('snap_name', type=str,  help='Snapshot name')
     snapshot_parser.add_argument('-v0', '--assume_v0',  action='store_true',
                                  default=False,
-                                 help='assume target volume as version 0 if, '
+                                 help='treat target volume as version 0 if, '
                                  'necessary')
     snapshot_parser.add_argument('--v0_size', type=int, nargs='?', default=-1,
                                  help='set size of target volume to be assumed,'
@@ -104,7 +104,7 @@ def vlmc_parser():
     rename_parser.add_argument('newname', type=str,  help='new name')
     rename_parser.add_argument('-v0', '--assume_v0',  action='store_true',
                                default=False,
-                               help='assume target volume as version 0, if '
+                               help='treat target volume as version 0, if '
                                'necessary')
     rename_parser.add_argument('--v0_size', type=int, nargs='?', default=-1,
                                help='set size of target volume to be assumed, '
@@ -120,7 +120,7 @@ def vlmc_parser():
     resize_parser.add_argument('name', type=str,  help='volume/device name')
     resize_parser.add_argument('-v0', '--assume_v0',  action='store_true',
                                default=False,
-                               help='assume target volume as version 0, if '
+                               help='treat target volume as version 0, if '
                                'necessary')
     resize_parser.add_argument('--v0_size', type=int, nargs='?', default=-1,
                                help='set size of target volume to be assumed, '
@@ -131,7 +131,7 @@ def vlmc_parser():
     open_parser.add_argument('name', type=str,  help='volume/device name')
     open_parser.add_argument('-v0', '--assume_v0',  action='store_true',
                              default=False,
-                             help='assume target volume as version 0, if '
+                             help='treat target volume as version 0, if '
                              'necessary')
     open_parser.add_argument('--v0_size', type=int, nargs='?', default=-1,
                              help='set size of target volume to be assumed, if '
@@ -142,7 +142,7 @@ def vlmc_parser():
     close_parser.add_argument('name', type=str,  help='volume/device name')
     close_parser.add_argument('-v0', '--assume_v0',  action='store_true',
                               default=False,
-                              help='assume target volume as version 0, if '
+                              help='treat target volume as version 0, if '
                               'necessary')
     close_parser.add_argument('--v0_size', type=int, nargs='?', default=-1,
                               help='set size of target volume to be assumed, if'
@@ -163,7 +163,7 @@ def vlmc_parser():
     info_parser.add_argument('name', type=str,  help='volume name')
     info_parser.add_argument('-v0', '--assume_v0',  action='store_true',
                              default=False,
-                             help='assume target volume as version 0, if '
+                             help='treat target volume as version 0, if '
                              'necessary')
     info_parser.add_argument('--v0_size', type=int, nargs='?', default=-1,
                              help='set size of target volume to be assumed, if '
@@ -182,7 +182,7 @@ def vlmc_parser():
     hash_parser.add_argument('name', type=str,  help='snapshot name')
     hash_parser.add_argument('-v0', '--assume_v0',  action='store_true',
                              default=False,
-                             help='assume target volume as version 0, if '
+                             help='treat target volume as version 0, if '
                              'necessary')
     hash_parser.add_argument('--v0_size', type=int, nargs='?', default=-1,
                              help='set size of target volume to be assumed, if '
