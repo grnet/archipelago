@@ -38,7 +38,7 @@ def archip_premigrate_disk(idx):
         raise Exception("Invalid disk template %s" % template)
 
     if provider != 'archipelago' and provider != 'vlmc':
-        raise Exception("Unknown provider %s" % provider)
+        return 0
 
     if not vol_name:
         raise Exception("No volume name provided")
