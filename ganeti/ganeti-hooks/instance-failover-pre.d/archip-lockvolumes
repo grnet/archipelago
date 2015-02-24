@@ -1,0 +1,88 @@
+#!/usr/bin/env python
+
+# Copyright (C) 2010-2014 GRNET S.A.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+
+import os
+import sys
+import socket
+
+from archipelago import vlmc as vlmc
+from archipelago.common import loadrc
+
+
+def hooks_log(msg):
+    f = open('/var/log/ganeti/hooks.log', 'a')
+    f.write("%s\n" % msg)
+    f.close()
+
+
+def archip_lock_disk(idx):
+    provider = os.getenv("GANETI_INSTANCE_DISK%d_PROVIDER" % idx)
+    vol_name = os.getenv("GANETI_INSTANCE_DISK%d_ID" % idx)
+    template = os.getenv("GANETI_INSTANCE_DISK%d_TEMPLATE_NAME" % idx)
+
+    if template != 'ext':
+        raise Exception("Invalid disk template %s" % template)
+
+    if provider != 'archipelago' and provider != 'vlmc':
+        return 0
+
+    if not vol_name:
+        raise Exception("No volume name provided")
+
+    # Try to lock the volume
+    hooks_log("Locking volume %s" % vol_name)
+    vlmc.lock(name=vol_name)
+    hooks_log("Locked volume %s" % vol_name)
+
+
+def archip_lock_disks():
+    try:
+        count = os.getenv("GANETI_INSTANCE_DISK_COUNT")
+        template = os.getenv("GANETI_INSTANCE_DISK_TEMPLATE")
+    except:
+        return 1
+
+    if template != 'ext':
+        return 0
+
+    count = int(count)
+    hooks_log("Found %d disks" % count)
+
+    for i in range(0, count):
+        try:
+            archip_lock_disk(i)
+        except Exception as e:
+            msg = "Failed to lock volume %d: %s" % (i, e)
+            print msg
+            hooks_log(msg)
+            return 1
+
+    return 0
+
+if __name__ == '__main__':
+    loadrc(None)
+
+    try:
+        secondary = os.getenv("GANETI_INSTANCE_SECONDARY")
+    except:
+        exit(0)
+
+    if socket.getfqdn() != secondary:
+        exit(0)
+
+    exit(archip_lock_disks())
