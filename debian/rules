@@ -16,5 +16,3 @@ override_dh_installinit:
 override_dh_fixperms:
 	dh_fixperms --exclude var/log/ganeti/extstorage
 #	chmod 0750 $(DESTDIR)/var/log/ganeti/extstorage
-
-
