@@ -26,6 +26,7 @@ from subprocess import check_call
 from .common import *
 from .vlmc import showmapped as vlmc_showmapped
 from .vlmc import get_mapped as vlmc_get_mapped
+from .vlmc import unmap_volume as vlmc_unmap_volume
 from blktap import VlmcTapdisk, VlmcTapdiskException
 
 def start_peer(peer, cli=False):
@@ -150,16 +151,9 @@ def start(role=None, cli=False, **kwargs):
     except Exception as e:
         if cli:
             print red(e)
-        stop(role, cli, force=True)
+        stop(role, cli, pause=True)
 
-def stop(role=None, cli=False, force=False, **kwargs):
-    try:
-        if config['BLKTAP_ENABLED'] is False and vlmc_get_mapped():
-            vlmc_showmapped()
-            raise Error("Cannot stop archipelago. Mapped volumes exist")
-    except VlmcTapdiskException:
-        pass
-
+def stop(role=None, cli=False, pause=False, **kwargs):
     if role:
         try:
             p = peers[role]
@@ -177,12 +171,32 @@ def stop(role=None, cli=False, force=False, **kwargs):
     if config["BLKTAP_ENABLED"] and loaded_module('blktap'):
         mapped = vlmc_get_mapped()
         if mapped and len(mapped) > 0:
-            if not force:
+            if not pause:
                 vlmc_showmapped()
-                raise Error("Cannot stop archipelago. Mapped volumes exist")
-            for m in mapped:
-                if not VlmcTapdisk.is_paused(m.device):
-                    VlmcTapdisk.pause(m.device)
+                print red("Mapped volumes exist, unmapping...")
+                try:
+                    for m in mapped:
+                        vlmc_unmap_volume(m.device)
+                except Error as e:
+                    raise Error("Error while umapping volume, during shutdown"
+                                ": %s" % e)
+
+            else:
+                for m in mapped:
+                    if not VlmcTapdisk.is_paused(m.device):
+                        VlmcTapdisk.pause(m.device)
+
+        mapped = vlmc_get_mapped()
+        if mapped and len(mapped) > 0:
+            vlmc_showmapped()
+            if pause:
+                if not reduce(and, [VlmcTapdisk.is_paused(m.device) for m in
+                                    mapped], True):
+                    raise Error("Found unpaused volume, cannot stop "
+                                "Archipelago")
+            else
+                raise Error("Found more mapped volumes, cannot stop "
+                            "Archipelago")
 
     stop_peers(peers, cli)
     time.sleep(0.5)
@@ -233,5 +247,5 @@ def status(cli=False, **kwargs):
 
 
 def restart(**kwargs):
-    stop(force=True, **kwargs)
+    stop(pause=True, **kwargs)
     start(**kwargs)
