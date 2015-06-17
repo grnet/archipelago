@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-# Copyright (C) 2010-2014 GRNET S.A.
+# Copyright (C) 2010-2015 GRNET S.A.
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -17,17 +17,15 @@
 #
 
 
-import os
 import sys
 import time
-import errno
-from subprocess import check_call
 
 from .common import *
 from .vlmc import showmapped as vlmc_showmapped
 from .vlmc import get_mapped as vlmc_get_mapped
 from .vlmc import unmap_volume as vlmc_unmap_volume
 from blktap import VlmcTapdisk, VlmcTapdiskException
+
 
 def start_peer(peer, cli=False):
     if peer.is_running():
@@ -49,12 +47,12 @@ def start_peer(peer, cli=False):
             sys.stdout.write("\n")
         raise Error("Cannot start %s" % peer.role)
 
-#TODO configurable
+    # TODO: configurable
     i = 0
     while not peer.is_running():
         time.sleep(0.1)
         i += 1
-        if i > 30: #3secs
+        if i > 30:  # 3secs
             if cli:
                 sys.stdout.write(red("FAILED".ljust(SECOND_COLUMN_WIDTH)))
                 sys.stdout.write("\n")
@@ -137,8 +135,8 @@ def start(role=None, cli=False, **kwargs):
         print ""
 
     try:
-        #get_segment().create()
-        #time.sleep(0.5)
+        # get_segment().create()
+        # time.sleep(0.5)
         create_posixfd_dirs()
         start_peers(peers, cli)
         if config["BLKTAP_ENABLED"]:
@@ -153,6 +151,7 @@ def start(role=None, cli=False, **kwargs):
             print red(e)
         stop(role, cli, pause=True)
 
+
 def stop(role=None, cli=False, pause=False, **kwargs):
     if role:
         try:
@@ -161,7 +160,7 @@ def stop(role=None, cli=False, pause=False, **kwargs):
             raise Error("Invalid peer %s" % role)
         return stop_peer(p, cli)
 
-    #check devices
+    # check devices
     if cli:
         print "===================="
         print "Stoping archipelago"
@@ -190,11 +189,13 @@ def stop(role=None, cli=False, pause=False, **kwargs):
         if mapped and len(mapped) > 0:
             vlmc_showmapped()
             if pause:
-                if not reduce(and, [VlmcTapdisk.is_paused(m.device) for m in
-                                    mapped], True):
+                import operator
+                if not reduce(operator.and_, [VlmcTapdisk.is_paused(m.device)
+                                              for m in mapped],
+                              True):
                     raise Error("Found unpaused volume, cannot stop "
                                 "Archipelago")
-            else
+            else:
                 raise Error("Found more mapped volumes, cannot stop "
                             "Archipelago")
 
@@ -227,7 +228,7 @@ def status(cli=False, **kwargs):
         if loaded_module("blktap"):
             if cli:
                 pretty_print("blktap", green('Loaded'))
-            #r += 1
+            # r += 1
         else:
             if cli:
                 pretty_print("blktap", red('Not loaded'))
