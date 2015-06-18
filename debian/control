@@ -2,7 +2,7 @@ Source: archipelago
 Section: otherosfs
 Priority: extra
 Maintainer: Filippos Giannakos <philipgian@grnet.gr>
-Build-Depends: debhelper (>= 7.0.50~), python, libst-dev, libxseg-dev(>=0.4),
+Build-Depends: debhelper (>= 7.0.50~), python, libst-dev, libxseg-dev(>0.4),
  librados-dev(=0.61.2+grnet2-1) | librados-dev(>=0.65),
  libssl-dev, cmake(>=2.8)
 Standards-Version: 3.9.1
@@ -11,7 +11,7 @@ X-Python-Version: >=2.6
 Package: python-archipelago
 Section: python
 Architecture: any
-Depends: ${misc:Depends}, ${python:Depends}, python-xseg(>=0.4),
+Depends: ${misc:Depends}, ${python:Depends}, python-xseg(>0.4),
  python-pkg-resources, psmisc
 Recommends: python-ceph
 Provides: ${python:Provides}, archipelago-tool1
@@ -21,7 +21,7 @@ Description: Python archipelago module
 Package: archipelago
 Architecture: amd64
 Depends: ${misc:Depends},  ${shlibs:Depends}, ${python:Depends},
- libxseg0(>=0.4), python-archipelago(=${binary:Version})
+ libxseg0(>0.4), python-archipelago(=${binary:Version})
 Provides: archipelago-protocol1
 Replaces: archipelago-modules-dkms, archipelago-modules-0.3.5,
  archipelago-modules-0.3.4, archipelago-modules-0.3.3,
@@ -38,7 +38,7 @@ Description:  Provides archipelago infrastructure
 Package: archipelago-rados
 Architecture: amd64
 Depends: ${misc:Depends}, ${shlibs:Depends}, archipelago-protocol1,
- librados2(=0.61.2+grnet2-1) | librados2(>=0.65), libxseg0(>=0.4)
+ librados2(=0.61.2+grnet2-1) | librados2(>=0.65), libxseg0(>0.4)
 Description: Provides archipelago rados driver
  Extended Description here
 
