@@ -199,8 +199,9 @@ void log_pr(char *msg, struct peer_req *pr)
 		target[end] = 0;
 		strncpy(data, req_data, 63);
 		data[63] = 0;
-		printf("%s: req id:%u, op:%u %llu:%lu serviced: %lu, retval: %lu, reqstate: %u\n"
-				"target[%u]:'%s', data[%llu]:\n%s------------------\n\n",
+        XSEGLOG2(D, "%s: req id:%u, op:%u %llu:%lu serviced: %lu, retval: %lu, "
+               "reqstate: %u, " "target[%u]:'%s',i "
+               "data[%llu]:%s------------------",
 				msg,
 				(unsigned int)(pr - peer->peer_reqs),
 				(unsigned int)pr->req->op,
