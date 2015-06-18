@@ -92,7 +92,7 @@ static struct map * find_map_len(struct mapperd *mapper, char *target,
 	char buf[XSEG_MAX_TARGETLEN+1];
 
 	if (targetlen > MAX_VOLUME_LEN){
-		XSEGLOG2(&lc, E, "Namelen %u too long. Max: %d",
+		XSEGLOG2(E, "Namelen %u too long. Max: %d",
 					targetlen, MAX_VOLUME_LEN);
 		return NULL;
 	}
@@ -108,7 +108,7 @@ static struct map * find_map_len(struct mapperd *mapper, char *target,
 		buf[targetlen] = 0;
 //	}
 
-	XSEGLOG2(&lc, D, "looking up map %s, len %u",
+	XSEGLOG2(D, "looking up map %s, len %u",
 			buf, targetlen);
 	return find_map(mapper, buf);
 }
@@ -119,18 +119,18 @@ static int insert_map(struct mapperd *mapper, struct map *map)
 	int r = -1;
 
 	if (find_map(mapper, map->key)){
-		XSEGLOG2(&lc, W, "Map %s found in hash maps", map->key);
+		XSEGLOG2(W, "Map %s found in hash maps", map->key);
 		goto out;
 	}
 
-	XSEGLOG2(&lc, D, "Inserting map %s, len: %d (map: %lx)", 
+	XSEGLOG2(D, "Inserting map %s, len: %d (map: %lx)", 
 			map->key, strlen(map->key), (unsigned long) map);
 	r = xhash_insert(mapper->hashmaps, (xhashidx) map->key, (xhashidx) map);
 	while (r == -XHASH_ERESIZE) {
 		xhashidx shift = xhash_grow_size_shift(mapper->hashmaps);
 		xhash_t *new_hashmap = xhash_resize(mapper->hashmaps, shift, 0, NULL);
 		if (!new_hashmap){
-			XSEGLOG2(&lc, E, "Cannot grow mapper->hashmaps to sizeshift %llu",
+			XSEGLOG2(E, "Cannot grow mapper->hashmaps to sizeshift %llu",
 					(unsigned long long) shift);
 			goto out;
 		}
@@ -152,7 +152,7 @@ static int remove_map(struct mapperd *mapper, struct map *map)
 		xhashidx shift = xhash_shrink_size_shift(mapper->hashmaps);
 		xhash_t *new_hashmap = xhash_resize(mapper->hashmaps, shift, 0, NULL);
 		if (!new_hashmap){
-			XSEGLOG2(&lc, E, "Cannot shrink mapper->hashmaps to sizeshift %llu",
+			XSEGLOG2(E, "Cannot shrink mapper->hashmaps to sizeshift %llu",
 					(unsigned long long) shift);
 			goto out;
 		}
@@ -167,24 +167,24 @@ inline struct map_node * get_mapnode(struct map *map, uint64_t index)
 {
 	struct map_node *mn;
 	if (index >= map->nr_objs) {
-	//	XSEGLOG2(&lc, E, "Index out of range: %llu > %llu",
+	//	XSEGLOG2(E, "Index out of range: %llu > %llu",
 	//			index, map->nr_objs);
 		return NULL;
 	}
 	if (!map->objects) {
-	//	XSEGLOG2(&lc, E, "Map %s has no objects", map->volume);
+	//	XSEGLOG2(E, "Map %s has no objects", map->volume);
 		return NULL;
 	}
 	mn = &map->objects[index];
 	mn->ref++;
-	//XSEGLOG2(&lc, D,  "mapnode %p: ref: %u", mn, mn->ref);
+	//XSEGLOG2(D,  "mapnode %p: ref: %u", mn, mn->ref);
 	return mn;
 }
 
 inline void put_mapnode(struct map_node *mn)
 {
 	mn->ref--;
-	//XSEGLOG2(&lc, D, "mapnode %p: ref: %u", mn, mn->ref);
+	//XSEGLOG2(D, "mapnode %p: ref: %u", mn, mn->ref);
 	if (!mn->ref){
 		//clean up mn
 		st_cond_destroy(mn->cond);
@@ -220,10 +220,10 @@ static inline void __get_map(struct map *map)
 static inline void put_map(struct map *map)
 {
 	struct map_node *mn;
-	XSEGLOG2(&lc, D, "Putting map %lx %s. ref %u", map, map->volume, map->ref);
+	XSEGLOG2(D, "Putting map %lx %s. ref %u", map, map->volume, map->ref);
 	map->ref--;
 	if (!map->ref){
-		XSEGLOG2(&lc, I, "Freeing map %s", map->volume);
+		XSEGLOG2(I, "Freeing map %s", map->volume);
 		/*
 		 * Check that every object is not used by another state thread.
 		 * This should always check out, otherwise there is a bug. Since
@@ -237,7 +237,7 @@ static inline void put_map(struct map *map)
 			if (mn) {
 				//make sure all pending operations on all objects are completed
 				if (mn->state & MF_OBJECT_NOT_READY) {
-					XSEGLOG2(&lc, E, "BUG: map node in use while freeing map");
+					XSEGLOG2(E, "BUG: map node in use while freeing map");
 					wait_on_mapnode(mn, mn->state & MF_OBJECT_NOT_READY);
 				}
 //				mn->state |= MF_OBJECT_DESTROYED;
@@ -245,14 +245,14 @@ static inline void put_map(struct map *map)
 				put_mapnode(mn); //matching get_mapnode;
 				//assert mn->ref == 0;
 				if (mn->ref) {
-					XSEGLOG2(&lc, E, "BUG: map node ref != 0 after final put");
+					XSEGLOG2(E, "BUG: map node ref != 0 after final put");
 				}
 			}
 		}
 		//clean up map
 		if (map->objects)
 			free(map->objects);
-		XSEGLOG2(&lc, I, "Freed map %s", map->volume);
+		XSEGLOG2(I, "Freed map %s", map->volume);
 		free(map);
 	}
 }
@@ -267,13 +267,13 @@ static void change_map_volume(struct map *map, char *name, uint32_t namelen)
 static struct map * create_map(char *name, uint32_t namelen, uint32_t flags)
 {
 	if (namelen + MAPPER_PREFIX_LEN > MAX_VOLUME_LEN){
-		XSEGLOG2(&lc, E, "Namelen %u too long. Max: %d",
+		XSEGLOG2(E, "Namelen %u too long. Max: %d",
 					namelen, MAX_VOLUME_LEN-MAPPER_PREFIX_LEN);
 		return NULL;
 	}
 	struct map *m = calloc(1, sizeof(struct map));
 	if (!m){
-		XSEGLOG2(&lc, E, "Cannot allocate map ");
+		XSEGLOG2(E, "Cannot allocate map ");
 		return NULL;
 	}
 	m->size = -1;
@@ -323,7 +323,7 @@ static void wait_all_map_objects_ready(struct map *map)
 		if (mn) {
 			//make sure all pending operations on all objects are completed
 			if (mn->state & MF_OBJECT_NOT_READY) {
-				XSEGLOG2(&lc, E, "BUG: Map node %x of map %s, "
+				XSEGLOG2(E, "BUG: Map node %x of map %s, "
 						"idx: %llu is not ready",
 						mn, map->volume, i);
 //				wait_on_mapnode(mn, mn->state & MF_OBJECT_NOT_READY);
@@ -370,7 +370,7 @@ static int do_copyups(struct peer_req *pr, struct r2o *mns, int n)
 				 */
 				if (mn->state != MF_OBJECT_COPYING
 						&& mn->state != MF_OBJECT_WRITING) {
-					XSEGLOG2(&lc, E, "BUG: Map node has wrong state");
+					XSEGLOG2(E, "BUG: Map node has wrong state");
 				}
 				wait_on_mapnode(mn, mn->state & MF_OBJECT_NOT_READY);
 				if (mn->state & MF_OBJECT_DELETED){
@@ -382,7 +382,7 @@ static int do_copyups(struct peer_req *pr, struct r2o *mns, int n)
 			if (!(mn->flags & MF_OBJECT_WRITABLE)) {
 				//calc new_target, copy up object
 				if (__copyup_object(pr, mn) == NULL){
-					XSEGLOG2(&lc, E, "Error in copy up object");
+					XSEGLOG2(E, "Error in copy up object");
 					mio->err = 1;
 				} else {
 					mio->pending_reqs++;
@@ -394,7 +394,7 @@ static int do_copyups(struct peer_req *pr, struct r2o *mns, int n)
 	}
 
 	if (mio->err){
-		XSEGLOG2(&lc, E, "Mio->err, pending_copyups: %d", mio->pending_reqs);
+		XSEGLOG2(E, "Mio->err, pending_copyups: %d", mio->pending_reqs);
 	}
 
 	if (mio->pending_reqs > 0)
@@ -418,10 +418,10 @@ static int req2objs(struct peer_req *pr, struct map *map, int write)
 	char buf[XSEG_MAX_TARGETLEN];
 	struct xseg_reply_map *reply;
 
-	XSEGLOG2(&lc, D, "Calculated %u nr_objs", nr_objs);
+	XSEGLOG2(D, "Calculated %u nr_objs", nr_objs);
 
 	if (pr->req->offset + pr->req->size > map->size) {
-		XSEGLOG2(&lc, E, "Invalid offset/size: offset: %llu, "
+		XSEGLOG2(E, "Invalid offset/size: offset: %llu, "
 				"size: %llu, map size: %llu",
 				pr->req->offset, pr->req->size, map->size);
 		return -1;
@@ -430,7 +430,7 @@ static int req2objs(struct peer_req *pr, struct map *map, int write)
 	/* get map_nodes of request */
 	struct r2o *mns = calloc(nr_objs, sizeof(struct r2o));
 	if (!mns){
-		XSEGLOG2(&lc, E, "Cannot allocate mns");
+		XSEGLOG2(E, "Cannot allocate mns");
 		return -1;
 	}
 
@@ -443,7 +443,7 @@ static int req2objs(struct peer_req *pr, struct map *map, int write)
 	obj_size =  (obj_offset + rem_size > map->blocksize) ? map->blocksize - obj_offset : rem_size;
 	mn = get_mapnode(map, obj_index);
 	if (!mn) {
-		XSEGLOG2(&lc, E, "Cannot find obj_index %llu\n",
+		XSEGLOG2(E, "Cannot find obj_index %llu\n",
 				(unsigned long long) obj_index);
 		r = -1;
 		goto out;
@@ -460,12 +460,12 @@ static int req2objs(struct peer_req *pr, struct map *map, int write)
 		rem_size -= obj_size;
 		mn = get_mapnode(map, obj_index);
 		if (!mn) {
-			XSEGLOG2(&lc, E, "Cannot find obj_index %llu\n", (unsigned long long) obj_index);
+			XSEGLOG2(E, "Cannot find obj_index %llu\n", (unsigned long long) obj_index);
 			r = -1;
 			goto out;
 		}
 		if (mn->flags & MF_OBJECT_DELETED) {
-			XSEGLOG2(&lc, E, "Trying to perform I/O on deleted object %s",
+			XSEGLOG2(E, "Trying to perform I/O on deleted object %s",
 					mn->object);
 			r = -1;
 			goto out;
@@ -478,7 +478,7 @@ static int req2objs(struct peer_req *pr, struct map *map, int write)
 	if (write) {
 		if (do_copyups(pr, mns, idx) < 0) {
 			r = -1;
-			XSEGLOG2(&lc, E, "do_copyups failed");
+			XSEGLOG2(E, "do_copyups failed");
 			goto out;
 		}
 	}
@@ -487,7 +487,7 @@ static int req2objs(struct peer_req *pr, struct map *map, int write)
 	strncpy(buf, target, pr->req->targetlen);
 	r = xseg_resize_request(peer->xseg, pr->req, pr->req->targetlen, size);
 	if (r < 0) {
-		XSEGLOG2(&lc, E, "Cannot resize request");
+		XSEGLOG2(E, "Cannot resize request");
 		goto out;
 	}
 	target = xseg_get_target(peer->xseg, pr->req);
@@ -532,7 +532,7 @@ static int do_info(struct peer_req *pr, struct map *map)
 		strncpy(buf, target, req->targetlen);
 		r = xseg_resize_request(peer->xseg, req, req->targetlen, sizeof(struct xseg_reply_info));
 		if (r < 0) {
-			XSEGLOG2(&lc, E, "Cannot resize request");
+			XSEGLOG2(E, "Cannot resize request");
 			return -1;
 		}
 		target = xseg_get_target(peer->xseg, req);
@@ -570,7 +570,7 @@ static int dropcache(struct peer_req *pr, struct map *map)
 	int r;
 	struct peerd *peer = pr->peer;
 	struct mapperd *mapper = __get_mapperd(peer);
-	XSEGLOG2(&lc, I, "Dropping cache for map %s", map->volume);
+	XSEGLOG2(I, "Dropping cache for map %s", map->volume);
 	/*
 	 * We can lazily drop the cache from here, by just removing from the maps
 	 * hashmap making it inaccessible from future requests. This is because:
@@ -593,12 +593,12 @@ static int dropcache(struct peer_req *pr, struct map *map)
 	//FIXME err check
 	r = remove_map(mapper, map);
 	if (r < 0) {
-		XSEGLOG2(&lc, E, "Remove map %s from hashmap failed", map->volume);
-		XSEGLOG2(&lc, E, "Dropping cache for map %s failed", map->volume);
+		XSEGLOG2(E, "Remove map %s from hashmap failed", map->volume);
+		XSEGLOG2(E, "Dropping cache for map %s failed", map->volume);
 		return -1;
 	}
 	map->state |= MF_MAP_DESTROYED;
-	XSEGLOG2(&lc, I, "Dropping cache for map %s completed", map->volume);
+	XSEGLOG2(I, "Dropping cache for map %s completed", map->volume);
 	put_map(map);	// put map here to destroy it (matches m->ref = 1 on map create)
 	return 0;
 }
@@ -606,7 +606,7 @@ static int dropcache(struct peer_req *pr, struct map *map)
 static int do_close(struct peer_req *pr, struct map *map)
 {
 	if (!(map->state & MF_MAP_CANCACHE)) {
-		XSEGLOG2(&lc, E, "Attempted to close a not opened/cached map");
+		XSEGLOG2(E, "Attempted to close a not opened/cached map");
 		return -1;
 	}
 	/* Do not close the map while there are pending requests on the
@@ -650,19 +650,19 @@ static int do_snapshot(struct peer_req *pr, struct map *map)
 	snapnamelen = xsnapshot->targetlen;
 
 	if (!snapnamelen) {
-		XSEGLOG2(&lc, E, "Snapshot name must be provided");
+		XSEGLOG2(E, "Snapshot name must be provided");
 		return -1;
 	}
 
 	if (!(map->state & MF_MAP_EXCLUSIVE)) {
-		XSEGLOG2(&lc, E, "Map was not opened exclusively");
+		XSEGLOG2(E, "Map was not opened exclusively");
 		return -1;
 	}
 	if (map->epoch == UINT64_MAX) {
-		XSEGLOG2(&lc, E, "Max epoch reached for %s", map->volume);
+		XSEGLOG2(E, "Max epoch reached for %s", map->volume);
 		return -1;
 	}
-	XSEGLOG2(&lc, I, "Starting snapshot for map %s", map->volume);
+	XSEGLOG2(I, "Starting snapshot for map %s", map->volume);
 	map->state |= MF_MAP_SNAPSHOTTING;
 
 	//create new map struct with name snapshot name and flag readonly.
@@ -674,13 +674,13 @@ static int do_snapshot(struct peer_req *pr, struct map *map)
 	//open/load map to check if snap exists
 	r = open_map(pr, snap_map, 0);
 	if (r < 0) {
-		XSEGLOG2(&lc, E, "Could not open snap map");
-		XSEGLOG2(&lc, E, "Snapshot exists");
+		XSEGLOG2(E, "Could not open snap map");
+		XSEGLOG2(E, "Snapshot exists");
 		goto out_put;
 	}
 	r = load_map_metadata(pr, snap_map);
 	if (r >= 0 && !(map->flags & MF_MAP_DELETED)) {
-		XSEGLOG2(&lc, E, "Snapshot exists");
+		XSEGLOG2(E, "Snapshot exists");
 		goto out_close;
 	}
 	snap_map->epoch = 0;
@@ -701,7 +701,7 @@ static int do_snapshot(struct peer_req *pr, struct map *map)
 	for (i = 0; i < nr_objs; i++) {
 		mn = get_mapnode(map, i);
 		if (!mn) {
-			XSEGLOG2(&lc, E, "Could not get map node %llu for map %s",
+			XSEGLOG2(E, "Could not get map node %llu for map %s",
 					i, map->volume);
 			goto out_err;
 		}
@@ -718,7 +718,7 @@ static int do_snapshot(struct peer_req *pr, struct map *map)
 		// No other operation that manipulated map objects can occur
 		// simutaneously with snapshot operation.
 		if (mn->state & MF_OBJECT_NOT_READY)
-			XSEGLOG2(&lc, E, "BUG: object not ready");
+			XSEGLOG2(E, "BUG: object not ready");
 	//		wait_on_mapnode(mn, mn->state & MF_OBJECT_NOT_READY);
 
 		mn->flags &= ~MF_OBJECT_WRITABLE;
@@ -729,7 +729,7 @@ static int do_snapshot(struct peer_req *pr, struct map *map)
 	//write map
 	r = write_map(pr, map);
 	if (r < 0) {
-		XSEGLOG2(&lc, E, "Cannot write map %s", map->volume);
+		XSEGLOG2(E, "Cannot write map %s", map->volume);
 		/* Not restoring epoch or writable status here, is not
 		 * devastating, since this is not the common case, and it can
 		 * only cause unneeded copy-on-write operations.
@@ -739,7 +739,7 @@ static int do_snapshot(struct peer_req *pr, struct map *map)
 	//write snapshot map
 	r = write_map(pr, snap_map);
 	if (r < 0) {
-		XSEGLOG2(&lc, E, "Write of snapshot map failed");
+		XSEGLOG2(E, "Write of snapshot map failed");
 		goto out_unset;
 	}
 
@@ -752,7 +752,7 @@ static int do_snapshot(struct peer_req *pr, struct map *map)
 	if (map->opened_count == cur_count)
 		close_map(pr, map);
 
-	XSEGLOG2(&lc, I, "Snapshot for map %s completed", map->volume);
+	XSEGLOG2(I, "Snapshot for map %s completed", map->volume);
 	return 0;
 
 out_unset:
@@ -763,7 +763,7 @@ out_put:
 	put_map(snap_map);
 out_err:
 	map->state &= ~MF_MAP_SNAPSHOTTING;
-	XSEGLOG2(&lc, E, "Snapshot for map %s failed", map->volume);
+	XSEGLOG2(E, "Snapshot for map %s failed", map->volume);
 	return -1;
 }
 
@@ -781,12 +781,12 @@ static int do_destroy(struct peer_req *pr, struct map *map)
 		return -1;
 
 	if (map->flags & MF_MAP_DELETED) {
-		XSEGLOG2(&lc, E, "Map %s already deleted", map->volume);
+		XSEGLOG2(E, "Map %s already deleted", map->volume);
 		do_close(pr, map);
 		return -1;
 	}
 
-	XSEGLOG2(&lc, I, "Destroying map %s", map->volume);
+	XSEGLOG2(I, "Destroying map %s", map->volume);
 	map->state |= MF_MAP_DESTROYING;
 
 	wait_all_map_objects_ready(map);
@@ -801,14 +801,14 @@ static int do_destroy(struct peer_req *pr, struct map *map)
 
 		mn = get_mapnode(map, i);
 		if (!mn) {
-			XSEGLOG2(&lc, E, "Could not get map node %llu for map %s",
+			XSEGLOG2(E, "Could not get map node %llu for map %s",
 					i, map->volume);
 			mio->err = 1;
 			break;
 		}
 
 		if (mn->state & MF_OBJECT_NOT_READY) {
-			XSEGLOG2(&lc, E, "BUG: object not ready");
+			XSEGLOG2(E, "BUG: object not ready");
 			wait_on_mapnode(mn, mn->state & MF_OBJECT_NOT_READY);
 		}
 
@@ -817,11 +817,11 @@ static int do_destroy(struct peer_req *pr, struct map *map)
 			|| !(mn->flags & MF_OBJECT_ARCHIP && mn->flags & MF_OBJECT_WRITABLE)) {
 			//only remove writable archipelago objects.
 			//skip already deleted
-			XSEGLOG2(&lc, D, "Skipping object %s", mn->object);
+			XSEGLOG2(D, "Skipping object %s", mn->object);
 			put_mapnode(mn);
 			continue;
 		}
-		XSEGLOG2(&lc, D, "%s flags:\n  Writable: %s\n  Zero: %s\n"
+		XSEGLOG2(D, "%s flags:\n  Writable: %s\n  Zero: %s\n"
 				"  Deleted: %s\n  Archip: %s", mn->object,
 				(mn->flags & MF_OBJECT_WRITABLE ? "yes" : "no"),
 				(mn->flags & MF_OBJECT_ZERO? "yes" : "no"),
@@ -831,7 +831,7 @@ static int do_destroy(struct peer_req *pr, struct map *map)
 		req = __object_delete(pr, mn);
 		if (!req) {
 			put_mapnode(mn);
-			XSEGLOG2(&lc, E, "Error removing object %s", mn->object);
+			XSEGLOG2(E, "Error removing object %s", mn->object);
 			mio->err = 1;
 		}
 		//mapnode will be put by delete_object on completion
@@ -841,7 +841,7 @@ static int do_destroy(struct peer_req *pr, struct map *map)
 		wait_on_pr(pr, mio->pending_reqs > 0);
 
 	if (mio->err) {
-		XSEGLOG2(&lc, E, "Error while removing objects of %s", map->volume);
+		XSEGLOG2(E, "Error while removing objects of %s", map->volume);
 		map->state &= ~MF_MAP_DESTROYING;
 		return -1;
 	}
@@ -849,11 +849,11 @@ static int do_destroy(struct peer_req *pr, struct map *map)
 	r = delete_map(pr, map, 0);
 	if (r < 0){
 		map->state &= ~MF_MAP_DESTROYING;
-		XSEGLOG2(&lc, E, "Failed to destroy map %s", map->volume);
+		XSEGLOG2(E, "Failed to destroy map %s", map->volume);
 		return -1;
 	}
 	map->state &= ~MF_MAP_DESTROYING;
-	XSEGLOG2(&lc, I, "Destroyed map %s", map->volume);
+	XSEGLOG2(I, "Destroyed map %s", map->volume);
 	/* do close will drop the map from cache  */
 
 	do_close(pr, map);
@@ -877,15 +877,15 @@ static int rename_map(struct peer_req *pr, struct map *map,
 	int r;
 
 	if (!newnamelen) {
-		XSEGLOG2(&lc, E, "A new name must be provided");
+		XSEGLOG2(E, "A new name must be provided");
 		return -1;
 	}
 
 	if (!(map->state & MF_MAP_EXCLUSIVE)) {
-		XSEGLOG2(&lc, E, "Map was not opened exclusively");
+		XSEGLOG2(E, "Map was not opened exclusively");
 		return -1;
 	}
-	XSEGLOG2(&lc, I, "Starting rename for map %s", map->volume);
+	XSEGLOG2(I, "Starting rename for map %s", map->volume);
 	map->state |= MF_MAP_RENAMING;
 
 	//create new map struct with name newname.
@@ -897,17 +897,17 @@ static int rename_map(struct peer_req *pr, struct map *map,
 	//open/load map to check if snap exists
 	r = open_map(pr, new_map, 0);
 	if (r < 0) {
-		XSEGLOG2(&lc, E, "Could not open new map");
-		XSEGLOG2(&lc, E, "Rename destination exists");
+		XSEGLOG2(E, "Could not open new map");
+		XSEGLOG2(E, "Rename destination exists");
 		goto out_put;
 	}
 	r = load_map_metadata(pr, new_map);
 	if (r >= 0 && !(map->flags & MF_MAP_DELETED)) {
-		XSEGLOG2(&lc, E, "Rename destination exists");
+		XSEGLOG2(E, "Rename destination exists");
 		goto out_close;
 	}
 	if (new_map->epoch == UINT64_MAX) {
-		XSEGLOG2(&lc, E, "Max epoch reached for %s", new_map->volume);
+		XSEGLOG2(E, "Max epoch reached for %s", new_map->volume);
 		goto out_close;
 	}
 
@@ -928,13 +928,13 @@ static int rename_map(struct peer_req *pr, struct map *map,
 	//write new map
 	r = write_map(pr, new_map);
 	if (r < 0) {
-		XSEGLOG2(&lc, E, "Cannot write map %s", new_map->volume);
+		XSEGLOG2(E, "Cannot write map %s", new_map->volume);
 		goto out_unset;
 	}
-	XSEGLOG2(&lc, I, "New map %s created", new_map->volume);
+	XSEGLOG2(I, "New map %s created", new_map->volume);
 	new_map->objects = NULL;
 
-	XSEGLOG2(&lc, I, "Will now proceed to remove old map %s", map->volume);
+	XSEGLOG2(I, "Will now proceed to remove old map %s", map->volume);
 
 	if (purge) {
 		r = purge_map(pr, map);
@@ -943,7 +943,7 @@ static int rename_map(struct peer_req *pr, struct map *map,
 	}
 
 	if (r < 0) {
-		XSEGLOG2(&lc, W, "Could not remove old prefixed volume %s. "
+		XSEGLOG2(W, "Could not remove old prefixed volume %s. "
 				 "Continuing anyway.", map->volume);
 	}
 	//close old map here to leave the lock
@@ -971,7 +971,7 @@ static int rename_map(struct peer_req *pr, struct map *map,
 
 	put_map(new_map);
 	map->state &= ~MF_MAP_RENAMING;
-	XSEGLOG2(&lc, I, "Renamed %s completed ", map->volume);
+	XSEGLOG2(I, "Renamed %s completed ", map->volume);
 	return 0;
 
 out_unset:
@@ -982,7 +982,7 @@ out_put:
 	put_map(new_map);
 out_err:
 	map->state &= ~MF_MAP_RENAMING;
-	XSEGLOG2(&lc, E, "Rename for map %s failed", map->volume);
+	XSEGLOG2(E, "Rename for map %s failed", map->volume);
 	return -1;
 }
 
@@ -1003,13 +1003,13 @@ static int do_rename(struct peer_req *pr, struct map *map)
 	newnamelen = xrename->targetlen;
 
 	if (!newnamelen) {
-		XSEGLOG2(&lc, E, "A new name must be provided");
+		XSEGLOG2(E, "A new name must be provided");
 		return -1;
 	}
 
 	r = rename_map(pr, map, newname, newnamelen, 0);
 	if (r < 0) {
-		XSEGLOG2(&lc, E, "Rename for map %s failed", map->volume);
+		XSEGLOG2(E, "Rename for map %s failed", map->volume);
 		return -1;
 	}
 
@@ -1019,7 +1019,7 @@ static int do_rename(struct peer_req *pr, struct map *map)
 	 * was successfull, and there isn't much to do about the error.
 	 */
 	do_close(pr, map);
-	XSEGLOG2(&lc, I, "Renamed %s completed ", map->volume);
+	XSEGLOG2(I, "Renamed %s completed ", map->volume);
 	return 0;
 }
 
@@ -1029,27 +1029,27 @@ static int do_mapr(struct peer_req *pr, struct map *map)
 	struct peerd *peer = pr->peer;
 	int r = req2objs(pr, map, 0);
 	if  (r < 0){
-		XSEGLOG2(&lc, I, "Map r of map %s, range: %llu-%llu failed",
+		XSEGLOG2(I, "Map r of map %s, range: %llu-%llu failed",
 				map->volume, 
 				(unsigned long long) pr->req->offset, 
 				(unsigned long long) (pr->req->offset + pr->req->size));
 		return -1;
 	}
-	XSEGLOG2(&lc, I, "Map r of map %s, range: %llu-%llu completed",
+	XSEGLOG2(I, "Map r of map %s, range: %llu-%llu completed",
 			map->volume, 
 			(unsigned long long) pr->req->offset, 
 			(unsigned long long) (pr->req->offset + pr->req->size));
-	XSEGLOG2(&lc, D, "Req->offset: %llu, req->size: %llu",
+	XSEGLOG2(D, "Req->offset: %llu, req->size: %llu",
 			(unsigned long long) pr->req->offset,
 			(unsigned long long) pr->req->size);
 	char buf[XSEG_MAX_TARGETLEN+1];
 	struct xseg_reply_map *reply = (struct xseg_reply_map *) xseg_get_data(peer->xseg, pr->req);
 	int i;
 	for (i = 0; i < reply->cnt; i++) {
-		XSEGLOG2(&lc, D, "i: %d, reply->cnt: %u",i, reply->cnt);
+		XSEGLOG2(D, "i: %d, reply->cnt: %u",i, reply->cnt);
 		strncpy(buf, reply->segs[i].target, reply->segs[i].targetlen);
 		buf[reply->segs[i].targetlen] = 0;
-		XSEGLOG2(&lc, D, "%d: Object: %s, offset: %llu, size: %llu", i, buf,
+		XSEGLOG2(D, "%d: Object: %s, offset: %llu, size: %llu", i, buf,
 				(unsigned long long) reply->segs[i].offset,
 				(unsigned long long) reply->segs[i].size);
 	}
@@ -1061,32 +1061,32 @@ static int do_mapw(struct peer_req *pr, struct map *map)
 	struct peerd *peer = pr->peer;
 	int r;
 	if (map->flags & MF_MAP_READONLY) {
-		XSEGLOG2(&lc, E, "Cannot write to a read only map");
+		XSEGLOG2(E, "Cannot write to a read only map");
 		return -1;
 	}
 	r = req2objs(pr, map, 1);
 	if  (r < 0){
-		XSEGLOG2(&lc, I, "Map w of map %s, range: %llu-%llu failed",
+		XSEGLOG2(I, "Map w of map %s, range: %llu-%llu failed",
 				map->volume, 
 				(unsigned long long) pr->req->offset, 
 				(unsigned long long) (pr->req->offset + pr->req->size));
 		return -1;
 	}
-	XSEGLOG2(&lc, I, "Map w of map %s, range: %llu-%llu completed",
+	XSEGLOG2(I, "Map w of map %s, range: %llu-%llu completed",
 			map->volume, 
 			(unsigned long long) pr->req->offset, 
 			(unsigned long long) (pr->req->offset + pr->req->size));
-	XSEGLOG2(&lc, D, "Req->offset: %llu, req->size: %llu",
+	XSEGLOG2(D, "Req->offset: %llu, req->size: %llu",
 			(unsigned long long) pr->req->offset,
 			(unsigned long long) pr->req->size);
 	char buf[XSEG_MAX_TARGETLEN+1];
 	struct xseg_reply_map *reply = (struct xseg_reply_map *) xseg_get_data(peer->xseg, pr->req);
 	int i;
 	for (i = 0; i < reply->cnt; i++) {
-		XSEGLOG2(&lc, D, "i: %d, reply->cnt: %u",i, reply->cnt);
+		XSEGLOG2(D, "i: %d, reply->cnt: %u",i, reply->cnt);
 		strncpy(buf, reply->segs[i].target, reply->segs[i].targetlen);
 		buf[reply->segs[i].targetlen] = 0;
-		XSEGLOG2(&lc, D, "%d: Object: %s, offset: %llu, size: %llu", i, buf,
+		XSEGLOG2(D, "%d: Object: %s, offset: %llu, size: %llu", i, buf,
 				(unsigned long long) reply->segs[i].offset,
 				(unsigned long long) reply->segs[i].size);
 	}
@@ -1107,33 +1107,33 @@ static int do_clone(struct peer_req *pr, struct map *map)
 		(struct xseg_request_clone *) xseg_get_data(peer->xseg, pr->req);
 
 	if (!(map->flags & MF_MAP_READONLY)) {
-		XSEGLOG2(&lc, E, "Cloning is supported only from a snapshot");
+		XSEGLOG2(E, "Cloning is supported only from a snapshot");
 		return -1;
 	}
 
-	XSEGLOG2(&lc, I, "Cloning map %s", map->volume);
+	XSEGLOG2(I, "Cloning map %s", map->volume);
 	clonemap = create_map(target, pr->req->targetlen, MF_ARCHIP);
 	if (!clonemap) {
-		XSEGLOG2(&lc, E, "Create map %s failed");
+		XSEGLOG2(E, "Create map %s failed");
 		return -1;
 	}
 
 	/* open map to get exclusive access to map */
 	r = open_map(pr, clonemap, 0);
 	if (r < 0){
-		XSEGLOG2(&lc, E, "Cannot open map %s", clonemap->volume);
-		XSEGLOG2(&lc, E, "Target volume %s exists", clonemap->volume);
+		XSEGLOG2(E, "Cannot open map %s", clonemap->volume);
+		XSEGLOG2(E, "Target volume %s exists", clonemap->volume);
 		goto out_put;
 	}
 	r = load_map_metadata(pr, clonemap);
 	if (r >= 0 && !(clonemap->flags & MF_MAP_DELETED)) {
-		XSEGLOG2(&lc, E, "Target volume %s exists", clonemap->volume);
+		XSEGLOG2(E, "Target volume %s exists", clonemap->volume);
 		goto out_close;
 	}
 
 	/* Make sure, we can take at least one snapshot of the new volume */
 	if (map->epoch >= UINT64_MAX - 2) {
-		XSEGLOG2(&lc, E, "Max epoch reached for %s", clonemap->volume);
+		XSEGLOG2(E, "Max epoch reached for %s", clonemap->volume);
 		goto out_close;
 	}
 	clonemap->flags = 0;
@@ -1144,7 +1144,7 @@ static int do_clone(struct peer_req *pr, struct map *map)
 	else
 		clonemap->size = xclone->size;
 	if (clonemap->size < map->size){
-		XSEGLOG2(&lc, W, "Requested clone size (%llu) < map size (%llu)"
+		XSEGLOG2(W, "Requested clone size (%llu) < map size (%llu)"
 				"\n\t for requested clone %s",
 				(unsigned long long) clonemap->size,
 				(unsigned long long) map->size, clonemap->volume);
@@ -1187,11 +1187,11 @@ static int do_clone(struct peer_req *pr, struct map *map)
 
 	r = write_map(pr, clonemap);
 	if (r < 0){
-		XSEGLOG2(&lc, E, "Cannot write map %s", clonemap->volume);
+		XSEGLOG2(E, "Cannot write map %s", clonemap->volume);
 		goto out_close;
 	}
 
-	XSEGLOG2(&lc, I, "Cloning map %s to %s completed",
+	XSEGLOG2(I, "Cloning map %s to %s completed",
 			map->volume, clonemap->volume);
 	close_map(pr, clonemap);
 	put_map(clonemap);
@@ -1213,10 +1213,10 @@ static int truncate_map(struct peer_req *pr, struct map *map, uint64_t offset)
    int r;
 
    if (!(map->state & MF_MAP_EXCLUSIVE)) {
-           XSEGLOG2(&lc, E, "Map was not opened exclusively");
+           XSEGLOG2(E, "Map was not opened exclusively");
            return -1;
    }
-   XSEGLOG2(&lc, I, "Starting truncation for map %s", map->volume);
+   XSEGLOG2(I, "Starting truncation for map %s", map->volume);
    map->state |= MF_MAP_TRUNCATING;
 
    wait_all_map_objects_ready(map);
@@ -1230,7 +1230,7 @@ static int truncate_map(struct peer_req *pr, struct map *map, uint64_t offset)
    if (nr_objs > old_nr_objs) {
            struct map_node *map_nodes = calloc(nr_objs, sizeof(struct map_node));
            if (!map_nodes) {
-                   XSEGLOG2(&lc, E, "Cannot allocate %llu nr_objs", nr_objs);
+                   XSEGLOG2(E, "Cannot allocate %llu nr_objs", nr_objs);
                    goto out_unset;
            }
            uint64_t i;
@@ -1279,18 +1279,18 @@ static int truncate_map(struct peer_req *pr, struct map *map, uint64_t offset)
 
    r = write_map(pr, map);
    if (r < 0) {
-           XSEGLOG2(&lc, E, "Cannot write map %s", map->volume);
+           XSEGLOG2(E, "Cannot write map %s", map->volume);
            goto out_unset;
    }
-   XSEGLOG2(&lc, I, "Map %s truncated", map->volume);
+   XSEGLOG2(I, "Map %s truncated", map->volume);
 
    map->state &= ~MF_MAP_TRUNCATING;
-   XSEGLOG2(&lc, I, "Truncation of %s completed ", map->volume);
+   XSEGLOG2(I, "Truncation of %s completed ", map->volume);
    return 0;
 
 out_unset:
    map->state &= ~MF_MAP_TRUNCATING;
-   XSEGLOG2(&lc, E, "Truncation for map %s failed ", map->volume);
+   XSEGLOG2(E, "Truncation for map %s failed ", map->volume);
    return -1;
 }
 
@@ -1305,11 +1305,11 @@ static int do_truncate(struct peer_req *pr, struct map *map)
 
        r = truncate_map(pr, map, offset);
        if (r < 0) {
-               XSEGLOG2(&lc, E, "Truncation for map %s failed", map->volume);
+               XSEGLOG2(E, "Truncation for map %s failed", map->volume);
                return -1;
        }
        do_close(pr, map);
-       XSEGLOG2(&lc, I, "Truncation for map %s completed ", map->volume);
+       XSEGLOG2(I, "Truncation for map %s completed ", map->volume);
        return 0;
 }
 
@@ -1348,7 +1348,7 @@ struct map * get_map(struct peer_req *pr, char *name, uint32_t namelen,
 				return NULL;
 			r = insert_map(mapper, map);
 			if (r < 0) {
-				XSEGLOG2(&lc, E, "Cannot insert map %s", map->volume);
+				XSEGLOG2(E, "Cannot insert map %s", map->volume);
 				put_map(map);
 				return NULL;
 			}
@@ -1378,7 +1378,7 @@ retry:
 			if (archip_map && map->state & MF_MAP_EXCLUSIVE) {
 				r = rename_map(pr, map, name, namelen, 1);
 				if (r < 0) {
-					XSEGLOG2(&lc, E, "Could not rename map, continuing with the old map");
+					XSEGLOG2(E, "Could not rename map, continuing with the old map");
 				} else {
 
 				}
@@ -1403,7 +1403,7 @@ retry:
 			 * NULL.
 			 */
 			if (map->flags & MF_MAP_DELETED){
-				XSEGLOG2(&lc, E, "Loaded deleted map %s. Failing...",
+				XSEGLOG2(E, "Loaded deleted map %s. Failing...",
 						map->volume);
 				do_close(pr, map);
 				dropcache(pr, map);
@@ -1486,9 +1486,9 @@ void * handle_clone(struct peer_req *pr)
 				xclone->targetlen, MF_LOAD|MF_ARCHIP);
 	} else {
 		/* else try to create a new volume */
-		XSEGLOG2(&lc, I, "Creating volume");
+		XSEGLOG2(I, "Creating volume");
 		if (!xclone->size){
-			XSEGLOG2(&lc, E, "Cannot create volume. Size not specified");
+			XSEGLOG2(E, "Cannot create volume. Size not specified");
 			r = -1;
 			goto out;
 		}
@@ -1504,22 +1504,22 @@ void * handle_clone(struct peer_req *pr)
 		/* open map to get exclusive access to map */
 		r = open_map(pr, map, 0);
 		if (r < 0) {
-			XSEGLOG2(&lc, E, "Cannot open map %s", map->volume);
-			XSEGLOG2(&lc, E, "Target volume %s exists", map->volume);
+			XSEGLOG2(E, "Cannot open map %s", map->volume);
+			XSEGLOG2(E, "Target volume %s exists", map->volume);
 			put_map(map);
 			r = -1;
 			goto out;
 		}
 		r = load_map_metadata(pr, map);
 		if (r >= 0 && !(map->flags & MF_MAP_DELETED)) {
-			XSEGLOG2(&lc, E, "Map exists %s", map->volume);
+			XSEGLOG2(E, "Map exists %s", map->volume);
 			close_map(pr, map);
 			put_map(map);
 			r = -1;
 			goto out;
 		}
 		if (map->epoch >= UINT64_MAX - 2) {
-			XSEGLOG2(&lc, E, "Max epoch reached for %s", map->volume);
+			XSEGLOG2(E, "Max epoch reached for %s", map->volume);
 			close_map(pr, map);
 			put_map(map);
 			r = -1;
@@ -1536,7 +1536,7 @@ void * handle_clone(struct peer_req *pr)
 		uint64_t nr_objs = calc_map_obj(map);
 		struct map_node *map_nodes = calloc(nr_objs, sizeof(struct map_node));
 		if (!map_nodes){
-			XSEGLOG2(&lc, E, "Cannot allocate %llu nr_objs", nr_objs);
+			XSEGLOG2(E, "Cannot allocate %llu nr_objs", nr_objs);
 			close_map(pr, map);
 			put_map(map);
 			r = -1;
@@ -1560,12 +1560,12 @@ void * handle_clone(struct peer_req *pr)
 		}
 		r = write_map(pr, map);
 		if (r < 0){
-			XSEGLOG2(&lc, E, "Cannot write map %s", map->volume);
+			XSEGLOG2(E, "Cannot write map %s", map->volume);
 			close_map(pr, map);
 			put_map(map);
 			goto out;
 		}
-		XSEGLOG2(&lc, I, "Volume %s created", map->volume);
+		XSEGLOG2(I, "Volume %s created", map->volume);
 		r = 0;
 		close_map(pr, map);
 		put_map(map);
@@ -1585,9 +1585,9 @@ void * handle_create(struct peer_req *pr)
 	struct peerd *peer = pr->peer;
 	struct xseg_request *req = pr->req;
 	//struct mapperd *mapper = __get_mapperd(peer);
-	XSEGLOG2(&lc, I, "Creating volume");
+	XSEGLOG2(I, "Creating volume");
 	if (!req->size){
-		XSEGLOG2(&lc, E, "Cannot create volume. Size not specified");
+		XSEGLOG2(E, "Cannot create volume. Size not specified");
 		r = -1;
 		goto out;
 	}
@@ -1604,22 +1604,22 @@ void * handle_create(struct peer_req *pr)
 	/* open map to get exclusive access to map */
 	r = open_map(pr, map, 0);
 	if (r < 0) {
-		XSEGLOG2(&lc, E, "Cannot open map %s", map->volume);
-		XSEGLOG2(&lc, E, "Target volume %s exists", map->volume);
+		XSEGLOG2(E, "Cannot open map %s", map->volume);
+		XSEGLOG2(E, "Target volume %s exists", map->volume);
 		put_map(map);
 		r = -1;
 		goto out;
 	}
 	r = load_map_metadata(pr, map);
 	if (r >= 0 && !(map->flags & MF_MAP_DELETED)) {
-		XSEGLOG2(&lc, E, "Map exists %s", map->volume);
+		XSEGLOG2(E, "Map exists %s", map->volume);
 		close_map(pr, map);
 		put_map(map);
 		r = -1;
 		goto out;
 	}
 	if (map->epoch >= UINT64_MAX - 2) {
-		XSEGLOG2(&lc, E, "Max epoch reached for %s", map->volume);
+		XSEGLOG2(E, "Max epoch reached for %s", map->volume);
 		close_map(pr, map);
 		put_map(map);
 		r = -1;
@@ -1655,7 +1655,7 @@ void * handle_create(struct peer_req *pr)
 
 	nr_objs = calc_map_obj(map);
 	if (nr_objs != mapdata->cnt) {
-		XSEGLOG2(&lc, E, "Map size does not match supplied objects");
+		XSEGLOG2(E, "Map size does not match supplied objects");
 		close_map(pr, map);
 		put_map(map);
 		r = -1;
@@ -1664,7 +1664,7 @@ void * handle_create(struct peer_req *pr)
 
 	struct map_node *map_nodes = calloc(nr_objs, sizeof(struct map_node));
 	if (!map_nodes){
-		XSEGLOG2(&lc, E, "Cannot allocate %llu nr_objs", nr_objs);
+		XSEGLOG2(E, "Cannot allocate %llu nr_objs", nr_objs);
 		close_map(pr, map);
 		put_map(map);
 		r = -1;
@@ -1679,7 +1679,7 @@ void * handle_create(struct peer_req *pr)
 		strncpy(map_nodes[i].object, mapdata->segs[i].target,
 				mapdata->segs[i].targetlen);
 		map_nodes[i].object[mapdata->segs[i].targetlen] = 0;
-		XSEGLOG2(&lc, D, "%d: %s (%u)", i, map_nodes[i].object,
+		XSEGLOG2(D, "%d: %s (%u)", i, map_nodes[i].object,
 				mapdata->segs[i].targetlen);
 		map_nodes[i].state = 0;
 		map_nodes[i].flags = 0;
@@ -1690,7 +1690,7 @@ void * handle_create(struct peer_req *pr)
 			map_nodes[i].flags |= MF_OBJECT_ZERO;
 			//assert READONLY
 			if (map_nodes[i].flags & MF_OBJECT_WRITABLE) {
-				XSEGLOG2(&lc, W, "Zero objects must always be READONLY");
+				XSEGLOG2(W, "Zero objects must always be READONLY");
 				map_nodes[i].flags &= ~MF_OBJECT_WRITABLE;
 			}
 		}
@@ -1704,12 +1704,12 @@ void * handle_create(struct peer_req *pr)
 
 	r = write_map(pr, map);
 	if (r < 0){
-		XSEGLOG2(&lc, E, "Cannot write map %s", map->volume);
+		XSEGLOG2(E, "Cannot write map %s", map->volume);
 		close_map(pr, map);
 		put_map(map);
 		goto out;
 	}
-	XSEGLOG2(&lc, I, "Volume %s created", map->volume);
+	XSEGLOG2(I, "Volume %s created", map->volume);
 	r = 0;
 	close_map(pr, map);
 	put_map(map);
@@ -1746,7 +1746,7 @@ void * handle_mapw(struct peer_req *pr)
 		fail(peer, pr);
 	else
 		complete(peer, pr);
-	XSEGLOG2(&lc, D, "Ta: %d", ta);
+	XSEGLOG2(D, "Ta: %d", ta);
 	ta--;
 	return NULL;
 }
@@ -1945,7 +1945,7 @@ int dispatch(struct peerd *peer, struct peer_req *pr, struct xseg_request *req,
 //			mio->cb(pr, req);
 			arg = calloc(1, sizeof(struct cb_arg));
 			if (!arg) {
-				XSEGLOG2(&lc, E, "Cannot allocate cb_arg");
+				XSEGLOG2(E, "Cannot allocate cb_arg");
 				return -1;
 			}
 			arg->pr = pr;
@@ -1986,12 +1986,12 @@ int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 	READ_ARG_ULONG("-mbp", mapper->mbportno);
 	END_READ_ARGS();
 	if (mapper->bportno == -1){
-		XSEGLOG2(&lc, E, "Portno for blocker must be provided");
+		XSEGLOG2(E, "Portno for blocker must be provided");
 		usage(argv[0]);
 		return -1;
 	}
 	if (mapper->mbportno == -1){
-		XSEGLOG2(&lc, E, "Portno for mblocker must be provided");
+		XSEGLOG2(E, "Portno for mblocker must be provided");
 		usage(argv[0]);
 		return -1;
 	}
@@ -2023,7 +2023,7 @@ int wait_reply(struct peerd *peer, struct xseg_request *expected_req)
 	struct xseg_request *received;
 	xseg_prepare_wait(xseg, portno_start);
 	while(1) {
-		XSEGLOG2(&lc, D, "Attempting to check for reply");
+		XSEGLOG2(D, "Attempting to check for reply");
 		c = 1;
 		while (c){
 			c = 0;
@@ -2033,10 +2033,10 @@ int wait_reply(struct peerd *peer, struct xseg_request *expected_req)
 					c = 1;
 					r =  xseg_get_req_data(xseg, received, (void **) &pr);
 					if (r < 0 || !pr || received != expected_req){
-						XSEGLOG2(&lc, W, "Received request with no pr data\n");
+						XSEGLOG2(W, "Received request with no pr data\n");
 						xport p = xseg_respond(peer->xseg, received, peer->portno_start, X_ALLOC);
 						if (p == NoPort){
-							XSEGLOG2(&lc, W, "Could not respond stale request");
+							XSEGLOG2(W, "Could not respond stale request");
 							xseg_put_request(xseg, received, portno_start);
 							continue;
 						} else {
@@ -2059,7 +2059,7 @@ void custom_peer_finalize(struct peerd *peer)
 	struct mapperd *mapper = __get_mapperd(peer);
 	struct peer_req *pr = alloc_peer_req(peer);
 	if (!pr){
-		XSEGLOG2(&lc, E, "Cannot get peer request");
+		XSEGLOG2(E, "Cannot get peer request");
 		return;
 	}
 	struct map *map;
@@ -2076,7 +2076,7 @@ void custom_peer_finalize(struct peerd *peer)
 			continue;
 		wait_reply(peer, req);
 		if (!(req->state & XS_SERVED))
-			XSEGLOG2(&lc, E, "Couldn't close map %s", map->volume);
+			XSEGLOG2(E, "Couldn't close map %s", map->volume);
 		map->state &= ~MF_MAP_CLOSING;
 		put_request(pr, req);
 	}

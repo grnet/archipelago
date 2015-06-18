@@ -45,7 +45,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 __attribute__ ((unused))
 void inspect_obv(struct object_vars *obv)
 {
-	XSEGLOG2(&lc, D, "Struct object vars:\n"
+	XSEGLOG2(D, "Struct object vars:\n"
 			"\tname: %s (%d),\n"
 			"\tprefix: %s (%d),\n"
 			"\tseed: %lu (%d),\n"
@@ -166,7 +166,7 @@ static int readwrite_chunk_full(struct bench *prefs, struct xseg_request *req)
 	lfsr_init(&off_lfsr, 0x7FFFFFFFFFFFFFFF, req->offset, 0);
 
 	if (s < sizeof(struct signature)) {
-		XSEGLOG2(&lc, E, "Too small chunk size (%lu butes). Leaving.", s);
+		XSEGLOG2(E, "Too small chunk size (%lu butes). Leaving.", s);
 		return 1;
 	}
 
@@ -207,7 +207,7 @@ static int readwrite_chunk_meta(struct bench *prefs, struct xseg_request *req)
 	sig.offset = req->offset;
 
 	if (s < sig_s) {
-		XSEGLOG2(&lc, E, "Too small chunk size (%lu butes). "
+		XSEGLOG2(E, "Too small chunk size (%lu butes). "
 				"Leaving.", s);
 		return 1;
 	}
@@ -247,7 +247,7 @@ void create_chunk(struct bench *prefs, struct xseg_request *req, uint64_t new)
 			readwrite_chunk_full(prefs, req);
 			break;
 		default:
-			XSEGLOG2(&lc, W, "Unexpected verification mode: %d\n",
+			XSEGLOG2(W, "Unexpected verification mode: %d\n",
 					verify);
 	}
 }
@@ -275,7 +275,7 @@ int read_chunk(struct bench *prefs, struct xseg_request *req)
 			r = readwrite_chunk_full(prefs, req);
 			break;
 		default:
-			XSEGLOG2(&lc, W, "Unexpected verification mode: %d\n",
+			XSEGLOG2(W, "Unexpected verification mode: %d\n",
 					verify);
 	}
 	return r;
