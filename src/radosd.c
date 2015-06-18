@@ -312,7 +312,7 @@ int handle_read(struct peerd *peer, struct peer_req *pr)
 	}
 	else {
 		/* should not reach this */
-		printf("read request reached this\n");
+		XSEGLOG2(W, "read request reached this\n");
 		fail(peer, pr);
 	}
 	return 0;
@@ -356,7 +356,7 @@ int handle_write(struct peerd *peer, struct peer_req *pr)
 	}
 	else {
 		/* should not reach this */
-		printf("write request reached this\n");
+		XSEGLOG2(W, "write request reached this\n");
 		fail(peer, pr);
 	}
 	return 0;

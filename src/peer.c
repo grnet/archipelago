@@ -164,9 +164,9 @@ void print_req(struct xseg *xseg, struct xseg_request *req)
 		target[end] = 0;
 		strncpy(data, req_data, 63);
 		data[63] = 0;
-		printf("req id:%lu, op:%u %llu:%lu serviced: %lu, reqstate: %u\n"
-				"src: %u, transit: %u, dst: %u effective dst: %u\n"
-				"target[%u]:'%s', data[%llu]:\n%s------------------\n\n",
+		XSEGLOG2(D, "req id:%lu, op:%u %llu:%lu serviced: %lu, reqstate: %u, "
+				"src: %u, transit: %u, dst: %u effective dst: %u, "
+				"target[%u]:'%s', data[%llu]:%s------------------",
 				(unsigned long)(req),
 				(unsigned int)req->op,
 				(unsigned long long)req->offset,
@@ -293,7 +293,7 @@ int all_peer_reqs_free(struct peerd *peer)
 struct timeval resp_start, resp_end, resp_accum = {0, 0};
 uint64_t responds = 0;
 void get_responds_stats(){
-		printf("Time waiting respond %lu.%06lu sec for %llu times.\n",
+		XSEGLOG2(I, "Time waiting respond %lu.%06lu sec for %llu times.\n",
 				//(unsigned int)(t - peer->thread),
 				resp_accum.tv_sec, resp_accum.tv_usec, (long long unsigned int) responds);
 }
@@ -363,7 +363,7 @@ static void handle_received(struct peerd *peer, struct peer_req *pr,
 struct timeval sub_start, sub_end, sub_accum = {0, 0};
 uint64_t submits = 0;
 void get_submits_stats(){
-		printf("Time waiting submit %lu.%06lu sec for %llu times.\n",
+		XSEGLOG2(I, "Time waiting submit %lu.%06lu sec for %llu times.\n",
 				//(unsigned int)(t - peer->thread),
 				sub_accum.tv_sec, sub_accum.tv_usec, (long long unsigned int) submits);
 }
@@ -374,7 +374,7 @@ int submit_peer_req(struct peerd *peer, struct peer_req *pr)
 	struct xseg_request *req = pr->req;
 	// assert req->portno == peer->portno ?
 	//TODO small function with error checking
-	XSEGLOG2 (&lc, D, "submitting peer req %u\n", (unsigned int)(pr - peer->peer_reqs));
+	XSEGLOG2 (D, "submitting peer req %u\n", (unsigned int)(pr - peer->peer_reqs));
 	ret = xseg_set_req_data(peer->xseg, req, (void *)(pr));
 	if (ret < 0)
 		return -1;
@@ -727,7 +727,7 @@ malloc_fail:
 		return NULL;
 	}
 	if (xseg_initialize()){
-		printf("cannot initialize library\n");
+		XSEGLOG2(E, "cannot initialize library\n");
 		return NULL;
 	}
 	peer->xseg = join(spec);
@@ -746,14 +746,14 @@ malloc_fail:
 	for (p = peer->portno_start; p <= peer->portno_end; p++) {
 		port = xseg_bind_port(peer->xseg, p, peer->sd);
 		if (!port){
-			printf("cannot bind to port %u\n", (unsigned int) p);
+			XSEGLOG2(E, "cannot bind to port %u\n", (unsigned int) p);
 			return NULL;
 		}
 		if (p == peer->portno_start)
 			peer->sd = xseg_get_signal_desc(peer->xseg, port);
 	}
 
-	printf("Peer on ports  %u-%u\n", peer->portno_start, peer->portno_end);
+	XSEGLOG2(I, "Peer on ports  %u-%u\n", peer->portno_start, peer->portno_end);
 
 	r = xseg_init_local_signal(peer->xseg, peer->portno_start);
 	if (r < 0) {
@@ -988,11 +988,7 @@ int main(int argc, char *argv[])
 	peer_umask &= 0777;
 	umask(peer_umask);
 
-	r = init_logctx(argv[0], debug_level);
-	if (r < 0){
-		XSEGLOG("Cannot initialize logging to logfile");
-		return -1;
-	}
+	init_logctx(argv[0], debug_level);
 	XSEGLOG2(D, "Main thread has tid %ld.\n", syscall(SYS_gettid));
 
 	if (pidfile[0]){

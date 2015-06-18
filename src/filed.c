@@ -47,7 +47,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 void custom_peer_usage(char *argv0)
 {
-	 fprintf(stderr, "General peer options:\n"
+    fprintf(stderr, "General peer options:\n"
                 "  Option        | Default    | \n"
                 "  --------------------------------------------\n"
                 "    --fdcache   | 2 * nr_ops | Fd cache size\n"

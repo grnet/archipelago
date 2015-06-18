@@ -1904,7 +1904,7 @@ int dispatch_accepted(struct peerd *peer, struct peer_req *pr,
 		case X_RENAME: action = handle_rename; break;
 		case X_TRUNCATE: action = handle_truncate; break;
 		case X_UPDATE: action = handle_update; break;
-		default: fprintf(stderr, "mydispatch: unknown op\n"); break;
+		default: XSEGLOG2(E, "mapper dispatch: unknown op\n"); break;
 	}
 	if (action){
 		ta++;
