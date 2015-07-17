@@ -21,6 +21,7 @@ DAEMON=/usr/bin/archipelago # Introduce the server's location here
 DAEMON_ARGS=""              # Arguments to run the daemon with
 #PIDFILE=/var/run/$NAME.pid
 SCRIPTNAME=/etc/init.d/$NAME
+STOP_ARGS=""
 
 # Exit if the package is not installed
 [ -x $DAEMON ] || exit 0
@@ -48,8 +49,17 @@ do_start()
 #
 do_stop()
 {
-	$DAEMON stop > /dev/null && return 0
+	$DAEMON stop $STOP_ARGS > /dev/null && return 0
 }
+
+#
+# Function that restarts the daemon/service
+#
+do_restart()
+{
+	$DAEMON restart > /dev/null && return 0
+}
+
 
 
 case "$1" in
@@ -78,22 +88,12 @@ case "$1" in
 	# 'force-reload' alias
 	#
 	log_daemon_msg "Restarting $DESC" "$NAME"
-	do_stop
+	do_restart
 	case "$?" in
-	  0|1)
-		do_start
-		case "$?" in
-			0) log_end_msg 0 ;;
-			1) log_end_msg 1 ;; # Old process is still running
-			*) log_end_msg 1 ;; # Failed to start
-		esac
-		;;
-	  *)
-	  	# Failed to stop
-		log_end_msg 1
-		;;
+		0|1) log_end_msg 0 ;;
+		2) log_end_msg 1 ;;
 	esac
-	;;
+    ;;
   *)
 	echo "Usage: $SCRIPTNAME {start|stop|status|restart|force-reload}" >&2
 	exit 3
