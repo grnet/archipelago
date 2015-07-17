@@ -152,7 +152,7 @@ def start(role=None, cli=False, **kwargs):
         stop(role, cli, pause=True)
 
 
-def stop(role=None, cli=False, pause=False, **kwargs):
+def stop(role=None, cli=False, pause=False, unmap=False, **kwargs):
     if role:
         try:
             p = peers[role]
@@ -172,14 +172,18 @@ def stop(role=None, cli=False, pause=False, **kwargs):
         if mapped and len(mapped) > 0:
             if not pause:
                 vlmc_showmapped()
-                print red("Mapped volumes exist, unmapping...")
-                try:
-                    for m in mapped:
-                        vlmc_unmap_volume(m.device)
-                except Error as e:
-                    raise Error("Error while umapping volume, during shutdown"
-                                ": %s" % e)
-
+                print ""
+                if unmap:
+                    print red("Mapped volumes exist, unmapping...")
+                    try:
+                        for m in mapped:
+                            vlmc_unmap_volume(m.device)
+                    except Error as e:
+                        raise Error("Error while umapping volume, during "
+                                    "shutdown: %s" % e)
+                else:
+                    raise Error("Found mapped volumes, cannot stop "
+                                "Archipelago")
             else:
                 for m in mapped:
                     if not VlmcTapdisk.is_paused(m.device):
@@ -188,6 +192,7 @@ def stop(role=None, cli=False, pause=False, **kwargs):
         mapped = vlmc_get_mapped()
         if mapped and len(mapped) > 0:
             vlmc_showmapped()
+            print ""
             if pause:
                 import operator
                 if not reduce(operator.and_, [VlmcTapdisk.is_paused(m.device)
