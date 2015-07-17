@@ -104,6 +104,28 @@ void segv_handler(int signal)
 	abort();
 }
 
+void decr_loglevel(int signal)
+{
+    if (verbose == 0)
+    {
+        XSEGLOG2(E, "Log level already at 0");
+        return;
+    }
+    XSEGLOG2(E, "Decrementing log level to %d", --verbose);
+    renew_logctx(verbose);
+}
+
+void incr_loglevel(int signal)
+{
+    if (verbose == 3)
+    {
+        XSEGLOG2(E, "Log level already at 3");
+        return;
+    }
+    XSEGLOG2(E, "Inrementing log level to %d", ++verbose);
+    renew_logctx(verbose);
+}
+
 static int setup_signals(struct peerd *peer)
 {
 	int r;
@@ -142,6 +164,16 @@ static int setup_signals(struct peerd *peer)
 	r = sigaction(SIGSEGV, &sa, NULL);
 	if (r < 0)
 		return r;
+
+    sa.sa_handler = decr_loglevel;
+    r = sigaction(SIGUSR1, &sa, NULL);
+    if (r < 0)
+        return r;
+
+    sa.sa_handler = incr_loglevel;
+    r = sigaction(SIGUSR2, &sa, NULL);
+    if (r < 0)
+        return r;
 
 	return r;
 }
