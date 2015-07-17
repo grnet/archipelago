@@ -27,7 +27,7 @@ STOP_ARGS=""
 [ -x $DAEMON ] || exit 0
 
 # Read configuration variable file if it is present
-#[ -r /etc/default/$NAME ] && . /etc/default/$NAME
+[ -r /etc/default/$NAME ] && . /etc/default/$NAME
 
 # Load the VERBOSE setting and other rcS variables
 . /lib/init/vars.sh
@@ -42,6 +42,7 @@ STOP_ARGS=""
 do_start()
 {
 	$DAEMON start > /dev/null && return 0
+    return 2
 }
 
 #
@@ -50,6 +51,7 @@ do_start()
 do_stop()
 {
 	$DAEMON stop $STOP_ARGS > /dev/null && return 0
+    return 2
 }
 
 #
@@ -58,6 +60,7 @@ do_stop()
 do_restart()
 {
 	$DAEMON restart > /dev/null && return 0
+    return 2
 }
 
 
