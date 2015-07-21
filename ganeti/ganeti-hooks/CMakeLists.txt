@@ -19,3 +19,5 @@ project (ganeti-hooks)
 
 INSTALL(DIRECTORY instance-migrate-pre.d DESTINATION /etc/ganeti/hooks
 	USE_SOURCE_PERMISSIONS)
+INSTALL(DIRECTORY instance-start-pre.d DESTINATION /etc/ganeti/hooks
+	USE_SOURCE_PERMISSIONS)

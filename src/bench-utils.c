@@ -223,7 +223,7 @@ void create_target(struct bench *prefs, struct xseg_request *req)
 	} else {
 		strncpy(req_target, obv->name, obv->namelen);
 	}
-	XSEGLOG2(&lc, D, "Target name of request is %s\n", req_target);
+	XSEGLOG2(D, "Target name of request is %s\n", req_target);
 }
 
 uint64_t determine_next(struct bench *prefs)
