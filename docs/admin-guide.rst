@@ -418,6 +418,16 @@ A few notable commands are:
 It also contains several other debugging and obsolete commands that will be
 removed on future versions.
 
+Logging
+*******
+
+``archipelago`` peers and ``libxseg`` use the LOCAL0 facility of syslog for
+debug, info, warning and error logging. Depending on the system logger of your
+preference, you might want to change its configuration, in order to accommodate
+for ``archipelago`` logs. The log level of each ``archipelago`` peer can be
+changes at runtime, by using the SIGUSR1 and SIGUSR2 signals, to decrement or
+increment the log level accordingly.
+
 Archipelago locking system
 **************************
 
