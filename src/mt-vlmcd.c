@@ -101,10 +101,10 @@ static struct xq * allocate_queue(xqindex nr)
 static int doubleup_queue(struct volume_info *vi)
 {
 	//assert vi->pending_reqs
-	XSEGLOG2(&lc, D, "Doubling up queue of volume %s", vi->name);
+	XSEGLOG2(D, "Doubling up queue of volume %s", vi->name);
 	struct xq *newq = allocate_queue(vi->pending_reqs->size * 2);
 	if (!newq){
-		XSEGLOG2(&lc, E, "Doubling up queue of volume %s failed. Allocation error",
+		XSEGLOG2(E, "Doubling up queue of volume %s failed. Allocation error",
 				vi->name);
 		return -1;
 	}
@@ -112,28 +112,28 @@ static int doubleup_queue(struct volume_info *vi)
 	if (__xq_resize(vi->pending_reqs, newq) == Noneidx){
 		xq_free(newq);
 		free(newq);
-		XSEGLOG2(&lc, E, "Doubling up queue of volume %s failed. Resize error",
+		XSEGLOG2(E, "Doubling up queue of volume %s failed. Resize error",
 				vi->name);
 		return -1;
 	}
 	xq_free(vi->pending_reqs);
 	free(vi->pending_reqs);
 	vi->pending_reqs = newq;
-	XSEGLOG2(&lc, D, "Doubling up queue of volume %s completed", vi->name);
+	XSEGLOG2(D, "Doubling up queue of volume %s completed", vi->name);
 	return 0;
 }
 
 static struct volume_info * find_volume(struct vlmcd *vlmc, char *volume)
 {
 	struct volume_info *vi = NULL;
-	XSEGLOG2(&lc, D, "looking up volume %s", volume);
+	XSEGLOG2(D, "looking up volume %s", volume);
 	int r = xhash_lookup(vlmc->volumes, (xhashidx) volume,
 			(xhashidx *) &vi);
 	if (r < 0){
-		XSEGLOG2(&lc, D, "looking up volume %s failed", volume);
+		XSEGLOG2(D, "looking up volume %s failed", volume);
 		return NULL;
 	}
-	XSEGLOG2(&lc, D, "looking up volume %s completed. VI: %lx",
+	XSEGLOG2(D, "looking up volume %s completed. VI: %lx",
 			volume, (unsigned long)vi);
 	return vi;
 }
@@ -144,7 +144,7 @@ static struct volume_info * find_volume_len(struct vlmcd *vlmc, char *target,
 	char buf[XSEG_MAX_TARGETLEN+1];
 	strncpy(buf, target, targetlen);
 	buf[targetlen] = 0;
-	XSEGLOG2(&lc, D, "looking up volume %s, len %u",
+	XSEGLOG2(D, "looking up volume %s, len %u",
 			buf, targetlen);
 	return find_volume(vlmc, buf);
 
@@ -155,25 +155,25 @@ static int insert_volume(struct vlmcd *vlmc, struct volume_info *vi)
 	int r = -1;
 
 	if (find_volume(vlmc, vi->name)){
-		XSEGLOG2(&lc, W, "Volume %s found in hash", vi->name);
+		XSEGLOG2(W, "Volume %s found in hash", vi->name);
 		return r;
 	}
 
-	XSEGLOG2(&lc, D, "Inserting volume %s, len: %d (volume_info: %lx)", 
+	XSEGLOG2(D, "Inserting volume %s, len: %d (volume_info: %lx)", 
 			vi->name, strlen(vi->name), (unsigned long) vi);
 	r = xhash_insert(vlmc->volumes, (xhashidx) vi->name, (xhashidx) vi);
 	while (r == -XHASH_ERESIZE) {
 		xhashidx shift = xhash_grow_size_shift(vlmc->volumes);
 		xhash_t *new_hashmap = xhash_resize(vlmc->volumes, shift, 0, NULL);
 		if (!new_hashmap){
-			XSEGLOG2(&lc, E, "Cannot grow vlmc->volumes to sizeshift %llu",
+			XSEGLOG2(E, "Cannot grow vlmc->volumes to sizeshift %llu",
 					(unsigned long long) shift);
 			return r;
 		}
 		vlmc->volumes = new_hashmap;
 		r = xhash_insert(vlmc->volumes, (xhashidx) vi->name, (xhashidx) vi);
 	}
-	XSEGLOG2(&lc, D, "Inserting volume %s, len: %d (volume_info: %lx) completed", 
+	XSEGLOG2(D, "Inserting volume %s, len: %d (volume_info: %lx) completed", 
 			vi->name, strlen(vi->name), (unsigned long) vi);
 
 	return r;
@@ -184,16 +184,16 @@ static int remove_volume(struct vlmcd *vlmc, struct volume_info *vi)
 {
 	int r = -1;
 
-	XSEGLOG2(&lc, D, "Removing volume %s, len: %d (volume_info: %lx)", 
+	XSEGLOG2(D, "Removing volume %s, len: %d (volume_info: %lx)", 
 			vi->name, strlen(vi->name), (unsigned long) vi);
 	r = xhash_delete(vlmc->volumes, (xhashidx) vi->name);
 	while (r == -XHASH_ERESIZE) {
 		xhashidx shift = xhash_shrink_size_shift(vlmc->volumes);
 		xhash_t *new_hashmap = xhash_resize(vlmc->volumes, shift, 0, NULL);
 		if (!new_hashmap){
-			XSEGLOG2(&lc, E, "Cannot shrink vlmc->volumes to sizeshift %llu",
+			XSEGLOG2(E, "Cannot shrink vlmc->volumes to sizeshift %llu",
 					(unsigned long long) shift);
-			XSEGLOG2(&lc, E, "Removing volume %s, (volume_info: %lx) failed", 
+			XSEGLOG2(E, "Removing volume %s, (volume_info: %lx) failed", 
 					vi->name, (unsigned long) vi);
 			return r;
 		}
@@ -201,10 +201,10 @@ static int remove_volume(struct vlmcd *vlmc, struct volume_info *vi)
 		r = xhash_delete(vlmc->volumes, (xhashidx) vi->name);
 	}
 	if (r < 0)
-		XSEGLOG2(&lc, W, "Removing volume %s, len: %d (volume_info: %lx) failed", 
+		XSEGLOG2(W, "Removing volume %s, len: %d (volume_info: %lx) failed", 
 			vi->name, strlen(vi->name), (unsigned long) vi);
 	else
-		XSEGLOG2(&lc, D, "Removing volume %s, len: %d (volume_info: %lx) completed", 
+		XSEGLOG2(D, "Removing volume %s, len: %d (volume_info: %lx) completed", 
 			vi->name, strlen(vi->name), (unsigned long) vi);
 	return r;
 }
@@ -218,7 +218,7 @@ static int conclude_pr(struct peerd *peer, struct peer_req *pr)
 	char *target = xseg_get_target(peer->xseg, pr->req);
 	struct volume_info *vi = find_volume_len(vlmc, target, pr->req->targetlen);
 
-	XSEGLOG2(&lc, D, "Concluding pr %lx, req: %lx vi: %lx", pr, pr->req, vi);
+	XSEGLOG2(D, "Concluding pr %lx, req: %lx vi: %lx", pr, pr->req, vi);
 
 	__set_vio_state(vio, CONCLUDED);
 	if (vio->err)
@@ -229,12 +229,12 @@ static int conclude_pr(struct peerd *peer, struct peer_req *pr)
 	if (vi){
 		//assert vi->active_reqs > 0
 		uint32_t ar = --vi->active_reqs;
-		XSEGLOG2(&lc, D, "vi: %lx, volume name: %s, active_reqs: %lu, pending_pr: %lx",
+		XSEGLOG2(D, "vi: %lx, volume name: %s, active_reqs: %lu, pending_pr: %lx",
 				vi, vi->name, ar, vi->pending_pr);
 		if (!ar && vi->pending_pr)
 			do_accepted_pr(peer, vi->pending_pr);
 	}
-	XSEGLOG2(&lc, D, "Concluded pr %lx, vi: %lx", pr, vi);
+	XSEGLOG2(D, "Concluded pr %lx, vi: %lx", pr, vi);
 	return 0;
 }
 
@@ -258,7 +258,7 @@ static int do_accepted_pr(struct peerd *peer, struct peer_req *pr)
 
 	struct volume_info *vi;
 
-	XSEGLOG2(&lc, I, "Do accepted pr started for pr %lx", pr);
+	XSEGLOG2(I, "Do accepted pr started for pr %lx", pr);
 	target = xseg_get_target(peer->xseg, pr->req);
 	if (!target){
 		vio->err = 1;
@@ -268,25 +268,25 @@ static int do_accepted_pr(struct peerd *peer, struct peer_req *pr)
 
 	vi = find_volume_len(vlmc, target, pr->req->targetlen);
 	if (!vi){
-		XSEGLOG2(&lc, E, "Cannot find volume");
-		XSEGLOG2(&lc, E, "Pr %lx", pr);
+		XSEGLOG2(E, "Cannot find volume");
+		XSEGLOG2(E, "Pr %lx", pr);
 		vio->err = 1;
 		conclude_pr(peer, pr);
 		return -1;
 	}
 
 	if (should_freeze_volume(pr->req)){
-		XSEGLOG2(&lc, I, "Freezing volume %s", vi->name);
+		XSEGLOG2(I, "Freezing volume %s", vi->name);
 		vi->flags |= VF_VOLUME_FROZEN;
 		if (vi->active_reqs){
 			//assert vi->pending_pr == NULL;
-			XSEGLOG2(&lc, I, "Active reqs of %s: %lu. Pending pr is set to %lx",
+			XSEGLOG2(I, "Active reqs of %s: %lu. Pending pr is set to %lx",
 					vi->name, vi->active_reqs, pr);
 			vi->pending_pr = pr;
 			return 0;
 		}
 		else {
-			XSEGLOG2(&lc, I, "No active reqs of %s. Pending pr is set to NULL",
+			XSEGLOG2(I, "No active reqs of %s. Pending pr is set to NULL",
 					vi->name);
 			//assert vi->pending_pr == pr
 			vi->pending_pr = NULL;
@@ -303,7 +303,7 @@ static int do_accepted_pr(struct peerd *peer, struct peer_req *pr)
                 * Unfreeze volume and start serving waiting/pending requests.
                 */
 		vi->flags &= ~VF_VOLUME_FROZEN;
-		XSEGLOG2(&lc, I, "Completing flush request");
+		XSEGLOG2(I, "Completing flush request");
 		pr->req->serviced = 0;
 		conclude_pr(peer, pr);
 		xqindex xqi;
@@ -321,7 +321,7 @@ static int do_accepted_pr(struct peerd *peer, struct peer_req *pr)
 		//handle flush requests here, so we don't mess with mapper
 		//because of the -1 offset
 		vi->flags &= ~VF_VOLUME_FROZEN;
-		XSEGLOG2(&lc, I, "Completing flush request");
+		XSEGLOG2(I, "Completing flush request");
 		pr->req->serviced = pr->req->size;
 		conclude_pr(peer, pr);
 		xqindex xqi;
@@ -341,7 +341,7 @@ static int do_accepted_pr(struct peerd *peer, struct peer_req *pr)
 	/* use datalen 0. let mapper allocate buffer space as needed */
 	r = xseg_prep_request(peer->xseg, vio->mreq, pr->req->targetlen, 0);
 	if (r < 0) {
-		XSEGLOG2(&lc, E, "Cannot prep request %lx, of pr %lx for volume %s",
+		XSEGLOG2(E, "Cannot prep request %lx, of pr %lx for volume %s",
 				vio->mreq, pr, vi->name);
 		goto out_put;
 	}
@@ -378,10 +378,10 @@ static int do_accepted_pr(struct peerd *peer, struct peer_req *pr)
 	r = xseg_signal(peer->xseg, p);
 	if (r < 0) {
 		/* since submission is successful, just print a warning message */
-		XSEGLOG2(&lc, W, "Couldnt signal port %u", p);
+		XSEGLOG2(W, "Couldnt signal port %u", p);
 	}
 
-	XSEGLOG2(&lc, I, "Pr %lx of volume %s completed", pr, vi->name);
+	XSEGLOG2(I, "Pr %lx of volume %s completed", pr, vi->name);
 	return 0;
 
 out_unset:
@@ -390,14 +390,14 @@ out_put:
 	xseg_put_request(peer->xseg, vio->mreq, pr->portno);
 out_err:
 	vio->err = 1;
-	XSEGLOG2(&lc, E, "Pr %lx of volume %s failed", pr, vi->name);
+	XSEGLOG2(E, "Pr %lx of volume %s failed", pr, vi->name);
 	conclude_pr(peer, pr);
 	return -1;
 }
 
 static int append_to_pending_reqs(struct volume_info *vi, struct peer_req *pr)
 {
-	XSEGLOG2(&lc, I, "Appending pr %lx to vi %lx, volume name %s",
+	XSEGLOG2(I, "Appending pr %lx to vi %lx, volume name %s",
 			pr, vi, vi->name);
 	if (!vi->pending_reqs){
 		//allocate 8 as default. FIXME make it relevant to nr_ops;
@@ -405,9 +405,9 @@ static int append_to_pending_reqs(struct volume_info *vi, struct peer_req *pr)
 	}
 
 	if (!vi->pending_reqs){
-		XSEGLOG2(&lc, E, "Cannot allocate pending reqs queue for volume %s",
+		XSEGLOG2(E, "Cannot allocate pending reqs queue for volume %s",
 				vi->name);
-		XSEGLOG2(&lc, E, "Appending pr %lx to vi %lx, volume name %s failed",
+		XSEGLOG2(E, "Appending pr %lx to vi %lx, volume name %s failed",
 				pr, vi, vi->name);
 		return -1;
 	}
@@ -415,7 +415,7 @@ static int append_to_pending_reqs(struct volume_info *vi, struct peer_req *pr)
 	xqindex r = __xq_append_tail(vi->pending_reqs, (xqindex) pr);
 	if (r == Noneidx){
 		if (doubleup_queue(vi) < 0){
-			XSEGLOG2(&lc, E, "Appending pr %lx to vi %lx, volume name %s failed",
+			XSEGLOG2(E, "Appending pr %lx to vi %lx, volume name %s failed",
 					pr, vi, vi->name);
 			return -1;
 		}
@@ -423,12 +423,12 @@ static int append_to_pending_reqs(struct volume_info *vi, struct peer_req *pr)
 	}
 
 	if (r == Noneidx){
-		XSEGLOG2(&lc, E, "Appending pr %lx to vi %lx, volume name %s failed",
+		XSEGLOG2(E, "Appending pr %lx to vi %lx, volume name %s failed",
 				pr, vi, vi->name);
 		return -1;
 	}
 
-	XSEGLOG2(&lc, I, "Appending pr %lx to vi %lx, volume name %s completed",
+	XSEGLOG2(I, "Appending pr %lx to vi %lx, volume name %s completed",
 			pr, vi, vi->name);
 	return 0;
 }
@@ -440,7 +440,7 @@ static int handle_accepted(struct peerd *peer, struct peer_req *pr,
 	struct vlmcd *vlmc = __get_vlmcd(peer);
 	char *target = xseg_get_target(peer->xseg, req);
 	struct volume_info *vi = find_volume_len(vlmc, target, req->targetlen);
-	XSEGLOG2(&lc, I, "Handle accepted for pr %lx, req %lx started", pr, req);
+	XSEGLOG2(I, "Handle accepted for pr %lx, req %lx started", pr, req);
 	if (!vi){
 		vi = malloc(sizeof(struct volume_info));
 		if (!vi){
@@ -463,7 +463,7 @@ static int handle_accepted(struct peerd *peer, struct peer_req *pr,
 	}
 
 	if (vi->flags & VF_VOLUME_FROZEN){
-		XSEGLOG2(&lc, I, "Volume %s (vi %lx) frozen. Appending to pending_reqs",
+		XSEGLOG2(I, "Volume %s (vi %lx) frozen. Appending to pending_reqs",
 				vi->name, vi);
 		if (append_to_pending_reqs(vi, pr) < 0){
 			vio->err = 1;
@@ -486,7 +486,7 @@ static int mapping_info(struct peerd *peer, struct peer_req *pr)
 	int r;
 
 	if (vio->mreq->state & XS_FAILED){
-		XSEGLOG2(&lc, E, "Info req %lx failed",
+		XSEGLOG2(E, "Info req %lx failed",
 				(unsigned long)vio->mreq);
 		vio->err = 1;
 	}
@@ -496,7 +496,7 @@ static int mapping_info(struct peerd *peer, struct peer_req *pr)
 			strncpy(buf, target, req->targetlen);
 			r = xseg_resize_request(peer->xseg, req, req->targetlen, sizeof(struct xseg_reply_info));
 			if (r < 0) {
-				XSEGLOG2(&lc, E, "Cannot resize request");
+				XSEGLOG2(E, "Cannot resize request");
 				vio->err = 1;
 				goto out;
 			}
@@ -519,7 +519,7 @@ static int mapping_open(struct peerd *peer, struct peer_req *pr)
 {
 	struct vlmc_io *vio = __get_vlmcio(pr);
 	if (vio->mreq->state & XS_FAILED){
-		XSEGLOG2(&lc, E, "Open req %lx failed",
+		XSEGLOG2(E, "Open req %lx failed",
 				(unsigned long)vio->mreq);
 		vio->err = 1;
 	}
@@ -534,7 +534,7 @@ static int mapping_close(struct peerd *peer, struct peer_req *pr)
 	struct vlmcd *vlmc = __get_vlmcd(peer);
 	struct vlmc_io *vio = __get_vlmcio(pr);
 	if (vio->mreq->state & XS_FAILED){
-		XSEGLOG2(&lc, E, "Close req %lx failed",
+		XSEGLOG2(E, "Close req %lx failed",
 				(unsigned long)vio->mreq);
 		vio->err = 1;
 	}
@@ -549,12 +549,12 @@ static int mapping_close(struct peerd *peer, struct peer_req *pr)
 	//assert volume freezed
 	//unfreeze
 	if (!vi){
-		XSEGLOG2(&lc, E, "Volume has not volume info");
+		XSEGLOG2(E, "Volume has not volume info");
 		return 0;
 	}
 	vi->flags &= ~ VF_VOLUME_FROZEN;
 	if (!vi->pending_reqs || !xq_count(vi->pending_reqs)){
-		XSEGLOG2(&lc, I, "Volume %s (vi %lx) had no pending reqs. Removing",
+		XSEGLOG2(I, "Volume %s (vi %lx) had no pending reqs. Removing",
 				vi->name, vi);
 		if (vi->pending_reqs)
 			xq_free(vi->pending_reqs);
@@ -563,14 +563,14 @@ static int mapping_close(struct peerd *peer, struct peer_req *pr)
 	}
 	else {
 		xqindex xqi;
-		XSEGLOG2(&lc, I, "Volume %s (vi %lx) had pending reqs. Handling",
+		XSEGLOG2(I, "Volume %s (vi %lx) had pending reqs. Handling",
 				vi->name, vi);
 		while (!(vi->flags & VF_VOLUME_FROZEN) &&
 				(xqi = __xq_pop_head(vi->pending_reqs)) != Noneidx) {
 			struct peer_req *ppr = (struct peer_req *) xqi;
 			do_accepted_pr(peer, ppr);
 		}
-		XSEGLOG2(&lc, I, "Volume %s (vi %lx) handling pending reqs completed",
+		XSEGLOG2(I, "Volume %s (vi %lx) handling pending reqs completed",
 				vi->name, vi);
 	}
 	return 0;
@@ -583,7 +583,7 @@ static int mapping_snapshot(struct peerd *peer, struct peer_req *pr)
 	char *target = xseg_get_target(peer->xseg, pr->req);
 	struct volume_info *vi = find_volume_len(vlmc, target, pr->req->targetlen);
 	if (vio->mreq->state & XS_FAILED){
-		XSEGLOG2(&lc, E, "req %lx (op: %d) failed",
+		XSEGLOG2(E, "req %lx (op: %d) failed",
 				(unsigned long)vio->mreq, vio->mreq->op);
 		vio->err = 1;
 	}
@@ -595,10 +595,10 @@ static int mapping_snapshot(struct peerd *peer, struct peer_req *pr)
 	//assert volume freezed
 	//unfreeze
 	if (!vi){
-		XSEGLOG2(&lc, E, "Volume has no volume info");
+		XSEGLOG2(E, "Volume has no volume info");
 		return 0;
 	}
-	XSEGLOG2(&lc, D, "Unfreezing volume %s", vi->name);
+	XSEGLOG2(D, "Unfreezing volume %s", vi->name);
 	vi->flags &= ~ VF_VOLUME_FROZEN;
 
 	xqindex xqi;
@@ -617,7 +617,7 @@ static int mapping_delete(struct peerd *peer, struct peer_req *pr)
 	char *target = xseg_get_target(peer->xseg, pr->req);
 	struct volume_info *vi = find_volume_len(vlmc, target, pr->req->targetlen);
 	if (vio->mreq->state & XS_FAILED){
-		XSEGLOG2(&lc, E, "req %lx (op: %d) failed",
+		XSEGLOG2(E, "req %lx (op: %d) failed",
 				(unsigned long)vio->mreq, vio->mreq->op);
 		vio->err = 1;
 	}
@@ -629,10 +629,10 @@ static int mapping_delete(struct peerd *peer, struct peer_req *pr)
 	//assert volume freezed
 	//unfreeze
 	if (!vi){
-		XSEGLOG2(&lc, E, "Volume has no volume info");
+		XSEGLOG2(E, "Volume has no volume info");
 		return 0;
 	}
-	XSEGLOG2(&lc, D, "Unfreezing volume %s", vi->name);
+	XSEGLOG2(D, "Unfreezing volume %s", vi->name);
 	vi->flags &= ~ VF_VOLUME_FROZEN;
 
 	xqindex xqi;
@@ -656,7 +656,7 @@ static int mapping_readwrite(struct peerd *peer, struct peer_req *pr)
 	int i,r;
 	xport p;
 	if (vio->mreq->state & XS_FAILED){
-		XSEGLOG2(&lc, E, "req %lx (op: %d) failed",
+		XSEGLOG2(E, "req %lx (op: %d) failed",
 				(unsigned long)vio->mreq, vio->mreq->op);
 		xseg_put_request(peer->xseg, vio->mreq, pr->portno);
 		vio->mreq = NULL;
@@ -691,7 +691,7 @@ static int mapping_readwrite(struct peerd *peer, struct peer_req *pr)
 		if (mreply->segs[i].flags & XF_MAPFLAG_ZERO) {
 			vio->breqs[i] = NULL;
 			if (pr->req->op != X_READ) {
-				XSEGLOG2(&lc, E, "Mapper returned zero object "
+				XSEGLOG2(E, "Mapper returned zero object "
 						"for a write I/O operation");
 				vio->err = 1;
 				break;
@@ -746,7 +746,7 @@ static int mapping_readwrite(struct peerd *peer, struct peer_req *pr)
 		}
 		r = xseg_signal(peer->xseg, p);
 		if (r < 0){
-			XSEGLOG2(&lc, W, "Couldnt signal port %u", p);
+			XSEGLOG2(W, "Couldnt signal port %u", p);
 		}
 		vio->breqs[i] = breq;
 		vio->breq_cnt++;
@@ -771,7 +771,7 @@ static int handle_mapping(struct peerd *peer, struct peer_req *pr,
 
 	//assert vio>mreq == req
 	if (vio->mreq != req){
-		XSEGLOG2(&lc, E ,"vio->mreq %lx, req: %lx state: %d breq[0]: %lx",
+		XSEGLOG2(E ,"vio->mreq %lx, req: %lx state: %d breq[0]: %lx",
 				(unsigned long)vio->mreq, (unsigned long)req,
 				vio->state, (unsigned long)vio->breqs[0]);
 		return -1;
@@ -798,7 +798,7 @@ static int handle_mapping(struct peerd *peer, struct peer_req *pr,
 			mapping_readwrite(peer, pr);
 			break;
 		default:
-			XSEGLOG2(&lc, W, "Invalid mreq op");
+			XSEGLOG2(W, "Invalid mreq op");
 			//vio->err = 1;
 			//conclude_pr(peer, pr);
 			break;
@@ -816,7 +816,7 @@ static int handle_serving(struct peerd *peer, struct peer_req *pr,
 	struct xseg_request *breq = req;
 
 	if (breq->state & XS_FAILED && !(breq->state & XS_SERVED)) {
-		XSEGLOG2(&lc, E, "req %lx (op: %d) failed at offset %llu\n",
+		XSEGLOG2(E, "req %lx (op: %d) failed at offset %llu\n",
 				(unsigned long)req, req->op,
 				(unsigned long long)req->offset);
 		vio->err = 1;
@@ -859,10 +859,10 @@ int dispatch(struct peerd *peer, struct peer_req *pr, struct xseg_request *req,
 			handle_serving(peer, pr, req);
 			break;
 		case CONCLUDED:
-			XSEGLOG2(&lc, W, "invalid state. dispatch called for CONCLUDED");
+			XSEGLOG2(W, "invalid state. dispatch called for CONCLUDED");
 			break;
 		default:
-			XSEGLOG2(&lc, E, "wtf dude? invalid state");
+			XSEGLOG2(E, "wtf dude? invalid state");
 			break;
 	}
 	return 0;
@@ -876,14 +876,14 @@ int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 	int i, j;
 
 	if (!vlmc) {
-		XSEGLOG2(&lc, E, "Cannot alloc vlmc");
+		XSEGLOG2(E, "Cannot alloc vlmc");
 		return -1;
 	}
 	peer->priv = (void *) vlmc;
 
 	vlmc->volumes = xhash_new(3, 0, XHASH_STRING);
 	if (!vlmc->volumes){
-		XSEGLOG2(&lc, E, "Cannot alloc vlmc");
+		XSEGLOG2(E, "Cannot alloc vlmc");
 		return -1;
 	}
 	vlmc->mportno = NoPort;
@@ -895,12 +895,12 @@ int custom_peer_init(struct peerd *peer, int argc, char *argv[])
 	END_READ_ARGS();
 
 	if (vlmc->bportno == NoPort) {
-		XSEGLOG2(&lc, E, "bportno must be provided");
+		XSEGLOG2(E, "bportno must be provided");
 		usage(argv[0]);
 		return -1;
 	}
 	if (vlmc->mportno == NoPort) {
-		XSEGLOG2(&lc, E, "mportno must be provided");
+		XSEGLOG2(E, "mportno must be provided");
 		usage(argv[0]);
 		return -1;
 	}

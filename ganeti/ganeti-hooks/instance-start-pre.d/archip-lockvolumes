@@ -1,5 +1,21 @@
 #!/usr/bin/env python
 
+# Copyright (C) 2010-2014 GRNET S.A.
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+
 import os
 import sys
 import socket
@@ -7,13 +23,14 @@ import socket
 from archipelago import vlmc as vlmc
 from archipelago.common import loadrc
 
+
 def hooks_log(msg):
     f = open('/var/log/ganeti/hooks.log', 'a')
     f.write("%s\n" % msg)
     f.close()
 
 
-def archip_premigrate_disk(idx):
+def archip_lock_disk(idx):
     provider = os.getenv("GANETI_INSTANCE_DISK%d_PROVIDER" % idx)
     vol_name = os.getenv("GANETI_INSTANCE_DISK%d_ID" % idx)
     template = os.getenv("GANETI_INSTANCE_DISK%d_TEMPLATE_NAME" % idx)
@@ -22,17 +39,18 @@ def archip_premigrate_disk(idx):
         raise Exception("Invalid disk template %s" % template)
 
     if provider != 'archipelago' and provider != 'vlmc':
-        raise Exception("Unknown provider %s" % provider)
+        return 0
 
     if not vol_name:
         raise Exception("No volume name provided")
 
-    hooks_log("Opening volume %s" % vol_name)
-    vlmc.open_volume(name=vol_name)
-    hooks_log("Opened volume %s" % vol_name)
+    # Try to lock the volume
+    hooks_log("Locking volume %s" % vol_name)
+    vlmc.lock(name=vol_name)
+    hooks_log("Locked volume %s" % vol_name)
 
 
-def archip_premigrate():
+def archip_lock_disks():
     try:
         count = os.getenv("GANETI_INSTANCE_DISK_COUNT")
         template = os.getenv("GANETI_INSTANCE_DISK_TEMPLATE")
@@ -47,9 +65,9 @@ def archip_premigrate():
 
     for i in range(0, count):
         try:
-            archip_premigrate_disk(i)
+            archip_lock_disk(i)
         except Exception as e:
-            msg = "Failed to open volume %d: %s" % (i, e)
+            msg = "Failed to lock volume %d: %s" % (i, e)
             print msg
             hooks_log(msg)
             return 1
@@ -67,5 +85,4 @@ if __name__ == '__main__':
     if socket.getfqdn() != primary:
         exit(0)
 
-    exit(archip_premigrate())
-
+    exit(archip_lock_disks())

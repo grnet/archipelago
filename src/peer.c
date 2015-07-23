@@ -59,7 +59,6 @@ struct cpu_list {
 struct cpu_list cpu_list;
 volatile unsigned int terminated = 0;
 unsigned int verbose = 0;
-struct log_ctx lc;
 #ifdef ST_THREADS
 uint32_t ta = 0;
 #endif
@@ -81,7 +80,7 @@ inline static int wake_up_next_thread(struct peerd *peer)
 
 void signal_handler(int signal)
 {
-//	XSEGLOG2(&lc, I, "Caught signal. Terminating gracefully");
+//	XSEGLOG2(I, "Caught signal. Terminating gracefully");
 	terminated = 1;
 #ifdef MT
 	wake_up_next_thread(global_peer);
@@ -105,10 +104,26 @@ void segv_handler(int signal)
 	abort();
 }
 
-void renew_logfile(int signal)
+void decr_loglevel(int signal)
 {
-//	XSEGLOG2(&lc, I, "Caught signal. Renewing logfile");
-	renew_logctx(&lc, NULL, verbose, NULL, REOPEN_FILE);
+    if (verbose == 0)
+    {
+        XSEGLOG2(E, "Log level already at 0");
+        return;
+    }
+    XSEGLOG2(E, "Decrementing log level to %d", --verbose);
+    renew_logctx(verbose);
+}
+
+void incr_loglevel(int signal)
+{
+    if (verbose == 3)
+    {
+        XSEGLOG2(E, "Log level already at 3");
+        return;
+    }
+    XSEGLOG2(E, "Inrementing log level to %d", ++verbose);
+    renew_logctx(verbose);
 }
 
 static int setup_signals(struct peerd *peer)
@@ -150,10 +165,15 @@ static int setup_signals(struct peerd *peer)
 	if (r < 0)
 		return r;
 
-	sa.sa_handler = renew_logfile;
-	r = sigaction(SIGUSR1, &sa, NULL);
-	if (r < 0)
-		return r;
+    sa.sa_handler = decr_loglevel;
+    r = sigaction(SIGUSR1, &sa, NULL);
+    if (r < 0)
+        return r;
+
+    sa.sa_handler = incr_loglevel;
+    r = sigaction(SIGUSR2, &sa, NULL);
+    if (r < 0)
+        return r;
 
 	return r;
 }
@@ -176,9 +196,9 @@ void print_req(struct xseg *xseg, struct xseg_request *req)
 		target[end] = 0;
 		strncpy(data, req_data, 63);
 		data[63] = 0;
-		printf("req id:%lu, op:%u %llu:%lu serviced: %lu, reqstate: %u\n"
-				"src: %u, transit: %u, dst: %u effective dst: %u\n"
-				"target[%u]:'%s', data[%llu]:\n%s------------------\n\n",
+		XSEGLOG2(D, "req id:%lu, op:%u %llu:%lu serviced: %lu, reqstate: %u, "
+				"src: %u, transit: %u, dst: %u effective dst: %u, "
+				"target[%u]:'%s', data[%llu]:%s------------------",
 				(unsigned long)(req),
 				(unsigned int)req->op,
 				(unsigned long long)req->offset,
@@ -211,8 +231,9 @@ void log_pr(char *msg, struct peer_req *pr)
 		target[end] = 0;
 		strncpy(data, req_data, 63);
 		data[63] = 0;
-		printf("%s: req id:%u, op:%u %llu:%lu serviced: %lu, retval: %lu, reqstate: %u\n"
-				"target[%u]:'%s', data[%llu]:\n%s------------------\n\n",
+        XSEGLOG2(D, "%s: req id:%u, op:%u %llu:%lu serviced: %lu, retval: %lu, "
+               "reqstate: %u, " "target[%u]:'%s',i "
+               "data[%llu]:%s------------------",
 				msg,
 				(unsigned int)(pr - peer->peer_reqs),
 				(unsigned int)pr->req->op,
@@ -304,7 +325,7 @@ int all_peer_reqs_free(struct peerd *peer)
 struct timeval resp_start, resp_end, resp_accum = {0, 0};
 uint64_t responds = 0;
 void get_responds_stats(){
-		printf("Time waiting respond %lu.%06lu sec for %llu times.\n",
+		XSEGLOG2(I, "Time waiting respond %lu.%06lu sec for %llu times.\n",
 				//(unsigned int)(t - peer->thread),
 				resp_accum.tv_sec, resp_accum.tv_usec, (long long unsigned int) responds);
 }
@@ -315,7 +336,7 @@ void fail(struct peerd *peer, struct peer_req *pr)
 	struct xseg_request *req = pr->req;
 	uint32_t p;
 	if (req){
-		XSEGLOG2(&lc, D, "failing req %u", (unsigned int) (pr - peer->peer_reqs));
+		XSEGLOG2(D, "failing req %u", (unsigned int) (pr - peer->peer_reqs));
 		req->state |= XS_FAILED;
 		//xseg_set_req_data(peer->xseg, pr->req, NULL);
 		p = xseg_respond(peer->xseg, req, pr->portno, X_ALLOC);
@@ -355,7 +376,7 @@ static void handle_accepted(struct peerd *peer, struct peer_req *pr,
 {
 	struct xseg_request *xreq = pr->req;
 	//assert xreq == req;
-	XSEGLOG2(&lc, D, "Handle accepted");
+	XSEGLOG2(D, "Handle accepted");
 	xreq->serviced = 0;
 	//xreq->state = XS_ACCEPTED;
 	pr->retval = 0;
@@ -367,14 +388,14 @@ static void handle_received(struct peerd *peer, struct peer_req *pr,
 {
 	//struct xseg_request *req = pr->req;
 	//assert req->state != XS_ACCEPTED;
-	XSEGLOG2(&lc, D, "Handle received \n");
+	XSEGLOG2(D, "Handle received \n");
 	dispatch(peer, pr, req, dispatch_receive);
 
 }
 struct timeval sub_start, sub_end, sub_accum = {0, 0};
 uint64_t submits = 0;
 void get_submits_stats(){
-		printf("Time waiting submit %lu.%06lu sec for %llu times.\n",
+		XSEGLOG2(I, "Time waiting submit %lu.%06lu sec for %llu times.\n",
 				//(unsigned int)(t - peer->thread),
 				sub_accum.tv_sec, sub_accum.tv_usec, (long long unsigned int) submits);
 }
@@ -385,7 +406,7 @@ int submit_peer_req(struct peerd *peer, struct peer_req *pr)
 	struct xseg_request *req = pr->req;
 	// assert req->portno == peer->portno ?
 	//TODO small function with error checking
-	XSEGLOG2 (&lc, D, "submitting peer req %u\n", (unsigned int)(pr - peer->peer_reqs));
+	XSEGLOG2 (D, "submitting peer req %u\n", (unsigned int)(pr - peer->peer_reqs));
 	ret = xseg_set_req_data(peer->xseg, req, (void *)(pr));
 	if (ret < 0)
 		return -1;
@@ -443,10 +464,10 @@ int check_ports(struct peerd *peer)
 		if (received) {
 			r =  xseg_get_req_data(xseg, received, (void **) &pr);
 			if (r < 0 || !pr){
-				XSEGLOG2(&lc, W, "Received request with no pr data\n");
+				XSEGLOG2(W, "Received request with no pr data\n");
 				xport p = xseg_respond(peer->xseg, received, peer->portno_start, X_ALLOC);
 				if (p == NoPort){
-					XSEGLOG2(&lc, W, "Could not respond stale request");
+					XSEGLOG2(W, "Could not respond stale request");
 					xseg_put_request(xseg, received, portno_start);
 					continue;
 				} else {
@@ -476,8 +497,8 @@ static void* thread_loop(void *arg)
 	uint64_t loops;
 	uint64_t threshold=1000/(1 + portno_end - portno_start);
 
-	XSEGLOG2(&lc, D, "thread %u\n",  (unsigned int) (t- peer->thread));
-	XSEGLOG2(&lc, I, "Thread %u has tid %u.\n", (unsigned int) (t- peer->thread), pid);
+	XSEGLOG2(D, "thread %u\n",  (unsigned int) (t- peer->thread));
+	XSEGLOG2(I, "Thread %u has tid %u.\n", (unsigned int) (t- peer->thread), pid);
 	for (;!(isTerminate() && xq_count(&peer->free_reqs) == peer->nr_ops);) {
 		for(loops =  threshold; loops > 0; loops--) {
 			if (loops == 1)
@@ -485,10 +506,10 @@ static void* thread_loop(void *arg)
 			if (check_ports(peer, t))
 				loops = threshold;
 		}
-		XSEGLOG2(&lc, I, "Thread %u goes to sleep\n", (unsigned int) (t- peer->thread));
+		XSEGLOG2(I, "Thread %u goes to sleep\n", (unsigned int) (t- peer->thread));
 		xseg_wait_signal(xseg, peer->sd, 10000000UL);
 		xseg_cancel_wait(xseg, peer->portno_start);
-		XSEGLOG2(&lc, I, "Thread %u woke up\n", (unsigned int) (t- peer->thread));
+		XSEGLOG2(I, "Thread %u woke up\n", (unsigned int) (t- peer->thread));
 	}
 	wake_up_next_thread(peer);
 	custom_peer_finalize(peer);
@@ -573,18 +594,18 @@ int defer_request(struct peerd *peer, struct peer_req *pr)
 	int r;
 	xport p;
 	if (!canDefer(peer)){
-		XSEGLOG2(&lc, E, "Peer cannot defer requests");
+		XSEGLOG2(E, "Peer cannot defer requests");
 		return -1;
 	}
 	p = xseg_forward(peer->xseg, pr->req, peer->defer_portno, pr->portno,
 			X_ALLOC);
 	if (p == NoPort){
-		XSEGLOG2(&lc, E, "Cannot defer request %lx", pr->req);
+		XSEGLOG2(E, "Cannot defer request %lx", pr->req);
 		return -1;
 	}
 	r = xseg_signal(peer->xseg, p);
 	if (r < 0) {
-		XSEGLOG2(&lc, W, "Cannot signal port %lu", p);
+		XSEGLOG2(W, "Cannot signal port %lu", p);
 	}
 	free_peer_req(peer, pr);
 	return 0;
@@ -613,7 +634,7 @@ static int generic_peerd_loop(void *arg)
 	threshold += 1;
 	uint64_t loops;
 
-	XSEGLOG2(&lc, I, "%s has tid %u.\n", id, pid);
+	XSEGLOG2(I, "%s has tid %u.\n", id, pid);
 	//for (;!(isTerminate() && xq_count(&peer->free_reqs) == peer->nr_ops);) {
 	for (;!(isTerminate() && all_peer_reqs_free(peer));) {
 		//Heart of peerd_loop. This loop is common for everyone.
@@ -633,10 +654,10 @@ static int generic_peerd_loop(void *arg)
 			continue;
 		}
 #endif
-		XSEGLOG2(&lc, I, "%s goes to sleep\n", id);
+		XSEGLOG2(I, "%s goes to sleep\n", id);
 		xseg_wait_signal(xseg, peer->sd, 10000000UL);
 		xseg_cancel_wait(xseg, peer->portno_start);
-		XSEGLOG2(&lc, I, "%s woke up\n", id);
+		XSEGLOG2(I, "%s woke up\n", id);
 	}
 	return 0;
 }
@@ -738,7 +759,7 @@ malloc_fail:
 		return NULL;
 	}
 	if (xseg_initialize()){
-		printf("cannot initialize library\n");
+		XSEGLOG2(E, "cannot initialize library\n");
 		return NULL;
 	}
 	peer->xseg = join(spec);
@@ -757,18 +778,18 @@ malloc_fail:
 	for (p = peer->portno_start; p <= peer->portno_end; p++) {
 		port = xseg_bind_port(peer->xseg, p, peer->sd);
 		if (!port){
-			printf("cannot bind to port %u\n", (unsigned int) p);
+			XSEGLOG2(E, "cannot bind to port %u\n", (unsigned int) p);
 			return NULL;
 		}
 		if (p == peer->portno_start)
 			peer->sd = xseg_get_signal_desc(peer->xseg, port);
 	}
 
-	printf("Peer on ports  %u-%u\n", peer->portno_start, peer->portno_end);
+	XSEGLOG2(I, "Peer on ports  %u-%u\n", peer->portno_start, peer->portno_end);
 
 	r = xseg_init_local_signal(peer->xseg, peer->portno_start);
 	if (r < 0) {
-		XSEGLOG2(&lc, E, "Could not initialize local signals");
+		XSEGLOG2(E, "Could not initialize local signals");
 		return NULL;
 	}
 
@@ -956,7 +977,7 @@ int main(int argc, char *argv[])
 		struct group *gr;
 		gr = getgrgid(gid);
 		if (!gr) {
-			XSEGLOG2(&lc, E, "Group %d not found", gid);
+			XSEGLOG2(E, "Group %d not found", gid);
 			return -1;
 		}
 	}
@@ -965,7 +986,7 @@ int main(int argc, char *argv[])
 		struct passwd *pw;
 		pw = getpwuid(uid);
 		if (!pw) {
-			XSEGLOG2(&lc, E, "User %d not found", uid);
+			XSEGLOG2(E, "User %d not found", uid);
 			return -1;
 		}
 		username = pw->pw_name;
@@ -978,20 +999,20 @@ int main(int argc, char *argv[])
 	cur_gid = getegid();
 
 	if (gid != -1 && cur_gid != gid && setregid(gid, gid)) {
-		XSEGLOG2(&lc, E, "Could not set gid to %d", gid);
+		XSEGLOG2(E, "Could not set gid to %d", gid);
 		return -1;
 	}
 
 	if (uid != -1) {
 		if ((cur_gid != gid || cur_uid != uid)
 				&& initgroups(username, gid)) {
-			XSEGLOG2(&lc, E, "Could not initgroups for user %s, "
+			XSEGLOG2(E, "Could not initgroups for user %s, "
 					"gid %d", username, gid);
 			return -1;
 		}
 
 		if (cur_uid != uid && setreuid(uid, uid)) {
-			XSEGLOG2(&lc, E, "Failed to set uid %d", uid);
+			XSEGLOG2(E, "Failed to set uid %d", uid);
 		}
 	}
 
@@ -999,21 +1020,16 @@ int main(int argc, char *argv[])
 	peer_umask &= 0777;
 	umask(peer_umask);
 
-	r = init_logctx(&lc, argv[0], debug_level, logfile,
-			REDIRECT_STDOUT|REDIRECT_STDERR);
-	if (r < 0){
-		XSEGLOG("Cannot initialize logging to logfile");
-		return -1;
-	}
-	XSEGLOG2(&lc, D, "Main thread has tid %ld.\n", syscall(SYS_gettid));
+	init_logctx(argv[0], debug_level);
+	XSEGLOG2(D, "Main thread has tid %ld.\n", syscall(SYS_gettid));
 
 	if (pidfile[0]){
 		pid_fd = pidfile_open(pidfile, &old_pid);
 		if (pid_fd < 0) {
 			if (old_pid) {
-				XSEGLOG2(&lc, E, "Daemon already running, pid: %d.", old_pid);
+				XSEGLOG2(E, "Daemon already running, pid: %d.", old_pid);
 			} else {
-				XSEGLOG2(&lc, E, "Cannot open or create pidfile");
+				XSEGLOG2(E, "Cannot open or create pidfile");
 			}
 			return -1;
 		}
@@ -1021,10 +1037,10 @@ int main(int argc, char *argv[])
 
 	if (daemonize){
 		if (close(STDIN_FILENO)){
-			XSEGLOG2(&lc, W, "Could not close stdin");
+			XSEGLOG2(W, "Could not close stdin");
 		}
 		if (daemon(0, 1) < 0){
-			XSEGLOG2(&lc, E, "Cannot daemonize");
+			XSEGLOG2(E, "Cannot daemonize");
 			r = -1;
 			goto out;
 		}
@@ -1038,19 +1054,19 @@ int main(int argc, char *argv[])
 		r = get_cpu_list(cpus, &cpu_list);
 
 		if (r < 0) {
-			XSEGLOG2(&lc, E, "--cpus %s: Invalid input", cpus);
+			XSEGLOG2(E, "--cpus %s: Invalid input", cpus);
 			goto out;
 		}
 #ifdef MT
 		if (nr_threads != cpu_list.len) {
-			XSEGLOG2(&lc, E, "--cpus %s: Number of "
+			XSEGLOG2(E, "--cpus %s: Number of "
 					"threads (%d) and CPUs don't match",
 					cpus, nr_threads);
 			goto out;
 		}
 #else
 		if (cpu_list.len != 1) {
-			XSEGLOG2(&lc, E, "--cpus %s: Too many CPUs for a "
+			XSEGLOG2(E, "--cpus %s: Too many CPUs for a "
 					"single process", cpus);
 			goto out;
 		}
@@ -1065,7 +1081,7 @@ int main(int argc, char *argv[])
 		portno_end = portno;
 	}
 	if (portno_start == -1 || portno_end == -1){
-		XSEGLOG2(&lc, E, "Portno or {portno_start, portno_end} must be supplied");
+		XSEGLOG2(E, "Portno or {portno_start, portno_end} must be supplied");
 		usage(argv[0]);
 		r = -1;
 		goto out;

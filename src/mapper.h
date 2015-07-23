@@ -243,7 +243,7 @@ struct mapper_io {
 	do {					\
 		ta--;				\
 		__get_mapper_io(pr)->active = 0;\
-		XSEGLOG2(&lc, D, "Waiting on pr %lx, ta: %u",  pr, ta); \
+		XSEGLOG2(D, "Waiting on pr %lx, ta: %u",  pr, ta); \
 		st_cond_wait(__pr->cond);	\
 	} while (__condition__)
 
@@ -251,7 +251,7 @@ struct mapper_io {
 	do {					\
 		ta--;				\
 		__mn->waiters++;		\
-		XSEGLOG2(&lc, D, "Waiting on map node %lx %s, waiters: %u, \
+		XSEGLOG2(D, "Waiting on map node %lx %s, waiters: %u, \
 			ta: %u",  __mn, __mn->object, __mn->waiters, ta);  \
 		st_cond_wait(__mn->cond);	\
 	} while (__condition__)
@@ -260,7 +260,7 @@ struct mapper_io {
 	do {					\
 		ta--;				\
 		__map->waiters++;		\
-		XSEGLOG2(&lc, D, "Waiting on map %lx %s, waiters: %u, ta: %u",\
+		XSEGLOG2(D, "Waiting on map %lx %s, waiters: %u, ta: %u",\
 				   __map, __map->volume, __map->waiters, ta); \
 		st_cond_wait(__map->cond);	\
 	} while (__condition__)
@@ -269,7 +269,7 @@ struct mapper_io {
 	do {					\
 		ta--;				\
 		__map->waiters_users++;		\
-		XSEGLOG2(&lc, D, "Waiting for objects ready on map %lx %s, waiters: %u, ta: %u",\
+		XSEGLOG2(D, "Waiting for objects ready on map %lx %s, waiters: %u, ta: %u",\
 				   __map, __map->volume, __map->waiters_users, ta); \
 		st_cond_wait(__map->users_cond);	\
 	} while (__map->users)
@@ -278,7 +278,7 @@ struct mapper_io {
 	do { 					\
 		if (!__get_mapper_io(pr)->active){\
 			ta++;			\
-			XSEGLOG2(&lc, D, "Signaling  pr %lx, ta: %u",  pr, ta);\
+			XSEGLOG2(D, "Signaling  pr %lx, ta: %u",  pr, ta);\
 			__get_mapper_io(pr)->active = 1;\
 			st_cond_signal(__pr->cond);	\
 		}				\
@@ -286,11 +286,11 @@ struct mapper_io {
 
 #define signal_map(__map)			\
 	do { 					\
-		XSEGLOG2(&lc, D, "Checking map %lx %s. Waiters %u, ta: %u", \
+		XSEGLOG2(D, "Checking map %lx %s. Waiters %u, ta: %u", \
 				__map, __map->volume, __map->waiters, ta);  \
 		if (__map->waiters) {		\
 			ta += __map->waiters;		\
-			XSEGLOG2(&lc, D, "Signaling map %lx %s, waiters: %u, \
+			XSEGLOG2(D, "Signaling map %lx %s, waiters: %u, \
 			ta: %u",  __map, __map->volume, __map->waiters, ta); \
 			__map->waiters = 0;	\
 			st_cond_broadcast(__map->cond);	\
@@ -302,7 +302,7 @@ struct mapper_io {
 		/* assert __map->users == 0 */ \
 		if (__map->waiters_users) {		\
 			ta += __map->waiters_users;		\
-			XSEGLOG2(&lc, D, "Signaling objects ready for map %lx %s, waiters: %u, \
+			XSEGLOG2(D, "Signaling objects ready for map %lx %s, waiters: %u, \
 			ta: %u",  __map, __map->volume, __map->waiters_users, ta); \
 			__map->waiters_users = 0;	\
 			st_cond_broadcast(__map->users_cond);	\
@@ -313,7 +313,7 @@ struct mapper_io {
 	do { 					\
 		if (__mn->waiters) {		\
 			ta += __mn->waiters;	\
-			XSEGLOG2(&lc, D, "Signaling map node %lx %s, waiters: \
+			XSEGLOG2(D, "Signaling map node %lx %s, waiters: \
 			%u, ta: %u",  __mn, __mn->object, __mn->waiters, ta); \
 			__mn->waiters = 0;	\
 			st_cond_broadcast(__mn->cond);	\

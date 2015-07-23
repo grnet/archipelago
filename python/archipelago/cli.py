@@ -187,8 +187,11 @@ def archipelago_parser():
     stop_parser = subparsers.add_parser('stop', help='Stop archipelago')
     stop_parser.set_defaults(func=archipelago.stop)
     stop_parser.add_argument('role', type=str, nargs='?', help='peer to stop')
-    stop_parser.add_argument('-f', '--force',  action='store_true', default=False,
-                        help='Stop archipelago even if mapped volumes exist')
+    stop_parser.add_argument('--pause',  action='store_true', default=False,
+                        help='Stop archipelago -- if mapped volumes exist, '
+                             'pause them')
+    stop_parser.add_argument('--unmap',  action='store_true', default=False,
+                        help='Try unmapping mapped volumes, if they exist')
 
     status_parser = subparsers.add_parser('status', help='Archipelago status')
     status_parser.set_defaults(func=archipelago.status)
