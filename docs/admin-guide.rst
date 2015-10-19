@@ -426,7 +426,8 @@ debug, info, warning and error logging. Depending on the system logger of your
 preference, you might want to change its configuration, in order to accommodate
 for ``archipelago`` logs. The log level of each ``archipelago`` peer can be
 changes at runtime, by using the SIGUSR1 and SIGUSR2 signals, to decrement or
-increment the log level accordingly.
+increment the log level accordingly. Sending a SIGHUP will cause the current
+log level to be printed in the logs.
 
 Archipelago locking system
 **************************
