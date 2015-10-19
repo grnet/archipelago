@@ -49,6 +49,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #define MAX_SPEC_LEN 128
 #define MAX_PIDFILE_LEN 512
 #define MAX_CPUS_LEN 512
+#define MAX_ROLE_LEN 128
 
 /* Define the cpus on which the threads/process will be pinned */
 struct cpu_list {
@@ -106,9 +107,9 @@ void segv_handler(int signal)
 
 void decr_loglevel(int signal)
 {
-    if (verbose == 0)
+    if (verbose == E)
     {
-        XSEGLOG2(E, "Log level already at 0");
+        XSEGLOG2(E, "Log level already at E");
         return;
     }
     XSEGLOG2(E, "Decrementing log level to %d", --verbose);
@@ -117,13 +118,28 @@ void decr_loglevel(int signal)
 
 void incr_loglevel(int signal)
 {
-    if (verbose == 3)
+    if (verbose == D)
     {
-        XSEGLOG2(E, "Log level already at 3");
+        XSEGLOG2(E, "Log level already at D");
         return;
     }
     XSEGLOG2(E, "Inrementing log level to %d", ++verbose);
     renew_logctx(verbose);
+}
+
+void print_loglevel(int signal)
+{
+    char *t;
+
+    switch (verbose) {
+        case E: t = "E"; break;
+        case W: t = "W"; break;
+        case I: t = "I"; break;
+        case D: t = "D"; break;
+        default: XSEGLOG2(E, "Invalid log level!"); return;
+    }
+
+	XSEGLOG2(E, "Log level currently at %s", t);
 }
 
 static int setup_signals(struct peerd *peer)
@@ -172,6 +188,11 @@ static int setup_signals(struct peerd *peer)
 
     sa.sa_handler = incr_loglevel;
     r = sigaction(SIGUSR2, &sa, NULL);
+    if (r < 0)
+        return r;
+
+    sa.sa_handler = print_loglevel;
+    r = sigaction(SIGHUP, &sa, NULL);
     if (r < 0)
         return r;
 
@@ -232,7 +253,7 @@ void log_pr(char *msg, struct peer_req *pr)
 		strncpy(data, req_data, 63);
 		data[63] = 0;
         XSEGLOG2(D, "%s: req id:%u, op:%u %llu:%lu serviced: %lu, retval: %lu, "
-               "reqstate: %u, " "target[%u]:'%s',i "
+               "reqstate: %u, " "target[%u]:'%s', "
                "data[%llu]:%s------------------",
 				msg,
 				(unsigned int)(pr - peer->peer_reqs),
@@ -894,7 +915,6 @@ void usage(char *argv0)
 		"    -p        | NoPort  | Portno to bind\n"
 		"    -n        | 16      | Number of ops\n"
 		"    -v        | 0       | Verbosity level\n"
-		"    -l        | None    | Logfile \n"
 		"    -d        | No      | Daemonize \n"
 		"    --pidfile | None    | Pidfile \n"
 		"    -uid      | None    | Set real EUID \n"
@@ -904,6 +924,8 @@ void usage(char *argv0)
 #endif
 		"    --cpus    | No      | Coma-separated list of CPUs\n"
 		"              |         | to pin the process or threads\n"
+		"    --umask   | 007	 | Default umask\n"
+		"    -r        | None    | Peer role\n"
 		"\n"
 	       );
 	custom_peer_usage();
@@ -930,16 +952,16 @@ int main(int argc, char *argv[])
 	mode_t peer_umask = PEER_DEFAULT_UMASK;
 
 	char spec[MAX_SPEC_LEN + 1];
-	char logfile[MAX_LOGFILE_LEN + 1];
 	char pidfile[MAX_PIDFILE_LEN + 1];
 	char cpus[MAX_CPUS_LEN + 1];
+	char role[MAX_ROLE_LEN + 1];
 
 	char *username = NULL;
 
-	logfile[0] = 0;
 	pidfile[0] = 0;
 	spec[0] = 0;
 	cpus[0] = 0;
+	role[0] = 0;
 
 	//capture here -g spec, -n nr_ops, -p portno, -t nr_threads -v verbose level
 	// -dp xseg_portno to defer blocking requests
@@ -958,7 +980,6 @@ int main(int argc, char *argv[])
 	READ_ARG_ULONG("-t", nr_threads);
 #endif
 	READ_ARG_ULONG("-dp", defer_portno);
-	READ_ARG_STRING("-l", logfile, MAX_LOGFILE_LEN);
 	READ_ARG_BOOL("-d", daemonize);
 	READ_ARG_BOOL("-h", help);
 	READ_ARG_BOOL("--help", help);
@@ -966,6 +987,7 @@ int main(int argc, char *argv[])
 	READ_ARG_STRING("--cpus", cpus, MAX_CPUS_LEN);
 	READ_ARG_STRING("--pidfile", pidfile, MAX_PIDFILE_LEN);
 	READ_ARG_ULONG("--umask", peer_umask);
+	READ_ARG_STRING("-r", role, MAX_ROLE_LEN);
 	END_READ_ARGS();
 
 	if (help){
@@ -1020,7 +1042,7 @@ int main(int argc, char *argv[])
 	peer_umask &= 0777;
 	umask(peer_umask);
 
-	init_logctx(argv[0], debug_level);
+	init_logctx(role, debug_level);
 	XSEGLOG2(D, "Main thread has tid %ld.\n", syscall(SYS_gettid));
 
 	if (pidfile[0]){

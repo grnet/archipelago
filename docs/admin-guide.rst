@@ -787,7 +787,6 @@ Common options among all peers are:
       b) Threads in ``radosd`` are processing threads. For lock congestion
          reasons, avoid setting them to a value larger than 4.
 
-.. * ``logfile``:
 .. * ``pidfile``:
 
 ``filed``-specific options:

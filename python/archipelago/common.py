@@ -74,11 +74,9 @@ DEFAULTS = '/etc/archipelago/archipelago.conf'
 
 #system defaults
 ARCHIP_PREFIX = 'archip_'
-LOG_SUFFIX = '.log'
 PID_SUFFIX = '.pid'
 PIDFILE_PATH = "/var/run/archipelago"
 VLMC_LOCK_FILE = 'vlmc.lock'
-LOGS_PATH = "/var/log/archipelago"
 LOCK_PATH = "/var/lock"
 DEVICE_PREFIX = "/dev/xen/blktap-2/tapdev"
 
@@ -138,7 +136,7 @@ class Peer(object):
     cli_opts = None
 
     def __init__(self, role=None, daemon=True, nr_ops=16,
-                 logfile=None, pidfile=None, portno_start=None,
+                 pidfile=None, portno_start=None,
                  portno_end=None, log_level=0, spec=None, threshold=None,
                  user=None, group=None, umask="0o007"):
         if not role:
@@ -180,22 +178,10 @@ class Peer(object):
             raise Error("Xseg spec was not provided for %s" % role)
         self.spec = spec
 
-        if logfile:
-            self.logfile = logfile
-        else:
-            self.logfile = os.path.join(LOGS_PATH, role + LOG_SUFFIX)
-
         if pidfile:
             self.pidfile = pidfile
         else:
             self.pidfile = os.path.join(PIDFILE_PATH, role + PID_SUFFIX)
-
-        try:
-            if not os.path.isdir(os.path.dirname(self.logfile)):
-                raise Error("Log path %s does not exist" % self.logfile)
-        except:
-            raise Error("Log path %s does not exist or is not a directory" %
-                        self.logfile)
 
         self.log_level = log_level
         self.threshold = threshold
@@ -225,7 +211,6 @@ class Peer(object):
 
         os.chmod(os.path.dirname(self.pidfile), stat.S_IRWXU|stat.S_IRWXG)
         os.chown(os.path.dirname(self.pidfile), -1, self.group_gid)
-        os.chown(os.path.dirname(self.logfile), -1, self.group_gid)
 
 
         if self.get_pid():
@@ -285,9 +270,6 @@ class Peer(object):
         if self.nr_ops:
             self.cli_opts.append("-n")
             self.cli_opts.append(str(self.nr_ops))
-        if self.logfile:
-            self.cli_opts.append("-l")
-            self.cli_opts.append(self.logfile)
         if self.pidfile:
             self.cli_opts.append("--pidfile")
             self.cli_opts.append(self.pidfile)
@@ -315,6 +297,9 @@ class Peer(object):
         if self.umask:
             self.cli_opts.append("--umask")
             self.cli_opts.append(str(self.umask))
+        if self.role:
+            self.cli_opts.append("-r")
+            self.cli_opts.append(self.role)
 
 
 class MTpeer(Peer):
@@ -741,8 +726,6 @@ def createDict(cfg, section):
     sec_dic['portno_start'] = cfg.getint(section, 'portno_start')
     sec_dic['portno_end'] = cfg.getint(section, 'portno_end')
     sec_dic['nr_ops'] = cfg.getint(section, 'nr_ops')
-    if cfg.has_option(section, 'logfile'):
-        sec_dic['logfile'] = str(cfg.get(section, 'logfile'))
     if cfg.has_option(section, 'threshold'):
         sec_dic['threshold'] = cfg.getint(section, 'threshold')
     if cfg.has_option(section, 'log_level'):
