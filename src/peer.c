@@ -627,6 +627,7 @@ static int generic_peerd_loop(void *arg)
     threshold /= (1 + portno_end - portno_start);
     threshold += 1;
     uint64_t loops;
+    uint64_t test;
 
     XSEGLOG2(&lc, I, "%s has tid %u.\n", id, pid);
     //for (;!(isTerminate() && xq_count(&peer->free_reqs) == peer->nr_ops);) {
@@ -636,10 +637,11 @@ static int generic_peerd_loop(void *arg)
             if (loops == 1)
                 xseg_prepare_wait(xseg, peer->portno_start);
 #ifdef MT
-            if (check_ports(peer, t))
+            test = check_ports(peer, t);
 #else
-            if (check_ports(peer))
+            test = check_ports(peer);
 #endif
+            if (test)
                 loops = threshold;
         }
 #ifdef ST_THREADS
