@@ -1367,5 +1367,6 @@ class RadosdTest(BlockerTest, XsegTest):
         super(RadosdTest, self).tearDown()
 
 if __name__=='__main__':
+    os.umask(7)
     init()
     unittest.main()
