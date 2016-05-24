@@ -25,6 +25,9 @@ parse_config
 
 PORTS_AVAIL=$(($PORTS / 2 - 1))
 
+# Needed by archipelago
+umask 007
+
 for i in `seq 1 $1`
 do 
 	# call some function to do work

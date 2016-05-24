@@ -230,12 +230,19 @@ class Peer(object):
             os.kill(pid, signal.SIGTERM)
 
     def __is_running(self, pid):
-        name = self.executable
-        for p in psutil.process_iter():
-            if p.name[0:len(name)] == name and pid == p.pid:
-                return True
+        try:
+            process = psutil.Process(pid)
+        except psutil.NoSuchProcess:
+            return False
 
-        return False
+        # The name attribute in psutil.Process was removed in favor of the
+        # name() method.
+        name = process.name if psutil.version_info[0] < 2 else process.name()
+
+        if not self.executable.startswith(name):
+            # FIXME: We need to raise some kind of warning here
+            return False
+        return True
 
     def is_running(self):
         pid = self.get_pid()
