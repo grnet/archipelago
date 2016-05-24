@@ -31,7 +31,9 @@ def hooks_log(msg):
 
 def archip_premigrate_disk(idx):
     provider = os.getenv("GANETI_INSTANCE_DISK%d_PROVIDER" % idx)
-    vol_name = os.getenv("GANETI_INSTANCE_DISK%d_ID" % idx)
+    vol_name = os.getenv("GANETI_INSTANCE_DISK%d_NAME" % idx)
+    if not vol_name:
+        vol_name = os.getenv("GANETI_INSTANCE_DISK%d_ID" % idx)
     template = os.getenv("GANETI_INSTANCE_DISK%d_TEMPLATE_NAME" % idx)
 
     if template != 'ext':

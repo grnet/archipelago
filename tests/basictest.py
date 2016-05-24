@@ -130,6 +130,9 @@ def snapshot(volume):
     vlmc.snapshot(name=volume)
 
 if __name__ == '__main__':
+
+    # Archipelago needs umask 007
+    os.umask(7)
     loadrc(None)
     peers = construct_peers()
     tmpvolume=gettempname()
