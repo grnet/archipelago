@@ -22,12 +22,14 @@
 The script takes it's input from environment variables. Specifically the
 following variables should be present:
 
- - VOL_NAME: The name of the new Image file
+ - VOL_CNAME: The name of the new Image file
  - VOL_SIZE: The size of the new Image (in megabytes)
 
 The following variables are optional:
 
  - EXTP_ORIGIN: The name of the Image file to snapshot
+ - EXTP_REUSE_DATA: An indication to Archipelago that it should not create a
+   new volume but map an existing one
 
 The code branches to the correct function, depending on the name (sys.argv[0])
 of the executed script (attach, create, etc).
@@ -45,16 +47,19 @@ from archipelago import vlmc as vlmc
 
 def ReadEnv():
     """Read the enviromental variables"""
-    name = os.getenv("VOL_NAME")
+    name = os.getenv("VOL_CNAME")
     if name is None:
-        sys.stderr.write('The environment variable VOL_NAME is missing.\n')
+        sys.stderr.write('The environment variable VOL_CNAME is missing.\n')
         return None
+
+    reuse_data = os.getenv("EXTP_REUSE_DATA") == "True"
 
     return {"name": name,
             "size": os.getenv("VOL_SIZE"),
             "origin": os.getenv("EXTP_ORIGIN"),
             "origin_size": os.getenv("EXTP_ORIGIN_SIZE", "-1"),
             "snapshot_name": os.getenv("VOL_SNAPSHOT_NAME"),
+            "reuse_data": reuse_data,
             }
 
 
@@ -64,10 +69,16 @@ def create(env):
     size = env.get("size")
     origin = env.get("origin")
     origin_size = env.get("origin_size")
-    sys.stderr.write("Creating volume '%s' of size '%s' from '%s'\n"
-                     % (name, size, origin))
-    vlmc.create(name=name, size=int(size), snap=origin, assume_v0=True,
-                v0_size=int(origin_size))
+    reuse_data = env.get("reuse_data")
+
+    if not reuse_data:
+      sys.stderr.write("Creating volume '%s' of size '%s' from '%s'\n"
+                      % (name, size, origin))
+      vlmc.create(name=name, size=int(size), snap=origin, assume_v0=True,
+                  v0_size=int(origin_size))
+    else:
+      sys.stderr.write("Reusing previous data for %s\n" % name)
+
     return 0
 
 
@@ -95,14 +106,16 @@ def attach(env):
     # Check if the mapping already exists
     d_id = vlmc.is_mapped(name)
     if d_id is not None:
+      sys.stderr.write("The mapping exists for %s\n" % name)
       # The mapping exists. Return it.
-        sys.stdout.write("%s" % str(DEVICE_PREFIX + str(d_id)))
-        return 0
+      sys.stdout.write("%s" % str(DEVICE_PREFIX + str(d_id)))
+      return 0
     # The mapping doesn't exist. Create it.
     d_id = vlmc.map_volume(name=name)
     # The device was successfully mapped. Return it.
     #maybe assert (d_id == vlmc.is_mapped(name)
     sys.stdout.write("%s" % str(DEVICE_PREFIX + str(d_id)))
+    sys.stderr.write("Create the mapping for %s\n" % name)
     return 0
 
 
@@ -122,6 +135,7 @@ def detach(env):
         # The mapping exists. Unmap the vlmc device.
         vlmc.unmap_volume(name=str(DEVICE_PREFIX + str(d_id)))
     #assert(vlmc.is_mapped(name) == None)
+    sys.stderr.write("Unmap %s\n" % name)
     return 0
     #except Error as e:
     #  sys.stderr.write(str(e)+'\n')
@@ -139,9 +153,9 @@ def grow(env):
 
 
 def remove(env):
-    """Delete a vlmc Image"""
+    """Delete a vlmc Image
+    """
     name = env.get("name")
-
     sys.stderr.write("Deleting '%s'\n" % name)
     vlmc.remove(name=name)
     return 0
@@ -178,6 +192,7 @@ def main():
 
     try:
         action_name = os.path.basename(sys.argv[0])
+        sys.stderr.write("Action is %s\n" % action_name)
         action = actions[action_name]
         return action(env)
     except KeyError:
