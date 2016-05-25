@@ -1,3 +1,9 @@
+archipelago (0.4.4-1~jessie) jessie; urgency=medium
+
+  * New upstream version
+
+ -- Nikos Skalkotos <skalkoto@grnet.gr>  Wed, 25 May 2016 15:12:01 +0300
+
 archipelago (0.4.2-1~wheezy) wheezy; urgency=low
 
   * New upstream version
@@ -81,6 +87,7 @@ archipelago (0.1.1-1) unstable; urgency=low
   * Initial release
 
  -- Filippos Giannakos <philipgian@grnet.gr>  Thu, 25 Oct 2012 12:04:57 +0300
+
 
 
 
